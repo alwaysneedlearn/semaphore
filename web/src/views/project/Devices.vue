@@ -152,9 +152,61 @@
         <v-icon left>mdi-plus</v-icon>
         {{ $t('newDevice') }}
       </v-btn>
+      <v-menu offset-y v-if="can(USER_PERMISSIONS.manageProjectResources)">
+        <template v-slot:activator="{ on, attrs }">
+          <v-btn
+            class="ml-2"
+            outlined
+            v-bind="attrs"
+            v-on="on"
+            :disabled="selectedDevices.length === 0 || bulkLoading"
+          >
+            <v-icon left>mdi-playlist-check</v-icon>
+            {{ $t('deviceBulkOps') }} ({{ selectedDevices.length }})
+          </v-btn>
+        </template>
+        <v-list dense>
+          <v-list-item @click="runBulkProbe()">
+            <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('start')">
+            <v-list-item-icon><v-icon>mdi-play</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStart') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('stop')">
+            <v-list-item-icon><v-icon>mdi-stop</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStop') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('restart')">
+            <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceRestart') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('status')">
+            <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('config')">
+            <v-list-item-icon><v-icon>mdi-cloud-upload</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceConfigPush') }}</v-list-item-title>
+          </v-list-item>
+          <v-divider />
+          <v-list-item @click="bulkDeleteDialog = true">
+            <v-list-item-icon><v-icon color="error">mdi-delete</v-icon></v-list-item-icon>
+            <v-list-item-title class="error--text">{{ $t('delete') }}</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
     </v-toolbar>
 
     <v-divider />
+
+    <YesNoDialog
+      :title="$t('deleteDevice')"
+      :text="$t('deviceBulkDeleteConfirm', { count: selectedDevices.length })"
+      v-model="bulkDeleteDialog"
+      @yes="bulkDelete()"
+    />
 
     <v-row class="ma-4" dense>
       <v-col cols="6" sm="3">
@@ -202,12 +254,67 @@
 
     <v-data-table
       :headers="headers"
-      :items="items"
+      :items="filteredItems"
+      item-key="id"
+      show-select
+      v-model="selectedDevices"
       hide-default-footer
       class="mt-2"
       :items-per-page="Number.MAX_VALUE"
       style="max-width: calc(var(--breakpoint-xl) - var(--nav-drawer-width) - 200px); margin: auto;"
     >
+      <template v-slot:top>
+        <v-row dense class="px-4 pt-3">
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.trim="filters.hostname"
+              :label="$t('deviceFilterHostname')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.trim="filters.ip"
+              :label="$t('deviceFilterIp')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.deviceStatus"
+              :items="statusFilterOptions"
+              :label="$t('deviceStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.rdpStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceRdpStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.winrmStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceWinrmStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+        </v-row>
+      </template>
       <template v-slot:item.device_status="{ item }">
         <v-chip x-small :color="statusColor(item.device_status)" dark>
           {{ item.device_status }}
@@ -324,7 +431,17 @@ export default {
       discoveryError: '',
       discoveredDevices: [],
       selectedDiscovered: [],
+      selectedDevices: [],
       importingDiscovery: false,
+      bulkLoading: false,
+      bulkDeleteDialog: false,
+      filters: {
+        hostname: '',
+        ip: '',
+        deviceStatus: null,
+        rdpStatus: null,
+        winrmStatus: null,
+      },
       discoveryHeaders: [
         { text: 'Hostname', value: 'hostname' },
         { text: 'IP', value: 'ip_address' },
@@ -333,6 +450,34 @@ export default {
         { text: 'WinRM', value: 'winrm_status' },
       ],
     };
+  },
+  computed: {
+    statusFilterOptions() {
+      return ['healthy', 'unhealthy', 'checking', 'unknown'];
+    },
+    protocolFilterOptions() {
+      return ['online', 'offline', 'unknown'];
+    },
+    filteredItems() {
+      return (this.items || []).filter((it) => {
+        if (this.filters.hostname && !String(it.hostname || '').toLowerCase().includes(this.filters.hostname.toLowerCase())) {
+          return false;
+        }
+        if (this.filters.ip && !String(it.ip_address || '').toLowerCase().includes(this.filters.ip.toLowerCase())) {
+          return false;
+        }
+        if (this.filters.deviceStatus && it.device_status !== this.filters.deviceStatus) {
+          return false;
+        }
+        if (this.filters.rdpStatus && it.rdp_status !== this.filters.rdpStatus) {
+          return false;
+        }
+        if (this.filters.winrmStatus && it.winrm_status !== this.filters.winrmStatus) {
+          return false;
+        }
+        return true;
+      });
+    },
   },
 
   // ItemListPageBase has askDeleteItem call /refs which we don't expose;
@@ -388,6 +533,8 @@ export default {
       ]);
       this.items = devicesRes.data || [];
       this.stats = statsRes.data || this.stats;
+      const selectedIds = new Set(this.selectedDevices.map((x) => x.id));
+      this.selectedDevices = this.items.filter((x) => selectedIds.has(x.id));
     },
 
     async probeDevice(device) {
@@ -499,6 +646,53 @@ export default {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
         this.patrolling = false;
+      }
+    },
+    async runBulkProbe() {
+      this.bulkLoading = true;
+      try {
+        await Promise.all(this.selectedDevices.map((d) => axios.post(`${this.getItemsUrl()}/${d.id}/probe`)));
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceBulkDone', { count: this.selectedDevices.length }),
+        });
+        await this.loadItems();
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
+      }
+    },
+    async runBulkAction(action) {
+      this.bulkLoading = true;
+      try {
+        await Promise.all(
+          this.selectedDevices.map((d) => axios.post(`${this.getItemsUrl()}/${d.id}/action`, { action })),
+        );
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceBulkDone', { count: this.selectedDevices.length }),
+        });
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
+      }
+    },
+    async bulkDelete() {
+      this.bulkLoading = true;
+      try {
+        await Promise.all(this.selectedDevices.map((d) => axios.delete(`${this.getItemsUrl()}/${d.id}`)));
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceBulkDone', { count: this.selectedDevices.length }),
+        });
+        this.selectedDevices = [];
+        await this.loadItems();
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
       }
     },
 

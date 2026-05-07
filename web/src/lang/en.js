@@ -469,6 +469,11 @@ export default {
   deviceTaskQueued: 'Task #{id} queued',
   deviceAbnormalReason: 'Abnormal reason',
   deviceReasonEmpty: 'No abnormal reason recorded.',
+  deviceBulkOps: 'Bulk operations',
+  deviceBulkDeleteConfirm: 'Delete {count} selected devices?',
+  deviceFilterHostname: 'Filter by hostname',
+  deviceFilterIp: 'Filter by IP',
+  deviceBulkDone: 'Batch completed for {count} devices',
 
   // Device settings (project Settings page)
   deviceSettingsTitle: 'Device actions',

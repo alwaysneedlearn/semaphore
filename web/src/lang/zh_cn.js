@@ -396,6 +396,11 @@ export default {
   deviceTaskQueued: '任务 #{id} 已排队',
   deviceAbnormalReason: '异常原因',
   deviceReasonEmpty: '未记录异常原因',
+  deviceBulkOps: '批量操作',
+  deviceBulkDeleteConfirm: '确认删除已选 {count} 台设备？',
+  deviceFilterHostname: '按主机名筛选',
+  deviceFilterIp: '按 IP 筛选',
+  deviceBulkDone: '已完成 {count} 台设备的批量操作',
 
   // 设备设置（项目设置页）
   deviceSettingsTitle: '设备操作模板',
