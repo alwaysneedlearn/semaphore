@@ -412,6 +412,28 @@ func Route(
 	projectInventoryManagement.HandleFunc("/{inventory_id}", projects.UpdateInventory).Methods("PUT")
 	projectInventoryManagement.HandleFunc("/{inventory_id}", projects.RemoveInventory).Methods("DELETE")
 
+	// Devices
+	projectUserAPI.Path("/devices").HandlerFunc(projects.GetDevices).Methods("GET", "HEAD")
+	projectUserAPI.Path("/devices").HandlerFunc(projects.AddDevice).Methods("POST")
+	projectUserAPI.Path("/devices/stats").HandlerFunc(projects.GetDeviceStatsHandler).Methods("GET", "HEAD")
+	projectUserAPI.Path("/devices/discover").HandlerFunc(projects.DiscoverDevices).Methods("POST")
+	projectUserAPI.Path("/devices/discovery/import").HandlerFunc(projects.ImportDiscoveredDevices).Methods("POST")
+	projectUserAPI.Path("/devices/patrol").HandlerFunc(projects.RunPatrolForAllDevices).Methods("POST")
+	projectUserAPI.Path("/devices/status/bulk").HandlerFunc(projects.BulkUpdateDeviceStatus).Methods("PUT")
+	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.GetDeviceSettings).Methods("GET", "HEAD")
+	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.UpdateDeviceSettings).Methods("PUT")
+
+	projectDeviceManagement := projectUserAPI.PathPrefix("/devices").Subrouter()
+	projectDeviceManagement.Use(projects.DeviceMiddleware)
+	projectDeviceManagement.HandleFunc("/{device_id}", projects.GetDevice).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}", projects.UpdateDevice).Methods("PUT")
+	projectDeviceManagement.HandleFunc("/{device_id}", projects.RemoveDevice).Methods("DELETE")
+	projectDeviceManagement.HandleFunc("/{device_id}/status/reason", projects.GetDeviceStatusReason).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/config", projects.GetDeviceConfig).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/config", projects.PutDeviceConfig).Methods("PUT")
+	projectDeviceManagement.HandleFunc("/{device_id}/probe", projects.ProbeDevice).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/action", projects.RunDeviceAction).Methods("POST")
+
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.GetTerraformInventoryAliases).Methods("GET", "HEAD")
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.AddTerraformInventoryAlias).Methods("POST")
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases/{alias_id}", terraformInventoryController.GetTerraformInventoryAlias).Methods("GET")

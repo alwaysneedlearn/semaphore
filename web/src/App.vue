@@ -303,6 +303,21 @@
 
         <v-list-item
           v-if="project.type === ''"
+          key="devices"
+          :to="`/project/${projectId}/devices`"
+          data-testid="sidebar-devices"
+        >
+          <v-list-item-icon>
+            <v-icon>mdi-server-network</v-icon>
+          </v-list-item-icon>
+
+          <v-list-item-content>
+            <v-list-item-title>{{ $t('devices') }}</v-list-item-title>
+          </v-list-item-content>
+        </v-list-item>
+
+        <v-list-item
+          v-if="project.type === ''"
           key="environment"
           :to="`/project/${projectId}/environment`"
           data-testid="sidebar-environment"

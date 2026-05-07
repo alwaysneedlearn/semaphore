@@ -16,6 +16,7 @@ import Templates from '../views/project/Templates.vue';
 import TemplateView from '../views/project/TemplateView.vue';
 import Environment from '../views/project/Environment.vue';
 import Inventory from '../views/project/Inventory.vue';
+import Devices from '../views/project/Devices.vue';
 import Keys from '../views/project/Keys.vue';
 import Repositories from '../views/project/Repositories.vue';
 import Team from '../views/project/Team.vue';
@@ -125,6 +126,10 @@ const routes = [
   {
     path: '/project/:projectId/inventory',
     component: Inventory,
+  },
+  {
+    path: '/project/:projectId/devices',
+    component: Devices,
   },
   {
     path: '/project/:projectId/integrations',
