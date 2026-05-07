@@ -1,8 +1,10 @@
 package projects
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -376,8 +378,15 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 
 func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
-	var updates []db.DeviceStatusUpdate
-	if !helpers.Bind(w, r, &updates) {
+	updates, err := parseBulkDeviceStatusUpdates(r.Body)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if len(updates) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "No status updates provided",
+		})
 		return
 	}
 	updated := 0
@@ -435,6 +444,116 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		updated++
 	}
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
+}
+
+func parseBulkDeviceStatusUpdates(body io.ReadCloser) ([]db.DeviceStatusUpdate, error) {
+	defer body.Close()
+
+	rawBody, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
+
+	var updates []db.DeviceStatusUpdate
+	if err := json.Unmarshal(rawBody, &updates); err == nil && len(updates) > 0 {
+		normalizeBulkUpdates(updates)
+		return updates, nil
+	}
+
+	type bulkPayload struct {
+		Updates []bulkDeviceStatusUpdate `json:"updates"`
+		Results []bulkDeviceStatusUpdate `json:"results"`
+		Devices []bulkDeviceStatusUpdate `json:"devices"`
+	}
+
+	var payload bulkPayload
+	decoder := json.NewDecoder(bytes.NewReader(rawBody))
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, err
+	}
+
+	var source []bulkDeviceStatusUpdate
+	switch {
+	case len(payload.Updates) > 0:
+		source = payload.Updates
+	case len(payload.Results) > 0:
+		source = payload.Results
+	case len(payload.Devices) > 0:
+		source = payload.Devices
+	default:
+		return []db.DeviceStatusUpdate{}, nil
+	}
+
+	updates = make([]db.DeviceStatusUpdate, 0, len(source))
+	for _, item := range source {
+		u := item.toDeviceStatusUpdate()
+		updates = append(updates, u)
+	}
+	normalizeBulkUpdates(updates)
+	return updates, nil
+}
+
+func normalizeBulkUpdates(updates []db.DeviceStatusUpdate) {
+	for i := range updates {
+		updates[i].Hostname = strings.TrimSpace(updates[i].Hostname)
+		updates[i].Status = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].Status))))
+		if updates[i].RDPStatus != "" {
+			updates[i].RDPStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].RDPStatus))))
+		}
+		if updates[i].WinRMStatus != "" {
+			updates[i].WinRMStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].WinRMStatus))))
+		}
+	}
+}
+
+type bulkDeviceStatusUpdate struct {
+	Hostname       string     `json:"hostname"`
+	Status         string     `json:"status"`
+	DeviceStatus   string     `json:"device_status"`
+	RDPStatus      string     `json:"rdp_status"`
+	RDP            string     `json:"rdp"`
+	WinRMStatus    string     `json:"winrm_status"`
+	WINRM          string     `json:"winrm"`
+	AbnormalReason *string    `json:"abnormal_reason,omitempty"`
+	Reason         *string    `json:"reason,omitempty"`
+	CheckedAt      *time.Time `json:"checked_at,omitempty"`
+	LastUpdated    *time.Time `json:"last_updated,omitempty"`
+	Timestamp      *time.Time `json:"timestamp,omitempty"`
+}
+
+func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
+	status := u.Status
+	if strings.TrimSpace(status) == "" {
+		status = u.DeviceStatus
+	}
+	rdp := u.RDPStatus
+	if strings.TrimSpace(rdp) == "" {
+		rdp = u.RDP
+	}
+	winrm := u.WinRMStatus
+	if strings.TrimSpace(winrm) == "" {
+		winrm = u.WINRM
+	}
+	reason := u.AbnormalReason
+	if reason == nil {
+		reason = u.Reason
+	}
+	checkedAt := u.CheckedAt
+	if checkedAt == nil {
+		checkedAt = u.LastUpdated
+	}
+	if checkedAt == nil {
+		checkedAt = u.Timestamp
+	}
+
+	return db.DeviceStatusUpdate{
+		Hostname:       u.Hostname,
+		Status:         db.DeviceStatus(status),
+		RDPStatus:      db.DeviceStatus(rdp),
+		WinRMStatus:    db.DeviceStatus(winrm),
+		AbnormalReason: reason,
+		CheckedAt:      checkedAt,
+	}
 }
 
 func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
