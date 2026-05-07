@@ -33,17 +33,24 @@ const (
 
 // Device is a managed host belonging to a project.
 type Device struct {
-	ID             int          `db:"id" json:"id" backup:"-"`
-	ProjectID      int          `db:"project_id" json:"project_id" backup:"-"`
-	Name           string       `db:"name" json:"name"`
-	IPAddress      string       `db:"ip_address" json:"ip_address"`
-	Hostname       string       `db:"hostname" json:"hostname"`
-	DeviceStatus   DeviceStatus `db:"device_status" json:"device_status"`
-	RDPStatus      DeviceStatus `db:"rdp_status" json:"rdp_status"`
-	WinRMStatus    DeviceStatus `db:"winrm_status" json:"winrm_status"`
-	AbnormalReason *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
-	LastUpdated    *time.Time   `db:"last_updated" json:"last_updated,omitempty"`
-	Created        time.Time    `db:"created" json:"created" backup:"-"`
+	ID                               int          `db:"id" json:"id" backup:"-"`
+	ProjectID                        int          `db:"project_id" json:"project_id" backup:"-"`
+	Name                             string       `db:"name" json:"name"`
+	IPAddress                        string       `db:"ip_address" json:"ip_address"`
+	Hostname                         string       `db:"hostname" json:"hostname"`
+	AnsibleUser                      string       `db:"ansible_user" json:"ansible_user"`
+	AnsiblePassword                  string       `db:"ansible_password" json:"ansible_password"`
+	AnsibleConnection                string       `db:"ansible_connection" json:"ansible_connection"`
+	AnsibleWinRMTransport            string       `db:"ansible_winrm_transport" json:"ansible_winrm_transport"`
+	AnsibleWinRMScheme               string       `db:"ansible_winrm_scheme" json:"ansible_winrm_scheme"`
+	AnsiblePort                      int          `db:"ansible_port" json:"ansible_port"`
+	AnsibleWinRMServerCertValidation string       `db:"ansible_winrm_server_cert_validation" json:"ansible_winrm_server_cert_validation"`
+	DeviceStatus                     DeviceStatus `db:"device_status" json:"device_status"`
+	RDPStatus                        DeviceStatus `db:"rdp_status" json:"rdp_status"`
+	WinRMStatus                      DeviceStatus `db:"winrm_status" json:"winrm_status"`
+	AbnormalReason                   *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
+	LastUpdated                      *time.Time   `db:"last_updated" json:"last_updated,omitempty"`
+	Created                          time.Time    `db:"created" json:"created" backup:"-"`
 }
 
 // Validate enforces the device invariants checked at the API/store boundary.
@@ -85,15 +92,23 @@ type DeviceConfigItem struct {
 // ProjectDeviceSettings holds the per-project mapping of device actions to
 // templates plus the periodic refresh interval.
 type ProjectDeviceSettings struct {
-	ProjectID                int        `db:"project_id" json:"project_id"`
-	DiscoverTemplateID       *int       `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	StartTemplateID          *int       `db:"start_template_id" json:"start_template_id,omitempty"`
-	StopTemplateID           *int       `db:"stop_template_id" json:"stop_template_id,omitempty"`
-	RestartTemplateID        *int       `db:"restart_template_id" json:"restart_template_id,omitempty"`
-	StatusTemplateID         *int       `db:"status_template_id" json:"status_template_id,omitempty"`
-	ConfigTemplateID         *int       `db:"config_template_id" json:"config_template_id,omitempty"`
-	StatusRefreshIntervalMin int        `db:"status_refresh_interval_min" json:"status_refresh_interval_min"`
-	LastStatusRefreshAt      *time.Time `db:"last_status_refresh_at" json:"last_status_refresh_at,omitempty"`
+	ProjectID                               int        `db:"project_id" json:"project_id"`
+	DiscoverTemplateID                      *int       `db:"discover_template_id" json:"discover_template_id,omitempty"`
+	StartTemplateID                         *int       `db:"start_template_id" json:"start_template_id,omitempty"`
+	StopTemplateID                          *int       `db:"stop_template_id" json:"stop_template_id,omitempty"`
+	RestartTemplateID                       *int       `db:"restart_template_id" json:"restart_template_id,omitempty"`
+	StatusTemplateID                        *int       `db:"status_template_id" json:"status_template_id,omitempty"`
+	ConfigTemplateID                        *int       `db:"config_template_id" json:"config_template_id,omitempty"`
+	DefaultInventoryID                      *int       `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
+	DefaultAnsibleUser                      string     `db:"default_ansible_user" json:"default_ansible_user"`
+	DefaultAnsiblePassword                  string     `db:"default_ansible_password" json:"default_ansible_password"`
+	DefaultAnsibleConnection                string     `db:"default_ansible_connection" json:"default_ansible_connection"`
+	DefaultAnsibleWinRMTransport            string     `db:"default_ansible_winrm_transport" json:"default_ansible_winrm_transport"`
+	DefaultAnsibleWinRMScheme               string     `db:"default_ansible_winrm_scheme" json:"default_ansible_winrm_scheme"`
+	DefaultAnsiblePort                      int        `db:"default_ansible_port" json:"default_ansible_port"`
+	DefaultAnsibleWinRMServerCertValidation string     `db:"default_ansible_winrm_server_cert_validation" json:"default_ansible_winrm_server_cert_validation"`
+	StatusRefreshIntervalMin                int        `db:"status_refresh_interval_min" json:"status_refresh_interval_min"`
+	LastStatusRefreshAt                     *time.Time `db:"last_status_refresh_at" json:"last_status_refresh_at,omitempty"`
 }
 
 // TemplateIDForAction returns the configured template id for the given action,

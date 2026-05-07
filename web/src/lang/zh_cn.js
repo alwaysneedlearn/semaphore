@@ -401,10 +401,18 @@ export default {
   deviceFilterHostname: '按主机名筛选',
   deviceFilterIp: '按 IP 筛选',
   deviceBulkDone: '已完成 {count} 台设备的批量操作',
+  deviceAnsibleUser: 'Ansible 用户',
+  deviceAnsiblePassword: 'Ansible 密码',
+  deviceAnsibleConnection: 'Ansible 连接方式',
+  deviceAnsibleWinrmTransport: 'WinRM 传输',
+  deviceAnsibleWinrmScheme: 'WinRM 协议',
+  deviceAnsiblePort: 'Ansible 端口',
+  deviceAnsibleWinrmCertValidation: 'WinRM 证书校验',
 
   // 设备设置（项目设置页）
   deviceSettingsTitle: '设备操作模板',
   deviceSettingsHelp: '为每个设备操作绑定一个任务模板。当触发对应操作时执行所选模板。在 playbook 中可使用 {device.ip}、{device.hostname} 等 extra-vars。',
+  deviceConnectionDefaultsHelp: '用于生成 windows_hosts inventory 的默认连接参数。',
   deviceTemplateDiscover: '发现模板',
   deviceTemplateStart: '启动模板',
   deviceTemplateStop: '停止模板',

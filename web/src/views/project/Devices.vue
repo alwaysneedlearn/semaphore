@@ -552,7 +552,10 @@ export default {
     async runAction(device, action) {
       this.busyId = device.id;
       try {
-        const res = await axios.post(`${this.getItemsUrl()}/${device.id}/action`, { action });
+        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
+          action,
+          device_ids: [device.id],
+        });
         EventBus.$emit('i-snackbar', {
           color: 'success',
           text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
@@ -666,12 +669,13 @@ export default {
     async runBulkAction(action) {
       this.bulkLoading = true;
       try {
-        await Promise.all(
-          this.selectedDevices.map((d) => axios.post(`${this.getItemsUrl()}/${d.id}/action`, { action })),
-        );
+        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
+          action,
+          device_ids: this.selectedDevices.map((d) => d.id),
+        });
         EventBus.$emit('i-snackbar', {
           color: 'success',
-          text: this.$i18n.t('deviceBulkDone', { count: this.selectedDevices.length }),
+          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
         });
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });

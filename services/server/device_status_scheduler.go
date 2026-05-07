@@ -143,6 +143,7 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 		TemplateID:  tpl.ID,
 		ProjectID:   settings.ProjectID,
 		Environment: string(envBytes),
+		InventoryID: settings.DefaultInventoryID,
 	}
 
 	if _, err := s.taskPool.AddTask(task, nil, "device-status-scheduler", settings.ProjectID, tpl.App.NeedTaskAlias()); err != nil {

@@ -32,6 +32,77 @@
       :disabled="saving"
     />
 
+    <v-divider class="my-4" />
+
+    <p class="text--secondary mb-2">{{ $t('deviceConnectionDefaultsHelp') }}</p>
+    <v-row dense>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_user"
+          :label="$t('deviceAnsibleUser')"
+          :disabled="saving"
+          outlined
+          dense
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_password"
+          :label="$t('deviceAnsiblePassword')"
+          :disabled="saving"
+          outlined
+          dense
+          type="password"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_connection"
+          :label="$t('deviceAnsibleConnection')"
+          :disabled="saving"
+          outlined
+          dense
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_winrm_transport"
+          :label="$t('deviceAnsibleWinrmTransport')"
+          :disabled="saving"
+          outlined
+          dense
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_winrm_scheme"
+          :label="$t('deviceAnsibleWinrmScheme')"
+          :disabled="saving"
+          outlined
+          dense
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model.number="settings.default_ansible_port"
+          :label="$t('deviceAnsiblePort')"
+          :disabled="saving"
+          outlined
+          dense
+          type="number"
+        />
+      </v-col>
+      <v-col cols="12">
+        <v-text-field
+          v-model="settings.default_ansible_winrm_server_cert_validation"
+          :label="$t('deviceAnsibleWinrmCertValidation')"
+          :disabled="saving"
+          outlined
+          dense
+        />
+      </v-col>
+    </v-row>
+
     <div class="d-flex justify-end mt-3">
       <v-btn color="primary" depressed :loading="saving" @click="save">
         {{ $t('save') }}
@@ -70,6 +141,13 @@ export default {
         status_template_id: null,
         config_template_id: null,
         status_refresh_interval_min: 0,
+        default_ansible_user: '',
+        default_ansible_password: '',
+        default_ansible_connection: 'winrm',
+        default_ansible_winrm_transport: 'basic',
+        default_ansible_winrm_scheme: 'http',
+        default_ansible_port: 5985,
+        default_ansible_winrm_server_cert_validation: 'ignore',
       },
       saving: false,
       formError: null,
@@ -107,6 +185,7 @@ export default {
       try {
         const payload = { ...this.settings };
         payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
+        payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
         await axios.put(`/api/project/${this.projectId}/devices/settings`, payload);
         EventBus.$emit('i-snackbar', { color: 'success', text: this.$i18n.t('deviceSettingsSaved') });
       } catch (e) {

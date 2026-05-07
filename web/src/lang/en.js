@@ -474,10 +474,18 @@ export default {
   deviceFilterHostname: 'Filter by hostname',
   deviceFilterIp: 'Filter by IP',
   deviceBulkDone: 'Batch completed for {count} devices',
+  deviceAnsibleUser: 'Ansible user',
+  deviceAnsiblePassword: 'Ansible password',
+  deviceAnsibleConnection: 'Ansible connection',
+  deviceAnsibleWinrmTransport: 'WinRM transport',
+  deviceAnsibleWinrmScheme: 'WinRM scheme',
+  deviceAnsiblePort: 'Ansible port',
+  deviceAnsibleWinrmCertValidation: 'WinRM cert validation',
 
   // Device settings (project Settings page)
   deviceSettingsTitle: 'Device actions',
   deviceSettingsHelp: 'Bind a task template to each device action. Selected templates are executed when the corresponding action is triggered. Pass {device.ip}, {device.hostname} as Ansible extra-vars in your playbooks.',
+  deviceConnectionDefaultsHelp: 'Default connection values used for device inventory generation (windows_hosts).',
   deviceTemplateDiscover: 'Discover template',
   deviceTemplateStart: 'Start template',
   deviceTemplateStop: 'Stop template',

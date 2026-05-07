@@ -142,6 +142,13 @@ func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]
 	for _, dev := range devices {
 		if old, ok := byHost[dev.Hostname]; ok {
 			old.IPAddress = dev.IPAddress
+			old.AnsibleUser = dev.AnsibleUser
+			old.AnsiblePassword = dev.AnsiblePassword
+			old.AnsibleConnection = dev.AnsibleConnection
+			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
+			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
+			old.AnsiblePort = dev.AnsiblePort
+			old.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
 			if dev.DeviceStatus != "" {
 				old.DeviceStatus = dev.DeviceStatus
 			}

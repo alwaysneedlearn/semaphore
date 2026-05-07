@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,178 @@ import (
 	"github.com/semaphoreui/semaphore/db"
 	"github.com/semaphoreui/semaphore/services/server"
 )
+
+const (
+	deviceAutoInventoryName  = "windows_hosts (auto)"
+	deviceAutoInventoryGroup = "windows_hosts"
+)
+
+func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSettings) {
+	if device.AnsibleUser == "" {
+		device.AnsibleUser = settings.DefaultAnsibleUser
+	}
+	if device.AnsiblePassword == "" {
+		device.AnsiblePassword = settings.DefaultAnsiblePassword
+	}
+	if device.AnsibleConnection == "" {
+		device.AnsibleConnection = settings.DefaultAnsibleConnection
+	}
+	if device.AnsibleConnection == "" {
+		device.AnsibleConnection = "winrm"
+	}
+	if device.AnsibleWinRMTransport == "" {
+		device.AnsibleWinRMTransport = settings.DefaultAnsibleWinRMTransport
+	}
+	if device.AnsibleWinRMTransport == "" {
+		device.AnsibleWinRMTransport = "basic"
+	}
+	if device.AnsibleWinRMScheme == "" {
+		device.AnsibleWinRMScheme = settings.DefaultAnsibleWinRMScheme
+	}
+	if device.AnsibleWinRMScheme == "" {
+		device.AnsibleWinRMScheme = "http"
+	}
+	if device.AnsiblePort == 0 {
+		device.AnsiblePort = settings.DefaultAnsiblePort
+	}
+	if device.AnsiblePort == 0 {
+		device.AnsiblePort = 5985
+	}
+	if device.AnsibleWinRMServerCertValidation == "" {
+		device.AnsibleWinRMServerCertValidation = settings.DefaultAnsibleWinRMServerCertValidation
+	}
+	if device.AnsibleWinRMServerCertValidation == "" {
+		device.AnsibleWinRMServerCertValidation = "ignore"
+	}
+}
+
+func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string {
+	user := dev.AnsibleUser
+	if user == "" {
+		user = settings.DefaultAnsibleUser
+	}
+	password := dev.AnsiblePassword
+	if password == "" {
+		password = settings.DefaultAnsiblePassword
+	}
+	connection := dev.AnsibleConnection
+	if connection == "" {
+		connection = settings.DefaultAnsibleConnection
+	}
+	if connection == "" {
+		connection = "winrm"
+	}
+	transport := dev.AnsibleWinRMTransport
+	if transport == "" {
+		transport = settings.DefaultAnsibleWinRMTransport
+	}
+	if transport == "" {
+		transport = "basic"
+	}
+	scheme := dev.AnsibleWinRMScheme
+	if scheme == "" {
+		scheme = settings.DefaultAnsibleWinRMScheme
+	}
+	if scheme == "" {
+		scheme = "http"
+	}
+	port := dev.AnsiblePort
+	if port == 0 {
+		port = settings.DefaultAnsiblePort
+	}
+	if port == 0 {
+		port = 5985
+	}
+	certValidation := dev.AnsibleWinRMServerCertValidation
+	if certValidation == "" {
+		certValidation = settings.DefaultAnsibleWinRMServerCertValidation
+	}
+	if certValidation == "" {
+		certValidation = "ignore"
+	}
+
+	parts := []string{dev.Hostname}
+	if dev.IPAddress != "" {
+		parts = append(parts, "ansible_host="+dev.IPAddress)
+	}
+	if user != "" {
+		parts = append(parts, "ansible_user="+user)
+	}
+	if password != "" {
+		parts = append(parts, "ansible_password="+password)
+	}
+	parts = append(parts, "ansible_connection="+connection)
+	parts = append(parts, "ansible_winrm_transport="+transport)
+	parts = append(parts, "ansible_winrm_scheme="+scheme)
+	parts = append(parts, "ansible_port="+strconv.Itoa(port))
+	parts = append(parts, "ansible_winrm_server_cert_validation="+certValidation)
+	return strings.Join(parts, " ")
+}
+
+func renderWindowsInventory(devices []db.Device, settings db.ProjectDeviceSettings) string {
+	var b strings.Builder
+	b.WriteString("[" + deviceAutoInventoryGroup + "]\n")
+	for _, dev := range devices {
+		if strings.TrimSpace(dev.Hostname) == "" {
+			continue
+		}
+		b.WriteString(buildInventoryLine(dev, settings))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func ensureProjectAutoInventory(r *http.Request, projectID int, devices []db.Device, settings db.ProjectDeviceSettings) (db.Inventory, error) {
+	inventories, err := helpers.Store(r).GetInventories(projectID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		return db.Inventory{}, err
+	}
+	content := renderWindowsInventory(devices, settings)
+	for _, inv := range inventories {
+		if !inv.IsDeviceDefaultAuto {
+			continue
+		}
+		inv.Name = deviceAutoInventoryName
+		inv.Type = db.InventoryStatic
+		inv.Inventory = content
+		if err = helpers.Store(r).UpdateInventory(inv); err != nil {
+			return db.Inventory{}, err
+		}
+		return inv, nil
+	}
+
+	inv, err := helpers.Store(r).CreateInventory(db.Inventory{
+		ProjectID:           projectID,
+		Name:                deviceAutoInventoryName,
+		Type:                db.InventoryStatic,
+		Inventory:           content,
+		IsDeviceDefaultAuto: true,
+	})
+	if err != nil {
+		return db.Inventory{}, err
+	}
+	return inv, nil
+}
+
+func syncProjectAutoInventory(r *http.Request, projectID int) error {
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(projectID)
+	if err != nil {
+		return err
+	}
+	devices, err := helpers.Store(r).GetDevices(projectID, db.RetrieveQueryParams{})
+	if err != nil {
+		return err
+	}
+	inv, err := ensureProjectAutoInventory(r, projectID, devices, settings)
+	if err != nil {
+		return err
+	}
+	if settings.DefaultInventoryID == nil || *settings.DefaultInventoryID != inv.ID {
+		settings.DefaultInventoryID = &inv.ID
+		return helpers.Store(r).UpdateProjectDeviceSettings(settings)
+	}
+	return nil
+}
 
 // DeviceMiddleware ensures the device exists, belongs to the current project,
 // and loads it into the request context under the key "device".
@@ -87,6 +260,11 @@ func GetDeviceStatsHandler(w http.ResponseWriter, r *http.Request) {
 // AddDevice creates a device under the current project.
 func AddDevice(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 
 	var device db.Device
 	if !helpers.Bind(w, r, &device) {
@@ -106,6 +284,7 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	if device.WinRMStatus == "" {
 		device.WinRMStatus = db.DeviceStatusUnknown
 	}
+	normalizeDeviceConnection(&device, settings)
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
@@ -125,6 +304,10 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 		ObjectID:    newDevice.ID,
 		Description: fmt.Sprintf("Device %s created", newDevice.Hostname),
 	})
+	if err = syncProjectAutoInventory(r, project.ID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 
 	helpers.WriteJSON(w, http.StatusCreated, newDevice)
 }
@@ -132,6 +315,11 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 // UpdateDevice persists changes to an existing device.
 func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	old := helpers.GetFromContext(r, "device").(db.Device)
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(old.ProjectID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 
 	var device db.Device
 	if !helpers.Bind(w, r, &device) {
@@ -145,15 +333,19 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.Name = device.Hostname
 	device.RDPStatus = old.RDPStatus
 	device.WinRMStatus = old.WinRMStatus
+	if device.DeviceStatus == "" {
+		device.DeviceStatus = old.DeviceStatus
+	}
 	device.AbnormalReason = old.AbnormalReason
 	device.LastUpdated = old.LastUpdated
+	normalizeDeviceConnection(&device, settings)
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
 
-	if err := helpers.Store(r).UpdateDevice(device); err != nil {
+	if err = helpers.Store(r).UpdateDevice(device); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -165,6 +357,10 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		ObjectID:    old.ID,
 		Description: fmt.Sprintf("Device %s updated", device.Hostname),
 	})
+	if err = syncProjectAutoInventory(r, old.ProjectID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -172,7 +368,8 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 // RemoveDevice deletes a device and (cascaded) its config items.
 func RemoveDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
-	if err := helpers.Store(r).DeleteDevice(device.ProjectID, device.ID); err != nil {
+	err := helpers.Store(r).DeleteDevice(device.ProjectID, device.ID)
+	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -184,6 +381,10 @@ func RemoveDevice(w http.ResponseWriter, r *http.Request) {
 		ObjectID:    device.ID,
 		Description: fmt.Sprintf("Device %s deleted", device.Hostname),
 	})
+	if err = syncProjectAutoInventory(r, device.ProjectID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -245,12 +446,31 @@ func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ProjectID = project.ID
+	if s.DefaultAnsibleConnection == "" {
+		s.DefaultAnsibleConnection = "winrm"
+	}
+	if s.DefaultAnsibleWinRMTransport == "" {
+		s.DefaultAnsibleWinRMTransport = "basic"
+	}
+	if s.DefaultAnsibleWinRMScheme == "" {
+		s.DefaultAnsibleWinRMScheme = "http"
+	}
+	if s.DefaultAnsiblePort == 0 {
+		s.DefaultAnsiblePort = 5985
+	}
+	if s.DefaultAnsibleWinRMServerCertValidation == "" {
+		s.DefaultAnsibleWinRMServerCertValidation = "ignore"
+	}
 
 	if s.StatusRefreshIntervalMin < 0 {
 		s.StatusRefreshIntervalMin = 0
 	}
 
 	if err := helpers.Store(r).UpdateProjectDeviceSettings(s); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if err := syncProjectAutoInventory(r, project.ID); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -268,7 +488,7 @@ func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 
 // runDeviceTemplate enqueues the template configured for the given action.
 // extraVars is merged into the task's environment override (extra-vars JSON).
-func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceAction, extraVars map[string]any) (db.Task, error) {
+func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		return db.Task{}, err
@@ -299,6 +519,7 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 		TemplateID:  tpl.ID,
 		ProjectID:   project.ID,
 		Environment: env,
+		InventoryID: inventoryID,
 	}
 
 	user := helpers.UserFromContext(r)
@@ -316,7 +537,7 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 
-	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, nil)
+	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, nil, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -326,6 +547,11 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 
 func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 	var body struct {
 		Devices           []db.Device `json:"devices"`
 		SelectedHostnames []string    `json:"selected_hostnames"`
@@ -360,6 +586,7 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		if dev.Hostname == "" {
 			continue
 		}
+		normalizeDeviceConnection(&dev, settings)
 		if len(selected) > 0 && !selected[dev.Hostname] {
 			continue
 		}
@@ -367,6 +594,10 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := helpers.Store(r).UpsertDevicesByHostname(project.ID, toUpsert)
 	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if err = syncProjectAutoInventory(r, project.ID); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -558,6 +789,15 @@ func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
 
 func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
+	if err := syncProjectAutoInventory(r, project.ID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -571,7 +811,7 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 			"ip":       d.IPAddress,
 		})
 	}
-	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload})
+	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -581,6 +821,24 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 		_ = helpers.Store(r).UpdateDeviceStatusByHostname(project.ID, d.Hostname, db.DeviceStatusChecking, now)
 	}
 	helpers.WriteJSON(w, http.StatusCreated, task)
+}
+
+func createTemporaryInventoryForDevices(r *http.Request, projectID int, devices []db.Device) (*int, error) {
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(projectID)
+	if err != nil {
+		return nil, err
+	}
+	content := renderWindowsInventory(devices, settings)
+	inv, err := helpers.Store(r).CreateInventory(db.Inventory{
+		ProjectID: projectID,
+		Name:      fmt.Sprintf("windows_hosts batch %d", time.Now().Unix()),
+		Type:      db.InventoryStatic,
+		Inventory: content,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &inv.ID, nil
 }
 
 // RunDeviceAction triggers the configured template for {start, stop, restart,
@@ -634,7 +892,81 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		extraVars["config"] = categorized
 	}
 
-	task, err := runDeviceTemplate(r, project, body.Action, extraVars)
+	tmpInventoryID, err := createTemporaryInventoryForDevices(r, project.ID, []db.Device{device})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+
+	task, err := runDeviceTemplate(r, project, body.Action, extraVars, tmpInventoryID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusCreated, task)
+}
+
+func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body struct {
+		Action    db.DeviceAction `json:"action"`
+		DeviceIDs []int           `json:"device_ids"`
+	}
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	switch body.Action {
+	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
+		db.DeviceActionStatus, db.DeviceActionConfig:
+	default:
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Unsupported device action",
+		})
+		return
+	}
+	if len(body.DeviceIDs) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "No devices selected",
+		})
+		return
+	}
+
+	idSet := map[int]bool{}
+	for _, id := range body.DeviceIDs {
+		idSet[id] = true
+	}
+	allDevices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	selected := make([]db.Device, 0, len(body.DeviceIDs))
+	payload := make([]map[string]any, 0, len(body.DeviceIDs))
+	for _, d := range allDevices {
+		if !idSet[d.ID] {
+			continue
+		}
+		selected = append(selected, d)
+		payload = append(payload, map[string]any{
+			"id":       d.ID,
+			"hostname": d.Hostname,
+			"ip":       d.IPAddress,
+		})
+	}
+	if len(selected) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Selected devices not found",
+		})
+		return
+	}
+
+	tmpInventoryID, err := createTemporaryInventoryForDevices(r, project.ID, selected)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	extraVars := map[string]any{"devices": payload}
+	task, err := runDeviceTemplate(r, project, body.Action, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return

@@ -18,10 +18,11 @@ func (i InventoryType) IsStatic() bool {
 
 // Inventory is the model of an ansible inventory file
 type Inventory struct {
-	ID        int    `db:"id" json:"id" backup:"-"`
-	Name      string `db:"name" json:"name" binding:"required"`
-	ProjectID int    `db:"project_id" json:"project_id" backup:"-"`
-	Inventory string `db:"inventory" json:"inventory"`
+	ID                  int    `db:"id" json:"id" backup:"-"`
+	Name                string `db:"name" json:"name" binding:"required"`
+	ProjectID           int    `db:"project_id" json:"project_id" backup:"-"`
+	Inventory           string `db:"inventory" json:"inventory"`
+	IsDeviceDefaultAuto bool   `db:"is_device_default_auto" json:"is_device_default_auto"`
 
 	// accesses hosts in inventory
 	SSHKeyID *int      `db:"ssh_key_id" json:"ssh_key_id" backup:"-"`

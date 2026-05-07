@@ -31,6 +31,72 @@
       dense
       placeholder="server01.example.com"
     ></v-text-field>
+
+    <v-text-field
+      v-model="item.ansible_user"
+      :label="$t('deviceAnsibleUser')"
+      :disabled="formSaving"
+      outlined
+      dense
+      placeholder="winrmuser"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.ansible_password"
+      :label="$t('deviceAnsiblePassword')"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="password"
+      placeholder="winrmpass"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.ansible_connection"
+      :label="$t('deviceAnsibleConnection')"
+      :disabled="formSaving"
+      outlined
+      dense
+      placeholder="winrm"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.ansible_winrm_transport"
+      :label="$t('deviceAnsibleWinrmTransport')"
+      :disabled="formSaving"
+      outlined
+      dense
+      placeholder="basic"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.ansible_winrm_scheme"
+      :label="$t('deviceAnsibleWinrmScheme')"
+      :disabled="formSaving"
+      outlined
+      dense
+      placeholder="http"
+    ></v-text-field>
+
+    <v-text-field
+      v-model.number="item.ansible_port"
+      :label="$t('deviceAnsiblePort')"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="number"
+      min="1"
+      placeholder="5985"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.ansible_winrm_server_cert_validation"
+      :label="$t('deviceAnsibleWinrmCertValidation')"
+      :disabled="formSaving"
+      outlined
+      dense
+      placeholder="ignore"
+    ></v-text-field>
   </v-form>
 </template>
 <script>
@@ -50,6 +116,13 @@ export default {
       return {
         ip_address: '',
         hostname: '',
+        ansible_user: '',
+        ansible_password: '',
+        ansible_connection: 'winrm',
+        ansible_winrm_transport: 'basic',
+        ansible_winrm_scheme: 'http',
+        ansible_port: 5985,
+        ansible_winrm_server_cert_validation: 'ignore',
         device_status: 'unknown',
       };
     },
