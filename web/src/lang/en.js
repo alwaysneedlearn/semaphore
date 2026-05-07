@@ -435,10 +435,13 @@ export default {
   deviceHostname: 'Hostname',
   deviceHostnameRequired: 'Hostname is required',
   deviceStatus: 'Device status',
+  deviceRdpStatus: 'RDP',
+  deviceWinrmStatus: 'WinRM',
   deviceLastUpdated: 'Last updated',
   deviceTotal: 'Total devices',
   deviceHealthy: 'Healthy',
   deviceUnhealthy: 'Unhealthy',
+  deviceChecking: 'Checking',
   devicePatrolAll: 'Patrol all',
   deviceUnknown: 'Unknown status',
   deviceDiscover: 'Discover',
@@ -464,6 +467,8 @@ export default {
   deviceConfigAddRow: 'Add item',
   keyIsRequired: 'Key is required',
   deviceTaskQueued: 'Task #{id} queued',
+  deviceAbnormalReason: 'Abnormal reason',
+  deviceReasonEmpty: 'No abnormal reason recorded.',
 
   // Device settings (project Settings page)
   deviceSettingsTitle: 'Device actions',

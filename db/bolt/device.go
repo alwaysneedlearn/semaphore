@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/semaphoreui/semaphore/db"
@@ -10,6 +11,31 @@ import (
 func (d *BoltDb) GetDevice(projectID int, deviceID int) (device db.Device, err error) {
 	err = d.getObject(projectID, db.DeviceProps, intObjectID(deviceID), &device)
 	return
+}
+
+func (d *BoltDb) GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit int) ([]db.DeviceStatusCallbackLog, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	// Deprecated backend: no dedicated callback log table. Return empty list.
+	return []db.DeviceStatusCallbackLog{}, nil
+}
+
+func (d *BoltDb) CreateDeviceStatusCallbackLog(l db.DeviceStatusCallbackLog) (db.DeviceStatusCallbackLog, error) {
+	// Deprecated backend: persist callback payload into abnormal_reason fallback.
+	if l.DeviceID != nil {
+		dev, err := d.GetDevice(l.ProjectID, *l.DeviceID)
+		if err == nil {
+			msg := l.Payload
+			if msg == "" {
+				b, _ := json.Marshal(l)
+				msg = string(b)
+			}
+			dev.AbnormalReason = &msg
+			_ = d.UpdateDevice(dev)
+		}
+	}
+	return l, nil
 }
 
 func (d *BoltDb) GetDevices(projectID int, params db.RetrieveQueryParams) (devices []db.Device, err error) {

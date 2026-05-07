@@ -317,6 +317,8 @@ type DeviceManager interface {
 	UpdateDeviceStatus(projectID, deviceID int, rdp, winrm DeviceStatus, refreshed time.Time) error
 	UpdateDeviceStatusByHostname(projectID int, hostname string, status DeviceStatus, refreshed time.Time) error
 	UpsertDevicesByHostname(projectID int, devices []Device) ([]Device, error)
+	GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit int) ([]DeviceStatusCallbackLog, error)
+	CreateDeviceStatusCallbackLog(log DeviceStatusCallbackLog) (DeviceStatusCallbackLog, error)
 	DeleteDevice(projectID, deviceID int) error
 	GetDeviceStats(projectID int) (DeviceStats, error)
 

@@ -43,8 +43,8 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		"id",
 		"insert into project__device ("+
 			"project_id, name, ip_address, hostname, device_status, "+
-			"rdp_status, winrm_status, last_updated, created) values "+
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"rdp_status, winrm_status, abnormal_reason, last_updated, created) values "+
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		device.ProjectID,
 		device.Name,
 		device.IPAddress,
@@ -52,6 +52,7 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
+		device.AbnormalReason,
 		device.LastUpdated,
 		device.Created,
 	)
@@ -67,12 +68,16 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 func (d *SqlDb) UpdateDevice(device db.Device) error {
 	_, err := d.exec(
 		"update project__device set "+
-			"name=?, ip_address=?, hostname=?, device_status=? "+
+			"name=?, ip_address=?, hostname=?, device_status=?, rdp_status=?, winrm_status=?, abnormal_reason=?, last_updated=? "+
 			"where id=? and project_id=?",
 		device.Name,
 		device.IPAddress,
 		device.Hostname,
 		device.DeviceStatus,
+		device.RDPStatus,
+		device.WinRMStatus,
+		device.AbnormalReason,
+		device.LastUpdated,
 		device.ID,
 		device.ProjectID,
 	)
@@ -163,12 +168,45 @@ func (d *SqlDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]d
 		if dev.DeviceStatus != "" {
 			existing.DeviceStatus = dev.DeviceStatus
 		}
+		if dev.RDPStatus != "" {
+			existing.RDPStatus = dev.RDPStatus
+		}
+		if dev.WinRMStatus != "" {
+			existing.WinRMStatus = dev.WinRMStatus
+		}
+		existing.AbnormalReason = dev.AbnormalReason
+		now := tz.Now()
+		existing.LastUpdated = &now
 		if err = d.UpdateDevice(existing); err != nil {
 			return nil, err
 		}
 		saved = append(saved, existing)
 	}
 	return saved, nil
+}
+
+func (d *SqlDb) GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit int) ([]db.DeviceStatusCallbackLog, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var logs []db.DeviceStatusCallbackLog
+	_, err := d.selectAll(&logs, d.PrepareQuery(
+		"select * from project__device_status_callback where project_id=? and device_id=? order by created desc limit ?",
+	), projectID, deviceID, limit)
+	return logs, err
+}
+
+func (d *SqlDb) CreateDeviceStatusCallbackLog(l db.DeviceStatusCallbackLog) (db.DeviceStatusCallbackLog, error) {
+	id, err := d.insert("id", "insert into project__device_status_callback ("+
+		"project_id, device_id, hostname, status, rdp_status, winrm_status, abnormal_reason, payload, created"+
+		") values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		l.ProjectID, l.DeviceID, l.Hostname, l.Status, l.RDPStatus, l.WinRMStatus, l.AbnormalReason, l.Payload, l.Created,
+	)
+	if err != nil {
+		return db.DeviceStatusCallbackLog{}, err
+	}
+	l.ID = id
+	return l, nil
 }
 
 func (d *SqlDb) GetDeviceConfigItems(projectID, deviceID int) ([]db.DeviceConfigItem, error) {

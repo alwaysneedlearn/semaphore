@@ -34,6 +34,16 @@
                 {{ item.device_status }}
               </v-chip>
             </template>
+            <template v-slot:item.rdp_status="{ item }">
+              <v-chip x-small :color="statusColor(item.rdp_status)" dark>
+                {{ item.rdp_status }}
+              </v-chip>
+            </template>
+            <template v-slot:item.winrm_status="{ item }">
+              <v-chip x-small :color="statusColor(item.winrm_status)" dark>
+                {{ item.winrm_status }}
+              </v-chip>
+            </template>
           </v-data-table>
         </v-card-text>
         <v-card-actions>
@@ -81,6 +91,34 @@
       :device-name="configDeviceName"
       @saved="loadItems"
     />
+    <v-dialog v-model="reasonDialog" max-width="700">
+      <v-card>
+        <v-card-title>
+          {{ $t('deviceAbnormalReason') }} - {{ reasonDeviceHostname }}
+        </v-card-title>
+        <v-card-text>
+          <v-alert dense type="warning" v-if="reasonError">{{ reasonError }}</v-alert>
+          <div class="mb-2">
+            <strong>{{ $t('deviceStatus') }}:</strong> {{ reasonData.device_status || '-' }}
+          </div>
+          <div class="mb-4">
+            <strong>{{ $t('deviceAbnormalReason') }}:</strong>
+            {{ reasonData.abnormal_reason || $t('deviceReasonEmpty') }}
+          </div>
+          <v-data-table
+            :headers="reasonHeaders"
+            :items="reasonData.logs || []"
+            dense
+            hide-default-footer
+            :items-per-page="Number.MAX_VALUE"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="reasonDialog = false">{{ $t('close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-toolbar flat>
       <v-app-bar-nav-icon @click="showDrawer()"></v-app-bar-nav-icon>
@@ -153,10 +191,10 @@
         <v-card outlined>
           <v-card-text class="pa-3">
             <div class="text-overline">
-              <v-icon small color="grey">mdi-help-circle</v-icon>
-              {{ $t('deviceUnknown') }}
+              <v-icon small color="warning">mdi-progress-clock</v-icon>
+              {{ $t('deviceChecking') }}
             </div>
-            <div class="text-h4">{{ stats.unknown }}</div>
+            <div class="text-h4">{{ stats.checking }}</div>
           </v-card-text>
         </v-card>
       </v-col>
@@ -173,6 +211,16 @@
       <template v-slot:item.device_status="{ item }">
         <v-chip x-small :color="statusColor(item.device_status)" dark>
           {{ item.device_status }}
+        </v-chip>
+      </template>
+      <template v-slot:item.rdp_status="{ item }">
+        <v-chip x-small :color="statusColor(item.rdp_status)" dark>
+          {{ item.rdp_status }}
+        </v-chip>
+      </template>
+      <template v-slot:item.winrm_status="{ item }">
+        <v-chip x-small :color="statusColor(item.winrm_status)" dark>
+          {{ item.winrm_status }}
         </v-chip>
       </template>
       <template v-slot:item.last_updated="{ item }">
@@ -219,6 +267,13 @@
           <v-btn :title="$t('deviceConfig')" @click="openConfigDialog(item)">
             <v-icon>mdi-cog</v-icon>
           </v-btn>
+          <v-btn
+            :title="$t('deviceAbnormalReason')"
+            :disabled="item.device_status === 'healthy' || item.device_status === 'unknown'"
+            @click="openReasonDialog(item)"
+          >
+            <v-icon>mdi-alert-circle-outline</v-icon>
+          </v-btn>
           <v-btn :title="$t('edit')" @click="editItem(item.id)">
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
@@ -253,6 +308,17 @@ export default {
       configDialog: false,
       configDeviceId: null,
       configDeviceName: '',
+      reasonDialog: false,
+      reasonError: '',
+      reasonDeviceHostname: '',
+      reasonData: {},
+      reasonHeaders: [
+        { text: this.$i18n.t('deviceLastUpdated'), value: 'created' },
+        { text: this.$i18n.t('deviceStatus'), value: 'status' },
+        { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status' },
+        { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status' },
+        { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
+      ],
       discoveryDialog: false,
       discoveryJson: '',
       discoveryError: '',
@@ -263,6 +329,8 @@ export default {
         { text: 'Hostname', value: 'hostname' },
         { text: 'IP', value: 'ip_address' },
         { text: 'Status', value: 'device_status' },
+        { text: 'RDP', value: 'rdp_status' },
+        { text: 'WinRM', value: 'winrm_status' },
       ],
     };
   },
@@ -296,6 +364,8 @@ export default {
         { text: this.$i18n.t('deviceIpAddress'), value: 'ip_address', width: '18%' },
         { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '25%' },
         { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
+        { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status', width: '9%' },
+        { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '9%' },
         { text: this.$i18n.t('deviceLastUpdated'), value: 'last_updated', width: '15%' },
         { value: 'actions', sortable: false, width: '0%' },
       ];
@@ -379,6 +449,9 @@ export default {
             hostname: (x.hostname || '').trim(),
             ip_address: (x.ip_address || x.ip || '').trim(),
             device_status: x.device_status || x.status || 'unknown',
+            rdp_status: x.rdp_status || 'unknown',
+            winrm_status: x.winrm_status || 'unknown',
+            abnormal_reason: x.abnormal_reason || null,
           }))
           .filter((x) => x.hostname);
         this.selectedDiscovered = [...this.discoveredDevices];
@@ -433,6 +506,18 @@ export default {
       this.configDeviceId = device.id;
       this.configDeviceName = device.hostname;
       this.configDialog = true;
+    },
+    async openReasonDialog(device) {
+      this.reasonDialog = true;
+      this.reasonDeviceHostname = device.hostname;
+      this.reasonError = '';
+      this.reasonData = {};
+      try {
+        const res = await axios.get(`${this.getItemsUrl()}/${device.id}/status/reason`);
+        this.reasonData = res.data || {};
+      } catch (e) {
+        this.reasonError = getErrorMessage(e);
+      }
     },
   },
 };

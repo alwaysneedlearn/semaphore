@@ -55,6 +55,22 @@ func GetDevice(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
 
+func GetDeviceStatusReason(w http.ResponseWriter, r *http.Request) {
+	device := helpers.GetFromContext(r, "device").(db.Device)
+	logs, err := helpers.Store(r).GetDeviceStatusCallbackLogs(device.ProjectID, device.ID, 20)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{
+		"hostname":        device.Hostname,
+		"device_status":   device.DeviceStatus,
+		"abnormal_reason": device.AbnormalReason,
+		"last_updated":    device.LastUpdated,
+		"logs":            logs,
+	})
+}
+
 // GetDeviceStatsHandler returns aggregate counts for the project's devices.
 func GetDeviceStatsHandler(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
@@ -81,6 +97,12 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	device.Name = device.Hostname
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = db.DeviceStatusUnknown
+	}
+	if device.RDPStatus == "" {
+		device.RDPStatus = db.DeviceStatusUnknown
+	}
+	if device.WinRMStatus == "" {
+		device.WinRMStatus = db.DeviceStatusUnknown
 	}
 
 	if err := device.Validate(); err != nil {
@@ -119,6 +141,10 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
 	device.Name = device.Hostname
+	device.RDPStatus = old.RDPStatus
+	device.WinRMStatus = old.WinRMStatus
+	device.AbnormalReason = old.AbnormalReason
+	device.LastUpdated = old.LastUpdated
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
@@ -315,7 +341,19 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		dev.IPAddress = strings.TrimSpace(dev.IPAddress)
 		dev.Name = dev.Hostname
 		if dev.DeviceStatus == "" {
-			dev.DeviceStatus = db.DeviceStatusUnknown
+			if dev.RDPStatus == db.DeviceStatusOnline && dev.WinRMStatus == db.DeviceStatusOnline {
+				dev.DeviceStatus = db.DeviceStatusHealthy
+			} else if dev.RDPStatus == db.DeviceStatusOffline && dev.WinRMStatus == db.DeviceStatusOffline {
+				dev.DeviceStatus = db.DeviceStatusUnhealthy
+			} else {
+				dev.DeviceStatus = db.DeviceStatusUnknown
+			}
+		}
+		if dev.RDPStatus == "" {
+			dev.RDPStatus = db.DeviceStatusUnknown
+		}
+		if dev.WinRMStatus == "" {
+			dev.WinRMStatus = db.DeviceStatusUnknown
 		}
 		if dev.Hostname == "" {
 			continue
@@ -343,9 +381,22 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated := 0
+	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	byHostname := map[string]db.Device{}
+	for _, dev := range devices {
+		byHostname[dev.Hostname] = dev
+	}
 	for _, u := range updates {
 		hostname := strings.TrimSpace(u.Hostname)
 		if hostname == "" {
+			continue
+		}
+		dev, ok := byHostname[hostname]
+		if !ok {
 			continue
 		}
 		switch u.Status {
@@ -357,9 +408,31 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		if u.CheckedAt != nil {
 			refreshed = *u.CheckedAt
 		}
-		if err := helpers.Store(r).UpdateDeviceStatusByHostname(project.ID, hostname, u.Status, refreshed); err == nil {
-			updated++
+		dev.DeviceStatus = u.Status
+		if u.RDPStatus != "" {
+			dev.RDPStatus = u.RDPStatus
 		}
+		if u.WinRMStatus != "" {
+			dev.WinRMStatus = u.WinRMStatus
+		}
+		dev.AbnormalReason = u.AbnormalReason
+		dev.LastUpdated = &refreshed
+		if err := helpers.Store(r).UpdateDevice(dev); err != nil {
+			continue
+		}
+		payloadBytes, _ := json.Marshal(u)
+		_, _ = helpers.Store(r).CreateDeviceStatusCallbackLog(db.DeviceStatusCallbackLog{
+			ProjectID:      project.ID,
+			DeviceID:       &dev.ID,
+			Hostname:       hostname,
+			Status:         u.Status,
+			RDPStatus:      dev.RDPStatus,
+			WinRMStatus:    dev.WinRMStatus,
+			AbnormalReason: u.AbnormalReason,
+			Payload:        string(payloadBytes),
+			Created:        refreshed,
+		})
+		updated++
 	}
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
 }

@@ -33,16 +33,17 @@ const (
 
 // Device is a managed host belonging to a project.
 type Device struct {
-	ID           int          `db:"id" json:"id" backup:"-"`
-	ProjectID    int          `db:"project_id" json:"project_id" backup:"-"`
-	Name         string       `db:"name" json:"name"`
-	IPAddress    string       `db:"ip_address" json:"ip_address"`
-	Hostname     string       `db:"hostname" json:"hostname"`
-	DeviceStatus DeviceStatus `db:"device_status" json:"device_status"`
-	RDPStatus    DeviceStatus `db:"rdp_status" json:"rdp_status"`
-	WinRMStatus  DeviceStatus `db:"winrm_status" json:"winrm_status"`
-	LastUpdated  *time.Time   `db:"last_updated" json:"last_updated,omitempty"`
-	Created      time.Time    `db:"created" json:"created" backup:"-"`
+	ID             int          `db:"id" json:"id" backup:"-"`
+	ProjectID      int          `db:"project_id" json:"project_id" backup:"-"`
+	Name           string       `db:"name" json:"name"`
+	IPAddress      string       `db:"ip_address" json:"ip_address"`
+	Hostname       string       `db:"hostname" json:"hostname"`
+	DeviceStatus   DeviceStatus `db:"device_status" json:"device_status"`
+	RDPStatus      DeviceStatus `db:"rdp_status" json:"rdp_status"`
+	WinRMStatus    DeviceStatus `db:"winrm_status" json:"winrm_status"`
+	AbnormalReason *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
+	LastUpdated    *time.Time   `db:"last_updated" json:"last_updated,omitempty"`
+	Created        time.Time    `db:"created" json:"created" backup:"-"`
 }
 
 // Validate enforces the device invariants checked at the API/store boundary.
@@ -125,7 +126,23 @@ type DeviceStats struct {
 }
 
 type DeviceStatusUpdate struct {
-	Hostname  string       `json:"hostname"`
-	Status    DeviceStatus `json:"status"`
-	CheckedAt *time.Time   `json:"checked_at,omitempty"`
+	Hostname       string       `json:"hostname"`
+	Status         DeviceStatus `json:"status"`
+	RDPStatus      DeviceStatus `json:"rdp_status,omitempty"`
+	WinRMStatus    DeviceStatus `json:"winrm_status,omitempty"`
+	AbnormalReason *string      `json:"abnormal_reason,omitempty"`
+	CheckedAt      *time.Time   `json:"checked_at,omitempty"`
+}
+
+type DeviceStatusCallbackLog struct {
+	ID             int          `db:"id" json:"id"`
+	ProjectID      int          `db:"project_id" json:"project_id"`
+	DeviceID       *int         `db:"device_id" json:"device_id,omitempty"`
+	Hostname       string       `db:"hostname" json:"hostname"`
+	Status         DeviceStatus `db:"status" json:"status"`
+	RDPStatus      DeviceStatus `db:"rdp_status" json:"rdp_status"`
+	WinRMStatus    DeviceStatus `db:"winrm_status" json:"winrm_status"`
+	AbnormalReason *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
+	Payload        string       `db:"payload" json:"payload"`
+	Created        time.Time    `db:"created" json:"created"`
 }

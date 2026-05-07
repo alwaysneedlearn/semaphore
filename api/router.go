@@ -428,6 +428,7 @@ func Route(
 	projectDeviceManagement.HandleFunc("/{device_id}", projects.GetDevice).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}", projects.UpdateDevice).Methods("PUT")
 	projectDeviceManagement.HandleFunc("/{device_id}", projects.RemoveDevice).Methods("DELETE")
+	projectDeviceManagement.HandleFunc("/{device_id}/status/reason", projects.GetDeviceStatusReason).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/config", projects.GetDeviceConfig).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/config", projects.PutDeviceConfig).Methods("PUT")
 	projectDeviceManagement.HandleFunc("/{device_id}/probe", projects.ProbeDevice).Methods("POST")

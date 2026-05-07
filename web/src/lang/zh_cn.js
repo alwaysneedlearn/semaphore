@@ -362,10 +362,13 @@ export default {
   deviceHostname: '主机名',
   deviceHostnameRequired: '主机名不能为空',
   deviceStatus: '设备状态',
+  deviceRdpStatus: 'RDP',
+  deviceWinrmStatus: 'WinRM',
   deviceLastUpdated: '更新时间',
   deviceTotal: '设备总数',
   deviceHealthy: '健康',
   deviceUnhealthy: '异常',
+  deviceChecking: '巡检中',
   devicePatrolAll: '巡检全部',
   deviceUnknown: '未知状态',
   deviceDiscover: '发现设备',
@@ -391,6 +394,8 @@ export default {
   deviceConfigAddRow: '新增配置项',
   keyIsRequired: '键不能为空',
   deviceTaskQueued: '任务 #{id} 已排队',
+  deviceAbnormalReason: '异常原因',
+  deviceReasonEmpty: '未记录异常原因',
 
   // 设备设置（项目设置页）
   deviceSettingsTitle: '设备操作模板',
