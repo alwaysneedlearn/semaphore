@@ -13,16 +13,6 @@
     </v-alert>
 
     <v-text-field
-      v-model="item.name"
-      :label="$t('name')"
-      :rules="[v => !!v || $t('name_required')]"
-      required
-      :disabled="formSaving"
-      outlined
-      dense
-    ></v-text-field>
-
-    <v-text-field
       v-model="item.ip_address"
       :label="$t('deviceIpAddress')"
       :rules="[v => !v || /^[0-9a-fA-F:.]+$/.test(v) || $t('deviceIpInvalid')]"
@@ -35,6 +25,7 @@
     <v-text-field
       v-model="item.hostname"
       :label="$t('deviceHostname')"
+      :rules="[v => !!v || $t('deviceHostnameRequired')]"
       :disabled="formSaving"
       outlined
       dense
@@ -57,9 +48,9 @@ export default {
     },
     getNewItem() {
       return {
-        name: '',
         ip_address: '',
         hostname: '',
+        device_status: 'unknown',
       };
     },
   },

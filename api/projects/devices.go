@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/semaphoreui/semaphore/api/helpers"
 	"github.com/semaphoreui/semaphore/db"
@@ -75,9 +76,12 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	device.ProjectID = project.ID
-	device.Name = strings.TrimSpace(device.Name)
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
+	device.Name = device.Hostname
+	if device.DeviceStatus == "" {
+		device.DeviceStatus = db.DeviceStatusUnknown
+	}
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
@@ -95,7 +99,7 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 		ProjectID:   project.ID,
 		ObjectType:  db.EventDevice,
 		ObjectID:    newDevice.ID,
-		Description: fmt.Sprintf("Device %s created", newDevice.Name),
+		Description: fmt.Sprintf("Device %s created", newDevice.Hostname),
 	})
 
 	helpers.WriteJSON(w, http.StatusCreated, newDevice)
@@ -112,9 +116,9 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	device.ID = old.ID
 	device.ProjectID = old.ProjectID
-	device.Name = strings.TrimSpace(device.Name)
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
+	device.Name = device.Hostname
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
@@ -131,7 +135,7 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		ProjectID:   old.ProjectID,
 		ObjectType:  db.EventDevice,
 		ObjectID:    old.ID,
-		Description: fmt.Sprintf("Device %s updated", device.Name),
+		Description: fmt.Sprintf("Device %s updated", device.Hostname),
 	})
 
 	w.WriteHeader(http.StatusNoContent)
@@ -150,7 +154,7 @@ func RemoveDevice(w http.ResponseWriter, r *http.Request) {
 		ProjectID:   device.ProjectID,
 		ObjectType:  db.EventDevice,
 		ObjectID:    device.ID,
-		Description: fmt.Sprintf("Device %s deleted", device.Name),
+		Description: fmt.Sprintf("Device %s deleted", device.Hostname),
 	})
 
 	w.WriteHeader(http.StatusNoContent)
@@ -292,6 +296,101 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusCreated, task)
 }
 
+func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body struct {
+		Devices           []db.Device `json:"devices"`
+		SelectedHostnames []string    `json:"selected_hostnames"`
+	}
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	selected := map[string]bool{}
+	for _, h := range body.SelectedHostnames {
+		selected[strings.TrimSpace(h)] = true
+	}
+	var toUpsert []db.Device
+	for _, dev := range body.Devices {
+		dev.Hostname = strings.TrimSpace(dev.Hostname)
+		dev.IPAddress = strings.TrimSpace(dev.IPAddress)
+		dev.Name = dev.Hostname
+		if dev.DeviceStatus == "" {
+			dev.DeviceStatus = db.DeviceStatusUnknown
+		}
+		if dev.Hostname == "" {
+			continue
+		}
+		if len(selected) > 0 && !selected[dev.Hostname] {
+			continue
+		}
+		toUpsert = append(toUpsert, dev)
+	}
+	saved, err := helpers.Store(r).UpsertDevicesByHostname(project.ID, toUpsert)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{
+		"saved_count": len(saved),
+		"devices":     saved,
+	})
+}
+
+func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var updates []db.DeviceStatusUpdate
+	if !helpers.Bind(w, r, &updates) {
+		return
+	}
+	updated := 0
+	for _, u := range updates {
+		hostname := strings.TrimSpace(u.Hostname)
+		if hostname == "" {
+			continue
+		}
+		switch u.Status {
+		case db.DeviceStatusHealthy, db.DeviceStatusUnhealthy, db.DeviceStatusChecking, db.DeviceStatusUnknown:
+		default:
+			continue
+		}
+		refreshed := time.Now()
+		if u.CheckedAt != nil {
+			refreshed = *u.CheckedAt
+		}
+		if err := helpers.Store(r).UpdateDeviceStatusByHostname(project.ID, hostname, u.Status, refreshed); err == nil {
+			updated++
+		}
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
+}
+
+func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	payload := make([]map[string]any, 0, len(devices))
+	for _, d := range devices {
+		payload = append(payload, map[string]any{
+			"id":       d.ID,
+			"hostname": d.Hostname,
+			"ip":       d.IPAddress,
+		})
+	}
+	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	now := time.Now()
+	for _, d := range devices {
+		_ = helpers.Store(r).UpdateDeviceStatusByHostname(project.ID, d.Hostname, db.DeviceStatusChecking, now)
+	}
+	helpers.WriteJSON(w, http.StatusCreated, task)
+}
+
 // RunDeviceAction triggers the configured template for {start, stop, restart,
 // status, config} on a specific device.
 func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +417,6 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	extraVars := map[string]any{
 		"device": map[string]any{
 			"id":       device.ID,
-			"name":     device.Name,
 			"ip":       device.IPAddress,
 			"hostname": device.Hostname,
 		},
@@ -366,6 +464,13 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
+		device.DeviceStatus = db.DeviceStatusHealthy
+	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
+		device.DeviceStatus = db.DeviceStatusUnhealthy
+	} else {
+		device.DeviceStatus = db.DeviceStatusUnknown
+	}
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)
 }

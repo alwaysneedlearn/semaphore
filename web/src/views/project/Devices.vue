@@ -1,5 +1,50 @@
 <template>
   <div v-if="items != null">
+    <v-dialog v-model="discoveryDialog" :max-width="900">
+      <v-card>
+        <v-card-title>{{ $t('deviceDiscoveryTitle') }}</v-card-title>
+        <v-card-text>
+          <p class="text--secondary">
+            {{ $t('deviceDiscoveryHelp') }}
+          </p>
+          <v-textarea
+            v-model="discoveryJson"
+            :label="$t('deviceDiscoveryJson')"
+            outlined
+            rows="6"
+            auto-grow
+          />
+          <div class="d-flex mb-2">
+            <v-btn small text @click="parseDiscoveryJson">{{ $t('parse') }}</v-btn>
+            <v-btn small text class="ml-2" @click="runDiscoverTemplate">
+              {{ $t('deviceDiscoverRunTemplate') }}
+            </v-btn>
+          </div>
+          <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
+          <v-data-table
+            :headers="discoveryHeaders"
+            :items="discoveredDevices"
+            item-key="hostname"
+            show-select
+            v-model="selectedDiscovered"
+            dense
+          >
+            <template v-slot:item.device_status="{ item }">
+              <v-chip x-small :color="statusColor(item.device_status)" dark>
+                {{ item.device_status }}
+              </v-chip>
+            </template>
+          </v-data-table>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="discoveryDialog = false">{{ $t('cancel') }}</v-btn>
+          <v-btn color="primary" :loading="importingDiscovery" @click="importSelectedDiscovery">
+            {{ $t('deviceImportSelected') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <EditDialog
       v-model="editDialog"
@@ -45,11 +90,20 @@
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
         text
         class="mr-2"
-        :loading="discovering"
-        @click="discoverDevices"
+        @click="discoveryDialog = true"
       >
         <v-icon left>mdi-radar</v-icon>
         {{ $t('deviceDiscover') }}
+      </v-btn>
+      <v-btn
+        v-if="can(USER_PERMISSIONS.manageProjectResources)"
+        text
+        class="mr-2"
+        :loading="patrolling"
+        @click="runPatrol"
+      >
+        <v-icon left>mdi-stethoscope</v-icon>
+        {{ $t('devicePatrolAll') }}
       </v-btn>
       <v-btn
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
@@ -77,10 +131,10 @@
         <v-card outlined>
           <v-card-text class="pa-3">
             <div class="text-overline">
-              <v-icon small color="success">mdi-checkbox-marked-circle</v-icon>
-              {{ $t('deviceRdpOnline') }}
+              <v-icon small color="success">mdi-check-circle</v-icon>
+              {{ $t('deviceHealthy') }}
             </div>
-            <div class="text-h4">{{ stats.rdp_online }}</div>
+            <div class="text-h4">{{ stats.healthy }}</div>
           </v-card-text>
         </v-card>
       </v-col>
@@ -88,10 +142,10 @@
         <v-card outlined>
           <v-card-text class="pa-3">
             <div class="text-overline">
-              <v-icon small color="success">mdi-checkbox-marked-circle</v-icon>
-              {{ $t('deviceWinrmOnline') }}
+              <v-icon small color="error">mdi-alert-circle</v-icon>
+              {{ $t('deviceUnhealthy') }}
             </div>
-            <div class="text-h4">{{ stats.winrm_online }}</div>
+            <div class="text-h4">{{ stats.unhealthy }}</div>
           </v-card-text>
         </v-card>
       </v-col>
@@ -116,14 +170,9 @@
       :items-per-page="Number.MAX_VALUE"
       style="max-width: calc(var(--breakpoint-xl) - var(--nav-drawer-width) - 200px); margin: auto;"
     >
-      <template v-slot:item.rdp_status="{ item }">
-        <v-chip x-small :color="statusColor(item.rdp_status)" dark>
-          {{ item.rdp_status }}
-        </v-chip>
-      </template>
-      <template v-slot:item.winrm_status="{ item }">
-        <v-chip x-small :color="statusColor(item.winrm_status)" dark>
-          {{ item.winrm_status }}
+      <template v-slot:item.device_status="{ item }">
+        <v-chip x-small :color="statusColor(item.device_status)" dark>
+          {{ item.device_status }}
         </v-chip>
       </template>
       <template v-slot:item.last_updated="{ item }">
@@ -196,13 +245,25 @@ export default {
   data() {
     return {
       stats: {
-        total: 0, rdp_online: 0, winrm_online: 0, unknown: 0,
+        total: 0, healthy: 0, unhealthy: 0, checking: 0, unknown: 0,
       },
       discovering: false,
+      patrolling: false,
       busyId: null,
       configDialog: false,
       configDeviceId: null,
       configDeviceName: '',
+      discoveryDialog: false,
+      discoveryJson: '',
+      discoveryError: '',
+      discoveredDevices: [],
+      selectedDiscovered: [],
+      importingDiscovery: false,
+      discoveryHeaders: [
+        { text: 'Hostname', value: 'hostname' },
+        { text: 'IP', value: 'ip_address' },
+        { text: 'Status', value: 'device_status' },
+      ],
     };
   },
 
@@ -215,8 +276,9 @@ export default {
     },
 
     statusColor(s) {
-      if (s === 'online') return 'success';
-      if (s === 'offline') return 'error';
+      if (s === 'healthy' || s === 'online') return 'success';
+      if (s === 'unhealthy' || s === 'offline') return 'error';
+      if (s === 'checking') return 'warning';
       return 'grey';
     },
 
@@ -231,11 +293,9 @@ export default {
 
     getHeaders() {
       return [
-        { text: this.$i18n.t('name'), value: 'name', width: '15%' },
-        { text: this.$i18n.t('deviceIpAddress'), value: 'ip_address', width: '12%' },
-        { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '20%' },
-        { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status', width: '10%' },
-        { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '10%' },
+        { text: this.$i18n.t('deviceIpAddress'), value: 'ip_address', width: '18%' },
+        { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '25%' },
+        { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
         { text: this.$i18n.t('deviceLastUpdated'), value: 'last_updated', width: '15%' },
         { value: 'actions', sortable: false, width: '0%' },
       ];
@@ -307,10 +367,71 @@ export default {
         this.discovering = false;
       }
     },
+    parseDiscoveryJson() {
+      this.discoveryError = '';
+      try {
+        const parsed = JSON.parse(this.discoveryJson || '[]');
+        if (!Array.isArray(parsed)) {
+          throw new Error('json must be array');
+        }
+        this.discoveredDevices = parsed
+          .map((x) => ({
+            hostname: (x.hostname || '').trim(),
+            ip_address: (x.ip_address || x.ip || '').trim(),
+            device_status: x.device_status || x.status || 'unknown',
+          }))
+          .filter((x) => x.hostname);
+        this.selectedDiscovered = [...this.discoveredDevices];
+      } catch (e) {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryJsonInvalid');
+      }
+    },
+    async runDiscoverTemplate() {
+      await this.discoverDevices();
+    },
+    async importSelectedDiscovery() {
+      this.importingDiscovery = true;
+      this.discoveryError = '';
+      try {
+        const payload = {
+          devices: this.discoveredDevices,
+          selected_hostnames: this.selectedDiscovered.map((x) => x.hostname),
+        };
+        const res = await axios.post(`${this.getItemsUrl()}/discovery/import`, payload);
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceImportSaved', { count: res.data.saved_count || 0 }),
+        });
+        this.discoveryDialog = false;
+        await this.loadItems();
+      } catch (e) {
+        this.discoveryError = getErrorMessage(e);
+      } finally {
+        this.importingDiscovery = false;
+      }
+    },
+    async runPatrol() {
+      this.patrolling = true;
+      try {
+        const res = await axios.post(`${this.getItemsUrl()}/patrol`);
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
+        });
+        if (res.data && res.data.id) {
+          EventBus.$emit('i-show-task', { taskId: res.data.id });
+        }
+        await this.loadItems();
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.patrolling = false;
+      }
+    },
 
     openConfigDialog(device) {
       this.configDeviceId = device.id;
-      this.configDeviceName = device.name;
+      this.configDeviceName = device.hostname;
       this.configDialog = true;
     },
   },

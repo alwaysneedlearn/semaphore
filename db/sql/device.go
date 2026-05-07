@@ -25,6 +25,12 @@ func (d *SqlDb) DeleteDevice(projectID int, deviceID int) error {
 }
 
 func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) {
+	if device.Name == "" {
+		device.Name = device.Hostname
+	}
+	if device.DeviceStatus == "" {
+		device.DeviceStatus = db.DeviceStatusUnknown
+	}
 	if device.RDPStatus == "" {
 		device.RDPStatus = db.DeviceStatusUnknown
 	}
@@ -36,13 +42,14 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 	insertID, err := d.insert(
 		"id",
 		"insert into project__device ("+
-			"project_id, name, ip_address, hostname, "+
+			"project_id, name, ip_address, hostname, device_status, "+
 			"rdp_status, winrm_status, last_updated, created) values "+
-			"(?, ?, ?, ?, ?, ?, ?, ?)",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		device.ProjectID,
 		device.Name,
 		device.IPAddress,
 		device.Hostname,
+		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
 		device.LastUpdated,
@@ -60,11 +67,12 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 func (d *SqlDb) UpdateDevice(device db.Device) error {
 	_, err := d.exec(
 		"update project__device set "+
-			"name=?, ip_address=?, hostname=? "+
+			"name=?, ip_address=?, hostname=?, device_status=? "+
 			"where id=? and project_id=?",
 		device.Name,
 		device.IPAddress,
 		device.Hostname,
+		device.DeviceStatus,
 		device.ID,
 		device.ProjectID,
 	)
@@ -72,26 +80,31 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 }
 
 func (d *SqlDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
+	deviceStatus := db.DeviceStatusUnknown
+	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
+		deviceStatus = db.DeviceStatusHealthy
+	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
+		deviceStatus = db.DeviceStatusUnhealthy
+	}
 	_, err := d.exec(
-		"update project__device set rdp_status=?, winrm_status=?, last_updated=? "+
+		"update project__device set rdp_status=?, winrm_status=?, device_status=?, last_updated=? "+
 			"where id=? and project_id=?",
-		rdp, winrm, refreshed, deviceID, projectID,
+		rdp, winrm, deviceStatus, refreshed, deviceID, projectID,
 	)
 	return err
 }
 
 func (d *SqlDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) {
 	type row struct {
-		RDP     db.DeviceStatus `db:"rdp_status"`
-		WinRM   db.DeviceStatus `db:"winrm_status"`
-		Count   int             `db:"cnt"`
+		Status db.DeviceStatus `db:"device_status"`
+		Count  int             `db:"cnt"`
 	}
 	var rows []row
 	_, err = d.selectAll(&rows,
 		d.PrepareQuery(
-			"select rdp_status, winrm_status, count(*) as cnt "+
+			"select device_status, count(*) as cnt "+
 				"from project__device where project_id=? "+
-				"group by rdp_status, winrm_status"),
+				"group by device_status"),
 		projectID,
 	)
 	if err != nil {
@@ -100,23 +113,62 @@ func (d *SqlDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) 
 
 	for _, r := range rows {
 		stats.Total += r.Count
-		switch r.RDP {
-		case db.DeviceStatusOnline:
-			stats.RDPOnline += r.Count
-		case db.DeviceStatusOffline:
-			stats.RDPOffline += r.Count
-		}
-		switch r.WinRM {
-		case db.DeviceStatusOnline:
-			stats.WinRMOnline += r.Count
-		case db.DeviceStatusOffline:
-			stats.WinRMOffline += r.Count
-		}
-		if r.RDP == db.DeviceStatusUnknown && r.WinRM == db.DeviceStatusUnknown {
+		switch r.Status {
+		case db.DeviceStatusHealthy:
+			stats.Healthy += r.Count
+		case db.DeviceStatusUnhealthy:
+			stats.Unhealthy += r.Count
+		case db.DeviceStatusChecking:
+			stats.Checking += r.Count
+		default:
 			stats.Unknown += r.Count
 		}
 	}
 	return
+}
+
+func (d *SqlDb) UpdateDeviceStatusByHostname(projectID int, hostname string, status db.DeviceStatus, refreshed time.Time) error {
+	_, err := d.exec(
+		"update project__device set device_status=?, last_updated=? where project_id=? and hostname=?",
+		status,
+		refreshed,
+		projectID,
+		hostname,
+	)
+	return err
+}
+
+func (d *SqlDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]db.Device, error) {
+	var saved []db.Device
+	for _, dev := range devices {
+		var existing db.Device
+		err := d.selectOne(&existing,
+			"select * from project__device where project_id=? and hostname=?",
+			projectID, dev.Hostname)
+		if err != nil && !errors.Is(err, db.ErrNotFound) {
+			return nil, err
+		}
+
+		if errors.Is(err, db.ErrNotFound) {
+			dev.ProjectID = projectID
+			created, cErr := d.CreateDevice(dev)
+			if cErr != nil {
+				return nil, cErr
+			}
+			saved = append(saved, created)
+			continue
+		}
+
+		existing.IPAddress = dev.IPAddress
+		if dev.DeviceStatus != "" {
+			existing.DeviceStatus = dev.DeviceStatus
+		}
+		if err = d.UpdateDevice(existing); err != nil {
+			return nil, err
+		}
+		saved = append(saved, existing)
+	}
+	return saved, nil
 }
 
 func (d *SqlDb) GetDeviceConfigItems(projectID, deviceID int) ([]db.DeviceConfigItem, error) {

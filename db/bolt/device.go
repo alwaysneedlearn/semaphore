@@ -26,6 +26,12 @@ func (d *BoltDb) UpdateDevice(device db.Device) error {
 }
 
 func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
+	if device.Name == "" {
+		device.Name = device.Hostname
+	}
+	if device.DeviceStatus == "" {
+		device.DeviceStatus = db.DeviceStatusUnknown
+	}
 	if device.RDPStatus == "" {
 		device.RDPStatus = db.DeviceStatusUnknown
 	}
@@ -48,6 +54,13 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.Devic
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
+		device.DeviceStatus = db.DeviceStatusHealthy
+	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
+		device.DeviceStatus = db.DeviceStatusUnhealthy
+	} else {
+		device.DeviceStatus = db.DeviceStatusUnknown
+	}
 	t := refreshed
 	device.LastUpdated = &t
 	return d.updateObject(projectID, db.DeviceProps, device)
@@ -60,23 +73,66 @@ func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error)
 	}
 	for _, dev := range devices {
 		stats.Total++
-		switch dev.RDPStatus {
-		case db.DeviceStatusOnline:
-			stats.RDPOnline++
-		case db.DeviceStatusOffline:
-			stats.RDPOffline++
-		}
-		switch dev.WinRMStatus {
-		case db.DeviceStatusOnline:
-			stats.WinRMOnline++
-		case db.DeviceStatusOffline:
-			stats.WinRMOffline++
-		}
-		if dev.RDPStatus == db.DeviceStatusUnknown && dev.WinRMStatus == db.DeviceStatusUnknown {
+		switch dev.DeviceStatus {
+		case db.DeviceStatusHealthy:
+			stats.Healthy++
+		case db.DeviceStatusUnhealthy:
+			stats.Unhealthy++
+		case db.DeviceStatusChecking:
+			stats.Checking++
+		default:
 			stats.Unknown++
 		}
 	}
 	return
+}
+
+func (d *BoltDb) UpdateDeviceStatusByHostname(projectID int, hostname string, status db.DeviceStatus, refreshed time.Time) error {
+	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{})
+	if err != nil {
+		return err
+	}
+	for _, dev := range devices {
+		if dev.Hostname == hostname {
+			dev.DeviceStatus = status
+			t := refreshed
+			dev.LastUpdated = &t
+			return d.UpdateDevice(dev)
+		}
+	}
+	return db.ErrNotFound
+}
+
+func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]db.Device, error) {
+	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{})
+	if err != nil {
+		return nil, err
+	}
+	byHost := map[string]db.Device{}
+	for _, dev := range existing {
+		byHost[dev.Hostname] = dev
+	}
+	var saved []db.Device
+	for _, dev := range devices {
+		if old, ok := byHost[dev.Hostname]; ok {
+			old.IPAddress = dev.IPAddress
+			if dev.DeviceStatus != "" {
+				old.DeviceStatus = dev.DeviceStatus
+			}
+			if err = d.UpdateDevice(old); err != nil {
+				return nil, err
+			}
+			saved = append(saved, old)
+		} else {
+			dev.ProjectID = projectID
+			created, cErr := d.CreateDevice(dev)
+			if cErr != nil {
+				return nil, cErr
+			}
+			saved = append(saved, created)
+		}
+	}
+	return saved, nil
 }
 
 // Device config items in Bolt are stored as a side-list keyed by device id.
