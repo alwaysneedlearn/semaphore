@@ -308,6 +308,25 @@ type InventoryManager interface {
 	DeleteInventory(projectID int, inventoryID int) error
 }
 
+// DeviceManager handles device-related operations.
+type DeviceManager interface {
+	GetDevices(projectID int, params RetrieveQueryParams) ([]Device, error)
+	GetDevice(projectID, deviceID int) (Device, error)
+	CreateDevice(device Device) (Device, error)
+	UpdateDevice(device Device) error
+	UpdateDeviceStatus(projectID, deviceID int, rdp, winrm DeviceStatus, refreshed time.Time) error
+	DeleteDevice(projectID, deviceID int) error
+	GetDeviceStats(projectID int) (DeviceStats, error)
+
+	GetDeviceConfigItems(projectID, deviceID int) ([]DeviceConfigItem, error)
+	SetDeviceConfigItems(projectID, deviceID int, items []DeviceConfigItem) error
+
+	GetProjectDeviceSettings(projectID int) (ProjectDeviceSettings, error)
+	UpdateProjectDeviceSettings(settings ProjectDeviceSettings) error
+	MarkProjectStatusRefreshed(projectID int, refreshed time.Time) error
+	GetProjectsDueForStatusRefresh(now time.Time) ([]ProjectDeviceSettings, error)
+}
+
 // RepositoryManager handles repository-related operations
 type RepositoryManager interface {
 	GetRepository(projectID int, repositoryID int) (Repository, error)
@@ -537,6 +556,7 @@ type Store interface {
 	SecretStorageRepository
 	SecretSyncRepository
 	RoleRepository
+	DeviceManager
 }
 
 var AccessKeyProps = ObjectProps{
@@ -603,6 +623,23 @@ var InventoryProps = ObjectProps{
 	SortableColumns:       []string{"name"},
 	DefaultSortingColumn:  "name",
 	Ownerships:            []*ObjectProps{&TemplateProps},
+}
+
+var DeviceProps = ObjectProps{
+	TableName:             "project__device",
+	Type:                  reflect.TypeOf(Device{}),
+	PrimaryColumnName:     "id",
+	ReferringColumnSuffix: "device_id",
+	SortableColumns:       []string{"name", "ip_address", "hostname", "rdp_status", "winrm_status", "last_updated"},
+	DefaultSortingColumn:  "name",
+}
+
+var DeviceConfigItemProps = ObjectProps{
+	TableName:            "project__device_config_item",
+	Type:                 reflect.TypeOf(DeviceConfigItem{}),
+	PrimaryColumnName:    "id",
+	SortableColumns:      []string{"category", "key"},
+	DefaultSortingColumn: "category",
 }
 
 var RepositoryProps = ObjectProps{
