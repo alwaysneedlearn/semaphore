@@ -628,12 +628,37 @@ export default {
         return null;
       }
     },
+    stripAnsiCodes(input) {
+      if (!input) {
+        return '';
+      }
+      const ESC = '\u001b';
+      let i = 0;
+      let out = '';
+      while (i < input.length) {
+        if (input[i] === ESC && input[i + 1] === '[') {
+          i += 2;
+          while (i < input.length) {
+            const ch = input[i];
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+              i += 1;
+              break;
+            }
+            i += 1;
+          }
+        } else {
+          out += input[i];
+          i += 1;
+        }
+      }
+      return out;
+    },
     extractJsonArrayFromText(text) {
       if (!text) {
         return null;
       }
 
-      const clean = text.split('\u001b').join('');
+      const clean = this.stripAnsiCodes(text);
 
       const direct = this.tryParseJsonArray(clean);
       if (direct) {
