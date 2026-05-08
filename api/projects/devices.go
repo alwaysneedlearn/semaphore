@@ -536,8 +536,31 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 // DiscoverDevices triggers the project's discover template (if configured).
 func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body struct {
+		Subnet      string                 `json:"subnet"`
+		NetworkCIDR string                 `json:"network_cidr"`
+		ExtraVars   map[string]interface{} `json:"extra_vars"`
+	}
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
 
-	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, nil, nil)
+	extraVars := map[string]interface{}{}
+	for k, v := range body.ExtraVars {
+		extraVars[k] = v
+	}
+
+	subnet := strings.TrimSpace(body.Subnet)
+	if subnet == "" {
+		subnet = strings.TrimSpace(body.NetworkCIDR)
+	}
+	if subnet != "" {
+		// Keep both keys for compatibility with existing templates.
+		extraVars["subnet"] = subnet
+		extraVars["network_cidr"] = subnet
+	}
+
+	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return

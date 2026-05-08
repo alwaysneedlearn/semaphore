@@ -7,6 +7,16 @@
           <p class="text--secondary">
             {{ $t('deviceDiscoveryHelp') }}
           </p>
+          <v-text-field
+            v-model="discoverySubnet"
+            :label="$t('deviceDiscoverySubnet')"
+            :hint="$t('deviceDiscoverySubnetHint')"
+            persistent-hint
+            outlined
+            dense
+            class="mb-2"
+            placeholder="192.168.1.0/24"
+          />
           <v-textarea
             v-model="discoveryJson"
             :label="$t('deviceDiscoveryJson')"
@@ -428,6 +438,7 @@ export default {
       ],
       discoveryDialog: false,
       discoveryJson: '',
+      discoverySubnet: '',
       discoveryError: '',
       discoveredDevices: [],
       selectedDiscovered: [],
@@ -573,7 +584,10 @@ export default {
     async discoverDevices() {
       this.discovering = true;
       try {
-        const res = await axios.post(`${this.getItemsUrl()}/discover`);
+        const payload = {
+          subnet: this.discoverySubnet || null,
+        };
+        const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
         EventBus.$emit('i-snackbar', {
           color: 'success',
           text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
