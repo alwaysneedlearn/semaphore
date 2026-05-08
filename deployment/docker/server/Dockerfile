@@ -4,8 +4,10 @@ RUN apk add --no-cache -U \
     libc-dev curl nodejs npm git gcc zip unzip tar
 
 WORKDIR /usr/local
-# hadolint ignore=DL4006
-RUN curl -sL https://taskfile.dev/install.sh | sh
+# Install task via Go modules (avoid install.sh hitting GitHub API for latest tag).
+# Pin a release for reproducible builds when GitHub is slow or rate-limited.
+RUN go install github.com/go-task/task/v3/cmd/task@v3.45.5
+ENV PATH="/go/bin:${PATH}"
 
 WORKDIR /go/src/semaphore
 COPY . /go/src/semaphore
