@@ -33,17 +33,52 @@
     />
 
     <v-divider class="my-4" />
-    <p class="text--secondary mb-2">默认配置（全部设备）JSON</p>
-    <v-textarea
-      v-model="settings.default_config_json"
-      label="default_config_json"
-      hint='例如: {"SystemConfig":{"ExecuteType":"1","IsExportHisData":"True"}}'
-      persistent-hint
-      outlined
+    <p class="text--secondary mb-2">默认配置（全部设备）</p>
+    <v-data-table
+      :headers="defaultConfigHeaders"
+      :items="defaultConfigItems"
       dense
-      rows="4"
-      :disabled="saving"
-    />
+      hide-default-footer
+      :items-per-page="Number.MAX_VALUE"
+    >
+      <template v-slot:item.category="{ item }">
+        <v-text-field
+          v-model="item.category"
+          hide-details
+          dense
+          outlined
+          placeholder="SystemConfig"
+          :disabled="saving"
+        />
+      </template>
+      <template v-slot:item.key="{ item }">
+        <v-text-field
+          v-model="item.key"
+          hide-details
+          dense
+          outlined
+          :disabled="saving"
+        />
+      </template>
+      <template v-slot:item.value="{ item }">
+        <v-text-field
+          v-model="item.value"
+          hide-details
+          dense
+          outlined
+          :disabled="saving"
+        />
+      </template>
+      <template v-slot:item.actions="{ index }">
+        <v-btn icon small @click="removeDefaultConfigRow(index)" :disabled="saving">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </template>
+    </v-data-table>
+    <v-btn small text class="mt-2" @click="addDefaultConfigRow" :disabled="saving">
+      <v-icon left>mdi-plus</v-icon>
+      {{ $t('deviceConfigAddRow') }}
+    </v-btn>
 
     <v-divider class="my-4" />
 
@@ -163,6 +198,13 @@ export default {
       },
       saving: false,
       formError: null,
+      defaultConfigItems: [],
+      defaultConfigHeaders: [
+        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
+        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '30%' },
+        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '40%' },
+        { value: 'actions', sortable: false, width: '5%' },
+      ],
     };
   },
 
@@ -184,6 +226,7 @@ export default {
         const res = await axios.get(`/api/project/${this.projectId}/devices/settings`);
         // copy fields the server returned, falling back to defaults
         this.settings = { ...this.settings, ...(res.data || {}) };
+        this.defaultConfigItems = this.parseDefaultConfigJson(this.settings.default_config_json);
         if (this.settings.status_refresh_interval_min == null) {
           this.settings.status_refresh_interval_min = 0;
         }
@@ -191,11 +234,55 @@ export default {
         this.formError = getErrorMessage(e);
       }
     },
+    parseDefaultConfigJson(raw) {
+      if (!raw || String(raw).trim() === '') {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        const rows = [];
+        Object.keys(parsed || {}).forEach((category) => {
+          const group = parsed[category] || {};
+          Object.keys(group).forEach((key) => {
+            rows.push({
+              category,
+              key,
+              value: String(group[key] == null ? '' : group[key]),
+            });
+          });
+        });
+        return rows;
+      } catch (e) {
+        return [];
+      }
+    },
+    buildDefaultConfigJson() {
+      const categorized = {};
+      this.defaultConfigItems.forEach((item) => {
+        const category = (item.category || '').trim();
+        const key = (item.key || '').trim();
+        if (!category || !key) {
+          return;
+        }
+        if (!categorized[category]) {
+          categorized[category] = {};
+        }
+        categorized[category][key] = item.value == null ? '' : String(item.value);
+      });
+      return JSON.stringify(categorized);
+    },
+    addDefaultConfigRow() {
+      this.defaultConfigItems.push({ category: 'SystemConfig', key: '', value: '' });
+    },
+    removeDefaultConfigRow(index) {
+      this.defaultConfigItems.splice(index, 1);
+    },
     async save() {
       this.saving = true;
       this.formError = null;
       try {
         const payload = { ...this.settings };
+        payload.default_config_json = this.buildDefaultConfigJson();
         payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
         payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
         await axios.put(`/api/project/${this.projectId}/devices/settings`, payload);
