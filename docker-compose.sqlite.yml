@@ -19,9 +19,9 @@ services:
       TZ: Asia/Shanghai
     volumes:
       # 配置文件持久化
-      - ./semaphore-config:/etc/semaphore
+      - ./semaphore-config-sqlite:/etc/semaphore
       # SQLite 数据文件持久化
-      - ./semaphore-data:/var/lib/semaphore
+      - ./semaphore-data-sqlite:/var/lib/semaphore
       # playbook
       - ./playbook:/root/playbook
       # neware安装包
