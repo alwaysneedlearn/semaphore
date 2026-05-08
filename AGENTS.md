@@ -56,3 +56,4 @@ All commands use `task` (go-task). See `Taskfile.yml` for the full list.
 - The `go.mod` has a `replace` directive pointing `pro` module to `./pro`; this is normal for the open-source build.
 - SQLite is the simplest DB dialect for local dev — no external database service needed.
 - After changing Go code, you must rebuild the binary (`task build:be`) before restarting the server. The frontend has a separate build (`task build:fe`).
+- Critical deploy sequence for UI changes: after any frontend change, always run `task build:fe`, then rebuild backend (`task build:be` or `go build ...`) so new assets are embedded, then restart the running `./bin/semaphore ...` process. If UI still looks stale, hard refresh (`Ctrl+Shift+R`) to bust browser cache.
