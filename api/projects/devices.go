@@ -541,8 +541,13 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 		NetworkCIDR string                 `json:"network_cidr"`
 		ExtraVars   map[string]interface{} `json:"extra_vars"`
 	}
-	if !helpers.Bind(w, r, &body) {
-		return
+	if r.Body != nil {
+		defer r.Body.Close()
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&body); err != nil && err != io.EOF {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
 
 	extraVars := map[string]interface{}{}
