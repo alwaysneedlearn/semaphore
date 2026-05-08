@@ -617,23 +617,52 @@ export default {
       });
       await this.waitAndLoadDiscoveryResult(taskId, attemptsLeft - 1);
     },
+    tryParseJsonArray(candidate) {
+      if (!candidate) {
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(candidate.trim());
+        return Array.isArray(parsed) ? parsed : null;
+      } catch (e) {
+        return null;
+      }
+    },
     extractJsonArrayFromText(text) {
       if (!text) {
         return null;
       }
-      let start = text.lastIndexOf('[');
-      while (start !== -1) {
-        const candidate = text.slice(start).trim();
+
+      const clean = text.split('\u001b').join('');
+
+      const direct = this.tryParseJsonArray(clean);
+      if (direct) {
+        return direct;
+      }
+
+      const escapedFieldRegex = /"(stdout|msg)"\s*:\s*"((?:\\.|[^"\\])*)"/g;
+      let escapedFieldMatch = escapedFieldRegex.exec(clean);
+      while (escapedFieldMatch !== null) {
         try {
-          const parsed = JSON.parse(candidate);
-          if (Array.isArray(parsed)) {
-            return parsed;
+          const unescaped = JSON.parse(`"${escapedFieldMatch[2]}"`);
+          const fromField = this.tryParseJsonArray(unescaped);
+          if (fromField) {
+            return fromField;
           }
         } catch (e) {
-          // continue scanning previous '['
+          // continue
         }
-        start = text.lastIndexOf('[', start - 1);
+        escapedFieldMatch = escapedFieldRegex.exec(clean);
       }
+
+      const arrayLikeMatches = clean.match(/\[\s*\{[\s\S]*?\}\s*\]/g) || [];
+      for (let i = arrayLikeMatches.length - 1; i >= 0; i -= 1) {
+        const parsed = this.tryParseJsonArray(arrayLikeMatches[i]);
+        if (parsed) {
+          return parsed;
+        }
+      }
+
       return null;
     },
     async loadDiscoveryResultFromTask(taskId) {
