@@ -869,6 +869,24 @@ func createTemporaryInventoryForDevices(r *http.Request, projectID int, devices 
 	return &inv.ID, nil
 }
 
+func enqueueDeviceActionTask(
+	r *http.Request,
+	project db.Project,
+	action db.DeviceAction,
+	extraVars map[string]any,
+	inventoryID *int,
+) (db.Task, error) {
+	return runDeviceTemplate(r, project, action, extraVars, inventoryID)
+}
+
+func cloneExtraVars(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
 // RunDeviceAction triggers the configured template for {start, stop, restart,
 // status, config} on a specific device.
 func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
@@ -926,12 +944,35 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := runDeviceTemplate(r, project, body.Action, extraVars, tmpInventoryID)
+	task, err := enqueueDeviceActionTask(r, project, body.Action, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-	helpers.WriteJSON(w, http.StatusCreated, task)
+
+	if body.Action != db.DeviceActionConfig {
+		helpers.WriteJSON(w, http.StatusCreated, task)
+		return
+	}
+
+	restartVars := cloneExtraVars(extraVars)
+	delete(restartVars, "config")
+	restartVars["triggered_by"] = "config"
+	restartVars["config_task_id"] = task.ID
+
+	restartTask, err := enqueueDeviceActionTask(r, project, db.DeviceActionRestart, restartVars, tmpInventoryID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id":              task.ID,
+		"task_id":         task.ID,
+		"task":            task,
+		"restart_task_id": restartTask.ID,
+		"restart_task":    restartTask,
+	})
 }
 
 func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
@@ -994,12 +1035,35 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	extraVars := map[string]any{"devices": payload}
-	task, err := runDeviceTemplate(r, project, body.Action, extraVars, tmpInventoryID)
+	task, err := enqueueDeviceActionTask(r, project, body.Action, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-	helpers.WriteJSON(w, http.StatusCreated, task)
+
+	if body.Action != db.DeviceActionConfig {
+		helpers.WriteJSON(w, http.StatusCreated, task)
+		return
+	}
+
+	restartVars := cloneExtraVars(extraVars)
+	delete(restartVars, "config")
+	restartVars["triggered_by"] = "config"
+	restartVars["config_task_id"] = task.ID
+
+	restartTask, err := enqueueDeviceActionTask(r, project, db.DeviceActionRestart, restartVars, tmpInventoryID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id":              task.ID,
+		"task_id":         task.ID,
+		"task":            task,
+		"restart_task_id": restartTask.ID,
+		"restart_task":    restartTask,
+	})
 }
 
 // ProbeDevice runs an immediate server-side TCP port probe of RDP and WinRM
