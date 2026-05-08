@@ -19,7 +19,7 @@ RUN go install github.com/go-task/task/v3/cmd/task@v3.45.5
 ENV PATH="/go/bin:${PATH}"
 
 WORKDIR /go/src/semaphore
-COPY . /go/src/semaphore
+COPY go.mod go.sum ./
 
 RUN --mount=type=cache,target=/go/pkg \
     go mod download -x
@@ -29,22 +29,9 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG GH_TOKEN
 
-RUN if [ -n "$APP_BUILD_TYPE" ]; then \
-      git clone -b main https://${GH_TOKEN}@github.com/semaphoreui/semaphorepro-module.git pro_impl && \
-      go work init . ./pro_impl; \
-    fi
-
-RUN --mount=type=cache,target=/go/pkg \
-    --mount=type=cache,target=/root/.cache/go-build \
-    task deps APP_BUILD_TYPE=${APP_BUILD_TYPE} && \
-    task build GOOS=${TARGETOS} GOARCH=${TARGETARCH} APP_BUILD_TYPE=${APP_BUILD_TYPE}
-
-
 ENV OPENTOFU_VERSION="1.11.0"
 ENV TERRAFORM_VERSION="1.11.3"
 ENV TERRAGRUNT_VERSION="0.78.0"
-#ENV PULUMI_VERSION="3.116.1"
-#ENV POWERSHELL_VERSION="3.116.1"
 
 RUN wget https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz && \
     tar xf tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz -C /tmp && \
@@ -56,6 +43,18 @@ RUN curl -O https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraf
 
 RUN wget -O /tmp/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH} && \
     chmod +x /tmp/terragrunt
+
+COPY . /go/src/semaphore
+
+RUN if [ -n "$APP_BUILD_TYPE" ]; then \
+  git clone -b main https://${GH_TOKEN}@github.com/semaphoreui/semaphorepro-module.git pro_impl && \
+  go work init . ./pro_impl; \
+fi
+
+RUN --mount=type=cache,target=/go/pkg \
+    --mount=type=cache,target=/root/.cache/go-build \
+    task deps APP_BUILD_TYPE=${APP_BUILD_TYPE} && \
+    task build GOOS=${TARGETOS} GOARCH=${TARGETARCH} APP_BUILD_TYPE=${APP_BUILD_TYPE}
 
 FROM alpine:3.21
 
