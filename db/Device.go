@@ -107,6 +107,7 @@ type ProjectDeviceSettings struct {
 	DefaultAnsibleWinRMScheme               string     `db:"default_ansible_winrm_scheme" json:"default_ansible_winrm_scheme"`
 	DefaultAnsiblePort                      int        `db:"default_ansible_port" json:"default_ansible_port"`
 	DefaultAnsibleWinRMServerCertValidation string     `db:"default_ansible_winrm_server_cert_validation" json:"default_ansible_winrm_server_cert_validation"`
+	DefaultConfigJSON                       string     `db:"default_config_json" json:"default_config_json"`
 	StatusRefreshIntervalMin                int        `db:"status_refresh_interval_min" json:"status_refresh_interval_min"`
 	LastStatusRefreshAt                     *time.Time `db:"last_status_refresh_at" json:"last_status_refresh_at,omitempty"`
 }
@@ -126,7 +127,8 @@ func (s ProjectDeviceSettings) TemplateIDForAction(action DeviceAction) *int {
 	case DeviceActionStatus:
 		return s.StatusTemplateID
 	case DeviceActionConfig:
-		return s.ConfigTemplateID
+		// "Apply configuration" now reuses restart template flow.
+		return s.RestartTemplateID
 	}
 	return nil
 }

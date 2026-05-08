@@ -33,6 +33,19 @@
     />
 
     <v-divider class="my-4" />
+    <p class="text--secondary mb-2">默认配置（全部设备）JSON</p>
+    <v-textarea
+      v-model="settings.default_config_json"
+      label="default_config_json"
+      hint='例如: {"SystemConfig":{"ExecuteType":"1","IsExportHisData":"True"}}'
+      persistent-hint
+      outlined
+      dense
+      rows="4"
+      :disabled="saving"
+    />
+
+    <v-divider class="my-4" />
 
     <p class="text--secondary mb-2">{{ $t('deviceConnectionDefaultsHelp') }}</p>
     <v-row dense>
@@ -121,7 +134,6 @@ const ACTIONS = [
   { field: 'stop_template_id', label: 'deviceTemplateStop' },
   { field: 'restart_template_id', label: 'deviceTemplateRestart' },
   { field: 'status_template_id', label: 'deviceTemplateStatus' },
-  { field: 'config_template_id', label: 'deviceTemplateConfig' },
 ];
 
 export default {
@@ -139,7 +151,7 @@ export default {
         stop_template_id: null,
         restart_template_id: null,
         status_template_id: null,
-        config_template_id: null,
+        default_config_json: '',
         status_refresh_interval_min: 0,
         default_ansible_user: '',
         default_ansible_password: '',

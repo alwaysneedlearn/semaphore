@@ -461,6 +461,17 @@ func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	if s.DefaultAnsibleWinRMServerCertValidation == "" {
 		s.DefaultAnsibleWinRMServerCertValidation = "ignore"
 	}
+	if strings.TrimSpace(s.DefaultConfigJSON) == "" {
+		s.DefaultConfigJSON = ""
+	} else {
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(s.DefaultConfigJSON), &parsed); err != nil {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "default_config_json must be valid JSON object",
+			})
+			return
+		}
+	}
 
 	if s.StatusRefreshIntervalMin < 0 {
 		s.StatusRefreshIntervalMin = 0
@@ -879,12 +890,31 @@ func enqueueDeviceActionTask(
 	return runDeviceTemplate(r, project, action, extraVars, inventoryID)
 }
 
-func cloneExtraVars(in map[string]any) map[string]any {
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = v
+func parseDefaultDeviceConfigJSON(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
 	}
-	return out
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil
+	}
+	return parsed
+}
+
+func buildCategorizedDeviceConfig(items []db.DeviceConfigItem) map[string]map[string]string {
+	categorized := map[string]map[string]string{}
+	for _, it := range items {
+		cat := strings.TrimSpace(it.Category)
+		if cat == "" {
+			cat = "default"
+		}
+		if categorized[cat] == nil {
+			categorized[cat] = map[string]string{}
+		}
+		categorized[cat][it.Key] = it.Value
+	}
+	return categorized
 }
 
 // RunDeviceAction triggers the configured template for {start, stop, restart,
@@ -918,24 +948,22 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if body.Action == db.DeviceActionConfig {
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
+		extraVars["default_config"] = defaultConfig
+	}
+
+	if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
 		if err != nil {
 			helpers.WriteError(w, err)
 			return
 		}
-		categorized := map[string]map[string]string{}
-		for _, it := range items {
-			cat := it.Category
-			if cat == "" {
-				cat = "default"
-			}
-			if categorized[cat] == nil {
-				categorized[cat] = map[string]string{}
-			}
-			categorized[cat][it.Key] = it.Value
-		}
-		extraVars["config"] = categorized
+		extraVars["config"] = buildCategorizedDeviceConfig(items)
 	}
 
 	tmpInventoryID, err := createTemporaryInventoryForDevices(r, project.ID, []db.Device{device})
@@ -944,35 +972,17 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := enqueueDeviceActionTask(r, project, body.Action, extraVars, tmpInventoryID)
+	effectiveAction := body.Action
+	if body.Action == db.DeviceActionConfig {
+		effectiveAction = db.DeviceActionRestart
+		extraVars["triggered_by"] = "config"
+	}
+	task, err := enqueueDeviceActionTask(r, project, effectiveAction, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-
-	if body.Action != db.DeviceActionConfig {
-		helpers.WriteJSON(w, http.StatusCreated, task)
-		return
-	}
-
-	restartVars := cloneExtraVars(extraVars)
-	delete(restartVars, "config")
-	restartVars["triggered_by"] = "config"
-	restartVars["config_task_id"] = task.ID
-
-	restartTask, err := enqueueDeviceActionTask(r, project, db.DeviceActionRestart, restartVars, tmpInventoryID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-
-	helpers.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id":              task.ID,
-		"task_id":         task.ID,
-		"task":            task,
-		"restart_task_id": restartTask.ID,
-		"restart_task":    restartTask,
-	})
+	helpers.WriteJSON(w, http.StatusCreated, task)
 }
 
 func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
@@ -1035,35 +1045,37 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	extraVars := map[string]any{"devices": payload}
-	task, err := enqueueDeviceActionTask(r, project, body.Action, extraVars, tmpInventoryID)
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-
-	if body.Action != db.DeviceActionConfig {
-		helpers.WriteJSON(w, http.StatusCreated, task)
-		return
+	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
+		extraVars["default_config"] = defaultConfig
 	}
-
-	restartVars := cloneExtraVars(extraVars)
-	delete(restartVars, "config")
-	restartVars["triggered_by"] = "config"
-	restartVars["config_task_id"] = task.ID
-
-	restartTask, err := enqueueDeviceActionTask(r, project, db.DeviceActionRestart, restartVars, tmpInventoryID)
+	if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
+		configByHostname := map[string]map[string]map[string]string{}
+		for _, d := range selected {
+			items, itemErr := helpers.Store(r).GetDeviceConfigItems(project.ID, d.ID)
+			if itemErr != nil {
+				helpers.WriteError(w, itemErr)
+				return
+			}
+			configByHostname[d.Hostname] = buildCategorizedDeviceConfig(items)
+		}
+		extraVars["configs_by_hostname"] = configByHostname
+	}
+	effectiveAction := body.Action
+	if body.Action == db.DeviceActionConfig {
+		effectiveAction = db.DeviceActionRestart
+		extraVars["triggered_by"] = "config"
+	}
+	task, err := enqueueDeviceActionTask(r, project, effectiveAction, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-
-	helpers.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id":              task.ID,
-		"task_id":         task.ID,
-		"task":            task,
-		"restart_task_id": restartTask.ID,
-		"restart_task":    restartTask,
-	})
+	helpers.WriteJSON(w, http.StatusCreated, task)
 }
 
 // ProbeDevice runs an immediate server-side TCP port probe of RDP and WinRM
