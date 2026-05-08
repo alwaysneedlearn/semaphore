@@ -60,6 +60,16 @@ RUN if [ "${INSTALL_IAC_TOOLS}" = "true" ]; then \
       chmod +x /tmp/terragrunt; \
     fi
 
+# stage-1 always copies /tmp/{tofu,terraform,terragrunt}.
+# When IaC tools are disabled, create lightweight placeholders so COPY succeeds.
+RUN if [ "${INSTALL_IAC_TOOLS}" != "true" ]; then \
+      for tool in tofu terraform terragrunt; do \
+        printf '%s\n' '#!/bin/sh' \
+          "echo \"$tool is disabled in this image (INSTALL_IAC_TOOLS=false)\" >&2" \
+          'exit 1' > "/tmp/${tool}" && chmod +x "/tmp/${tool}"; \
+      done; \
+    fi
+
 COPY . /go/src/semaphore
 
 RUN if [ -n "$APP_BUILD_TYPE" ]; then \
