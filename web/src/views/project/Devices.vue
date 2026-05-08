@@ -694,7 +694,20 @@ export default {
       const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
       const lines = outputRes.data || [];
       const merged = lines.map((line) => line.output || '').join('\n');
-      const parsed = this.extractJsonArrayFromText(merged);
+      let parsed = this.extractJsonArrayFromText(merged);
+
+      if (!parsed) {
+        try {
+          const rawRes = await axios.get(
+            `/api/project/${this.projectId}/tasks/${taskId}/raw_output`,
+            { responseType: 'text' },
+          );
+          parsed = this.extractJsonArrayFromText(rawRes.data || '');
+        } catch (e) {
+          // ignore raw output fallback errors and keep original message below
+        }
+      }
+
       if (!parsed) {
         this.discoveryError = this.$i18n.t('deviceDiscoveryResultNotFound');
         return;
