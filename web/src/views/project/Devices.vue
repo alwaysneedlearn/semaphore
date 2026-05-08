@@ -17,19 +17,14 @@
             class="mb-2"
             placeholder="192.168.1.0/24"
           />
-          <v-textarea
-            v-model="discoveryJson"
-            :label="$t('deviceDiscoveryJson')"
-            outlined
-            rows="6"
-            auto-grow
-          />
-          <div class="d-flex mb-2">
-            <v-btn small text @click="parseDiscoveryJson">{{ $t('parse') }}</v-btn>
-            <v-btn small text class="ml-2" @click="runDiscoverTemplate">
-              {{ $t('deviceDiscoverRunTemplate') }}
-            </v-btn>
-          </div>
+          <v-btn
+            color="primary"
+            class="mb-3"
+            :loading="discovering"
+            @click="runDiscoverTemplate"
+          >
+            {{ $t('deviceDiscoverRunTemplate') }}
+          </v-btn>
           <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
           <v-data-table
             :headers="discoveryHeaders"
@@ -437,7 +432,6 @@ export default {
         { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
       ],
       discoveryDialog: false,
-      discoveryJson: '',
       discoverySubnet: '',
       discoveryError: '',
       discoveredDevices: [],
@@ -651,34 +645,24 @@ export default {
         this.discoveryError = this.$i18n.t('deviceDiscoveryResultNotFound');
         return;
       }
-      this.discoveryJson = JSON.stringify(parsed, null, 2);
-      this.parseDiscoveryJson();
+      this.applyDiscoveredDevices(parsed);
       EventBus.$emit('i-snackbar', {
         color: 'success',
         text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
       });
     },
-    parseDiscoveryJson() {
-      this.discoveryError = '';
-      try {
-        const parsed = JSON.parse(this.discoveryJson || '[]');
-        if (!Array.isArray(parsed)) {
-          throw new Error('json must be array');
-        }
-        this.discoveredDevices = parsed
-          .map((x) => ({
-            hostname: (x.hostname || '').trim(),
-            ip_address: (x.ip_address || x.ip || '').trim(),
-            device_status: x.device_status || x.status || 'unknown',
-            rdp_status: x.rdp_status || 'unknown',
-            winrm_status: x.winrm_status || 'unknown',
-            abnormal_reason: x.abnormal_reason || null,
-          }))
-          .filter((x) => x.hostname);
-        this.selectedDiscovered = [...this.discoveredDevices];
-      } catch (e) {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryJsonInvalid');
-      }
+    applyDiscoveredDevices(parsed) {
+      this.discoveredDevices = (parsed || [])
+        .map((x) => ({
+          hostname: (x.hostname || '').trim(),
+          ip_address: (x.ip_address || x.ip || '').trim(),
+          device_status: x.device_status || x.status || 'unknown',
+          rdp_status: x.rdp_status || 'unknown',
+          winrm_status: x.winrm_status || 'unknown',
+          abnormal_reason: x.abnormal_reason || null,
+        }))
+        .filter((x) => x.hostname);
+      this.selectedDiscovered = [...this.discoveredDevices];
     },
     async runDiscoverTemplate() {
       await this.discoverDevices();
