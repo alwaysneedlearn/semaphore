@@ -588,18 +588,75 @@ export default {
           subnet: this.discoverySubnet || null,
         };
         const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
+        const taskId = res.data && res.data.id;
         EventBus.$emit('i-snackbar', {
           color: 'success',
-          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
+          text: this.$i18n.t('deviceTaskQueued', { id: taskId }),
         });
-        if (res.data && res.data.id) {
-          EventBus.$emit('i-show-task', { taskId: res.data.id });
+        if (taskId) {
+          EventBus.$emit('i-show-task', { taskId });
+          await this.waitAndLoadDiscoveryResult(taskId);
         }
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
         this.discovering = false;
       }
+    },
+    async waitAndLoadDiscoveryResult(taskId, attemptsLeft = 60) {
+      const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
+      const status = (taskRes.data && taskRes.data.status) || '';
+      if (status === 'success') {
+        await this.loadDiscoveryResultFromTask(taskId);
+        return;
+      }
+      if (status === 'error' || status === 'stopped') {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskFailed');
+        return;
+      }
+      if (attemptsLeft <= 1) {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
+        return;
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, 2000);
+      });
+      await this.waitAndLoadDiscoveryResult(taskId, attemptsLeft - 1);
+    },
+    extractJsonArrayFromText(text) {
+      if (!text) {
+        return null;
+      }
+      let start = text.lastIndexOf('[');
+      while (start !== -1) {
+        const candidate = text.slice(start).trim();
+        try {
+          const parsed = JSON.parse(candidate);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+        } catch (e) {
+          // continue scanning previous '['
+        }
+        start = text.lastIndexOf('[', start - 1);
+      }
+      return null;
+    },
+    async loadDiscoveryResultFromTask(taskId) {
+      const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
+      const lines = outputRes.data || [];
+      const merged = lines.map((line) => line.output || '').join('\n');
+      const parsed = this.extractJsonArrayFromText(merged);
+      if (!parsed) {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryResultNotFound');
+        return;
+      }
+      this.discoveryJson = JSON.stringify(parsed, null, 2);
+      this.parseDiscoveryJson();
+      EventBus.$emit('i-snackbar', {
+        color: 'success',
+        text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+      });
     },
     parseDiscoveryJson() {
       this.discoveryError = '';
