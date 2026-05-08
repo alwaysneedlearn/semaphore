@@ -1,5 +1,18 @@
 <template>
   <div v-if="items != null">
+    <v-dialog v-model="deviceSettingsDialog" :max-width="900">
+      <v-card>
+        <v-card-title>{{ $t('deviceSettingsTitle') }}</v-card-title>
+        <v-card-text>
+          <DeviceSettingsForm :project-id="projectId" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deviceSettingsDialog = false">{{ $t('close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="discoveryDialog" :max-width="900">
       <v-card>
         <v-card-title>{{ $t('deviceDiscoveryTitle') }}</v-card-title>
@@ -129,6 +142,15 @@
       <v-app-bar-nav-icon @click="showDrawer()"></v-app-bar-nav-icon>
       <v-toolbar-title>{{ $t('devices') }}</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn
+        v-if="can(USER_PERMISSIONS.manageProjectResources)"
+        text
+        class="mr-2"
+        @click="deviceSettingsDialog = true"
+      >
+        <v-icon left>mdi-cog</v-icon>
+        {{ $t('deviceSettingsTitle') }}
+      </v-btn>
       <v-btn
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
         text
@@ -403,11 +425,12 @@ import EventBus from '@/event-bus';
 import ItemListPageBase from '@/components/ItemListPageBase';
 import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
+import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
   mixins: [ItemListPageBase],
-  components: { DeviceForm, DeviceConfigDialog },
+  components: { DeviceForm, DeviceConfigDialog, DeviceSettingsForm },
 
   data() {
     return {
@@ -416,6 +439,7 @@ export default {
       },
       discovering: false,
       patrolling: false,
+      deviceSettingsDialog: false,
       busyId: null,
       configDialog: false,
       configDeviceId: null,

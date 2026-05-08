@@ -59,15 +59,6 @@
         ></v-progress-linear>
       </div>
 
-      <h2 class="mt-8 mb-1" v-if="projectType === ''">{{ $t('deviceSettingsTitle') }}</h2>
-
-      <v-divider class="mb-4" v-if="projectType === ''" />
-
-      <DeviceSettingsForm
-        v-if="projectType === ''"
-        :project-id="projectId"
-      />
-
       <h2 class="mt-8 mb-1">{{ $t('danger_zone_settings') }}</h2>
 
       <v-divider class="mb-8" />
@@ -179,11 +170,10 @@ import axios from 'axios';
 import YesNoDialog from '@/components/YesNoDialog.vue';
 import delay from '@/lib/delay';
 import DashboardMenu from '@/components/DashboardMenu.vue';
-import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
 
 export default {
   components: {
-    DashboardMenu, YesNoDialog, ProjectForm, DeviceSettingsForm,
+    DashboardMenu, YesNoDialog, ProjectForm,
   },
   props: {
     projectId: Number,
