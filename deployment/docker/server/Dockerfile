@@ -20,14 +20,16 @@ ENV PATH="/go/bin:${PATH}"
 
 WORKDIR /go/src/semaphore
 COPY go.mod go.sum ./
-
-RUN --mount=type=cache,target=/go/pkg \
-    go mod download -x
+# Local replace ./pro — need pro module metadata before go mod download (see root go.mod replace).
+COPY pro/go.mod pro/go.sum ./pro/
 
 ARG APP_BUILD_TYPE
 ARG TARGETOS
 ARG TARGETARCH
 ARG GH_TOKEN
+
+RUN --mount=type=cache,target=/go/pkg \
+    go mod download -x
 
 ENV OPENTOFU_VERSION="1.11.0"
 ENV TERRAFORM_VERSION="1.11.3"
