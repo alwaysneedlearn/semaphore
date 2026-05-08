@@ -34,16 +34,23 @@ RUN --mount=type=cache,target=/go/pkg \
 ENV OPENTOFU_VERSION="1.11.0"
 ENV TERRAFORM_VERSION="1.11.3"
 ENV TERRAGRUNT_VERSION="0.78.0"
+ARG OPENTOFU_DOWNLOAD_URL="https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz"
+ARG TERRAFORM_DOWNLOAD_URL="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip"
+ARG TERRAGRUNT_DOWNLOAD_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"
+ARG DOWNLOAD_RETRIES=5
 
-RUN wget https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz && \
-    tar xf tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz -C /tmp && \
-    rm tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz
+RUN curl -fL --retry ${DOWNLOAD_RETRIES} --retry-all-errors --retry-delay 5 \
+    -o "/tmp/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz" "${OPENTOFU_DOWNLOAD_URL}" && \
+    tar xf "/tmp/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz" -C /tmp && \
+    rm "/tmp/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz"
 
-RUN curl -O https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip && \
-    unzip terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip -d /tmp && \
-    rm terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip
+RUN curl -fL --retry ${DOWNLOAD_RETRIES} --retry-all-errors --retry-delay 5 \
+    -o "/tmp/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" "${TERRAFORM_DOWNLOAD_URL}" && \
+    unzip "/tmp/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" -d /tmp && \
+    rm "/tmp/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip"
 
-RUN wget -O /tmp/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH} && \
+RUN curl -fL --retry ${DOWNLOAD_RETRIES} --retry-all-errors --retry-delay 5 \
+    -o /tmp/terragrunt "${TERRAGRUNT_DOWNLOAD_URL}" && \
     chmod +x /tmp/terragrunt
 
 COPY . /go/src/semaphore
