@@ -1,5 +1,13 @@
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine3.21 as builder
 
+# Go modules: proxy.golang.org is unreachable from some regions. Override at build time if needed:
+#   docker build --build-arg GOPROXY=https://goproxy.io,direct ...
+# If checksum DB is blocked: --build-arg GOSUMDB=off
+ARG GOPROXY=https://goproxy.cn,https://goproxy.io,https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
+ARG GOSUMDB=sum.golang.org
+ENV GOSUMDB=${GOSUMDB}
+
 RUN apk add --no-cache -U \
     libc-dev curl nodejs npm git gcc zip unzip tar
 
