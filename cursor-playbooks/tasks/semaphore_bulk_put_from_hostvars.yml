@@ -9,6 +9,16 @@
   loop: "{{ groups['windows_hosts'] | default([]) }}"
   when: hostvars[item].semaphore_callback_row is defined
 
+- name: 提示缺少 SEMAPHORE_API_TOKEN（不会 PUT，设备可能保持 checking）
+  ansible.builtin.debug:
+    msg: >-
+      Bulk status callback skipped: set SEMAPHORE_API_TOKEN on the template
+      (and SEMAPHORE_URL if the controller cannot reach Semaphore at 127.0.0.1:3000).
+      Project id is passed as extra-var semaphore_project_id; SEMAPHORE_PROJECT_ID env is optional.
+  when:
+    - (semaphore_status_bulk_updates | default([])) | length > 0
+    - (lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim | length) < 1
+
 - name: PUT Semaphore /devices/status/bulk
   ansible.builtin.uri:
     url: "{{ _sem_url }}/api/project/{{ _sem_pid }}/devices/status/bulk"
@@ -22,7 +32,8 @@
     status_code: [200]
   vars:
     _sem_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
-    _sem_pid: "{{ lookup('env', 'SEMAPHORE_PROJECT_ID') | default('', true) | trim }}"
+    # Injected by Semaphore task extra-vars (runDeviceTemplate / scheduler); env is fallback.
+    _sem_pid: "{{ (semaphore_project_id | default(lookup('env', 'SEMAPHORE_PROJECT_ID'), true)) | trim | string }}"
     _sem_token: "{{ lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim }}"
   when:
     - _sem_pid | length > 0

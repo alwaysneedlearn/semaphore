@@ -4,12 +4,15 @@ Local playbooks for device discovery, status patrol, start/stop/restart. **Not r
 
 ## Semaphore API callback (optional)
 
-These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHORE_PROJECT_ID`** and **`SEMAPHORE_API_TOKEN`** are set (template Environment / Variable Group, or controller env).
+These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHORE_API_TOKEN`** is set (template Environment / Variable Group, or controller env).
+
+**Project id** is injected automatically as **`semaphore_project_id`** in the task’s extra-vars for Patrol all, scheduled status runs, and other flows that use `runDeviceTemplate`. You only need **`SEMAPHORE_PROJECT_ID`** in the environment if you run the playbook outside Semaphore without that extra-var.
 
 | Variable | Description |
 |----------|-------------|
-| `SEMAPHORE_PROJECT_ID` | Numeric project id |
-| `SEMAPHORE_API_TOKEN` | User API token (`Authorization: Bearer …`) |
+| `semaphore_project_id` | Injected by Semaphore (extra-vars); used by `tasks/semaphore_bulk_put_from_hostvars.yml` |
+| `SEMAPHORE_PROJECT_ID` | Optional fallback (numeric id) if not in extra-vars |
+| `SEMAPHORE_API_TOKEN` | User API token (`Authorization: Bearer …`) — **required** for the callback to run |
 | `SEMAPHORE_URL` | Optional; default `http://127.0.0.1:3000` (must reach Semaphore from the Ansible controller) |
 
 - **`device_discovery.yml`** — **No** bulk callback: only prints a JSON array for the UI to parse; persistence is **Import selected** → API `discovery/import`.

@@ -576,9 +576,16 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 		return db.Task{}, err
 	}
 
+	mergedVars := map[string]any{}
+	for k, v := range extraVars {
+		mergedVars[k] = v
+	}
+	// Lets playbooks call PUT /devices/status/bulk without requiring SEMAPHORE_PROJECT_ID in template env.
+	mergedVars["semaphore_project_id"] = project.ID
+
 	env := ""
-	if len(extraVars) > 0 {
-		b, err := json.Marshal(extraVars)
+	if len(mergedVars) > 0 {
+		b, err := json.Marshal(mergedVars)
 		if err != nil {
 			return db.Task{}, err
 		}

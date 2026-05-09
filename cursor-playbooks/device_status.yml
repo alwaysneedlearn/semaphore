@@ -28,6 +28,17 @@
       changed_when: false
       ignore_unreachable: true
 
+    - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          device_status: unknown
+          rdp_status: offline
+          winrm_status: offline
+      vars:
+        _sem_dev: "{{ devices | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(devices | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+      when: status.unreachable | default(false)
+
     - name: 跳过不可达主机
       ansible.builtin.meta: end_host
       when: status.unreachable | default(false)
@@ -110,6 +121,10 @@
         'NOT_RUNNING' not in status.stdout
 
     - name: 状态判断：双保险判定与输出综合状态
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' not in status.stdout
       block:
         - name: 双保险判定综合状态
           ansible.builtin.set_fact:
@@ -132,11 +147,12 @@
               需要重配={{ need_reconfigure }}
 
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
+      when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: >-
-            {% if status is not defined or ('stdout' not in status) or (status.unreachable | default(false)) %}unknown
+            {% if status is not defined or ('stdout' not in status) %}unknown
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy
             {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
             {% else %}healthy{% endif %}

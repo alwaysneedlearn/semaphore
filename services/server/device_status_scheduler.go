@@ -133,7 +133,10 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 			"hostname": d.Hostname,
 		})
 	}
-	envBytes, err := json.Marshal(map[string]any{"devices": devicePayload})
+	envBytes, err := json.Marshal(map[string]any{
+		"devices":              devicePayload,
+		"semaphore_project_id": settings.ProjectID,
+	})
 	if err != nil {
 		log.WithError(err).Warn("device status: failed to marshal devices")
 		return
