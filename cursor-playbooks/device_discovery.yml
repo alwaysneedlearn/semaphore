@@ -148,33 +148,7 @@
             device_status: >-
               {{ 'healthy' if (winrm_online and rdp_online) else 'unknown' }}
 
-      - name: Semaphore 回调（更新已存在设备的探测状态，hostname 非空才会匹配）
-        when:
-          - (lookup('env', 'SEMAPHORE_PROJECT_ID') | default('', true) | trim | length) > 0
-          - (lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim | length) > 0
-        block:
-          - name: 组装 status/bulk 请求体
-            ansible.builtin.set_fact:
-              discovery_bulk_updates: "{{ discovery_bulk_updates | default([]) + [ {'hostname': item.hostname | trim, 'device_status': item.device_status, 'rdp_status': item.rdp_status, 'winrm_status': item.winrm_status} ] }}"
-            loop: "{{ discovered_devices | default([]) }}"
-            when: item.hostname | default('') | trim | length > 0
-
-          - name: PUT /api/project/.../devices/status/bulk
-            ansible.builtin.uri:
-              url: "{{ _sem_url }}/api/project/{{ _sem_pid }}/devices/status/bulk"
-              method: PUT
-              headers:
-                Content-Type: application/json
-                Authorization: "Bearer {{ _sem_token }}"
-              body_format: json
-              body:
-                updates: "{{ discovery_bulk_updates | default([]) }}"
-              status_code: [200]
-            vars:
-              _sem_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
-              _sem_pid: "{{ lookup('env', 'SEMAPHORE_PROJECT_ID') | default('', true) | trim }}"
-              _sem_token: "{{ lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim }}"
-            when: (discovery_bulk_updates | default([])) | length > 0
+      # 发现流程仅输出 JSON 供前端解析与用户选择导入；不在此写回 Semaphore（避免与「导入」语义混淆）。
 
       - name: 输出前端可解析的 JSON 数组（最后输出，裸 stdout）
         # IMPORTANT: Keep this as the last JSON output so UI can auto-parse task logs.
