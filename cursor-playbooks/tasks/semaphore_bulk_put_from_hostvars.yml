@@ -1,0 +1,30 @@
+---
+# Include from a play with hosts: localhost after a windows_hosts play that set
+# hostvar semaphore_callback_row per host.
+# Env: SEMAPHORE_URL (optional), SEMAPHORE_PROJECT_ID, SEMAPHORE_API_TOKEN
+
+- name: 汇总各主机 semaphore_callback_row
+  ansible.builtin.set_fact:
+    semaphore_status_bulk_updates: "{{ semaphore_status_bulk_updates | default([]) + [ hostvars[item].semaphore_callback_row ] }}"
+  loop: "{{ groups['windows_hosts'] | default([]) }}"
+  when: hostvars[item].semaphore_callback_row is defined
+
+- name: PUT Semaphore /devices/status/bulk
+  ansible.builtin.uri:
+    url: "{{ _sem_url }}/api/project/{{ _sem_pid }}/devices/status/bulk"
+    method: PUT
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ _sem_token }}"
+    body_format: json
+    body:
+      updates: "{{ semaphore_status_bulk_updates | default([]) }}"
+    status_code: [200]
+  vars:
+    _sem_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
+    _sem_pid: "{{ lookup('env', 'SEMAPHORE_PROJECT_ID') | default('', true) | trim }}"
+    _sem_token: "{{ lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim }}"
+  when:
+    - _sem_pid | length > 0
+    - _sem_token | length > 0
+    - (semaphore_status_bulk_updates | default([])) | length > 0
