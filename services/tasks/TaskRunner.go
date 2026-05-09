@@ -184,6 +184,7 @@ func (t *TaskRunner) run() {
 		t.Task.End = &now
 		t.saveStatus()
 		t.createTaskEvent()
+		t.pool.deleteEphemeralBatchInventory(t.Task.ProjectID, t.Task.InventoryID)
 		t.pool.queueEvents <- PoolEvent{EventTypeFinished, t}
 	}()
 
@@ -297,7 +298,7 @@ func (t *TaskRunner) populateTaskEnvironment() (err error) {
 	}
 
 	tplEnvironment := make(map[string]any)
-  
+
 	if t.Environment.JSON != "" {
 		err = json.Unmarshal([]byte(t.Environment.JSON), &tplEnvironment)
 	}
@@ -375,13 +376,8 @@ func (t *TaskRunner) populateDetails() error {
 		t.users = append(t.users, userID)
 	}
 
-	// get inventory
-	canOverrideInventory, err := t.Template.CanOverrideInventory()
-	if err != nil {
-		return err
-	}
-
-	if canOverrideInventory && t.Task.InventoryID != nil {
+	// get inventory — prefer explicit task inventory when set (e.g. device actions with a temporary inventory).
+	if t.Task.InventoryID != nil {
 		t.Inventory, err = t.pool.inventoryService.GetInventory(t.Template.ProjectID, *t.Task.InventoryID)
 		if err != nil {
 			if t.Template.InventoryID != nil {
@@ -389,14 +385,14 @@ func (t *TaskRunner) populateDetails() error {
 				if err != nil {
 					return t.prepareError(err, "Template Inventory not found!")
 				}
+			} else {
+				return t.prepareError(err, "Task Inventory not found!")
 			}
 		}
-	} else {
-		if t.Template.InventoryID != nil {
-			t.Inventory, err = t.pool.inventoryService.GetInventory(t.Template.ProjectID, *t.Template.InventoryID)
-			if err != nil {
-				return t.prepareError(err, "Template Inventory not found!")
-			}
+	} else if t.Template.InventoryID != nil {
+		t.Inventory, err = t.pool.inventoryService.GetInventory(t.Template.ProjectID, *t.Template.InventoryID)
+		if err != nil {
+			return t.prepareError(err, "Template Inventory not found!")
 		}
 	}
 

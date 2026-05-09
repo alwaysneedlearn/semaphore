@@ -870,7 +870,7 @@ func createTemporaryInventoryForDevices(r *http.Request, projectID int, devices 
 	content := renderWindowsInventory(devices, settings)
 	inv, err := helpers.Store(r).CreateInventory(db.Inventory{
 		ProjectID: projectID,
-		Name:      fmt.Sprintf("windows_hosts batch %d", time.Now().Unix()),
+		Name:      fmt.Sprintf("%s%d", db.DeviceEphemeralBatchInventoryPrefix, time.Now().Unix()),
 		Type:      db.InventoryStatic,
 		Inventory: content,
 	})

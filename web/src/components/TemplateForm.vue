@@ -190,6 +190,15 @@
           v-if="needField('inventory')"
         ></v-autocomplete>
 
+        <v-checkbox
+          class="mt-0 mb-2"
+          :label="$t('allowInventoryInTask')"
+          v-model="allow_override_inventory"
+          :hint="$t('allowInventoryInTaskHint')"
+          persistent-hint
+          v-if="needField('inventory') && needField('allow_override_inventory')"
+        />
+
         <v-autocomplete
           v-model="item.repository_id"
           :label="fieldLabel('repository') + ' *'"
@@ -384,13 +393,6 @@
             class="mt-0"
             :label="$t('allow_override_branch')"
             v-model="item.allow_override_branch_in_task"
-          />
-
-          <v-checkbox
-            class="mt-0"
-            :label="$t('allowInventoryInTask')"
-            v-model="allow_override_inventory"
-            v-if="needField('allow_override_inventory')"
           />
         </div>
       </v-col>
