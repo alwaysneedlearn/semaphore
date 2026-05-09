@@ -282,9 +282,12 @@
               try {
                 $cfg = ConvertFrom-Json -InputObject $cfgJson -AsHashtable
                 if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
-                if (-not $cfg["SystemConfig"].ContainsKey("ServerIpAddrStr")) { $cfg["SystemConfig"]["ServerIpAddrStr"] = $calbIp }
-                if (-not $cfg["SystemConfig"].ContainsKey("HisDataFromTime")) { $cfg["SystemConfig"]["HisDataFromTime"] = $fromDate }
-                if (-not $cfg["SystemConfig"].ContainsKey("HisDataToTime")) { $cfg["SystemConfig"]["HisDataToTime"] = $toDate }
+                ${null} = $cfg["SystemConfig"].Remove("ServerIpAddrStr")
+                $cfg["SystemConfig"]["ServerIpAddrStr"] = $calbIp
+                ${null} = $cfg["SystemConfig"].Remove("HisDataFromTime")
+                $cfg["SystemConfig"]["HisDataFromTime"] = $fromDate
+                ${null} = $cfg["SystemConfig"].Remove("HisDataToTime")
+                $cfg["SystemConfig"]["HisDataToTime"] = $toDate
                 $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
                 foreach ($section in $cfg.Keys) {
                   $vals = $cfg[$section]
