@@ -1,0 +1,88 @@
+# Patrol / status template with Semaphore bulk status callback.
+#
+# Bind this playbook to the project "Status" device template (Device actions → Status template).
+#
+# Template Environment (Variable Group or ENV), required:
+#   SEMAPHORE_PROJECT_ID   — numeric project id (/project/<id>/...)
+#   SEMAPHORE_API_TOKEN    — User → API tokens (Bearer)
+#
+# Optional:
+#   SEMAPHORE_URL          — default http://127.0.0.1:3000 (reachable from Ansible controller)
+#   EXE_NAME               — Windows process name (default uu)
+#
+# Semaphore passes extra-vars `devices`: [ { id, hostname, ip }, ... ] for patrol/status tasks.
+
+- name: Patrol hosts and report to Semaphore
+  hosts: windows_hosts
+  gather_facts: false
+  vars:
+    exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu', true) }}"
+  tasks:
+    - name: Match inventory host to Semaphore devices[] row
+      ansible.builtin.set_fact:
+        matched_device: >-
+          {{
+            devices | default([])
+            | selectattr('ip', 'equalto', inventory_hostname)
+            | list | first
+            | default(
+                devices | default([])
+                | selectattr('hostname', 'equalto', inventory_hostname)
+                | list | first,
+                true
+              )
+          }}
+
+    - name: Hostname field required by PUT /devices/status/bulk
+      ansible.builtin.set_fact:
+        api_hostname: "{{ (matched_device | default({})).hostname | default(inventory_hostname, true) }}"
+
+    - name: Check process (extend with API/log tasks as needed)
+      win_shell: |
+        $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+        if ($proc) { Write-Output "RUNNING" } else { Write-Output "NOT_RUNNING" }
+      register: proc_st
+      changed_when: false
+      ignore_unreachable: true
+
+    - name: Skip unreachable hosts
+      ansible.builtin.meta: end_host
+      when: proc_st.unreachable | default(false)
+
+    - name: Build row for bulk callback
+      ansible.builtin.set_fact:
+        patrol_update_row:
+          hostname: "{{ api_hostname }}"
+          device_status: "{{ 'healthy' if (proc_st.stdout | default('') | trim) == 'RUNNING' else 'unhealthy' }}"
+          rdp_status: "{{ 'online' }}"
+          winrm_status: "{{ 'online' }}"
+
+- name: Push aggregated statuses to Semaphore
+  hosts: localhost
+  gather_facts: false
+  vars:
+    semaphore_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
+    semaphore_project_id: "{{ lookup('env', 'SEMAPHORE_PROJECT_ID') | default('', true) | trim }}"
+    semaphore_api_token: "{{ lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) }}"
+  tasks:
+    - name: Collect patrol rows from windows_hosts play
+      ansible.builtin.set_fact:
+        bulk_updates: "{{ bulk_updates | default([]) + [ hostvars[item].patrol_update_row ] }}"
+      loop: "{{ groups['windows_hosts'] | default([]) }}"
+      when: hostvars[item].patrol_update_row is defined
+
+    - name: PUT device status bulk (updates healthy/unhealthy after patrol checking)
+      ansible.builtin.uri:
+        url: "{{ semaphore_url }}/api/project/{{ semaphore_project_id }}/devices/status/bulk"
+        method: PUT
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{ semaphore_api_token }}"
+        body_format: json
+        body:
+          updates: "{{ bulk_updates | default([]) }}"
+        status_code: [200]
+      when:
+        - semaphore_project_id | length > 0
+        - semaphore_api_token | length > 0
+        - (bulk_updates | default([])) | length > 0
