@@ -330,9 +330,7 @@ export default {
   // Ansible
   tag: '标签',
   tag_required: '标签是必需的',
-  allowInventoryInTask: '允许覆盖 Inventory',
-  allowInventoryInTaskHint:
-    '手动从界面启动任务时可选其它 Inventory；设备页发起的操作会自动注入临时 Inventory。',
+  allowInventoryInTask: '库存',
   allowLimitInTask: '限制',
   addLimit: '添加限制',
   allowDebug: '调试',

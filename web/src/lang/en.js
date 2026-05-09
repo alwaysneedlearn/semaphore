@@ -346,10 +346,7 @@ export default {
   // Ansible
   tag: 'Tag',
   tag_required: 'Tag is required',
-  allowInventoryInTask: 'Allow inventory override',
-  allowInventoryInTaskHint:
-    'Optional for manual tasks from the UI: lets operators choose another inventory when starting a task. '
-    + 'Device actions use a temporary inventory automatically.',
+  allowInventoryInTask: 'Inventory',
   allowLimitInTask: 'Limit',
   addLimit: 'Add limit',
   allowDebug: 'Debug',
