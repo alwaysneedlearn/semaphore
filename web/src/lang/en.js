@@ -480,6 +480,8 @@ export default {
   deviceFilterHostname: 'Filter by hostname',
   deviceFilterIp: 'Filter by IP',
   deviceBulkDone: 'Batch completed for {count} devices',
+  devicePaginationSelectionHint:
+    'Selection is kept when you change pages. The header checkbox only selects rows on the current page.',
   deviceAnsibleUser: 'Ansible user',
   deviceAnsiblePassword: 'Ansible password',
   deviceAnsibleConnection: 'Ansible connection',

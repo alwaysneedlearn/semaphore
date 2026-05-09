@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -172,7 +173,7 @@ func syncProjectAutoInventory(r *http.Request, projectID int) error {
 	if err != nil {
 		return err
 	}
-	devices, err := helpers.Store(r).GetDevices(projectID, db.RetrieveQueryParams{})
+	devices, err := helpers.Store(r).GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		return err
 	}
@@ -208,12 +209,57 @@ func DeviceMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// GetDevices returns the project's device list.
+func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
+	f := &db.DeviceListFilter{
+		HostnameSubstring: strings.TrimSpace(q.Get("hostname")),
+		IPSubstring:       strings.TrimSpace(q.Get("ip")),
+		DeviceStatus:      strings.TrimSpace(q.Get("device_status")),
+		RDPStatus:         strings.TrimSpace(q.Get("rdp_status")),
+		WinRMStatus:       strings.TrimSpace(q.Get("winrm_status")),
+	}
+	if f.HostnameSubstring == "" && f.IPSubstring == "" && f.DeviceStatus == "" &&
+		f.RDPStatus == "" && f.WinRMStatus == "" {
+		return nil
+	}
+	return f
+}
+
+func deviceListRetrieveParams(r *http.Request) (db.RetrieveQueryParams, error) {
+	params := helpers.QueryParamsForProps(r.URL, db.DeviceProps)
+	q := r.URL.Query()
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return params, err
+		}
+		if n > 0 {
+			params.Count = n
+		}
+	}
+	if v := q.Get("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return params, err
+		}
+		if n >= 0 {
+			params.Offset = n
+		}
+	}
+	return params.Validate(db.DeviceProps)
+}
+
+// GetDevices returns the project's device list with optional pagination and filters.
+// Response is always JSON object { "devices": [...], "total": N }.
 func GetDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
-	params := helpers.QueryParamsForProps(r.URL, db.DeviceProps)
+	params, err := deviceListRetrieveParams(r)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	filter := parseDeviceListFilter(r.URL.Query())
 
-	devices, err := helpers.Store(r).GetDevices(project.ID, params)
+	devices, err := helpers.Store(r).GetDevices(project.ID, params, filter)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -221,7 +267,20 @@ func GetDevices(w http.ResponseWriter, r *http.Request) {
 	if devices == nil {
 		devices = []db.Device{}
 	}
-	helpers.WriteJSON(w, http.StatusOK, devices)
+
+	total := len(devices)
+	if params.Count > 0 {
+		total, err = helpers.Store(r).CountDevices(project.ID, filter)
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{
+		"devices": devices,
+		"total":   total,
+	})
 }
 
 // GetDevice returns one device (loaded by DeviceMiddleware).
@@ -660,7 +719,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated := 0
-	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
+	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -837,7 +896,7 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
+	devices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -1014,7 +1073,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	for _, id := range body.DeviceIDs {
 		idSet[id] = true
 	}
-	allDevices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{})
+	allDevices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return

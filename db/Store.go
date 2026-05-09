@@ -310,7 +310,8 @@ type InventoryManager interface {
 
 // DeviceManager handles device-related operations.
 type DeviceManager interface {
-	GetDevices(projectID int, params RetrieveQueryParams) ([]Device, error)
+	GetDevices(projectID int, params RetrieveQueryParams, filter *DeviceListFilter) ([]Device, error)
+	CountDevices(projectID int, filter *DeviceListFilter) (int, error)
 	GetDevice(projectID, deviceID int) (Device, error)
 	CreateDevice(device Device) (Device, error)
 	UpdateDevice(device Device) error
@@ -634,7 +635,7 @@ var DeviceProps = ObjectProps{
 	Type:                  reflect.TypeOf(Device{}),
 	PrimaryColumnName:     "id",
 	ReferringColumnSuffix: "device_id",
-	SortableColumns:       []string{"name", "ip_address", "hostname", "rdp_status", "winrm_status", "last_updated"},
+	SortableColumns:       []string{"name", "ip_address", "hostname", "device_status", "rdp_status", "winrm_status", "last_updated"},
 	DefaultSortingColumn:  "name",
 }
 

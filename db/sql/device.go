@@ -2,6 +2,7 @@ package sql
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -14,10 +15,52 @@ func (d *SqlDb) GetDevice(projectID int, deviceID int) (device db.Device, err er
 	return
 }
 
-func (d *SqlDb) GetDevices(projectID int, params db.RetrieveQueryParams) ([]db.Device, error) {
+func deviceLikeEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+func applyDeviceListFilters(q squirrel.SelectBuilder, filter *db.DeviceListFilter) squirrel.SelectBuilder {
+	if filter == nil {
+		return q
+	}
+	if t := strings.TrimSpace(filter.HostnameSubstring); t != "" {
+		q = q.Where("`hostname` LIKE ?", "%"+deviceLikeEscape(t)+"%")
+	}
+	if t := strings.TrimSpace(filter.IPSubstring); t != "" {
+		q = q.Where("`ip_address` LIKE ?", "%"+deviceLikeEscape(t)+"%")
+	}
+	if t := strings.TrimSpace(filter.DeviceStatus); t != "" {
+		q = q.Where("`device_status` = ?", t)
+	}
+	if t := strings.TrimSpace(filter.RDPStatus); t != "" {
+		q = q.Where("`rdp_status` = ?", t)
+	}
+	if t := strings.TrimSpace(filter.WinRMStatus); t != "" {
+		q = q.Where("`winrm_status` = ?", t)
+	}
+	return q
+}
+
+func (d *SqlDb) GetDevices(projectID int, params db.RetrieveQueryParams, filter *db.DeviceListFilter) ([]db.Device, error) {
 	var devices []db.Device
-	err := d.getObjects(projectID, db.DeviceProps, params, nil, &devices)
+	err := d.getObjects(projectID, db.DeviceProps, params, func(q squirrel.SelectBuilder) squirrel.SelectBuilder {
+		return applyDeviceListFilters(q, filter)
+	}, &devices)
 	return devices, err
+}
+
+func (d *SqlDb) CountDevices(projectID int, filter *db.DeviceListFilter) (int, error) {
+	q := squirrel.Select("count(*)").From("`project__device`").Where("project_id=?", projectID)
+	q = applyDeviceListFilters(q, filter)
+	query, args, err := q.ToSql()
+	if err != nil {
+		return 0, err
+	}
+	cnt, err := d.Sql().SelectInt(d.PrepareQuery(query), args...)
+	return int(cnt), err
 }
 
 func (d *SqlDb) DeleteDevice(projectID int, deviceID int) error {

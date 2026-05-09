@@ -407,6 +407,8 @@ export default {
   deviceFilterHostname: '按主机名筛选',
   deviceFilterIp: '按 IP 筛选',
   deviceBulkDone: '已完成 {count} 台设备的批量操作',
+  devicePaginationSelectionHint:
+    '换页后仍保留已选设备；表头全选仅勾选当前页。',
   deviceAnsibleUser: 'Ansible 用户',
   deviceAnsiblePassword: 'Ansible 密码',
   deviceAnsibleConnection: 'Ansible 连接方式',

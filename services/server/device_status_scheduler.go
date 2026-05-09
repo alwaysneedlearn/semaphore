@@ -82,7 +82,7 @@ func (s *DeviceStatusScheduler) tick() {
 }
 
 func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings, now time.Time) {
-	devices, err := s.store.GetDevices(settings.ProjectID, db.RetrieveQueryParams{})
+	devices, err := s.store.GetDevices(settings.ProjectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		log.WithError(err).
 			WithField("project_id", settings.ProjectID).

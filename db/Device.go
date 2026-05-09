@@ -53,6 +53,15 @@ type Device struct {
 	Created                          time.Time    `db:"created" json:"created" backup:"-"`
 }
 
+// DeviceListFilter narrows the device list for API pagination (substring match for text fields).
+type DeviceListFilter struct {
+	HostnameSubstring string
+	IPSubstring       string
+	DeviceStatus      string
+	RDPStatus         string
+	WinRMStatus       string
+}
+
 // Validate enforces the device invariants checked at the API/store boundary.
 func (d Device) Validate() error {
 	if strings.TrimSpace(d.Hostname) == "" {
