@@ -1121,15 +1121,24 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
 		configByHostname := map[string]map[string]map[string]string{}
+		configsByHost := map[string]map[string]map[string]string{}
 		for _, d := range selected {
 			items, itemErr := helpers.Store(r).GetDeviceConfigItems(project.ID, d.ID)
 			if itemErr != nil {
 				helpers.WriteError(w, itemErr)
 				return
 			}
-			configByHostname[d.Hostname] = buildCategorizedDeviceConfig(items)
+			cfg := buildCategorizedDeviceConfig(items)
+			configByHostname[d.Hostname] = cfg
+			if ip := strings.TrimSpace(d.IPAddress); ip != "" {
+				configsByHost[ip] = cfg
+			}
+			if h := strings.TrimSpace(d.Hostname); h != "" {
+				configsByHost[h] = cfg
+			}
 		}
 		extraVars["configs_by_hostname"] = configByHostname
+		extraVars["configs_by_host"] = configsByHost
 	}
 	effectiveAction := body.Action
 	if body.Action == db.DeviceActionConfig {

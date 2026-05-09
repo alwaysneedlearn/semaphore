@@ -4,6 +4,9 @@
   gather_facts: no
   vars:
     exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu') }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
     - name: 停止程序（仅执行 stop）
@@ -37,27 +40,47 @@
               Write-Output "NOT_RUNNING"
             }
           register: stop_result
-          changed_when: "'STOPPED' in (stop_result.stdout | default('')) or 'STOPPED_BY_TASKKILL' in (stop_result.stdout | default(''))"
+          changed_when: >-
+            'STOPPED' in (stop_result.stdout | default('')) or
+            'STOPPED_BY_TASKKILL' in (stop_result.stdout | default('')) or
+            'NOT_RUNNING' in (stop_result.stdout | default(''))
           failed_when: >
-            stop_result is defined and 'stdout' in stop_result and
+            stop_result is defined and not (stop_result.unreachable | default(false)) and
+            'stdout' in stop_result and
             ('STOP_FAILED' in stop_result.stdout or 'STOP_ERROR' in stop_result.stdout)
+          ignore_unreachable: true
 
         - name: 输出停止结果
           ansible.builtin.debug:
-            msg: "[STOP] {{ inventory_hostname }} -> {{ stop_result.stdout | default('NO_OUTPUT') | trim }}"
+            msg: >-
+              [STOP] {{ inventory_hostname }} ->
+              {{ stop_result.stdout | default(stop_result.msg | default('NO_OUTPUT')) | trim }}
+          when: stop_result is defined and not (stop_result.unreachable | default(false))
+
       always:
         - name: 登记 Semaphore 回调行
           ansible.builtin.set_fact:
             semaphore_callback_row:
               hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
               device_status: >-
-                {% if stop_result is failed %}unhealthy
-                {% elif 'STOP_FAILED' in stop_result.stdout | default('') or 'STOP_ERROR' in stop_result.stdout | default('') %}unhealthy
+                {% if stop_result is not defined %}unknown
+                {% elif stop_result.unreachable | default(false) %}unknown
+                {% elif stop_result is failed %}unhealthy
                 {% else %}unhealthy{% endif %}
-              rdp_status: online
-              winrm_status: online
+              rdp_status: "{{ 'offline' if (stop_result is defined and (stop_result.unreachable | default(false))) else 'online' }}"
+              winrm_status: "{{ 'offline' if (stop_result is defined and (stop_result.unreachable | default(false))) else 'online' }}"
+              abnormal_reason: >-
+                {% if stop_result is not defined %}No task result
+                {% elif stop_result.unreachable | default(false) %}{{ 'WinRM unreachable: ' ~ (stop_result.msg | default('') | trim) }}
+                {% elif stop_result is failed %}{{ (stop_result.stdout | default('') | trim) or (stop_result.msg | default('stop failed')) }}
+                {% elif 'STOP_ERROR' in stop_result.stdout | default('') %}{{ stop_result.stdout | trim }}
+                {% elif 'STOP_FAILED' in stop_result.stdout | default('') %}{{ stop_result.stdout | trim }}
+                {% elif 'NOT_RUNNING' in stop_result.stdout | default('') %}Process was not running (already stopped)
+                {% elif 'STOPPED' in stop_result.stdout | default('') or 'STOPPED_BY_TASKKILL' in stop_result.stdout | default('') %}Stop completed; process not running
+                {% else %}{{ stop_result.stdout | default('') | trim }}
+                {% endif %}
           vars:
-            _sem_dev: "{{ devices | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(devices | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+            _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost

@@ -19,8 +19,11 @@
     api_expected_exec_success_code: "{{ lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('0') }}"
     export_started: "{{ lookup('env', 'EXPORT_STARTED') | default('3', true) }}"
     his_data_from_time: "${his_data_from_time}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
     default_cfg: "{{ default_config | default({}) }}"
-    device_cfg: "{{ (configs_by_hostname[inventory_hostname] if (configs_by_hostname is defined and inventory_hostname in configs_by_hostname) else (config | default({}))) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
     merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
@@ -45,6 +48,18 @@
       register: check_result
       changed_when: false
       ignore_unreachable: true
+
+    - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          device_status: unknown
+          rdp_status: offline
+          winrm_status: offline
+          abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+      when: check_result.unreachable | default(false)
 
     - name: 前置检查：跳过不可达主机
       ansible.builtin.meta: end_host
@@ -251,7 +266,18 @@
             relaunch_result is defined and 'stdout' in relaunch_result and
             ('START_ERROR' in relaunch_result.stdout or 'VERIFY_FAILED' in relaunch_result.stdout)
 
+      rescue:
+        - name: 错误处理：重配阶段失败
+          ansible.builtin.set_fact:
+            host_failed_task: "{{ ansible_failed_task.name | default('重配执行') }}"
+            host_failure_reason: "{{ (ansible_failed_result.stdout | default('')) | trim | default(ansible_failed_result.msg | default('未知错误'), true) }}"
+
+        - name: 错误处理：输出重配失败信息
+          ansible.builtin.debug:
+            msg: "[失败] 主机 {{ inventory_hostname }} 重配阶段 [{{ host_failed_task }}]: {{ host_failure_reason }}"
+
     - name: 启动验证：验证数据上报启动状态
+      when: host_failure_reason is not defined
       block:
         - name: 启动验证：调用启动API
           ansible.builtin.uri:
@@ -320,22 +346,37 @@
               日志结果: {{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
           when: not final_start_ok
 
+      rescue:
+        - name: 错误处理：启动验证阶段失败
+          ansible.builtin.set_fact:
+            host_failed_task: "{{ ansible_failed_task.name | default('启动验证') }}"
+            host_failure_reason: "{{ (ansible_failed_result.stdout | default('')) | trim | default(ansible_failed_result.msg | default('未知错误'), true) }}"
+
+        - name: 错误处理：输出验证失败信息
+          ansible.builtin.debug:
+            msg: "[失败] 主机 {{ inventory_hostname }} 验证阶段 [{{ host_failed_task }}]: {{ host_failure_reason }}"
+
   post_tasks:
     - name: 登记 Semaphore 回调行
+      when: not (check_result.unreachable | default(false))
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: >-
             {% if host_failure_reason is defined %}unhealthy
-            {% elif check_result is not defined or (check_result.unreachable | default(false)) %}unknown
+            {% elif check_result is not defined %}unknown
             {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}unhealthy
             {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
             {% else %}healthy{% endif %}
           rdp_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
           winrm_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
-          abnormal_reason: "{{ host_failure_reason if host_failure_reason is defined else '' }}"
+          abnormal_reason: >-
+            {% if host_failure_reason is defined %}{{ host_failure_reason }}
+            {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}Process was not running and start/verify did not succeed
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}Reconfigure/start verification failed
+            {% endif %}
       vars:
-        _sem_dev: "{{ devices | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(devices | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost
