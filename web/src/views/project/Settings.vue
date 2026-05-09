@@ -179,7 +179,6 @@ import axios from 'axios';
 import YesNoDialog from '@/components/YesNoDialog.vue';
 import delay from '@/lib/delay';
 import DashboardMenu from '@/components/DashboardMenu.vue';
-import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
 
 export default {
   components: {

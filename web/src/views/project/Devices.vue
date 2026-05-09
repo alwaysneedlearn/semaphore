@@ -4,11 +4,23 @@
       <v-card>
         <v-card-title>{{ $t('deviceSettingsTitle') }}</v-card-title>
         <v-card-text>
-          <DeviceSettingsForm :project-id="projectId" />
+          <DeviceSettingsForm
+            ref="deviceSettingsForm"
+            :project-id="projectId"
+            :hide-actions="true"
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="deviceSettingsDialog = false">{{ $t('close') }}</v-btn>
+          <v-btn
+            color="primary"
+            depressed
+            :loading="deviceSettingsSaving"
+            @click="saveDeviceSettings"
+          >
+            {{ $t('save') }}
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -468,6 +480,7 @@ export default {
       discovering: false,
       patrolling: false,
       deviceSettingsDialog: false,
+      deviceSettingsSaving: false,
       busyId: null,
       configDialog: false,
       configDeviceId: null,
@@ -565,6 +578,22 @@ export default {
     async askDeleteItem(itemId) {
       this.itemId = itemId;
       this.deleteItemDialog = true;
+    },
+
+    async saveDeviceSettings() {
+      if (!this.$refs.deviceSettingsForm || this.deviceSettingsSaving) {
+        return;
+      }
+
+      this.deviceSettingsSaving = true;
+      try {
+        const ok = await this.$refs.deviceSettingsForm.save();
+        if (ok) {
+          this.deviceSettingsDialog = false;
+        }
+      } finally {
+        this.deviceSettingsSaving = false;
+      }
     },
 
     statusColor(s) {
