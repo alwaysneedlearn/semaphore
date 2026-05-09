@@ -909,14 +909,22 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 			"ip":       d.IPAddress,
 		})
 	}
+
+	// Same as DeviceStatusScheduler.refreshProject: TCP probe first so RDP/WinRM and
+	// derived device_status stay accurate without relying on the Ansible callback.
+	// We intentionally do *not* mark every device as "checking" here — that state was
+	// sticky because status templates often never call PUT /devices/status/bulk.
+	for _, d := range devices {
+		rdp, winrm, refreshed := server.ProbeDevice(d)
+		if err := helpers.Store(r).UpdateDeviceStatus(project.ID, d.ID, rdp, winrm, refreshed); err != nil {
+			continue
+		}
+	}
+
 	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
-	}
-	now := time.Now()
-	for _, d := range devices {
-		_ = helpers.Store(r).UpdateDeviceStatusByHostname(project.ID, d.Hostname, db.DeviceStatusChecking, now)
 	}
 	helpers.WriteJSON(w, http.StatusCreated, task)
 }
