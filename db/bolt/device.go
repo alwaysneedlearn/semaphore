@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/semaphoreui/semaphore/db"
@@ -38,9 +39,93 @@ func (d *BoltDb) CreateDeviceStatusCallbackLog(l db.DeviceStatusCallbackLog) (db
 	return l, nil
 }
 
-func (d *BoltDb) GetDevices(projectID int, params db.RetrieveQueryParams) (devices []db.Device, err error) {
-	err = d.getObjects(projectID, db.DeviceProps, params, nil, &devices)
+func filterDevicesInMemory(devices []db.Device, filter *db.DeviceListFilter) []db.Device {
+	if filter == nil {
+		return devices
+	}
+	hostSub := strings.TrimSpace(filter.HostnameSubstring)
+	ipSub := strings.TrimSpace(filter.IPSubstring)
+	ds := strings.TrimSpace(filter.DeviceStatus)
+	rs := strings.TrimSpace(filter.RDPStatus)
+	ws := strings.TrimSpace(filter.WinRMStatus)
+
+	out := make([]db.Device, 0, len(devices))
+	for _, dev := range devices {
+		if hostSub != "" && !strings.Contains(strings.ToLower(dev.Hostname), strings.ToLower(hostSub)) {
+			continue
+		}
+		if ipSub != "" && !strings.Contains(strings.ToLower(dev.IPAddress), strings.ToLower(ipSub)) {
+			continue
+		}
+		if ds != "" && string(dev.DeviceStatus) != ds {
+			continue
+		}
+		if rs != "" && string(dev.RDPStatus) != rs {
+			continue
+		}
+		if ws != "" && string(dev.WinRMStatus) != ws {
+			continue
+		}
+		out = append(out, dev)
+	}
+	return out
+}
+
+func sliceDevicesPaged(all []db.Device, params db.RetrieveQueryParams) []db.Device {
+	if params.Count <= 0 && params.Offset <= 0 {
+		return all
+	}
+	start := params.Offset
+	if start > len(all) {
+		return []db.Device{}
+	}
+	end := len(all)
+	if params.Count > 0 {
+		end = start + params.Count
+		if end > len(all) {
+			end = len(all)
+		}
+	}
+	return all[start:end]
+}
+
+func (d *BoltDb) GetDevices(projectID int, params db.RetrieveQueryParams, filter *db.DeviceListFilter) (devices []db.Device, err error) {
+	var all []db.Device
+	err = d.getObjects(projectID, db.DeviceProps, db.RetrieveQueryParams{}, nil, &all)
+	if err != nil {
+		return
+	}
+	all = filterDevicesInMemory(all, filter)
+
+	sortBy := params.SortBy
+	if sortBy == "" {
+		sortBy = db.DeviceProps.DefaultSortingColumn
+	}
+	validSort := false
+	for _, col := range db.DeviceProps.SortableColumns {
+		if col == sortBy {
+			validSort = true
+			break
+		}
+	}
+	if !validSort {
+		sortBy = db.DeviceProps.DefaultSortingColumn
+	}
+	if err = sortObjects(&all, sortBy, params.SortInverted); err != nil {
+		return
+	}
+	devices = sliceDevicesPaged(all, params)
 	return
+}
+
+func (d *BoltDb) CountDevices(projectID int, filter *db.DeviceListFilter) (int, error) {
+	var all []db.Device
+	err := d.getObjects(projectID, db.DeviceProps, db.RetrieveQueryParams{}, nil, &all)
+	if err != nil {
+		return 0, err
+	}
+	all = filterDevicesInMemory(all, filter)
+	return len(all), nil
 }
 
 func (d *BoltDb) DeleteDevice(projectID int, deviceID int) error {
@@ -93,7 +178,7 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.Devic
 }
 
 func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) {
-	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{})
+	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		return
 	}
@@ -114,7 +199,7 @@ func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error)
 }
 
 func (d *BoltDb) UpdateDeviceStatusByHostname(projectID int, hostname string, status db.DeviceStatus, refreshed time.Time) error {
-	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{})
+	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		return err
 	}
@@ -130,7 +215,7 @@ func (d *BoltDb) UpdateDeviceStatusByHostname(projectID int, hostname string, st
 }
 
 func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]db.Device, error) {
-	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{})
+	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +227,13 @@ func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]
 	for _, dev := range devices {
 		if old, ok := byHost[dev.Hostname]; ok {
 			old.IPAddress = dev.IPAddress
+			old.AnsibleUser = dev.AnsibleUser
+			old.AnsiblePassword = dev.AnsiblePassword
+			old.AnsibleConnection = dev.AnsibleConnection
+			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
+			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
+			old.AnsiblePort = dev.AnsiblePort
+			old.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
 			if dev.DeviceStatus != "" {
 				old.DeviceStatus = dev.DeviceStatus
 			}

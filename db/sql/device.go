@@ -2,6 +2,7 @@ package sql
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -14,10 +15,52 @@ func (d *SqlDb) GetDevice(projectID int, deviceID int) (device db.Device, err er
 	return
 }
 
-func (d *SqlDb) GetDevices(projectID int, params db.RetrieveQueryParams) ([]db.Device, error) {
+func deviceLikeEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+func applyDeviceListFilters(q squirrel.SelectBuilder, filter *db.DeviceListFilter) squirrel.SelectBuilder {
+	if filter == nil {
+		return q
+	}
+	if t := strings.TrimSpace(filter.HostnameSubstring); t != "" {
+		q = q.Where("`hostname` LIKE ?", "%"+deviceLikeEscape(t)+"%")
+	}
+	if t := strings.TrimSpace(filter.IPSubstring); t != "" {
+		q = q.Where("`ip_address` LIKE ?", "%"+deviceLikeEscape(t)+"%")
+	}
+	if t := strings.TrimSpace(filter.DeviceStatus); t != "" {
+		q = q.Where("`device_status` = ?", t)
+	}
+	if t := strings.TrimSpace(filter.RDPStatus); t != "" {
+		q = q.Where("`rdp_status` = ?", t)
+	}
+	if t := strings.TrimSpace(filter.WinRMStatus); t != "" {
+		q = q.Where("`winrm_status` = ?", t)
+	}
+	return q
+}
+
+func (d *SqlDb) GetDevices(projectID int, params db.RetrieveQueryParams, filter *db.DeviceListFilter) ([]db.Device, error) {
 	var devices []db.Device
-	err := d.getObjects(projectID, db.DeviceProps, params, nil, &devices)
+	err := d.getObjects(projectID, db.DeviceProps, params, func(q squirrel.SelectBuilder) squirrel.SelectBuilder {
+		return applyDeviceListFilters(q, filter)
+	}, &devices)
 	return devices, err
+}
+
+func (d *SqlDb) CountDevices(projectID int, filter *db.DeviceListFilter) (int, error) {
+	q := squirrel.Select("count(*)").From("`project__device`").Where("project_id=?", projectID)
+	q = applyDeviceListFilters(q, filter)
+	query, args, err := q.ToSql()
+	if err != nil {
+		return 0, err
+	}
+	cnt, err := d.Sql().SelectInt(d.PrepareQuery(query), args...)
+	return int(cnt), err
 }
 
 func (d *SqlDb) DeleteDevice(projectID int, deviceID int) error {
@@ -42,13 +85,21 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 	insertID, err := d.insert(
 		"id",
 		"insert into project__device ("+
-			"project_id, name, ip_address, hostname, device_status, "+
-			"rdp_status, winrm_status, abnormal_reason, last_updated, created) values "+
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"project_id, name, ip_address, hostname, ansible_user, ansible_password, ansible_connection, "+
+			"ansible_winrm_transport, ansible_winrm_scheme, ansible_port, ansible_winrm_server_cert_validation, "+
+			"device_status, rdp_status, winrm_status, abnormal_reason, last_updated, created) values "+
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		device.ProjectID,
 		device.Name,
 		device.IPAddress,
 		device.Hostname,
+		device.AnsibleUser,
+		device.AnsiblePassword,
+		device.AnsibleConnection,
+		device.AnsibleWinRMTransport,
+		device.AnsibleWinRMScheme,
+		device.AnsiblePort,
+		device.AnsibleWinRMServerCertValidation,
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
@@ -68,11 +119,20 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 func (d *SqlDb) UpdateDevice(device db.Device) error {
 	_, err := d.exec(
 		"update project__device set "+
-			"name=?, ip_address=?, hostname=?, device_status=?, rdp_status=?, winrm_status=?, abnormal_reason=?, last_updated=? "+
+			"name=?, ip_address=?, hostname=?, ansible_user=?, ansible_password=?, ansible_connection=?, "+
+			"ansible_winrm_transport=?, ansible_winrm_scheme=?, ansible_port=?, ansible_winrm_server_cert_validation=?, "+
+			"device_status=?, rdp_status=?, winrm_status=?, abnormal_reason=?, last_updated=? "+
 			"where id=? and project_id=?",
 		device.Name,
 		device.IPAddress,
 		device.Hostname,
+		device.AnsibleUser,
+		device.AnsiblePassword,
+		device.AnsibleConnection,
+		device.AnsibleWinRMTransport,
+		device.AnsibleWinRMScheme,
+		device.AnsiblePort,
+		device.AnsibleWinRMServerCertValidation,
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
@@ -165,6 +225,13 @@ func (d *SqlDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]d
 		}
 
 		existing.IPAddress = dev.IPAddress
+		existing.AnsibleUser = dev.AnsibleUser
+		existing.AnsiblePassword = dev.AnsiblePassword
+		existing.AnsibleConnection = dev.AnsibleConnection
+		existing.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
+		existing.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
+		existing.AnsiblePort = dev.AnsiblePort
+		existing.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
 		if dev.DeviceStatus != "" {
 			existing.DeviceStatus = dev.DeviceStatus
 		}
@@ -276,10 +343,15 @@ func (d *SqlDb) UpdateProjectDeviceSettings(s db.ProjectDeviceSettings) error {
 		"update project__device_settings set "+
 			"discover_template_id=?, start_template_id=?, stop_template_id=?, "+
 			"restart_template_id=?, status_template_id=?, config_template_id=?, "+
-			"status_refresh_interval_min=? "+
+			"default_inventory_id=?, default_ansible_user=?, default_ansible_password=?, default_ansible_connection=?, "+
+			"default_ansible_winrm_transport=?, default_ansible_winrm_scheme=?, default_ansible_port=?, default_ansible_winrm_server_cert_validation=?, "+
+			"default_config_json=?, status_refresh_interval_min=? "+
 			"where project_id=?",
 		s.DiscoverTemplateID, s.StartTemplateID, s.StopTemplateID,
 		s.RestartTemplateID, s.StatusTemplateID, s.ConfigTemplateID,
+		s.DefaultInventoryID, s.DefaultAnsibleUser, s.DefaultAnsiblePassword, s.DefaultAnsibleConnection,
+		s.DefaultAnsibleWinRMTransport, s.DefaultAnsibleWinRMScheme, s.DefaultAnsiblePort, s.DefaultAnsibleWinRMServerCertValidation,
+		s.DefaultConfigJSON,
 		s.StatusRefreshIntervalMin,
 		s.ProjectID,
 	)
@@ -298,10 +370,15 @@ func (d *SqlDb) UpdateProjectDeviceSettings(s db.ProjectDeviceSettings) error {
 		"insert into project__device_settings ("+
 			"project_id, discover_template_id, start_template_id, stop_template_id, "+
 			"restart_template_id, status_template_id, config_template_id, "+
-			"status_refresh_interval_min) values (?, ?, ?, ?, ?, ?, ?, ?)",
+			"default_inventory_id, default_ansible_user, default_ansible_password, default_ansible_connection, "+
+			"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, default_ansible_winrm_server_cert_validation, "+
+			"default_config_json, status_refresh_interval_min) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.ProjectID,
 		s.DiscoverTemplateID, s.StartTemplateID, s.StopTemplateID,
 		s.RestartTemplateID, s.StatusTemplateID, s.ConfigTemplateID,
+		s.DefaultInventoryID, s.DefaultAnsibleUser, s.DefaultAnsiblePassword, s.DefaultAnsibleConnection,
+		s.DefaultAnsibleWinRMTransport, s.DefaultAnsibleWinRMScheme, s.DefaultAnsiblePort, s.DefaultAnsibleWinRMServerCertValidation,
+		s.DefaultConfigJSON,
 		s.StatusRefreshIntervalMin,
 	)
 	return err

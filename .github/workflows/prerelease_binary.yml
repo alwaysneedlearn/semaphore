@@ -1,0 +1,60 @@
+name: prerelease-binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Pre-release tag to create/update"
+        required: false
+        default: "prebuilt-semaphore"
+      release_name:
+        description: "Release title"
+        required: false
+        default: "Prebuilt Semaphore Binary"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build frontend assets
+        run: npm run build
+        working-directory: web
+
+      - name: Build backend binary
+        run: go build -o bin/semaphore ./cli
+
+      - name: Publish prerelease asset (replace existing)
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.event.inputs.release_tag || 'prebuilt-semaphore' }}
+          name: ${{ github.event.inputs.release_name || 'Prebuilt Semaphore Binary' }}
+          prerelease: true
+          allowUpdates: true
+          replacesArtifacts: true
+          removeArtifacts: true
+          artifacts: bin/semaphore
+          token: ${{ secrets.GITHUB_TOKEN }}

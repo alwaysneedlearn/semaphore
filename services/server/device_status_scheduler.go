@@ -82,7 +82,7 @@ func (s *DeviceStatusScheduler) tick() {
 }
 
 func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings, now time.Time) {
-	devices, err := s.store.GetDevices(settings.ProjectID, db.RetrieveQueryParams{})
+	devices, err := s.store.GetDevices(settings.ProjectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		log.WithError(err).
 			WithField("project_id", settings.ProjectID).
@@ -133,7 +133,10 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 			"hostname": d.Hostname,
 		})
 	}
-	envBytes, err := json.Marshal(map[string]any{"devices": devicePayload})
+	envBytes, err := json.Marshal(map[string]any{
+		"devices":              devicePayload,
+		"semaphore_project_id": settings.ProjectID,
+	})
 	if err != nil {
 		log.WithError(err).Warn("device status: failed to marshal devices")
 		return
@@ -143,6 +146,7 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 		TemplateID:  tpl.ID,
 		ProjectID:   settings.ProjectID,
 		Environment: string(envBytes),
+		InventoryID: settings.DefaultInventoryID,
 	}
 
 	if _, err := s.taskPool.AddTask(task, nil, "device-status-scheduler", settings.ProjectID, tpl.App.NeedTaskAlias()); err != nil {

@@ -183,7 +183,7 @@ import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
 
 export default {
   components: {
-    DashboardMenu, YesNoDialog, ProjectForm, DeviceSettingsForm,
+    DashboardMenu, YesNoDialog, ProjectForm,
   },
   props: {
     projectId: Number,

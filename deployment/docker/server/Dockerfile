@@ -1,50 +1,86 @@
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine3.21 as builder
 
+# Go modules: proxy.golang.org is unreachable from some regions. Override at build time if needed:
+#   docker build --build-arg GOPROXY=https://goproxy.io,direct ...
+# Checksum DB: avoid goproxy.cn's sum.golang.org mirror (often 504); use Google's CN sumdb mirror.
+# If everything times out (last resort, weaker supply-chain checks): --build-arg GOSUMDB=off
+ARG GOPROXY=https://goproxy.io,https://goproxy.cn,https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
+ARG GOSUMDB=sum.golang.google.cn
+ENV GOSUMDB=${GOSUMDB}
+
 RUN apk add --no-cache -U \
     libc-dev curl nodejs npm git gcc zip unzip tar
 
 WORKDIR /usr/local
-# hadolint ignore=DL4006
-RUN curl -sL https://taskfile.dev/install.sh | sh
+# Install task via Go modules (avoid install.sh hitting GitHub API for latest tag).
+# Pin a release for reproducible builds when GitHub is slow or rate-limited.
+RUN go install github.com/go-task/task/v3/cmd/task@v3.45.5
+ENV PATH="/go/bin:${PATH}"
 
 WORKDIR /go/src/semaphore
-COPY . /go/src/semaphore
-
-RUN --mount=type=cache,target=/go/pkg \
-    go mod download -x
+COPY go.mod go.sum ./
+# Local replace ./pro — need pro module metadata before go mod download (see root go.mod replace).
+COPY pro/go.mod pro/go.sum ./pro/
 
 ARG APP_BUILD_TYPE
 ARG TARGETOS
 ARG TARGETARCH
 ARG GH_TOKEN
 
-RUN if [ -n "$APP_BUILD_TYPE" ]; then \
-      git clone -b main https://${GH_TOKEN}@github.com/semaphoreui/semaphorepro-module.git pro_impl && \
-      go work init . ./pro_impl; \
+RUN --mount=type=cache,target=/go/pkg \
+    go mod download -x
+
+ENV OPENTOFU_VERSION="1.11.0"
+ENV TERRAFORM_VERSION="1.11.3"
+ENV TERRAGRUNT_VERSION="0.78.0"
+ARG INSTALL_IAC_TOOLS=true
+ARG OPENTOFU_DOWNLOAD_URL="https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz"
+ARG TERRAFORM_DOWNLOAD_URL="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip"
+ARG TERRAGRUNT_DOWNLOAD_URL="https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"
+ARG DOWNLOAD_RETRIES=5
+
+RUN if [ "${INSTALL_IAC_TOOLS}" = "true" ]; then \
+      curl -fL --retry ${DOWNLOAD_RETRIES} --retry-all-errors --retry-delay 5 \
+        -o "/tmp/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz" "${OPENTOFU_DOWNLOAD_URL}" && \
+      tar xf "/tmp/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz" -C /tmp && \
+      rm "/tmp/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz"; \
     fi
+
+RUN if [ "${INSTALL_IAC_TOOLS}" = "true" ]; then \
+      curl -fL --retry ${DOWNLOAD_RETRIES} --retry-all-errors --retry-delay 5 \
+        -o "/tmp/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" "${TERRAFORM_DOWNLOAD_URL}" && \
+      unzip "/tmp/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip" -d /tmp && \
+      rm "/tmp/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip"; \
+    fi
+
+RUN if [ "${INSTALL_IAC_TOOLS}" = "true" ]; then \
+      curl -fL --retry ${DOWNLOAD_RETRIES} --retry-all-errors --retry-delay 5 \
+        -o /tmp/terragrunt "${TERRAGRUNT_DOWNLOAD_URL}" && \
+      chmod +x /tmp/terragrunt; \
+    fi
+
+# stage-1 always copies /tmp/{tofu,terraform,terragrunt}.
+# When IaC tools are disabled, create lightweight placeholders so COPY succeeds.
+RUN if [ "${INSTALL_IAC_TOOLS}" != "true" ]; then \
+      for tool in tofu terraform terragrunt; do \
+        printf '%s\n' '#!/bin/sh' \
+          "echo \"$tool is disabled in this image (INSTALL_IAC_TOOLS=false)\" >&2" \
+          'exit 1' > "/tmp/${tool}" && chmod +x "/tmp/${tool}"; \
+      done; \
+    fi
+
+COPY . /go/src/semaphore
+
+RUN if [ -n "$APP_BUILD_TYPE" ]; then \
+  git clone -b main https://${GH_TOKEN}@github.com/semaphoreui/semaphorepro-module.git pro_impl && \
+  go work init . ./pro_impl; \
+fi
 
 RUN --mount=type=cache,target=/go/pkg \
     --mount=type=cache,target=/root/.cache/go-build \
     task deps APP_BUILD_TYPE=${APP_BUILD_TYPE} && \
     task build GOOS=${TARGETOS} GOARCH=${TARGETARCH} APP_BUILD_TYPE=${APP_BUILD_TYPE}
-
-
-ENV OPENTOFU_VERSION="1.11.0"
-ENV TERRAFORM_VERSION="1.11.3"
-ENV TERRAGRUNT_VERSION="0.78.0"
-#ENV PULUMI_VERSION="3.116.1"
-#ENV POWERSHELL_VERSION="3.116.1"
-
-RUN wget https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz && \
-    tar xf tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz -C /tmp && \
-    rm tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.tar.gz
-
-RUN curl -O https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip && \
-    unzip terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip -d /tmp && \
-    rm terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip
-
-RUN wget -O /tmp/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH} && \
-    chmod +x /tmp/terragrunt
 
 FROM alpine:3.21
 

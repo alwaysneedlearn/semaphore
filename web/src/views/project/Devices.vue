@@ -1,5 +1,18 @@
 <template>
   <div v-if="items != null">
+    <v-dialog v-model="deviceSettingsDialog" :max-width="900">
+      <v-card>
+        <v-card-title>{{ $t('deviceSettingsTitle') }}</v-card-title>
+        <v-card-text>
+          <DeviceSettingsForm :project-id="projectId" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deviceSettingsDialog = false">{{ $t('close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="discoveryDialog" :max-width="900">
       <v-card>
         <v-card-title>{{ $t('deviceDiscoveryTitle') }}</v-card-title>
@@ -7,19 +20,24 @@
           <p class="text--secondary">
             {{ $t('deviceDiscoveryHelp') }}
           </p>
-          <v-textarea
-            v-model="discoveryJson"
-            :label="$t('deviceDiscoveryJson')"
+          <v-text-field
+            v-model="discoverySubnet"
+            :label="$t('deviceDiscoverySubnet')"
+            :hint="$t('deviceDiscoverySubnetHint')"
+            persistent-hint
             outlined
-            rows="6"
-            auto-grow
+            dense
+            class="mb-2"
+            placeholder="192.168.1.0/24"
           />
-          <div class="d-flex mb-2">
-            <v-btn small text @click="parseDiscoveryJson">{{ $t('parse') }}</v-btn>
-            <v-btn small text class="ml-2" @click="runDiscoverTemplate">
-              {{ $t('deviceDiscoverRunTemplate') }}
-            </v-btn>
-          </div>
+          <v-btn
+            color="primary"
+            class="mb-3"
+            :loading="discovering"
+            @click="runDiscoverTemplate"
+          >
+            {{ $t('deviceDiscoverRunTemplate') }}
+          </v-btn>
           <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
           <v-data-table
             :headers="discoveryHeaders"
@@ -128,6 +146,15 @@
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
         text
         class="mr-2"
+        @click="deviceSettingsDialog = true"
+      >
+        <v-icon left>mdi-cog</v-icon>
+        {{ $t('deviceSettingsTitle') }}
+      </v-btn>
+      <v-btn
+        v-if="can(USER_PERMISSIONS.manageProjectResources)"
+        text
+        class="mr-2"
         @click="discoveryDialog = true"
       >
         <v-icon left>mdi-radar</v-icon>
@@ -152,9 +179,61 @@
         <v-icon left>mdi-plus</v-icon>
         {{ $t('newDevice') }}
       </v-btn>
+      <v-menu offset-y v-if="can(USER_PERMISSIONS.manageProjectResources)">
+        <template v-slot:activator="{ on, attrs }">
+          <v-btn
+            class="ml-2"
+            outlined
+            v-bind="attrs"
+            v-on="on"
+            :disabled="selectedDeviceIds.length === 0 || bulkLoading"
+          >
+            <v-icon left>mdi-playlist-check</v-icon>
+            {{ $t('deviceBulkOps') }} ({{ selectedDeviceIds.length }})
+          </v-btn>
+        </template>
+        <v-list dense>
+          <v-list-item @click="runBulkProbe()">
+            <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('start')">
+            <v-list-item-icon><v-icon>mdi-play</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStart') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('stop')">
+            <v-list-item-icon><v-icon>mdi-stop</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStop') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('restart')">
+            <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceRestart') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('status')">
+            <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item @click="runBulkAction('config')">
+            <v-list-item-icon><v-icon>mdi-cloud-upload</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceConfigPush') }}</v-list-item-title>
+          </v-list-item>
+          <v-divider />
+          <v-list-item @click="bulkDeleteDialog = true">
+            <v-list-item-icon><v-icon color="error">mdi-delete</v-icon></v-list-item-icon>
+            <v-list-item-title class="error--text">{{ $t('delete') }}</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
     </v-toolbar>
 
     <v-divider />
+
+    <YesNoDialog
+      :title="$t('deleteDevice')"
+      :text="$t('deviceBulkDeleteConfirm', { count: selectedDeviceIds.length })"
+      v-model="bulkDeleteDialog"
+      @yes="bulkDelete()"
+    />
 
     <v-row class="ma-4" dense>
       <v-col cols="6" sm="3">
@@ -202,12 +281,95 @@
 
     <v-data-table
       :headers="headers"
-      :items="items"
-      hide-default-footer
+      :items="items || []"
+      item-key="id"
+      :server-items-length="totalDevices"
+      :options="tableOptions"
+      :loading="devicesLoading"
+      :footer-props="{
+        itemsPerPageOptions: [10, 15, 25, 50],
+        showFirstLastPage: true,
+      }"
       class="mt-2"
-      :items-per-page="Number.MAX_VALUE"
       style="max-width: calc(var(--breakpoint-xl) - var(--nav-drawer-width) - 200px); margin: auto;"
+      @update:options="onDeviceTableOptions"
     >
+      <template v-slot:header._select>
+        <v-checkbox
+          class="ma-0 pa-0"
+          dense
+          hide-details
+          :ripple="false"
+          :input-value="pageAllSelected"
+          :indeterminate="pageSomeSelected"
+          @click.stop.prevent="toggleSelectPage"
+        />
+      </template>
+      <template v-slot:item._select="{ item }">
+        <v-checkbox
+          class="ma-0 pa-0"
+          dense
+          hide-details
+          :ripple="false"
+          :input-value="selectedDeviceIds.includes(item.id)"
+          @click.stop.prevent="toggleDeviceRow(item)"
+        />
+      </template>
+      <template v-slot:top>
+        <v-row dense class="px-4 pt-3">
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.trim="filters.hostname"
+              :label="$t('deviceFilterHostname')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.trim="filters.ip"
+              :label="$t('deviceFilterIp')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.deviceStatus"
+              :items="statusFilterOptions"
+              :label="$t('deviceStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.rdpStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceRdpStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.winrmStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceWinrmStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+        </v-row>
+        <div class="px-4 pb-1 text--secondary caption">
+          {{ $t('devicePaginationSelectionHint') }}
+        </div>
+      </template>
       <template v-slot:item.device_status="{ item }">
         <v-chip x-small :color="statusColor(item.device_status)" dark>
           {{ item.device_status }}
@@ -291,11 +453,12 @@ import EventBus from '@/event-bus';
 import ItemListPageBase from '@/components/ItemListPageBase';
 import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
+import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
   mixins: [ItemListPageBase],
-  components: { DeviceForm, DeviceConfigDialog },
+  components: { DeviceForm, DeviceConfigDialog, DeviceSettingsForm },
 
   data() {
     return {
@@ -304,6 +467,7 @@ export default {
       },
       discovering: false,
       patrolling: false,
+      deviceSettingsDialog: false,
       busyId: null,
       configDialog: false,
       configDeviceId: null,
@@ -320,11 +484,34 @@ export default {
         { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
       ],
       discoveryDialog: false,
-      discoveryJson: '',
+      discoverySubnet: '',
       discoveryError: '',
       discoveredDevices: [],
       selectedDiscovered: [],
+      selectedDeviceIds: [],
+      totalDevices: 0,
+      devicesLoading: false,
+      tableOptions: {
+        page: 1,
+        itemsPerPage: 15,
+        sortBy: ['hostname'],
+        sortDesc: [false],
+        groupBy: [],
+        groupDesc: [],
+        multiSort: false,
+        mustSort: false,
+      },
+      filterDebounceTimer: null,
       importingDiscovery: false,
+      bulkLoading: false,
+      bulkDeleteDialog: false,
+      filters: {
+        hostname: '',
+        ip: '',
+        deviceStatus: null,
+        rdpStatus: null,
+        winrmStatus: null,
+      },
       discoveryHeaders: [
         { text: 'Hostname', value: 'hostname' },
         { text: 'IP', value: 'ip_address' },
@@ -333,6 +520,43 @@ export default {
         { text: 'WinRM', value: 'winrm_status' },
       ],
     };
+  },
+  computed: {
+    statusFilterOptions() {
+      return ['healthy', 'unhealthy', 'checking', 'unknown'];
+    },
+    protocolFilterOptions() {
+      return ['online', 'offline', 'unknown'];
+    },
+    pageDeviceIds() {
+      return (this.items || []).map((x) => x.id);
+    },
+    pageAllSelected() {
+      if (!this.pageDeviceIds.length) {
+        return false;
+      }
+      return this.pageDeviceIds.every((id) => this.selectedDeviceIds.includes(id));
+    },
+    pageSomeSelected() {
+      const some = this.pageDeviceIds.some((id) => this.selectedDeviceIds.includes(id));
+      return some && !this.pageAllSelected;
+    },
+  },
+
+  watch: {
+    filters: {
+      handler() {
+        clearTimeout(this.filterDebounceTimer);
+        this.filterDebounceTimer = setTimeout(() => {
+          this.tableOptions = {
+            ...this.tableOptions,
+            page: 1,
+          };
+          this.loadItems();
+        }, 350);
+      },
+      deep: true,
+    },
   },
 
   // ItemListPageBase has askDeleteItem call /refs which we don't expose;
@@ -361,6 +585,13 @@ export default {
 
     getHeaders() {
       return [
+        {
+          text: '',
+          value: '_select',
+          sortable: false,
+          width: '52px',
+          align: 'center',
+        },
         { text: this.$i18n.t('deviceIpAddress'), value: 'ip_address', width: '18%' },
         { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '25%' },
         { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
@@ -381,13 +612,96 @@ export default {
       return 'i-device';
     },
 
+    onDeviceTableOptions(opts) {
+      this.tableOptions = opts;
+      this.loadItems();
+    },
+
+    toggleSelectPage() {
+      const checked = !this.pageAllSelected;
+      const idsOnPage = new Set(this.pageDeviceIds);
+      if (checked) {
+        const merged = new Set(this.selectedDeviceIds);
+        this.pageDeviceIds.forEach((id) => merged.add(id));
+        this.selectedDeviceIds = [...merged];
+      } else {
+        this.selectedDeviceIds = this.selectedDeviceIds.filter((id) => !idsOnPage.has(id));
+      }
+    },
+
+    toggleDeviceRow(item) {
+      const i = this.selectedDeviceIds.indexOf(item.id);
+      if (i >= 0) {
+        this.selectedDeviceIds.splice(i, 1);
+      } else {
+        this.selectedDeviceIds.push(item.id);
+      }
+    },
+
     async loadItems() {
-      const [devicesRes, statsRes] = await Promise.all([
-        axios.get(this.getItemsUrl()),
-        axios.get(`${this.getItemsUrl()}/stats`),
-      ]);
-      this.items = devicesRes.data || [];
-      this.stats = statsRes.data || this.stats;
+      this.devicesLoading = true;
+      try {
+        const opts = this.tableOptions || {};
+        const page = opts.page || 1;
+        const itemsPerPage = opts.itemsPerPage || 15;
+        const offset = (page - 1) * itemsPerPage;
+        const sortArr = opts.sortBy || ['hostname'];
+        const sortDescArr = opts.sortDesc || [false];
+        const sortBy = sortArr[0] || 'hostname';
+        const sortDesc = !!sortDescArr[0];
+
+        const params = {
+          limit: itemsPerPage,
+          offset,
+          sort: sortBy,
+          order: sortDesc ? 'desc' : 'asc',
+        };
+        if (this.filters.hostname) params.hostname = this.filters.hostname;
+        if (this.filters.ip) params.ip = this.filters.ip;
+        if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
+        if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
+        if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
+
+        const [devicesRes, statsRes] = await Promise.all([
+          axios.get(this.getItemsUrl(), { params }),
+          axios.get(`${this.getItemsUrl()}/stats`),
+        ]);
+        const body = devicesRes.data || {};
+        this.items = body.devices || [];
+        this.totalDevices = typeof body.total === 'number' ? body.total : (this.items || []).length;
+        this.stats = statsRes.data || this.stats;
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+        this.items = [];
+        this.totalDevices = 0;
+      } finally {
+        this.devicesLoading = false;
+      }
+    },
+
+    async deleteItem(itemId) {
+      this.itemId = itemId;
+      try {
+        const item = (this.items || []).find(
+          (x) => x[this.IDFieldName] === itemId,
+        ) || { id: itemId };
+        await axios({
+          method: 'delete',
+          url: this.getSingleItemUrl(),
+          responseType: 'json',
+        });
+        EventBus.$emit(this.getEventName(), {
+          action: 'delete',
+          item,
+        });
+        this.selectedDeviceIds = this.selectedDeviceIds.filter((id) => id !== itemId);
+        await this.loadItems();
+      } catch (err) {
+        EventBus.$emit('i-snackbar', {
+          color: 'error',
+          text: getErrorMessage(err),
+        });
+      }
     },
 
     async probeDevice(device) {
@@ -405,7 +719,10 @@ export default {
     async runAction(device, action) {
       this.busyId = device.id;
       try {
-        const res = await axios.post(`${this.getItemsUrl()}/${device.id}/action`, { action });
+        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
+          action,
+          device_ids: [device.id],
+        });
         EventBus.$emit('i-snackbar', {
           color: 'success',
           text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
@@ -423,13 +740,18 @@ export default {
     async discoverDevices() {
       this.discovering = true;
       try {
-        const res = await axios.post(`${this.getItemsUrl()}/discover`);
+        const payload = {
+          subnet: this.discoverySubnet || null,
+        };
+        const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
+        const taskId = res.data && res.data.id;
         EventBus.$emit('i-snackbar', {
           color: 'success',
-          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
+          text: this.$i18n.t('deviceTaskQueued', { id: taskId }),
         });
-        if (res.data && res.data.id) {
-          EventBus.$emit('i-show-task', { taskId: res.data.id });
+        if (taskId) {
+          EventBus.$emit('i-show-task', { taskId });
+          await this.waitAndLoadDiscoveryResult(taskId);
         }
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
@@ -437,27 +759,139 @@ export default {
         this.discovering = false;
       }
     },
-    parseDiscoveryJson() {
-      this.discoveryError = '';
-      try {
-        const parsed = JSON.parse(this.discoveryJson || '[]');
-        if (!Array.isArray(parsed)) {
-          throw new Error('json must be array');
-        }
-        this.discoveredDevices = parsed
-          .map((x) => ({
-            hostname: (x.hostname || '').trim(),
-            ip_address: (x.ip_address || x.ip || '').trim(),
-            device_status: x.device_status || x.status || 'unknown',
-            rdp_status: x.rdp_status || 'unknown',
-            winrm_status: x.winrm_status || 'unknown',
-            abnormal_reason: x.abnormal_reason || null,
-          }))
-          .filter((x) => x.hostname);
-        this.selectedDiscovered = [...this.discoveredDevices];
-      } catch (e) {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryJsonInvalid');
+    async waitAndLoadDiscoveryResult(taskId, attemptsLeft = 60) {
+      const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
+      const status = (taskRes.data && taskRes.data.status) || '';
+      if (status === 'success') {
+        await this.loadDiscoveryResultFromTask(taskId);
+        return;
       }
+      if (status === 'error' || status === 'stopped') {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskFailed');
+        return;
+      }
+      if (attemptsLeft <= 1) {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
+        return;
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, 2000);
+      });
+      await this.waitAndLoadDiscoveryResult(taskId, attemptsLeft - 1);
+    },
+    tryParseJsonArray(candidate) {
+      if (!candidate) {
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(candidate.trim());
+        return Array.isArray(parsed) ? parsed : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    stripAnsiCodes(input) {
+      if (!input) {
+        return '';
+      }
+      const ESC = '\u001b';
+      let i = 0;
+      let out = '';
+      while (i < input.length) {
+        if (input[i] === ESC && input[i + 1] === '[') {
+          i += 2;
+          while (i < input.length) {
+            const ch = input[i];
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+              i += 1;
+              break;
+            }
+            i += 1;
+          }
+        } else {
+          out += input[i];
+          i += 1;
+        }
+      }
+      return out;
+    },
+    extractJsonArrayFromText(text) {
+      if (!text) {
+        return null;
+      }
+
+      const clean = this.stripAnsiCodes(text);
+
+      const direct = this.tryParseJsonArray(clean);
+      if (direct) {
+        return direct;
+      }
+
+      const escapedFieldRegex = /"(stdout|msg)"\s*:\s*"((?:\\.|[^"\\])*)"/g;
+      let escapedFieldMatch = escapedFieldRegex.exec(clean);
+      while (escapedFieldMatch !== null) {
+        try {
+          const unescaped = JSON.parse(`"${escapedFieldMatch[2]}"`);
+          const fromField = this.tryParseJsonArray(unescaped);
+          if (fromField) {
+            return fromField;
+          }
+        } catch (e) {
+          // continue
+        }
+        escapedFieldMatch = escapedFieldRegex.exec(clean);
+      }
+
+      const arrayLikeMatches = clean.match(/\[\s*\{[\s\S]*?\}\s*\]/g) || [];
+      for (let i = arrayLikeMatches.length - 1; i >= 0; i -= 1) {
+        const parsed = this.tryParseJsonArray(arrayLikeMatches[i]);
+        if (parsed) {
+          return parsed;
+        }
+      }
+
+      return null;
+    },
+    async loadDiscoveryResultFromTask(taskId) {
+      const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
+      const lines = outputRes.data || [];
+      const merged = lines.map((line) => line.output || '').join('\n');
+      let parsed = this.extractJsonArrayFromText(merged);
+
+      if (!parsed) {
+        try {
+          const rawRes = await axios.get(
+            `/api/project/${this.projectId}/tasks/${taskId}/raw_output`,
+            { responseType: 'text' },
+          );
+          parsed = this.extractJsonArrayFromText(rawRes.data || '');
+        } catch (e) {
+          // ignore raw output fallback errors and keep original message below
+        }
+      }
+
+      if (!parsed) {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryResultNotFound');
+        return;
+      }
+      this.applyDiscoveredDevices(parsed);
+      EventBus.$emit('i-snackbar', {
+        color: 'success',
+        text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+      });
+    },
+    applyDiscoveredDevices(parsed) {
+      this.discoveredDevices = (parsed || [])
+        .map((x) => ({
+          hostname: (x.hostname || '').trim(),
+          ip_address: (x.ip_address || x.ip || '').trim(),
+          device_status: x.device_status || x.status || 'unknown',
+          rdp_status: x.rdp_status || 'unknown',
+          winrm_status: x.winrm_status || 'unknown',
+          abnormal_reason: x.abnormal_reason || null,
+        }))
+        .filter((x) => x.hostname);
+      this.selectedDiscovered = [...this.discoveredDevices];
     },
     async runDiscoverTemplate() {
       await this.discoverDevices();
@@ -499,6 +933,54 @@ export default {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
         this.patrolling = false;
+      }
+    },
+    async runBulkProbe() {
+      this.bulkLoading = true;
+      try {
+        await Promise.all(this.selectedDeviceIds.map((id) => axios.post(`${this.getItemsUrl()}/${id}/probe`)));
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceBulkDone', { count: this.selectedDeviceIds.length }),
+        });
+        await this.loadItems();
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
+      }
+    },
+    async runBulkAction(action) {
+      this.bulkLoading = true;
+      try {
+        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
+          action,
+          device_ids: this.selectedDeviceIds,
+        });
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
+        });
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
+      }
+    },
+    async bulkDelete() {
+      this.bulkLoading = true;
+      try {
+        await Promise.all(this.selectedDeviceIds.map((id) => axios.delete(`${this.getItemsUrl()}/${id}`)));
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceBulkDone', { count: this.selectedDeviceIds.length }),
+        });
+        this.selectedDeviceIds = [];
+        await this.loadItems();
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
       }
     },
 

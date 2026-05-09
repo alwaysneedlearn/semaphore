@@ -419,6 +419,7 @@ func Route(
 	projectUserAPI.Path("/devices/discover").HandlerFunc(projects.DiscoverDevices).Methods("POST")
 	projectUserAPI.Path("/devices/discovery/import").HandlerFunc(projects.ImportDiscoveredDevices).Methods("POST")
 	projectUserAPI.Path("/devices/patrol").HandlerFunc(projects.RunPatrolForAllDevices).Methods("POST")
+	projectUserAPI.Path("/devices/actions/bulk").HandlerFunc(projects.RunBulkDeviceAction).Methods("POST")
 	projectUserAPI.Path("/devices/status/bulk").HandlerFunc(projects.BulkUpdateDeviceStatus).Methods("PUT")
 	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.GetDeviceSettings).Methods("GET", "HEAD")
 	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.UpdateDeviceSettings).Methods("PUT")

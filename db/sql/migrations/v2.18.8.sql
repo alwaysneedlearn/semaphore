@@ -9,7 +9,7 @@ create table `project__device_status_callback` (
   `rdp_status` varchar(20) not null default 'unknown',
   `winrm_status` varchar(20) not null default 'unknown',
   `abnormal_reason` longtext null,
-  `payload` longtext not null default '',
+  `payload` longtext not null,
   `created` datetime not null,
 
   foreign key (`project_id`) references `project`(`id`) on delete cascade,

@@ -729,6 +729,28 @@ func getNextBuildVersion(startVersion string, currentVersion string) string {
 	return prefix + fmt.Sprintf("%0*d", len(body), newVer) + suffix
 }
 
+// deleteEphemeralBatchInventory removes device-action temporary inventories
+// (name prefix device_inventory_constants) after the task lifecycle ends.
+func (p *TaskPool) deleteEphemeralBatchInventory(projectID int, inventoryID *int) {
+	if inventoryID == nil || p == nil || p.store == nil {
+		return
+	}
+	inv, err := p.store.GetInventory(projectID, *inventoryID)
+	if err != nil {
+		return
+	}
+	if !strings.HasPrefix(inv.Name, db.DeviceEphemeralBatchInventoryPrefix) {
+		return
+	}
+	if err := p.store.DeleteInventory(projectID, inv.ID); err != nil {
+		log.WithFields(log.Fields{
+			"project_id":   projectID,
+			"inventory_id": inv.ID,
+			"name":         inv.Name,
+		}).WithError(err).Warn("Ephemeral batch inventory cleanup failed")
+	}
+}
+
 // AddTask creates and queues a new task for execution in the task pool.
 //
 // Parameters:
@@ -803,6 +825,7 @@ func (p *TaskPool) AddTask(
 	if err != nil {
 		taskRunner.Log("Error: " + err.Error())
 		taskRunner.SetStatus(task_logger.TaskFailStatus)
+		p.deleteEphemeralBatchInventory(taskObj.ProjectID, taskObj.InventoryID)
 		return
 	}
 

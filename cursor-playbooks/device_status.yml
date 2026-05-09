@@ -1,0 +1,221 @@
+---
+- name: 生成所有主机程序运行状态总览
+  hosts: windows_hosts
+  gather_facts: no
+  vars:
+    exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu') }}"
+    exe_dir: "{{ lookup('env', 'EXE_DIR') | default('C:\\Program Files\\NEWARE') }}"
+    zip_name: "{{ lookup('env', 'ZIP_NAME') | default('test') }}"
+    api_host: "{{ inventory_hostname }}"
+    api_port: "{{ lookup('env', 'API_PORT') | default('9002') }}"
+    api_status_call_type: 1
+    api_timeout_seconds: 15
+    api_expected_response_code: "{{ lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('0') }}"
+    api_expected_exec_success_code: "{{ lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('0') }}"
+    export_started: "{{ lookup('env', 'EXPORT_STARTED') | default('3', true) }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - name: 采集进程状态信息
+      win_shell: |
+        $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+        if ($proc) {
+            $p = $proc | Select-Object -First 1
+            Write-Output "RUNNING|PID:$($p.Id)|Memory:$([math]::Round($p.WorkingSet64/1MB,2))MB|Started:$($p.StartTime)|Uptime:$(([datetime]::Now - $p.StartTime).ToString('d\d\ h\h\ m\m'))"
+        } else {
+            Write-Output "NOT_RUNNING"
+        }
+      register: status
+      changed_when: false
+      ignore_unreachable: true
+
+    - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          device_status: unknown
+          rdp_status: offline
+          winrm_status: offline
+          abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+      when: status.unreachable | default(false)
+
+    - name: 跳过不可达主机
+      ansible.builtin.meta: end_host
+      when: status.unreachable | default(false)
+
+    - name: 状态判断：API 状态检查
+      block:
+        - name: 调用API查询上报状态
+          ansible.builtin.uri:
+            url: "http://{{ api_host }}:{{ api_port }}"
+            method: "POST"
+            body_format: json
+            body:
+              CallType: "{{ api_status_call_type | int }}"
+            headers:
+              Content-Type: "application/json; charset=utf-8"
+            return_content: true
+            status_code: 200
+            timeout: "{{ api_timeout_seconds | int }}"
+          register: api_status_result
+          delegate_to: localhost
+          failed_when: false
+
+        - name: 输出API响应内容
+          ansible.builtin.debug:
+            msg: "[API响应] HTTP={{ api_status_result.status | default('n/a') }} | 内容={{ api_status_result.content | default('未获取') }}"
+
+        - name: 解析API响应
+          ansible.builtin.set_fact:
+            api_status_ok: >-
+              {{
+                api_status_result.status | default(0) | int == 200 and
+                ((api_status_result.content | from_json).ResponeResultCode | default(-1) | int == api_expected_response_code | int) and
+                ((api_status_result.content | from_json).ExecResultCode | default(-1) | int == api_expected_exec_success_code | int)
+              }}
+            is_export_started: >-
+              {{
+                api_status_result.status | default(0) | int == 200 and
+                ((api_status_result.content | from_json).ExecResultData | default(-1) | int) == (export_started | int)
+              }}
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' not in status.stdout
+
+    - name: 状态判断：日志状态检查
+      block:
+        - name: 检查日志上报状态
+          win_shell: |
+            $logDir = "{{ exe_dir }}\{{ zip_name }}\LogData"
+            $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } | Sort-Object LastWriteTime -Descending
+            if ($logFiles -and $logFiles.Count -gt 0) {
+              $latestLog = $logFiles[0].FullName
+              $content = Get-Content $latestLog | Where-Object {
+                $logDate = ($_ -match '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') | Out-Null
+                $logTime = $matches[1]
+                $logTime = [datetime]::ParseExact($logTime, "yyyy-MM-dd HH:mm:ss", $null)
+                $currentTime = (Get-Date)
+                $timeDiff = $currentTime - $logTime
+                return $timeDiff.TotalMinutes -le 8
+              }
+              $keyword = "本轮通道状态上传成功"
+              $matches = $content | Select-String -Pattern $keyword
+              if ($matches) {
+                Write-Output "FOUND_KEYWORD"
+              } else {
+                Write-Output "NO_KEYWORD"
+              }
+            } else {
+              Write-Output "NO_LOGS_FOUND"
+            }
+          register: log_check_result
+          failed_when: false
+
+        - name: 输出日志检查结果
+          ansible.builtin.debug:
+            msg: "[日志检查] 结果={{ log_check_result.stdout | default('未执行') | trim }}"
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' not in status.stdout
+
+    - name: 状态判断：双保险判定与输出综合状态
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' not in status.stdout
+      block:
+        - name: 双保险判定综合状态
+          ansible.builtin.set_fact:
+            log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
+            need_reconfigure: >-
+              {{
+                not (
+                  ((api_status_ok | default(false) | bool) and (is_export_started | default(false) | bool)) or
+                  ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
+                )
+              }}
+
+        - name: 输出综合判断结果
+          ansible.builtin.debug:
+            msg: >
+              [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
+              API_OK={{ api_status_ok | default('n/a') }} |
+              已启动上报={{ is_export_started | default('n/a') }} |
+              日志_OK={{ log_status_ok | default('n/a') }} |
+              需要重配={{ need_reconfigure }}
+
+    - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
+      when: not (status.unreachable | default(false))
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          device_status: >-
+            {% if status is not defined or ('stdout' not in status) %}unknown
+            {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy
+            {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
+            {% else %}healthy{% endif %}
+          rdp_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
+          winrm_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
+          abnormal_reason: >-
+            {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
+            {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: API or log indicates abnormal (need reconfigure)
+            {% else %}{% endif %}
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+
+  post_tasks:
+    - name: 生成状态报告
+      when: ansible_play_hosts_all is defined
+      run_once: true
+      debug:
+        msg: |
+          ============================================
+              {{ exe_name }} 程序运行状态总览
+              检查时间: {{ lookup('pipe', 'date +"%Y-%m-%d %H:%M:%S"') }}
+          ============================================
+          {% for host in ansible_play_hosts_all %}
+          {% if hostvars[host].status is defined and hostvars[host].status.stdout is defined %}
+          {% set host_status = hostvars[host].status.stdout | trim %}
+          {% if 'NOT_RUNNING' in host_status %}
+          {{ host }} - NOT_RUNNING
+          {% elif hostvars[host].need_reconfigure is defined and hostvars[host].need_reconfigure | bool %}
+          {{ host }} - ABNORMAL  {{ host_status | regex_search('^[^|]+') }} | API_OK={{ hostvars[host].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[host].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[host].log_status_ok | default('n/a') }} | 需要重配=True
+          {% else %}
+          {{ host }} - NORMAL    {{ host_status | regex_search('^[^|]+') }} | API_OK={{ hostvars[host].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[host].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[host].log_status_ok | default('n/a') }}
+          {% endif %}
+          {% else %}
+          {{ host }} - UNREACHABLE
+          {% endif %}
+          {% endfor %}
+          ============================================
+          总计: {{ ansible_play_hosts_all | length }} 台主机
+          {% set ns = namespace(normal=0, abnormal=0, not_running=0, unreachable=0) %}
+          {% for host in ansible_play_hosts_all %}
+          {% if hostvars[host].status is not defined or 'stdout' not in hostvars[host].status %}
+          {% set ns.unreachable = ns.unreachable + 1 %}
+          {% elif 'NOT_RUNNING' in hostvars[host].status.stdout %}
+          {% set ns.not_running = ns.not_running + 1 %}
+          {% elif hostvars[host].need_reconfigure is defined and hostvars[host].need_reconfigure | bool %}
+          {% set ns.abnormal = ns.abnormal + 1 %}
+          {% else %}
+          {% set ns.normal = ns.normal + 1 %}
+          {% endif %}
+          {% endfor %}
+          正常: {{ ns.normal }} 台
+          异常(需重配): {{ ns.abnormal }} 台
+          未运行: {{ ns.not_running }} 台
+          不可达: {{ ns.unreachable }} 台
+          ============================================
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 执行 bulk 回调
+      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml

@@ -21,7 +21,7 @@ create table `project__device_config_item` (
   `device_id`  int          not null,
   `category`   varchar(150) not null default '',
   `key`        varchar(150) not null,
-  `value`      longtext     not null default '',
+  `value`      longtext     not null,
 
   foreign key (`device_id`) references `project__device`(`id`) on delete cascade
 );

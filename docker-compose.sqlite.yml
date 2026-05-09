@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  semaphore:
+    container_name: semaphore-ui-sqlite
+    image: semaphoreui/semaphore:local # ⚠️ 使用稳定版本，不要用 latest
+    ports:
+      - "3000:3000"
+    user: "0:0"
+    environment:
+      SEMAPHORE_DB_DIALECT: sqlite
+      SEMAPHORE_DB_HOST: /var/lib/semaphore/database.sqlite
+      SEMAPHORE_ADMIN: admin
+      SEMAPHORE_ADMIN_PASSWORD: Admin@123
+      SEMAPHORE_ADMIN_NAME: Admin
+      SEMAPHORE_ADMIN_EMAIL: admin@localhost
+      # SEMAPHORE_ACCESS_KEY_ENCRYPTION: "your_base64_key_here"  # 用 head -c32 /dev/urandom | base64 生成
+      SEMAPHORE_PLAYBOOK_PATH: /tmp/semaphore/
+      TZ: Asia/Shanghai
+    volumes:
+      # 配置文件持久化
+      - ./semaphore-config-sqlite:/etc/semaphore
+      # SQLite 数据文件持久化
+      - ./semaphore-data-sqlite:/var/lib/semaphore
+      # playbook
+      - ./playbook:/root/playbook
+      # neware安装包
+      - ./neware:/root/neware
+    restart: always
