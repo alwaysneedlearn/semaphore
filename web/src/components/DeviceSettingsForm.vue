@@ -151,7 +151,7 @@
       </v-col>
     </v-row>
 
-    <div class="d-flex justify-end mt-3">
+    <div v-if="!hideActions" class="d-flex justify-end mt-3">
       <v-btn color="primary" depressed :loading="saving" @click="save">
         {{ $t('save') }}
       </v-btn>
@@ -174,6 +174,7 @@ const ACTIONS = [
 export default {
   props: {
     projectId: { type: [Number, String], required: true },
+    hideActions: { type: Boolean, default: false },
   },
 
   data() {
@@ -287,9 +288,13 @@ export default {
         payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
         await axios.put(`/api/project/${this.projectId}/devices/settings`, payload);
         EventBus.$emit('i-snackbar', { color: 'success', text: this.$i18n.t('deviceSettingsSaved') });
+        this.$emit('saved');
+        return true;
       } catch (e) {
         this.formError = getErrorMessage(e);
         EventBus.$emit('i-snackbar', { color: 'error', text: this.formError });
+        this.$emit('save-failed', e);
+        return false;
       } finally {
         this.saving = false;
       }
