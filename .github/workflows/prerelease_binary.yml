@@ -47,6 +47,18 @@ jobs:
       - name: Build backend binary
         run: go build -o bin/semaphore ./cli
 
+      # GitHub Releases always shows "Source code" archives — those are repo source, not this job.
+      # Ship an obvious single-file artifact: one tarball containing only the `semaphore` binary.
+      - name: Package binary (not source)
+        run: |
+          set -eux
+          mkdir -p dist
+          chmod +x bin/semaphore
+          OUT="dist/semaphore-linux-amd64.tar.gz"
+          tar -czf "${OUT}" -C bin semaphore
+          ls -la dist/
+          sha256sum "${OUT}" | tee dist/SHA256SUMS.txt
+
       - name: Publish prerelease asset (replace existing)
         uses: ncipollo/release-action@v1
         with:
@@ -56,5 +68,5 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           removeArtifacts: true
-          artifacts: bin/semaphore
+          artifacts: dist/semaphore-linux-amd64.tar.gz,dist/SHA256SUMS.txt
           token: ${{ secrets.GITHUB_TOKEN }}
