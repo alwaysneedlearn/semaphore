@@ -161,6 +161,6 @@
       # 发现流程仅输出 JSON 供前端解析与用户选择导入；不在此写回 Semaphore（避免与「导入」语义混淆）。
       - name: 输出前端可解析的 JSON 数组（最后输出，固定前缀，单行）
         # IMPORTANT: Keep this as the very last output so UI can parse it reliably.
-        ansible.builtin.shell: |
-          printf 'SEMAPHORE_DISCOVERY_JSON=%s\n' '{{ discovered_devices | default([]) | to_json }}'
+        ansible.builtin.debug:
+          msg: "SEMAPHORE_DISCOVERY_JSON={{ discovered_devices | default([]) | to_json }}"
         changed_when: false
