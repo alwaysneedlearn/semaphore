@@ -765,21 +765,30 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		if err := helpers.Store(r).UpdateDevice(dev); err != nil {
 			continue
 		}
-		payloadBytes, _ := json.Marshal(u)
-		_, _ = helpers.Store(r).CreateDeviceStatusCallbackLog(db.DeviceStatusCallbackLog{
-			ProjectID:      project.ID,
-			DeviceID:       &dev.ID,
-			Hostname:       hostname,
-			Status:         u.Status,
-			RDPStatus:      dev.RDPStatus,
-			WinRMStatus:    dev.WinRMStatus,
-			AbnormalReason: u.AbnormalReason,
-			Payload:        string(payloadBytes),
-			Created:        refreshed,
-		})
+		if shouldRecordAbnormalLog(u) {
+			payloadBytes, _ := json.Marshal(u)
+			_, _ = helpers.Store(r).CreateDeviceStatusCallbackLog(db.DeviceStatusCallbackLog{
+				ProjectID:      project.ID,
+				DeviceID:       &dev.ID,
+				Hostname:       hostname,
+				Status:         u.Status,
+				RDPStatus:      dev.RDPStatus,
+				WinRMStatus:    dev.WinRMStatus,
+				AbnormalReason: u.AbnormalReason,
+				Payload:        string(payloadBytes),
+				Created:        refreshed,
+			})
+		}
 		updated++
 	}
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
+}
+
+func shouldRecordAbnormalLog(u db.DeviceStatusUpdate) bool {
+	if u.Status == db.DeviceStatusUnhealthy {
+		return true
+	}
+	return u.AbnormalReason != nil && strings.TrimSpace(*u.AbnormalReason) != ""
 }
 
 func parseBulkDeviceStatusUpdates(body io.ReadCloser) ([]db.DeviceStatusUpdate, error) {

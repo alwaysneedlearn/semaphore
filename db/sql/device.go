@@ -264,6 +264,16 @@ func (d *SqlDb) GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit i
 }
 
 func (d *SqlDb) CreateDeviceStatusCallbackLog(l db.DeviceStatusCallbackLog) (db.DeviceStatusCallbackLog, error) {
+	if l.DeviceID != nil {
+		if _, err := d.exec(
+			d.PrepareQuery("delete from project__device_status_callback where project_id=? and device_id=?"),
+			l.ProjectID,
+			*l.DeviceID,
+		); err != nil {
+			return db.DeviceStatusCallbackLog{}, err
+		}
+	}
+
 	id, err := d.insert("id", "insert into project__device_status_callback ("+
 		"project_id, device_id, hostname, status, rdp_status, winrm_status, abnormal_reason, payload, created"+
 		") values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
