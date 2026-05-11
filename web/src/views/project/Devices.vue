@@ -888,6 +888,11 @@ export default {
         }
       }
 
+      const yamlLike = this.tryParseYamlLikeDiscoveryList(clean);
+      if (yamlLike) {
+        return yamlLike;
+      }
+
       return null;
     },
     extractPrefixedDiscoveryJson(text) {
@@ -903,6 +908,52 @@ export default {
       const endLine = after.indexOf('\n');
       const candidate = (endLine >= 0 ? after.slice(0, endLine) : after).trim();
       return this.tryParseJsonArray(candidate);
+    },
+    tryParseYamlLikeDiscoveryList(text) {
+      if (!text || !text.includes('device_status:')) {
+        return null;
+      }
+
+      const lines = text.split('\n');
+      const items = [];
+      let current = null;
+
+      const parseValue = (v) => {
+        const raw = (v || '').trim();
+        if (!raw) {
+          return '';
+        }
+        if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith('\'') && raw.endsWith('\''))) {
+          return raw.slice(1, -1);
+        }
+        return raw;
+      };
+
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = this.stripAnsiCodes(lines[i] || '');
+        const itemStart = line.match(/^\s*-\s+([a-z_]+)\s*:\s*(.*)$/i);
+        if (itemStart) {
+          if (current) {
+            items.push(current);
+          }
+          current = { [itemStart[1]]: parseValue(itemStart[2]) };
+        } else {
+          const kv = line.match(/^\s{2,}([a-z_]+)\s*:\s*(.*)$/i);
+          if (kv && current) {
+            current[kv[1]] = parseValue(kv[2]);
+          }
+        }
+      }
+
+      if (current) {
+        items.push(current);
+      }
+
+      if (items.length === 0 || !items.some((x) => x.ip_address || x.hostname)) {
+        return null;
+      }
+
+      return items;
     },
     async loadDiscoveryResultFromTask(taskId) {
       const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
