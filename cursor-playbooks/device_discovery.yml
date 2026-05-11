@@ -105,13 +105,29 @@
         ansible.builtin.debug:
           msg: "发现 {{ open_rdp_ips | length }} 台主机开放RDP端口 ({{ rdp_port }})"
 
+      - name: 打印WinRM认证变量（脱敏）
+        ansible.builtin.debug:
+          msg:
+            - "WINRM_USER(raw)={{ lookup('env', 'WINRM_USER') | default('', true) }}"
+            - "winrm_user(effective)={{ winrm_user }}"
+            - "winrm_port(effective)={{ winrm_port }}"
+            - "winrm_transport(effective)=basic"
+            - "winrm_password_empty={{ (winrm_password | default('')) | length == 0 }}"
+            - "winrm_password_length={{ (winrm_password | default('')) | length }}"
+            - "open_winrm_ips={{ open_winrm_ips | default([]) | join(',') }}"
+        changed_when: false
+
       - name: 使用WinRM连接获取主机名
         ansible.windows.win_command: hostname
         register: hostname_result
         delegate_to: "{{ item }}"
         loop: "{{ open_winrm_ips }}"
+        loop_control:
+          label: "{{ item }}"
         when: open_winrm_ips | length > 0
         ignore_errors: true
+        ignore_unreachable: true
+        failed_when: false
         vars:
           ansible_connection: winrm
           ansible_winrm_port: "{{ winrm_port }}"
@@ -119,6 +135,25 @@
           ansible_password: "{{ winrm_password }}"
           ansible_winrm_server_cert_validation: ignore
           ansible_winrm_transport: basic
+
+      - name: 打印每台WinRM连接实际参数与结果（脱敏）
+        ansible.builtin.debug:
+          msg:
+            - "target={{ item.item | default('') }}"
+            - "ansible_connection=winrm"
+            - "ansible_winrm_port={{ winrm_port }}"
+            - "ansible_user={{ winrm_user }}"
+            - "ansible_winrm_transport=basic"
+            - "ansible_password_length={{ (winrm_password | default('')) | length }}"
+            - "unreachable={{ item.unreachable | default(false) }}"
+            - "failed={{ item.failed | default(false) }}"
+            - "msg={{ item.msg | default('') }}"
+            - "stdout={{ item.stdout | default('') | trim }}"
+        loop: "{{ hostname_result.results | default([]) }}"
+        when:
+          - hostname_result is defined
+          - hostname_result.results is defined
+        changed_when: false
 
       - name: 构建 hostname 映射（WinRM hostname 命令结果）
         ansible.builtin.set_fact:
