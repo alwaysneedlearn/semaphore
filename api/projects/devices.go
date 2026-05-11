@@ -105,7 +105,11 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 		certValidation = "ignore"
 	}
 
-	parts := []string{dev.Hostname}
+	inventoryHost := strings.TrimSpace(dev.IPAddress)
+	if inventoryHost == "" {
+		inventoryHost = strings.TrimSpace(dev.Hostname)
+	}
+	parts := []string{inventoryHost}
 	if dev.IPAddress != "" {
 		parts = append(parts, "ansible_host="+dev.IPAddress)
 	}
