@@ -1,4 +1,6 @@
 ---
+  # 与 playbook/network_discovery.yml：端口扫描用 ThreadPool + JSON；IP 列表用 ipaddress（掩码正确）。
+  # 主机名获取：对开放 WinRM 的主机 delegate + win_command hostname。
   - name: 网络发现 - 检测WinRM端口并获取主机名
     hosts: localhost
     gather_facts: no
@@ -7,11 +9,12 @@
       network_subnet: "{{ subnet | default(network_cidr | default(lookup('env', 'NETWORK_SUBNET') | default('192.168.1.0/24'))) }}"
       winrm_port: "{{ (lookup('env', 'WINRM_PORT') | trim) | default('5985', true) }}"
       rdp_port: "{{ (lookup('env', 'RDP_PORT') | trim) | default('3389', true) }}"
-      winrm_user: "{{ lookup('env', 'WINRM_USER') | default('administrator') }}"
-      winrm_password: "{{ lookup('env', 'WINRM_PASSWORD') | default('') }}"
-      timeout_seconds: "{{ (lookup('env', 'SCAN_TIMEOUT_SECONDS') | trim) | default('1', true) }}"
-      scan_workers: "{{ (lookup('env', 'SCAN_WORKERS') | trim) | default('128', true) }}"
-  
+      # 环境变量若为空字符串，| default('x') 不会替换（仅 undefined 才替换）
+      winrm_user: "{{ (lookup('env', 'WINRM_USER') | default('', true) | trim) | default('administrator', true) }}"
+      winrm_password: "{{ lookup('env', 'WINRM_PASSWORD') | default('', true) }}"
+      timeout_seconds: "{{ (lookup('env', 'SCAN_TIMEOUT_SECONDS') | trim) | default('2', true) }}"
+      scan_workers: "{{ (lookup('env', 'SCAN_WORKERS') | trim) | default('64', true) }}"
+
     tasks:
       - name: 解析网段生成IP列表（Python，按真实掩码）
         ansible.builtin.shell: |
@@ -23,29 +26,29 @@
           PY
         register: ip_list
         changed_when: false
-  
+
       - name: 设置目标IP列表
         ansible.builtin.set_fact:
           target_ips: "{{ ip_list.stdout_lines }}"
-  
+
       - name: 显示待扫描IP数量
         ansible.builtin.debug:
           msg: "待扫描 {{ target_ips | length }} 台主机 ({{ network_subnet }})"
-  
+
       - name: 使用Python扫描WinRM和RDP端口（限流并发）
         ansible.builtin.shell: |
           cat > /tmp/scan_ports.py << EOF
           import socket
           import json
           from concurrent.futures import ThreadPoolExecutor, as_completed
-  
+
           ip_str = "{{ target_ips | join(' ') }}"
           ip_list = ip_str.split() if ip_str else []
           winrm_port = {{ winrm_port }}
           rdp_port = {{ rdp_port }}
           timeout = {{ timeout_seconds }}
           max_workers = {{ scan_workers }}
-  
+
           def is_port_open(ip, port):
               try:
                   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -81,55 +84,53 @@
           python3 /tmp/scan_ports.py
         register: python_scan
         changed_when: false
-  
+
       - name: 提取Python扫描结果（JSON）
         ansible.builtin.set_fact:
           scan_output: "{{ (python_scan.stdout | default('{}')) | from_json }}"
-  
+
       - name: 提取WinRM开放IP
         ansible.builtin.set_fact:
           open_winrm_ips: "{{ scan_output.winrm_ips | default([]) }}"
-  
+
       - name: 提取RDP开放IP
         ansible.builtin.set_fact:
           open_rdp_ips: "{{ scan_output.rdp_ips | default([]) }}"
-  
+
       - name: 显示开放WinRM端口的主机数量
         ansible.builtin.debug:
           msg: "发现 {{ open_winrm_ips | length }} 台主机开放WinRM端口 ({{ winrm_port }})"
-  
+
       - name: 显示开放RDP端口的主机数量
         ansible.builtin.debug:
           msg: "发现 {{ open_rdp_ips | length }} 台主机开放RDP端口 ({{ rdp_port }})"
-  
-      - name: 尝试通过反向DNS获取主机名（不依赖inventory）
-        ansible.builtin.shell: |
-          cat > /tmp/reverse_dns.py << 'EOF'
-          import socket
-          import json
-          
-          ips = "{{ ((open_winrm_ips + open_rdp_ips) | unique) | join(' ') }}".split()
-          result = {}
-          for ip in ips:
-              try:
-                  host, _, _ = socket.gethostbyaddr(ip)
-                  result[ip] = (host or "").strip()
-              except Exception:
-                  result[ip] = ""
-          print(json.dumps(result, ensure_ascii=False))
-          EOF
-          python3 /tmp/reverse_dns.py
-        register: hostname_map_result
-        changed_when: false
-        failed_when: false
-  
+
+      - name: 使用WinRM连接获取主机名
+        ansible.windows.win_command: hostname
+        register: hostname_result
+        delegate_to: "{{ item }}"
+        loop: "{{ open_winrm_ips }}"
+        when: open_winrm_ips | length > 0
+        ignore_errors: true
+        vars:
+          ansible_connection: winrm
+          ansible_winrm_port: "{{ winrm_port }}"
+          ansible_user: "{{ winrm_user }}"
+          ansible_password: "{{ winrm_password }}"
+          ansible_winrm_server_cert_validation: ignore
+          ansible_winrm_transport: basic
+
+      - name: 构建 hostname 映射（WinRM hostname 命令结果）
+        ansible.builtin.set_fact:
+          hostname_map: "{{ hostname_map | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
+        loop: "{{ hostname_result.results | default([]) }}"
+        when:
+          - hostname_result is defined
+          - hostname_result.results is defined
+
       - name: 汇总发现结果（简版）
         ansible.builtin.debug:
           msg: "扫描完成：网段={{ network_subnet }}，总数={{ target_ips | length }}，WinRM在线={{ open_winrm_ips | length }}，RDP在线={{ open_rdp_ips | length }}"
-  
-      - name: 设置 hostname 映射
-        ansible.builtin.set_fact:
-          hostname_map: "{{ (hostname_map_result.stdout | default('{}')) | from_json }}"
 
       - name: 汇总 discovered_devices 结构化结果
         ansible.builtin.set_fact:
@@ -137,9 +138,8 @@
         loop: "{{ (open_winrm_ips + open_rdp_ips) | unique }}"
         vars:
           host_ip: "{{ item }}"
-          host_name: "{{ (hostname_map | default({})).get(host_ip, '') | trim }}"
-          # Keep hostname non-empty for import flow: fallback to IP when reverse DNS is unavailable.
-          effective_hostname: "{{ host_name if host_name else host_ip }}"
+          host_name: "{{ (hostname_map | default({})).get(host_ip, '') }}"
+          effective_hostname: "{{ host_name if (host_name | trim) else host_ip }}"
           winrm_online: "{{ host_ip in open_winrm_ips }}"
           rdp_online: "{{ host_ip in open_rdp_ips }}"
           device_item:
@@ -154,15 +154,9 @@
         ansible.builtin.file:
           path: /tmp/scan_ports.py
           state: absent
-      
-      - name: 清理反向DNS脚本
-        ansible.builtin.file:
-          path: /tmp/reverse_dns.py
-          state: absent
 
-      # 发现流程仅输出 JSON 供前端解析与用户选择导入；不在此写回 Semaphore（避免与「导入」语义混淆）。
+      # 发现流程仅输出 JSON 供前端解析；不在此写回 Semaphore。
       - name: 输出前端可解析的 JSON 数组（最后输出，固定前缀，单行）
-        # IMPORTANT: Keep this as the very last output so UI can parse it reliably.
         ansible.builtin.debug:
           msg: "SEMAPHORE_DISCOVERY_JSON={{ discovered_devices | default([]) | to_json }}"
         changed_when: false
