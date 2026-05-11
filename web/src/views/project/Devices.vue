@@ -851,6 +851,11 @@ export default {
 
       const clean = this.stripAnsiCodes(text);
 
+      const prefixed = this.extractPrefixedDiscoveryJson(clean);
+      if (prefixed) {
+        return prefixed;
+      }
+
       const direct = this.tryParseJsonArray(clean);
       if (direct) {
         return direct;
@@ -861,6 +866,10 @@ export default {
       while (escapedFieldMatch !== null) {
         try {
           const unescaped = JSON.parse(`"${escapedFieldMatch[2]}"`);
+          const prefixedField = this.extractPrefixedDiscoveryJson(unescaped);
+          if (prefixedField) {
+            return prefixedField;
+          }
           const fromField = this.tryParseJsonArray(unescaped);
           if (fromField) {
             return fromField;
@@ -880,6 +889,20 @@ export default {
       }
 
       return null;
+    },
+    extractPrefixedDiscoveryJson(text) {
+      if (!text) {
+        return null;
+      }
+      const marker = 'SEMAPHORE_DISCOVERY_JSON=';
+      const idx = text.lastIndexOf(marker);
+      if (idx < 0) {
+        return null;
+      }
+      const after = text.slice(idx + marker.length).trim();
+      const endLine = after.indexOf('\n');
+      const candidate = (endLine >= 0 ? after.slice(0, endLine) : after).trim();
+      return this.tryParseJsonArray(candidate);
     },
     async loadDiscoveryResultFromTask(taskId) {
       const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
