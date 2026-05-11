@@ -106,9 +106,6 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	}
 
 	inventoryHost := strings.TrimSpace(dev.IPAddress)
-	if inventoryHost == "" {
-		inventoryHost = strings.TrimSpace(dev.Hostname)
-	}
 	parts := []string{inventoryHost}
 	if dev.IPAddress != "" {
 		parts = append(parts, "ansible_host="+dev.IPAddress)
@@ -131,7 +128,7 @@ func renderWindowsInventory(devices []db.Device, settings db.ProjectDeviceSettin
 	var b strings.Builder
 	b.WriteString("[" + deviceAutoInventoryGroup + "]\n")
 	for _, dev := range devices {
-		if strings.TrimSpace(dev.Hostname) == "" {
+		if strings.TrimSpace(dev.IPAddress) == "" {
 			continue
 		}
 		b.WriteString(buildInventoryLine(dev, settings))
