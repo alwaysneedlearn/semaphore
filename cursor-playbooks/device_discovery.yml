@@ -137,11 +137,13 @@
         loop: "{{ (open_winrm_ips + open_rdp_ips) | unique }}"
         vars:
           host_ip: "{{ item }}"
-          host_name: "{{ (hostname_map | default({})).get(host_ip, '') }}"
+          host_name: "{{ (hostname_map | default({})).get(host_ip, '') | trim }}"
+          # Keep hostname non-empty for import flow: fallback to IP when reverse DNS is unavailable.
+          effective_hostname: "{{ host_name if host_name else host_ip }}"
           winrm_online: "{{ host_ip in open_winrm_ips }}"
           rdp_online: "{{ host_ip in open_rdp_ips }}"
           device_item:
-            hostname: "{{ host_name }}"
+            hostname: "{{ effective_hostname }}"
             ip_address: "{{ host_ip }}"
             winrm_status: "{{ 'online' if winrm_online else 'offline' }}"
             rdp_status: "{{ 'online' if rdp_online else 'offline' }}"
