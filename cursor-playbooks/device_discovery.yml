@@ -148,19 +148,6 @@
             device_status: >-
               {{ 'healthy' if (winrm_online and rdp_online) else 'unknown' }}
 
-      # 发现流程仅输出 JSON 供前端解析与用户选择导入；不在此写回 Semaphore（避免与「导入」语义混淆）。
-
-      - name: 输出前端可解析的 JSON 数组（最后输出，裸 stdout）
-        # IMPORTANT: Keep this as the last JSON output so UI can auto-parse task logs.
-        ansible.builtin.shell: |
-          printf '%s\n' '{{ discovered_devices | default([]) | to_json }}'
-        register: discovery_json_output
-        changed_when: false
-
-      - name: 显式打印 JSON 到任务输出
-        ansible.builtin.debug:
-          msg: "{{ discovery_json_output.stdout }}"
-
       - name: 清理临时文件
         ansible.builtin.file:
           path: /tmp/scan_ports.py
@@ -170,3 +157,10 @@
         ansible.builtin.file:
           path: /tmp/reverse_dns.py
           state: absent
+
+      # 发现流程仅输出 JSON 供前端解析与用户选择导入；不在此写回 Semaphore（避免与「导入」语义混淆）。
+      - name: 输出前端可解析的 JSON 数组（最后输出，固定前缀，单行）
+        # IMPORTANT: Keep this as the very last output so UI can parse it reliably.
+        ansible.builtin.shell: |
+          printf 'SEMAPHORE_DISCOVERY_JSON=%s\n' '{{ discovered_devices | default([]) | to_json }}'
+        changed_when: false
