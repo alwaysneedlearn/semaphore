@@ -101,10 +101,6 @@
           outlined
           dense
           type="password"
-          autocomplete="new-password"
-          clearable
-          @input="defaultAnsiblePasswordDirty = true"
-          @click:clear="defaultAnsiblePasswordDirty = true"
         />
       </v-col>
       <v-col cols="12" md="6">
@@ -203,7 +199,6 @@ export default {
       },
       saving: false,
       formError: null,
-      defaultAnsiblePasswordDirty: false,
       defaultConfigItems: [],
       defaultConfigHeaders: [
         { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
@@ -233,7 +228,6 @@ export default {
         // copy fields the server returned, falling back to defaults
         this.settings = { ...this.settings, ...(res.data || {}) };
         this.defaultConfigItems = this.parseDefaultConfigJson(this.settings.default_config_json);
-        this.defaultAnsiblePasswordDirty = false;
         if (this.settings.status_refresh_interval_min == null) {
           this.settings.status_refresh_interval_min = 0;
         }
@@ -292,12 +286,8 @@ export default {
         payload.default_config_json = this.buildDefaultConfigJson();
         payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
         payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
-        if (!this.defaultAnsiblePasswordDirty) {
-          delete payload.default_ansible_password;
-        }
         await axios.put(`/api/project/${this.projectId}/devices/settings`, payload);
         EventBus.$emit('i-snackbar', { color: 'success', text: this.$i18n.t('deviceSettingsSaved') });
-        this.defaultAnsiblePasswordDirty = false;
         this.$emit('saved');
         return true;
       } catch (e) {

@@ -60,20 +60,6 @@ func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSetti
 	}
 }
 
-// defaultAnsiblePasswordFromJSON normalizes JSON body values for default_ansible_password
-// (including explicit null or empty string → cleared password).
-func defaultAnsiblePasswordFromJSON(v any) string {
-	if v == nil {
-		return ""
-	}
-	switch t := v.(type) {
-	case string:
-		return strings.TrimSpace(t)
-	default:
-		return strings.TrimSpace(fmt.Sprint(t))
-	}
-}
-
 func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string {
 	user := dev.AnsibleUser
 	if user == "" {
@@ -508,8 +494,6 @@ func GetDeviceSettings(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	// Never expose stored default WinRM password in the API response.
-	s.DefaultAnsiblePassword = ""
 	helpers.WriteJSON(w, http.StatusOK, s)
 }
 
@@ -517,36 +501,11 @@ func GetDeviceSettings(w http.ResponseWriter, r *http.Request) {
 func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	var raw map[string]any
-	if err := json.Unmarshal(body, &raw); err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
 	var s db.ProjectDeviceSettings
-	if err := json.Unmarshal(body, &s); err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.Bind(w, r, &s) {
 		return
 	}
 	s.ProjectID = project.ID
-
-	existing, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	if _, has := raw["default_ansible_password"]; !has {
-		s.DefaultAnsiblePassword = existing.DefaultAnsiblePassword
-	} else {
-		s.DefaultAnsiblePassword = defaultAnsiblePasswordFromJSON(raw["default_ansible_password"])
-	}
-
 	if s.DefaultAnsibleConnection == "" {
 		s.DefaultAnsibleConnection = "winrm"
 	}
