@@ -411,6 +411,8 @@ export default {
     '换页后仍保留已选设备；表头全选仅勾选当前页。',
   deviceAnsibleUser: 'Ansible 用户',
   deviceAnsiblePassword: 'Ansible 密码',
+  deviceRdpUser: 'RDP 用户',
+  deviceRdpPassword: 'RDP 密码',
   deviceAnsibleConnection: 'Ansible 连接方式',
   deviceAnsibleWinrmTransport: 'WinRM 传输',
   deviceAnsibleWinrmScheme: 'WinRM 协议',

@@ -484,6 +484,8 @@ export default {
     'Selection is kept when you change pages. The header checkbox only selects rows on the current page.',
   deviceAnsibleUser: 'Ansible user',
   deviceAnsiblePassword: 'Ansible password',
+  deviceRdpUser: 'RDP user',
+  deviceRdpPassword: 'RDP password',
   deviceAnsibleConnection: 'Ansible connection',
   deviceAnsibleWinrmTransport: 'WinRM transport',
   deviceAnsibleWinrmScheme: 'WinRM scheme',

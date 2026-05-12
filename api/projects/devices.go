@@ -335,6 +335,8 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	device.Name = device.Hostname
 	device.AnsibleUser = strings.TrimSpace(device.AnsibleUser)
 	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
+	device.RDPUser = strings.TrimSpace(device.RDPUser)
+	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = db.DeviceStatusUnknown
 	}
@@ -393,6 +395,8 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.Name = device.Hostname
 	device.AnsibleUser = strings.TrimSpace(device.AnsibleUser)
 	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
+	device.RDPUser = strings.TrimSpace(device.RDPUser)
+	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
 	device.RDPStatus = old.RDPStatus
 	device.WinRMStatus = old.WinRMStatus
 	if device.DeviceStatus == "" {
@@ -923,9 +927,11 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 	payload := make([]map[string]any, 0, len(devices))
 	for _, d := range devices {
 		payload = append(payload, map[string]any{
-			"id":       d.ID,
-			"hostname": d.Hostname,
-			"ip":       d.IPAddress,
+			"id":             d.ID,
+			"hostname":       d.Hostname,
+			"ip":             d.IPAddress,
+			"rdp_user":       d.RDPUser,
+			"rdp_password":   d.RDPPassword,
 		})
 	}
 	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
@@ -1020,9 +1026,11 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 
 	extraVars := map[string]any{
 		"device": map[string]any{
-			"id":       device.ID,
-			"ip":       device.IPAddress,
-			"hostname": device.Hostname,
+			"id":             device.ID,
+			"ip":             device.IPAddress,
+			"hostname":       device.Hostname,
+			"rdp_user":       device.RDPUser,
+			"rdp_password":   device.RDPPassword,
 		},
 	}
 
@@ -1105,9 +1113,11 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		}
 		selected = append(selected, d)
 		payload = append(payload, map[string]any{
-			"id":       d.ID,
-			"hostname": d.Hostname,
-			"ip":       d.IPAddress,
+			"id":             d.ID,
+			"hostname":       d.Hostname,
+			"ip":             d.IPAddress,
+			"rdp_user":       d.RDPUser,
+			"rdp_password":   d.RDPPassword,
 		})
 	}
 	if len(selected) == 0 {

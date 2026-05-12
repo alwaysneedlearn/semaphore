@@ -87,8 +87,9 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		"insert into project__device ("+
 			"project_id, name, ip_address, hostname, ansible_user, ansible_password, ansible_connection, "+
 			"ansible_winrm_transport, ansible_winrm_scheme, ansible_port, ansible_winrm_server_cert_validation, "+
+			"rdp_user, rdp_password, "+
 			"device_status, rdp_status, winrm_status, abnormal_reason, last_updated, created) values "+
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		device.ProjectID,
 		device.Name,
 		device.IPAddress,
@@ -100,6 +101,8 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		device.AnsibleWinRMScheme,
 		device.AnsiblePort,
 		device.AnsibleWinRMServerCertValidation,
+		device.RDPUser,
+		device.RDPPassword,
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
@@ -121,6 +124,7 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 		"update project__device set "+
 			"name=?, ip_address=?, hostname=?, ansible_user=?, ansible_password=?, ansible_connection=?, "+
 			"ansible_winrm_transport=?, ansible_winrm_scheme=?, ansible_port=?, ansible_winrm_server_cert_validation=?, "+
+			"rdp_user=?, rdp_password=?, "+
 			"device_status=?, rdp_status=?, winrm_status=?, abnormal_reason=?, last_updated=? "+
 			"where id=? and project_id=?",
 		device.Name,
@@ -133,6 +137,8 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 		device.AnsibleWinRMScheme,
 		device.AnsiblePort,
 		device.AnsibleWinRMServerCertValidation,
+		device.RDPUser,
+		device.RDPPassword,
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,

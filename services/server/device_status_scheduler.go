@@ -127,10 +127,12 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 	devicePayload := make([]map[string]any, 0, len(devices))
 	for _, d := range devices {
 		devicePayload = append(devicePayload, map[string]any{
-			"id":       d.ID,
-			"name":     d.Name,
-			"ip":       d.IPAddress,
-			"hostname": d.Hostname,
+			"id":           d.ID,
+			"name":         d.Name,
+			"ip":           d.IPAddress,
+			"hostname":     d.Hostname,
+			"rdp_user":     d.RDPUser,
+			"rdp_password": d.RDPPassword,
 		})
 	}
 	envBytes, err := json.Marshal(map[string]any{

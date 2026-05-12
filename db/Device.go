@@ -45,6 +45,8 @@ type Device struct {
 	AnsibleWinRMScheme               string       `db:"ansible_winrm_scheme" json:"ansible_winrm_scheme"`
 	AnsiblePort                      int          `db:"ansible_port" json:"ansible_port"`
 	AnsibleWinRMServerCertValidation string       `db:"ansible_winrm_server_cert_validation" json:"ansible_winrm_server_cert_validation"`
+	RDPUser                          string       `db:"rdp_user" json:"rdp_user"`
+	RDPPassword                      string       `db:"rdp_password" json:"rdp_password"`
 	DeviceStatus                     DeviceStatus `db:"device_status" json:"device_status"`
 	RDPStatus                        DeviceStatus `db:"rdp_status" json:"rdp_status"`
 	WinRMStatus                      DeviceStatus `db:"winrm_status" json:"winrm_status"`

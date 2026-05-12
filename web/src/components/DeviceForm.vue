@@ -33,6 +33,28 @@
     ></v-text-field>
 
     <v-text-field
+      v-model="item.rdp_user"
+      :label="$t('deviceRdpUser')"
+      :disabled="formSaving"
+      outlined
+      dense
+      clearable
+      @click:clear="item.rdp_user = ''"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.rdp_password"
+      :label="$t('deviceRdpPassword')"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="password"
+      autocomplete="new-password"
+      clearable
+      @click:clear="item.rdp_password = ''"
+    ></v-text-field>
+
+    <v-text-field
       v-model="item.ansible_user"
       :label="$t('deviceAnsibleUser')"
       :disabled="formSaving"
@@ -122,6 +144,10 @@ export default {
       this.item.ansible_password = this.item.ansible_password == null
         ? ''
         : String(this.item.ansible_password).trim();
+      this.item.rdp_user = this.item.rdp_user == null ? '' : String(this.item.rdp_user).trim();
+      this.item.rdp_password = this.item.rdp_password == null
+        ? ''
+        : String(this.item.rdp_password).trim();
     },
     getItemsUrl() {
       return `/api/project/${this.projectId}/devices`;
@@ -133,6 +159,8 @@ export default {
       return {
         ip_address: '',
         hostname: '',
+        rdp_user: '',
+        rdp_password: '',
         ansible_user: '',
         ansible_password: '',
         ansible_connection: 'winrm',
