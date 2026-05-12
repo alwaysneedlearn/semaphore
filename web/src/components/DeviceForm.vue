@@ -115,7 +115,7 @@ export default {
       if (!this.item) {
         return;
       }
-      // Ensure cleared WinRM fields serialize as empty strings (not undefined), so PUT persists clears.
+      // Cleared WinRM fields must be '' (not undefined) so PUT persists clears.
       this.item.ansible_user = this.item.ansible_user == null
         ? ''
         : String(this.item.ansible_user).trim();
