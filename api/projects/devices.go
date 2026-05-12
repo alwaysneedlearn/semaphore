@@ -666,19 +666,37 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Devices           []db.Device `json:"devices"`
-		SelectedHostnames []string    `json:"selected_hostnames"`
+		SelectedIPs       []string    `json:"selected_ips"`
+		SelectedHostnames []string    `json:"selected_hostnames"` // legacy: used only if selected_ips is empty
 	}
 	if !helpers.Bind(w, r, &body) {
 		return
 	}
-	selected := map[string]bool{}
-	for _, h := range body.SelectedHostnames {
-		selected[strings.TrimSpace(h)] = true
+	selectedByIP := map[string]bool{}
+	for _, ip := range body.SelectedIPs {
+		if t := strings.TrimSpace(ip); t != "" {
+			selectedByIP[t] = true
+		}
 	}
-	var toUpsert []db.Device
+	selectedByHostname := map[string]bool{}
+	for _, h := range body.SelectedHostnames {
+		if t := strings.TrimSpace(h); t != "" {
+			selectedByHostname[t] = true
+		}
+	}
+	useIPFilter := len(selectedByIP) > 0
+	useHostnameFilter := !useIPFilter && len(selectedByHostname) > 0
+
+	byIP := map[string]db.Device{}
 	for _, dev := range body.Devices {
 		dev.Hostname = strings.TrimSpace(dev.Hostname)
 		dev.IPAddress = strings.TrimSpace(dev.IPAddress)
+		if dev.IPAddress == "" {
+			continue
+		}
+		if dev.Hostname == "" {
+			dev.Hostname = dev.IPAddress
+		}
 		dev.Name = dev.Hostname
 		if dev.DeviceStatus == "" {
 			if dev.RDPStatus == db.DeviceStatusOnline && dev.WinRMStatus == db.DeviceStatusOnline {
@@ -695,16 +713,20 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		if dev.WinRMStatus == "" {
 			dev.WinRMStatus = db.DeviceStatusUnknown
 		}
-		if dev.Hostname == "" {
-			continue
-		}
 		normalizeDeviceConnection(&dev, settings)
-		if len(selected) > 0 && !selected[dev.Hostname] {
+		if useIPFilter && !selectedByIP[dev.IPAddress] {
 			continue
 		}
+		if useHostnameFilter && !selectedByHostname[dev.Hostname] {
+			continue
+		}
+		byIP[dev.IPAddress] = dev
+	}
+	toUpsert := make([]db.Device, 0, len(byIP))
+	for _, dev := range byIP {
 		toUpsert = append(toUpsert, dev)
 	}
-	saved, err := helpers.Store(r).UpsertDevicesByHostname(project.ID, toUpsert)
+	saved, err := helpers.Store(r).UpsertDevicesByIPAddress(project.ID, toUpsert)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return

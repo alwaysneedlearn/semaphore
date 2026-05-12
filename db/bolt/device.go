@@ -214,19 +214,30 @@ func (d *BoltDb) UpdateDeviceStatusByHostname(projectID int, hostname string, st
 	return db.ErrNotFound
 }
 
-func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]db.Device, error) {
+func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]db.Device, error) {
 	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		return nil, err
 	}
-	byHost := map[string]db.Device{}
+	byIP := map[string]db.Device{}
 	for _, dev := range existing {
-		byHost[dev.Hostname] = dev
+		if ip := strings.TrimSpace(dev.IPAddress); ip != "" {
+			byIP[ip] = dev
+		}
 	}
 	var saved []db.Device
 	for _, dev := range devices {
-		if old, ok := byHost[dev.Hostname]; ok {
-			old.IPAddress = dev.IPAddress
+		ip := strings.TrimSpace(dev.IPAddress)
+		if ip == "" {
+			continue
+		}
+		dev.IPAddress = ip
+		if old, ok := byIP[ip]; ok {
+			old.IPAddress = ip
+			if strings.TrimSpace(dev.Hostname) != "" {
+				old.Hostname = strings.TrimSpace(dev.Hostname)
+				old.Name = old.Hostname
+			}
 			old.AnsibleUser = dev.AnsibleUser
 			old.AnsiblePassword = dev.AnsiblePassword
 			old.AnsibleConnection = dev.AnsibleConnection
@@ -237,16 +248,31 @@ func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]
 			if dev.DeviceStatus != "" {
 				old.DeviceStatus = dev.DeviceStatus
 			}
+			if dev.RDPStatus != "" {
+				old.RDPStatus = dev.RDPStatus
+			}
+			if dev.WinRMStatus != "" {
+				old.WinRMStatus = dev.WinRMStatus
+			}
+			old.AbnormalReason = dev.AbnormalReason
+			now := tz.Now()
+			old.LastUpdated = &now
 			if err = d.UpdateDevice(old); err != nil {
 				return nil, err
 			}
+			byIP[ip] = old
 			saved = append(saved, old)
 		} else {
 			dev.ProjectID = projectID
+			if strings.TrimSpace(dev.Hostname) == "" {
+				dev.Hostname = ip
+			}
+			dev.Name = dev.Hostname
 			created, cErr := d.CreateDevice(dev)
 			if cErr != nil {
 				return nil, cErr
 			}
+			byIP[ip] = created
 			saved = append(saved, created)
 		}
 	}

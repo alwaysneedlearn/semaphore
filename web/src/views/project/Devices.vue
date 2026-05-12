@@ -1005,7 +1005,9 @@ export default {
       try {
         const payload = {
           devices: this.discoveredDevices,
-          selected_hostnames: this.selectedDiscovered.map((x) => x.hostname),
+          selected_ips: this.selectedDiscovered
+            .map((x) => String(x.ip_address || x.ip || '').trim())
+            .filter((ip) => ip),
         };
         const res = await axios.post(`${this.getItemsUrl()}/discovery/import`, payload);
         EventBus.$emit('i-snackbar', {
