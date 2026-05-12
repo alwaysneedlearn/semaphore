@@ -333,6 +333,8 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
 	device.Name = device.Hostname
+	device.AnsibleUser = strings.TrimSpace(device.AnsibleUser)
+	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = db.DeviceStatusUnknown
 	}
@@ -389,6 +391,8 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
 	device.Name = device.Hostname
+	device.AnsibleUser = strings.TrimSpace(device.AnsibleUser)
+	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
 	device.RDPStatus = old.RDPStatus
 	device.WinRMStatus = old.WinRMStatus
 	if device.DeviceStatus == "" {

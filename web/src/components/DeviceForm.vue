@@ -38,7 +38,9 @@
       :disabled="formSaving"
       outlined
       dense
+      clearable
       placeholder="winrmuser"
+      @click:clear="item.ansible_user = ''"
     ></v-text-field>
 
     <v-text-field
@@ -48,7 +50,10 @@
       outlined
       dense
       type="password"
+      autocomplete="new-password"
+      clearable
       placeholder="winrmpass"
+      @click:clear="item.ansible_password = ''"
     ></v-text-field>
 
     <v-text-field
@@ -106,6 +111,18 @@ export default {
   mixins: [ItemFormBase],
 
   methods: {
+    beforeSave() {
+      if (!this.item) {
+        return;
+      }
+      // Ensure cleared WinRM fields serialize as empty strings (not undefined), so PUT persists clears.
+      this.item.ansible_user = this.item.ansible_user == null
+        ? ''
+        : String(this.item.ansible_user).trim();
+      this.item.ansible_password = this.item.ansible_password == null
+        ? ''
+        : String(this.item.ansible_password).trim();
+    },
     getItemsUrl() {
       return `/api/project/${this.projectId}/devices`;
     },
