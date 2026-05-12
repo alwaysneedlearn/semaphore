@@ -18,17 +18,17 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - name: 打印WinRM连接参数（脱敏）
+    - name: 打印WinRM连接参数（含 ansible_password 明文，仅用于排障）
       ansible.builtin.debug:
         msg:
+          - "注意：ansible_password 以明文输出，仅用于排查凭据问题；排障完成后请改回脱敏或删除本任务。"
           - "target_inventory_hostname={{ inventory_hostname }}"
           - "ansible_host={{ ansible_host | default(inventory_hostname, true) }}"
           - "ansible_connection={{ ansible_connection | default('winrm') }}"
           - "ansible_user={{ ansible_user | default('') }}"
           - "ansible_winrm_transport={{ ansible_winrm_transport | default('basic') }}"
           - "ansible_winrm_port={{ ansible_winrm_port | default('5985') }}"
-          - "ansible_password_empty={{ (ansible_password | default('')) | length == 0 }}"
-          - "ansible_password_length={{ (ansible_password | default('')) | length }}"
+          - "ansible_password={{ ansible_password | default('') }}"
       changed_when: false
 
     - name: 采集进程状态信息
