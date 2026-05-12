@@ -245,8 +245,7 @@ func (d *SqlDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]
 			existing.Hostname = strings.TrimSpace(dev.Hostname)
 			existing.Name = existing.Hostname
 		}
-		existing.AnsibleUser = dev.AnsibleUser
-		existing.AnsiblePassword = dev.AnsiblePassword
+		db.MergeDeviceCredentialsOnUpsert(&existing, dev)
 		existing.AnsibleConnection = dev.AnsibleConnection
 		existing.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
 		existing.AnsibleWinRMScheme = dev.AnsibleWinRMScheme

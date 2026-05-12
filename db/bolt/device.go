@@ -238,8 +238,7 @@ func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([
 				old.Hostname = strings.TrimSpace(dev.Hostname)
 				old.Name = old.Hostname
 			}
-			old.AnsibleUser = dev.AnsibleUser
-			old.AnsiblePassword = dev.AnsiblePassword
+			db.MergeDeviceCredentialsOnUpsert(&old, dev)
 			old.AnsibleConnection = dev.AnsibleConnection
 			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
 			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme

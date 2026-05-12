@@ -90,6 +90,24 @@ func (d Device) Validate() error {
 	return nil
 }
 
+// MergeDeviceCredentialsOnUpsert copies Ansible/RDP credential fields from incoming onto existing
+// only when incoming provides non-empty trimmed values. Discovery import payloads usually omit
+// secrets; assigning empty strings would erase manually configured credentials.
+func MergeDeviceCredentialsOnUpsert(existing *Device, incoming Device) {
+	if strings.TrimSpace(incoming.AnsibleUser) != "" {
+		existing.AnsibleUser = incoming.AnsibleUser
+	}
+	if strings.TrimSpace(incoming.AnsiblePassword) != "" {
+		existing.AnsiblePassword = incoming.AnsiblePassword
+	}
+	if strings.TrimSpace(incoming.RDPUser) != "" {
+		existing.RDPUser = incoming.RDPUser
+	}
+	if strings.TrimSpace(incoming.RDPPassword) != "" {
+		existing.RDPPassword = incoming.RDPPassword
+	}
+}
+
 // DeviceConfigItem is a key/value belonging to a device, grouped by Category.
 // (device_id, category, key) is unique.
 type DeviceConfigItem struct {

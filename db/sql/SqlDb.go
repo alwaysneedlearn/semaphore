@@ -491,7 +491,7 @@ func (d *SqlDb) getObject(projectID int, props db.ObjectProps, objectID int, obj
 func (d *SqlDb) makeObjectsQuery(projectID int, props db.ObjectProps, params db.RetrieveQueryParams) (q squirrel.SelectBuilder, err error) {
 	columns := []string{"*"}
 	if len(props.SelectColumns) > 0 {
-		columns = props.SortableColumns
+		columns = props.SelectColumns
 	}
 
 	q = squirrel.Select(columns...).From("`" + props.TableName + "` pe")
