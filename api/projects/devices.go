@@ -21,13 +21,11 @@ const (
 	deviceAutoInventoryGroup = "windows_hosts"
 )
 
+// normalizeDeviceConnection fills connection-related fields from project defaults when the
+// device leaves them blank. ansible_user / ansible_password are intentionally omitted here so
+// empty values stay empty in the database; buildInventoryLine still applies project defaults
+// when generating Ansible inventory for tasks.
 func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSettings) {
-	if device.AnsibleUser == "" {
-		device.AnsibleUser = settings.DefaultAnsibleUser
-	}
-	if device.AnsiblePassword == "" {
-		device.AnsiblePassword = settings.DefaultAnsiblePassword
-	}
 	if device.AnsibleConnection == "" {
 		device.AnsibleConnection = settings.DefaultAnsibleConnection
 	}
