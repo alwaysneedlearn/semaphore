@@ -48,9 +48,11 @@
       :disabled="formSaving"
       outlined
       dense
-      type="password"
+      :type="showRdpPassword ? 'text' : 'password'"
       autocomplete="new-password"
       clearable
+      :append-icon="showRdpPassword ? 'mdi-eye-off' : 'mdi-eye'"
+      @click:append="showRdpPassword = !showRdpPassword"
       @click:clear="item.rdp_password = ''"
     ></v-text-field>
 
@@ -71,10 +73,12 @@
       :disabled="formSaving"
       outlined
       dense
-      type="password"
+      :type="showAnsiblePassword ? 'text' : 'password'"
       autocomplete="new-password"
       clearable
       placeholder="winrmpass"
+      :append-icon="showAnsiblePassword ? 'mdi-eye-off' : 'mdi-eye'"
+      @click:append="showAnsiblePassword = !showAnsiblePassword"
       @click:clear="item.ansible_password = ''"
     ></v-text-field>
 
@@ -132,6 +136,13 @@ import ItemFormBase from '@/components/ItemFormBase';
 export default {
   mixins: [ItemFormBase],
 
+  data() {
+    return {
+      showAnsiblePassword: false,
+      showRdpPassword: false,
+    };
+  },
+
   methods: {
     beforeSave() {
       if (!this.item) {
@@ -170,6 +181,10 @@ export default {
         ansible_winrm_server_cert_validation: 'ignore',
         device_status: 'unknown',
       };
+    },
+    afterLoadData() {
+      this.showAnsiblePassword = false;
+      this.showRdpPassword = false;
     },
   },
 };
