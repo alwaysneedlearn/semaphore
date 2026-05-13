@@ -3,26 +3,28 @@
   hosts: windows_hosts
   gather_facts: no
   vars:
-    exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu') }}"
-    exe_dir: "{{ lookup('env', 'EXE_DIR') | default('C:\\Program Files\\NEWARE') }}"
-    zip_name: "{{ lookup('env', 'ZIP_NAME') | default('test') }}"
+    # Variable Group 环境变量（非空）优先，否则使用下列默认值
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
+    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NEWARE', true) }}"
+    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}.exe"
-    zip_path: "{{ lookup('env', 'ZIP_PATH') | default('/root/neware/dbwb') }}"
-    exe_args: "{{ lookup('env', 'EXE_ARGS') | default('') }}"
-    config_file_name: "{{ lookup('env', 'CONFIG_FILE_NAME') | default('NWReport_DBWB.iconf') }}"
+    zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('NWReport_DBWB.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{{ lookup('env', 'API_PORT') | default('9002') }}"
-    api_status_call_type: 1
-    api_start_call_type: 1000
-    api_timeout_seconds: 15
-    api_expected_response_code: "{{ lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('0') }}"
-    api_expected_exec_success_code: "{{ lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('0') }}"
-    export_not_started: "{{ lookup('env', 'EXPORT_NOT_STARTED') | default('1', true) }}"
-    export_starting: "{{ lookup('env', 'EXPORT_STARTING') | default('2', true) }}"
-    export_started: "{{ lookup('env', 'EXPORT_STARTED') | default('3', true) }}"
-    poll_retries: "{{ (lookup('env', 'POLL_RETRIES') | int > 0) | ternary(lookup('env', 'POLL_RETRIES'), '3') | int }}"
-    poll_delay: "{{ (lookup('env', 'POLL_DELAY') | int > 0) | ternary(lookup('env', 'POLL_DELAY'), '10') | int }}"
-    his_data_from_time: "${his_data_from_time}"
+    api_port: "{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) }}"
+    api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
+    api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
+    api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
+    api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
+    api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
+    export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
+    export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
+    export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
+    poll_retries: "{{ ((lookup('env', 'POLL_RETRIES') | default('', true) | trim) | default('3', true)) | int }}"
+    poll_delay: "{{ ((lookup('env', 'POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
+    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -32,10 +34,10 @@
     merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
     log_path: "{{ exe_dir }}\\{{ zip_name }}\\LogData\\NWReport_DBWB{{ lookup('pipe', 'date +%Y%m%d') }}.log"
-    log_success_keyword: "提示 本轮通道状态上传成功"
-    log_tail_lines: 50
-    log_poll_retries: 6
-    log_poll_delay: 10
+    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
+    log_tail_lines: "{{ ((lookup('env', 'LOG_TAIL_LINES') | default('', true) | trim) | default('50', true)) | int }}"
+    log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
+    log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
 
   tasks:
     - name: 前置检查：检查程序运行状态
@@ -403,7 +405,7 @@
                 if ($taskStatus -ne "Running") {
                   Start-ScheduledTask -TaskName $taskName
                 }
-                Start-Sleep -Seconds {{ restart_delay | default(30) }}
+                Start-Sleep -Seconds {{ restart_delay }}
                 $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
                 if ($verify) {
                   Write-Output "VERIFY_OK|PID:$($verify.Id)"

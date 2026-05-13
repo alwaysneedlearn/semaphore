@@ -31,10 +31,10 @@
       updates: "{{ semaphore_status_bulk_updates | default([]) }}"
     status_code: [200]
   vars:
-    _sem_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
+    _sem_url: "{{ (lookup('env', 'SEMAPHORE_URL') | default('', true) | trim) | default('http://127.0.0.1:3000', true) }}"
     # Injected by Semaphore task extra-vars (runDeviceTemplate / scheduler); env is fallback.
-    _sem_pid: "{{ (semaphore_project_id | default(lookup('env', 'SEMAPHORE_PROJECT_ID'), true)) | trim | string }}"
-    _sem_token: "{{ lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim }}"
+    _sem_pid: "{{ (semaphore_project_id | default(lookup('env', 'SEMAPHORE_PROJECT_ID'), true) | string | trim) }}"
+    _sem_token: "{{ (lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim) }}"
   when:
     - _sem_pid | length > 0
     - _sem_token | length > 0

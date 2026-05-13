@@ -5,15 +5,14 @@
     hosts: localhost
     gather_facts: no
     vars:
-      # Semaphore devices/discover passes subnet as extra vars: subnet + network_cidr
-      network_subnet: "{{ subnet | default(network_cidr | default(lookup('env', 'NETWORK_SUBNET') | default('192.168.1.0/24'))) }}"
-      winrm_port: "{{ (lookup('env', 'WINRM_PORT') | trim) | default('5985', true) }}"
-      rdp_port: "{{ (lookup('env', 'RDP_PORT') | trim) | default('3389', true) }}"
-      # 环境变量若为空字符串，| default('x') 不会替换（仅 undefined 才替换）
+      # 优先级：Variable Group 环境变量（非空）> Semaphore extra-vars（subnet / network_cidr）> 默认值
+      network_subnet: "{{ (lookup('env', 'NETWORK_SUBNET') | default('', true) | trim) | default(subnet | default('', true) | trim, true) | default(network_cidr | default('', true) | trim, true) | default('192.168.1.0/24', true) }}"
+      winrm_port: "{{ (lookup('env', 'WINRM_PORT') | default('', true) | trim) | default('5985', true) }}"
+      rdp_port: "{{ (lookup('env', 'RDP_PORT') | default('', true) | trim) | default('3389', true) }}"
       winrm_user: "{{ (lookup('env', 'WINRM_USER') | default('', true) | trim) | default('administrator', true) }}"
-      winrm_password: "{{ lookup('env', 'WINRM_PASSWORD') | default('', true) }}"
-      timeout_seconds: "{{ (lookup('env', 'SCAN_TIMEOUT_SECONDS') | trim) | default('2', true) }}"
-      scan_workers: "{{ (lookup('env', 'SCAN_WORKERS') | trim) | default('64', true) }}"
+      winrm_password: "{{ (lookup('env', 'WINRM_PASSWORD') | default('', true) | trim) | default('', true) }}"
+      timeout_seconds: "{{ (lookup('env', 'SCAN_TIMEOUT_SECONDS') | default('', true) | trim) | default('2', true) }}"
+      scan_workers: "{{ (lookup('env', 'SCAN_WORKERS') | default('', true) | trim) | default('64', true) }}"
 
     tasks:
       - name: 解析网段生成IP列表（Python，按真实掩码）
@@ -152,7 +151,7 @@
             winrm_status: "{{ 'online' if winrm_online else 'offline' }}"
             rdp_status: "{{ 'online' if rdp_online else 'offline' }}"
             device_status: >-
-              {{ 'healthy' if (winrm_online and rdp_online) else 'unknown' }}
+              {{ 'healthy' if (winrm_online and rdp_online) else 'unhealthy' }}
 
       - name: 清理临时文件
         ansible.builtin.file:
