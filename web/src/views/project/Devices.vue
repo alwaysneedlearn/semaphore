@@ -331,8 +331,8 @@
         <v-row dense class="px-4 pt-3">
           <v-col cols="12" md="3">
             <v-text-field
-              v-model.trim="filters.hostname"
-              :label="$t('deviceFilterHostname')"
+              v-model.trim="filters.ip"
+              :label="$t('deviceFilterIp')"
               clearable
               dense
               outlined
@@ -340,8 +340,8 @@
           </v-col>
           <v-col cols="12" md="3">
             <v-text-field
-              v-model.trim="filters.ip"
-              :label="$t('deviceFilterIp')"
+              v-model.trim="filters.hostname"
+              :label="$t('deviceFilterHostname')"
               clearable
               dense
               outlined
