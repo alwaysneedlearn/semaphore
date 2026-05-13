@@ -1198,12 +1198,13 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // ProbeDevice runs an immediate server-side TCP port probe of RDP and WinRM
-// for one device and persists the result. Useful for instant feedback when
-// no status template is configured.
+// for one device and persists rdp_status, winrm_status, and last_updated only
+// (device_status is unchanged). Useful for instant feedback when no status
+// template is configured.
 func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
 	rdp, winrm, refreshed := server.ProbeDevice(device)
-	if err := helpers.Store(r).UpdateDeviceStatus(
+	if err := helpers.Store(r).UpdateDevicePortProbeStatuses(
 		device.ProjectID, device.ID, rdp, winrm, refreshed,
 	); err != nil {
 		helpers.WriteError(w, err)
@@ -1211,13 +1212,6 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
-	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
-		device.DeviceStatus = db.DeviceStatusHealthy
-	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
-		device.DeviceStatus = db.DeviceStatusUnhealthy
-	} else {
-		device.DeviceStatus = db.DeviceStatusUnknown
-	}
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)
 }

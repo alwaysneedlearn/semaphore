@@ -177,6 +177,18 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.Devic
 	return d.updateObject(projectID, db.DeviceProps, device)
 }
 
+func (d *BoltDb) UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
+	device, err := d.GetDevice(projectID, deviceID)
+	if err != nil {
+		return err
+	}
+	device.RDPStatus = rdp
+	device.WinRMStatus = winrm
+	t := refreshed
+	device.LastUpdated = &t
+	return d.updateObject(projectID, db.DeviceProps, device)
+}
+
 func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) {
 	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {

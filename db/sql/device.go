@@ -165,6 +165,15 @@ func (d *SqlDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.Device
 	return err
 }
 
+func (d *SqlDb) UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
+	_, err := d.exec(
+		"update project__device set rdp_status=?, winrm_status=?, last_updated=? "+
+			"where id=? and project_id=?",
+		rdp, winrm, refreshed, deviceID, projectID,
+	)
+	return err
+}
+
 func (d *SqlDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) {
 	type row struct {
 		Status db.DeviceStatus `db:"device_status"`

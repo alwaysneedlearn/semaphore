@@ -316,6 +316,8 @@ type DeviceManager interface {
 	CreateDevice(device Device) (Device, error)
 	UpdateDevice(device Device) error
 	UpdateDeviceStatus(projectID, deviceID int, rdp, winrm DeviceStatus, refreshed time.Time) error
+	// UpdateDevicePortProbeStatuses updates only rdp_status, winrm_status, and last_updated (not device_status).
+	UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm DeviceStatus, refreshed time.Time) error
 	UpdateDeviceStatusByHostname(projectID int, hostname string, status DeviceStatus, refreshed time.Time) error
 	UpsertDevicesByIPAddress(projectID int, devices []Device) ([]Device, error)
 	GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit int) ([]DeviceStatusCallbackLog, error)
