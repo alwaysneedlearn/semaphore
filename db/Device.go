@@ -47,6 +47,7 @@ type Device struct {
 	AnsibleWinRMServerCertValidation string       `db:"ansible_winrm_server_cert_validation" json:"ansible_winrm_server_cert_validation"`
 	RDPUser                          string       `db:"rdp_user" json:"rdp_user"`
 	RDPPassword                      string       `db:"rdp_password" json:"rdp_password"`
+	RDPPort                          int          `db:"rdp_port" json:"rdp_port"`
 	DeviceStatus                     DeviceStatus `db:"device_status" json:"device_status"`
 	RDPStatus                        DeviceStatus `db:"rdp_status" json:"rdp_status"`
 	WinRMStatus                      DeviceStatus `db:"winrm_status" json:"winrm_status"`
@@ -90,6 +91,31 @@ func (d Device) Validate() error {
 	return nil
 }
 
+// Default TCP ports for device connectivity (RDP / WinRM over HTTP).
+const (
+	DefaultDeviceRDPPort     = 3389
+	DefaultDeviceAnsiblePort = 5985
+)
+
+// EffectiveDeviceRDPPort returns a valid RDP TCP port for probes and inventory.
+func EffectiveDeviceRDPPort(d Device) int {
+	if d.RDPPort > 0 && d.RDPPort <= 65535 {
+		return d.RDPPort
+	}
+	return DefaultDeviceRDPPort
+}
+
+// EffectiveDeviceAnsiblePort returns the WinRM/Ansible TCP port for probes and inventory.
+func EffectiveDeviceAnsiblePort(d Device, settings ProjectDeviceSettings) int {
+	if d.AnsiblePort > 0 && d.AnsiblePort <= 65535 {
+		return d.AnsiblePort
+	}
+	if settings.DefaultAnsiblePort > 0 && settings.DefaultAnsiblePort <= 65535 {
+		return settings.DefaultAnsiblePort
+	}
+	return DefaultDeviceAnsiblePort
+}
+
 // MergeDeviceCredentialsOnUpsert copies Ansible/RDP credential fields from incoming onto existing
 // only when incoming provides non-empty trimmed values. Discovery import payloads usually omit
 // secrets; assigning empty strings would erase manually configured credentials.
@@ -105,6 +131,17 @@ func MergeDeviceCredentialsOnUpsert(existing *Device, incoming Device) {
 	}
 	if strings.TrimSpace(incoming.RDPPassword) != "" {
 		existing.RDPPassword = incoming.RDPPassword
+	}
+}
+
+// MergeDevicePortsOnUpsert copies RDP/Ansible TCP ports when incoming sets valid values.
+// Import clears ports to 0 before upsert so normalized defaults do not overwrite stored ports.
+func MergeDevicePortsOnUpsert(existing *Device, incoming Device) {
+	if incoming.RDPPort > 0 && incoming.RDPPort <= 65535 {
+		existing.RDPPort = incoming.RDPPort
+	}
+	if incoming.AnsiblePort > 0 && incoming.AnsiblePort <= 65535 {
+		existing.AnsiblePort = incoming.AnsiblePort
 	}
 }
 

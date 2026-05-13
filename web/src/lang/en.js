@@ -460,7 +460,7 @@ export default {
   deviceImportSaved: '{count} devices saved',
   deviceProbe: 'Probe',
   deviceProbeTooltip:
-    'Probe: TCP reachability on RDP (3389) and WinRM HTTP (5985) only—not login or application health.',
+    'Probe: TCP reachability on this device\'s RDP port and WinRM (Ansible) port only—not login or application health.',
   deviceActions: 'Actions',
   deviceStart: 'Start',
   deviceStop: 'Stop',
@@ -488,6 +488,7 @@ export default {
   deviceAnsiblePassword: 'Ansible password',
   deviceRdpUser: 'RDP user',
   deviceRdpPassword: 'RDP password',
+  deviceRdpPort: 'RDP port',
   deviceAnsibleConnection: 'Ansible connection',
   deviceAnsibleWinrmTransport: 'WinRM transport',
   deviceAnsibleWinrmScheme: 'WinRM scheme',

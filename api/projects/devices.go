@@ -56,6 +56,9 @@ func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSetti
 	if device.AnsibleWinRMServerCertValidation == "" {
 		device.AnsibleWinRMServerCertValidation = "ignore"
 	}
+	if device.RDPPort <= 0 || device.RDPPort > 65535 {
+		device.RDPPort = db.DefaultDeviceRDPPort
+	}
 }
 
 func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string {
@@ -88,13 +91,7 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	if scheme == "" {
 		scheme = "http"
 	}
-	port := dev.AnsiblePort
-	if port == 0 {
-		port = settings.DefaultAnsiblePort
-	}
-	if port == 0 {
-		port = 5985
-	}
+	port := db.EffectiveDeviceAnsiblePort(dev, settings)
 	certValidation := dev.AnsibleWinRMServerCertValidation
 	if certValidation == "" {
 		certValidation = settings.DefaultAnsibleWinRMServerCertValidation
@@ -119,6 +116,7 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	parts = append(parts, "ansible_winrm_scheme="+scheme)
 	parts = append(parts, "ansible_port="+strconv.Itoa(port))
 	parts = append(parts, "ansible_winrm_server_cert_validation="+certValidation)
+	parts = append(parts, "rdp_port="+strconv.Itoa(db.EffectiveDeviceRDPPort(dev)))
 	return strings.Join(parts, " ")
 }
 
@@ -714,6 +712,10 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 			dev.WinRMStatus = db.DeviceStatusUnknown
 		}
 		normalizeDeviceConnection(&dev, settings)
+		// Upsert merges ports only when non-zero; avoid normalized defaults overwriting
+		// manually configured ports when discovery JSON does not specify ports.
+		dev.AnsiblePort = 0
+		dev.RDPPort = 0
 		if useIPFilter && !selectedByIP[dev.IPAddress] {
 			continue
 		}
@@ -949,11 +951,13 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 	payload := make([]map[string]any, 0, len(devices))
 	for _, d := range devices {
 		payload = append(payload, map[string]any{
-			"id":             d.ID,
-			"hostname":       d.Hostname,
-			"ip":             d.IPAddress,
-			"rdp_user":       d.RDPUser,
-			"rdp_password":   d.RDPPassword,
+			"id":           d.ID,
+			"hostname":     d.Hostname,
+			"ip":           d.IPAddress,
+			"rdp_user":     d.RDPUser,
+			"rdp_password": d.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(d),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
 		})
 	}
 	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
@@ -1046,21 +1050,23 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extraVars := map[string]any{
-		"device": map[string]any{
-			"id":             device.ID,
-			"ip":             device.IPAddress,
-			"hostname":       device.Hostname,
-			"rdp_user":       device.RDPUser,
-			"rdp_password":   device.RDPPassword,
-		},
-	}
-
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
+	extraVars := map[string]any{
+		"device": map[string]any{
+			"id":           device.ID,
+			"ip":           device.IPAddress,
+			"hostname":     device.Hostname,
+			"rdp_user":     device.RDPUser,
+			"rdp_password": device.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(device),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(device, settings),
+		},
+	}
+
 	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
 		extraVars["default_config"] = defaultConfig
 	}
@@ -1122,6 +1128,11 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	for _, id := range body.DeviceIDs {
 		idSet[id] = true
 	}
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 	allDevices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -1135,11 +1146,13 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		}
 		selected = append(selected, d)
 		payload = append(payload, map[string]any{
-			"id":             d.ID,
-			"hostname":       d.Hostname,
-			"ip":             d.IPAddress,
-			"rdp_user":       d.RDPUser,
-			"rdp_password":   d.RDPPassword,
+			"id":           d.ID,
+			"hostname":     d.Hostname,
+			"ip":           d.IPAddress,
+			"rdp_user":     d.RDPUser,
+			"rdp_password": d.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(d),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
 		})
 	}
 	if len(selected) == 0 {
@@ -1155,11 +1168,6 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	extraVars := map[string]any{"devices": payload}
-	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
 	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
 		extraVars["default_config"] = defaultConfig
 	}
@@ -1203,7 +1211,12 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 // template is configured.
 func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
-	rdp, winrm, refreshed := server.ProbeDevice(device)
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(device.ProjectID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	rdp, winrm, refreshed := server.ProbeDevice(device, settings)
 	if err := helpers.Store(r).UpdateDevicePortProbeStatuses(
 		device.ProjectID, device.ID, rdp, winrm, refreshed,
 	); err != nil {

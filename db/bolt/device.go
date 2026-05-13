@@ -149,6 +149,12 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 	if device.WinRMStatus == "" {
 		device.WinRMStatus = db.DeviceStatusUnknown
 	}
+	if device.AnsiblePort <= 0 || device.AnsiblePort > 65535 {
+		device.AnsiblePort = db.DefaultDeviceAnsiblePort
+	}
+	if device.RDPPort <= 0 || device.RDPPort > 65535 {
+		device.RDPPort = db.DefaultDeviceRDPPort
+	}
 	device.Created = tz.Now()
 
 	res, err := d.createObject(device.ProjectID, db.DeviceProps, device)
@@ -251,10 +257,10 @@ func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([
 				old.Name = old.Hostname
 			}
 			db.MergeDeviceCredentialsOnUpsert(&old, dev)
+			db.MergeDevicePortsOnUpsert(&old, dev)
 			old.AnsibleConnection = dev.AnsibleConnection
 			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
 			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
-			old.AnsiblePort = dev.AnsiblePort
 			old.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
 			if dev.DeviceStatus != "" {
 				old.DeviceStatus = dev.DeviceStatus

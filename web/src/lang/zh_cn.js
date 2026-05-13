@@ -387,7 +387,7 @@ export default {
   deviceImportSaved: '已保存 {count} 台设备',
   deviceProbe: '探测',
   deviceProbeTooltip:
-    '探测：仅检测 RDP（3389）与 WinRM（5985）的 TCP 端口是否可达；不含登录验证与业务健康检查。',
+    '探测：仅检测该设备配置的 RDP 端口与 WinRM（Ansible）端口的 TCP 是否可达；不含登录验证与业务健康检查。',
   deviceActions: '操作',
   deviceStart: '启动',
   deviceStop: '停止',
@@ -415,6 +415,7 @@ export default {
   deviceAnsiblePassword: 'Ansible 密码',
   deviceRdpUser: 'RDP 用户',
   deviceRdpPassword: 'RDP 密码',
+  deviceRdpPort: 'RDP 端口',
   deviceAnsibleConnection: 'Ansible 连接方式',
   deviceAnsibleWinrmTransport: 'WinRM 传输',
   deviceAnsibleWinrmScheme: 'WinRM 协议',
