@@ -120,6 +120,26 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	return strings.Join(parts, " ")
 }
 
+func projectHasDeviceWithIP(r *http.Request, projectID int, ip string, exceptID int) (bool, error) {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return false, nil
+	}
+
+	devices, err := helpers.Store(r).GetDevices(projectID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		return false, err
+	}
+
+	for _, d := range devices {
+		if strings.TrimSpace(d.IPAddress) == ip && d.ID != exceptID {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func renderWindowsInventory(devices []db.Device, settings db.ProjectDeviceSettings) string {
 	var b strings.Builder
 	b.WriteString("[" + deviceAutoInventoryGroup + "]\n")
@@ -350,6 +370,17 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
+	duplicateIP, err := projectHasDeviceWithIP(r, project.ID, device.IPAddress, 0)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if duplicateIP {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Device ip_address already exists in this project",
+		})
+		return
+	}
 
 	newDevice, err := helpers.Store(r).CreateDevice(device)
 	if err != nil {
@@ -406,6 +437,17 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
+		return
+	}
+	duplicateIP, err := projectHasDeviceWithIP(r, old.ProjectID, device.IPAddress, old.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if duplicateIP {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Device ip_address already exists in this project",
+		})
 		return
 	}
 

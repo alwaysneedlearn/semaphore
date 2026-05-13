@@ -132,6 +132,34 @@
           - hostname_result is defined
           - hostname_result.results is defined
 
+      - name: 计算待生成设备结果的主机列表
+        ansible.builtin.set_fact:
+          candidate_ips: "{{ (open_winrm_ips + open_rdp_ips) | unique }}"
+
+      - name: 反向DNS解析主机名（WinRM失败时兜底）
+        ansible.builtin.shell: |
+          python3 - << 'PY'
+          import json, socket
+          ips = {{ candidate_ips | to_json }}
+          out = {}
+          for ip in ips:
+              try:
+                  out[ip] = socket.gethostbyaddr(ip)[0]
+              except Exception:
+                  out[ip] = ""
+          print(json.dumps(out, ensure_ascii=False))
+          PY
+        register: reverse_dns_result
+        changed_when: false
+        when: candidate_ips | length > 0
+
+      - name: 构建 hostname 映射（反向DNS）
+        ansible.builtin.set_fact:
+          reverse_dns_map: "{{ (reverse_dns_result.stdout | default('{}')) | from_json }}"
+        when:
+          - reverse_dns_result is defined
+          - reverse_dns_result.stdout is defined
+
       - name: 汇总发现结果（简版）
         ansible.builtin.debug:
           msg: "扫描完成：网段={{ network_subnet }}，总数={{ target_ips | length }}，WinRM在线={{ open_winrm_ips | length }}，RDP在线={{ open_rdp_ips | length }}"
@@ -143,7 +171,8 @@
         vars:
           host_ip: "{{ item }}"
           host_name: "{{ (hostname_map | default({})).get(host_ip, '') }}"
-          effective_hostname: "{{ host_name if (host_name | trim) else host_ip }}"
+          reverse_dns_name: "{{ (reverse_dns_map | default({})).get(host_ip, '') }}"
+          effective_hostname: "{{ host_name if (host_name | trim) else (reverse_dns_name if (reverse_dns_name | trim) else host_ip) }}"
           winrm_online: "{{ host_ip in open_winrm_ips }}"
           rdp_online: "{{ host_ip in open_rdp_ips }}"
           device_item:
