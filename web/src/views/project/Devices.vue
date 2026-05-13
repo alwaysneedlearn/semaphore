@@ -526,8 +526,8 @@ export default {
         winrmStatus: null,
       },
       discoveryHeaders: [
-        { text: 'Hostname', value: 'hostname' },
         { text: 'IP', value: 'ip_address' },
+        { text: 'Hostname', value: 'hostname' },
         { text: 'Status', value: 'device_status' },
         { text: 'RDP', value: 'rdp_status' },
         { text: 'WinRM', value: 'winrm_status' },
