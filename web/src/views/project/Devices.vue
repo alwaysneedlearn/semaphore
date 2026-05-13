@@ -205,7 +205,7 @@
           </v-btn>
         </template>
         <v-list dense>
-          <v-list-item @click="runBulkProbe()">
+          <v-list-item :title="$t('deviceProbeTooltip')" @click="runBulkProbe()">
             <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
           </v-list-item>
@@ -403,7 +403,7 @@
       <template v-slot:item.actions="{ item }">
         <v-btn-toggle dense :value-comparator="() => false">
           <v-btn
-            :title="$t('deviceProbe')"
+            :title="$t('deviceProbeTooltip')"
             :loading="busyId === item.id"
             @click="probeDevice(item)"
           >

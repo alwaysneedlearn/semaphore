@@ -386,6 +386,8 @@ export default {
   deviceImportSelected: '导入选中设备',
   deviceImportSaved: '已保存 {count} 台设备',
   deviceProbe: '探测',
+  deviceProbeTooltip:
+    '探测：仅检测 RDP（3389）与 WinRM（5985）的 TCP 端口是否可达；不含登录验证与业务健康检查。',
   deviceActions: '操作',
   deviceStart: '启动',
   deviceStop: '停止',

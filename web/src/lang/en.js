@@ -459,6 +459,8 @@ export default {
   deviceImportSelected: 'Import selected devices',
   deviceImportSaved: '{count} devices saved',
   deviceProbe: 'Probe',
+  deviceProbeTooltip:
+    'Probe: TCP reachability on RDP (3389) and WinRM HTTP (5985) only—not login or application health.',
   deviceActions: 'Actions',
   deviceStart: 'Start',
   deviceStop: 'Stop',
