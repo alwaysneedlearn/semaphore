@@ -141,13 +141,13 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 		device.Name = device.Hostname
 	}
 	if device.DeviceStatus == "" {
-		device.DeviceStatus = db.DeviceStatusUnknown
+		device.DeviceStatus = db.DeviceStatusUnhealthy
 	}
 	if device.RDPStatus == "" {
-		device.RDPStatus = db.DeviceStatusUnknown
+		device.RDPStatus = db.DeviceStatusOffline
 	}
 	if device.WinRMStatus == "" {
-		device.WinRMStatus = db.DeviceStatusUnknown
+		device.WinRMStatus = db.DeviceStatusOffline
 	}
 	if device.AnsiblePort <= 0 || device.AnsiblePort > 65535 {
 		device.AnsiblePort = db.DefaultDeviceAnsiblePort
@@ -173,10 +173,8 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.Devic
 	device.WinRMStatus = winrm
 	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
 		device.DeviceStatus = db.DeviceStatusHealthy
-	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
-		device.DeviceStatus = db.DeviceStatusUnhealthy
 	} else {
-		device.DeviceStatus = db.DeviceStatusUnknown
+		device.DeviceStatus = db.DeviceStatusUnhealthy
 	}
 	t := refreshed
 	device.LastUpdated = &t
@@ -210,7 +208,7 @@ func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error)
 		case db.DeviceStatusChecking:
 			stats.Checking++
 		default:
-			stats.Unknown++
+			stats.Unhealthy++
 		}
 	}
 	return

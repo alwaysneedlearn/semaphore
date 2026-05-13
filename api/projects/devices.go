@@ -21,6 +21,28 @@ const (
 	deviceAutoInventoryGroup = "windows_hosts"
 )
 
+func normalizeProtocolStatus(status db.DeviceStatus) db.DeviceStatus {
+	if status == db.DeviceStatusOnline {
+		return db.DeviceStatusOnline
+	}
+	return db.DeviceStatusOffline
+}
+
+func normalizeDeviceHealthStatus(status db.DeviceStatus) db.DeviceStatus {
+	switch status {
+	case db.DeviceStatusHealthy, db.DeviceStatusChecking:
+		return status
+	default:
+		return db.DeviceStatusUnhealthy
+	}
+}
+
+func normalizeDeviceStatuses(device *db.Device) {
+	device.RDPStatus = normalizeProtocolStatus(device.RDPStatus)
+	device.WinRMStatus = normalizeProtocolStatus(device.WinRMStatus)
+	device.DeviceStatus = normalizeDeviceHealthStatus(device.DeviceStatus)
+}
+
 // normalizeDeviceConnection fills connection-related fields from project defaults when the
 // device leaves them blank. ansible_user / ansible_password are intentionally omitted here so
 // empty values stay empty in the database; buildInventoryLine still applies project defaults
@@ -234,6 +256,15 @@ func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
 		RDPStatus:         strings.TrimSpace(q.Get("rdp_status")),
 		WinRMStatus:       strings.TrimSpace(q.Get("winrm_status")),
 	}
+	if f.DeviceStatus == string(db.DeviceStatusUnknown) {
+		f.DeviceStatus = string(db.DeviceStatusUnhealthy)
+	}
+	if f.RDPStatus == string(db.DeviceStatusUnknown) {
+		f.RDPStatus = string(db.DeviceStatusOffline)
+	}
+	if f.WinRMStatus == string(db.DeviceStatusUnknown) {
+		f.WinRMStatus = string(db.DeviceStatusOffline)
+	}
 	if f.HostnameSubstring == "" && f.IPSubstring == "" && f.DeviceStatus == "" &&
 		f.RDPStatus == "" && f.WinRMStatus == "" {
 		return nil
@@ -284,6 +315,9 @@ func GetDevices(w http.ResponseWriter, r *http.Request) {
 	if devices == nil {
 		devices = []db.Device{}
 	}
+	for i := range devices {
+		normalizeDeviceStatuses(&devices[i])
+	}
 
 	total := len(devices)
 	if params.Count > 0 {
@@ -303,11 +337,13 @@ func GetDevices(w http.ResponseWriter, r *http.Request) {
 // GetDevice returns one device (loaded by DeviceMiddleware).
 func GetDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
+	normalizeDeviceStatuses(&device)
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
 
 func GetDeviceStatusReason(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
+	normalizeDeviceStatuses(&device)
 	logs, err := helpers.Store(r).GetDeviceStatusCallbackLogs(device.ProjectID, device.ID, 20)
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -355,15 +391,7 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
 	device.RDPUser = strings.TrimSpace(device.RDPUser)
 	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
-	if device.DeviceStatus == "" {
-		device.DeviceStatus = db.DeviceStatusUnknown
-	}
-	if device.RDPStatus == "" {
-		device.RDPStatus = db.DeviceStatusUnknown
-	}
-	if device.WinRMStatus == "" {
-		device.WinRMStatus = db.DeviceStatusUnknown
-	}
+	normalizeDeviceStatuses(&device)
 	normalizeDeviceConnection(&device, settings)
 
 	if err := device.Validate(); err != nil {
@@ -431,6 +459,7 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = old.DeviceStatus
 	}
+	normalizeDeviceStatuses(&device)
 	device.AbnormalReason = old.AbnormalReason
 	device.LastUpdated = old.LastUpdated
 	normalizeDeviceConnection(&device, settings)
@@ -741,18 +770,11 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		if dev.DeviceStatus == "" {
 			if dev.RDPStatus == db.DeviceStatusOnline && dev.WinRMStatus == db.DeviceStatusOnline {
 				dev.DeviceStatus = db.DeviceStatusHealthy
-			} else if dev.RDPStatus == db.DeviceStatusOffline && dev.WinRMStatus == db.DeviceStatusOffline {
-				dev.DeviceStatus = db.DeviceStatusUnhealthy
 			} else {
-				dev.DeviceStatus = db.DeviceStatusUnknown
+				dev.DeviceStatus = db.DeviceStatusUnhealthy
 			}
 		}
-		if dev.RDPStatus == "" {
-			dev.RDPStatus = db.DeviceStatusUnknown
-		}
-		if dev.WinRMStatus == "" {
-			dev.WinRMStatus = db.DeviceStatusUnknown
-		}
+		normalizeDeviceStatuses(&dev)
 		normalizeDeviceConnection(&dev, settings)
 		// Upsert merges ports only when non-zero; avoid normalized defaults overwriting
 		// manually configured ports when discovery JSON does not specify ports.
@@ -818,7 +840,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		switch u.Status {
-		case db.DeviceStatusHealthy, db.DeviceStatusUnhealthy, db.DeviceStatusChecking, db.DeviceStatusUnknown:
+		case db.DeviceStatusHealthy, db.DeviceStatusUnhealthy, db.DeviceStatusChecking:
 		default:
 			continue
 		}
@@ -833,6 +855,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		if u.WinRMStatus != "" {
 			dev.WinRMStatus = u.WinRMStatus
 		}
+		normalizeDeviceStatuses(&dev)
 		dev.AbnormalReason = u.AbnormalReason
 		dev.LastUpdated = &refreshed
 		if err := helpers.Store(r).UpdateDevice(dev); err != nil {
@@ -920,6 +943,13 @@ func normalizeBulkUpdates(updates []db.DeviceStatusUpdate) {
 		}
 		if updates[i].WinRMStatus != "" {
 			updates[i].WinRMStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].WinRMStatus))))
+		}
+		updates[i].Status = normalizeDeviceHealthStatus(updates[i].Status)
+		if updates[i].RDPStatus != "" {
+			updates[i].RDPStatus = normalizeProtocolStatus(updates[i].RDPStatus)
+		}
+		if updates[i].WinRMStatus != "" {
+			updates[i].WinRMStatus = normalizeProtocolStatus(updates[i].WinRMStatus)
 		}
 	}
 }
@@ -1267,6 +1297,7 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	normalizeDeviceStatuses(&device)
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)
 }

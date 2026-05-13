@@ -14,7 +14,7 @@ const probeDialTimeout = 1500 * time.Millisecond
 // ProbeDevice runs a fast TCP-port reachability probe against a device's RDP
 // and WinRM (Ansible) ports and returns the resulting statuses plus the refresh time.
 // Ports come from the device row and project defaults (see db.EffectiveDeviceRDPPort /
-// db.EffectiveDeviceAnsiblePort). If the device has no IP/hostname the result is "unknown".
+// db.EffectiveDeviceAnsiblePort). If the device has no IP/hostname the result is "offline".
 func ProbeDevice(device db.Device, settings db.ProjectDeviceSettings) (rdp, winrm db.DeviceStatus, refreshed time.Time) {
 	target := device.IPAddress
 	if target == "" {
@@ -23,7 +23,7 @@ func ProbeDevice(device db.Device, settings db.ProjectDeviceSettings) (rdp, winr
 
 	now := tz.Now()
 	if target == "" {
-		return db.DeviceStatusUnknown, db.DeviceStatusUnknown, now
+		return db.DeviceStatusOffline, db.DeviceStatusOffline, now
 	}
 
 	rdp = probePort(target, db.EffectiveDeviceRDPPort(device))

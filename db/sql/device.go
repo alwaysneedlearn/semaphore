@@ -72,13 +72,13 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		device.Name = device.Hostname
 	}
 	if device.DeviceStatus == "" {
-		device.DeviceStatus = db.DeviceStatusUnknown
+		device.DeviceStatus = db.DeviceStatusUnhealthy
 	}
 	if device.RDPStatus == "" {
-		device.RDPStatus = db.DeviceStatusUnknown
+		device.RDPStatus = db.DeviceStatusOffline
 	}
 	if device.WinRMStatus == "" {
-		device.WinRMStatus = db.DeviceStatusUnknown
+		device.WinRMStatus = db.DeviceStatusOffline
 	}
 	if device.AnsiblePort <= 0 || device.AnsiblePort > 65535 {
 		device.AnsiblePort = db.DefaultDeviceAnsiblePort
@@ -159,11 +159,9 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 }
 
 func (d *SqlDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
-	deviceStatus := db.DeviceStatusUnknown
+	deviceStatus := db.DeviceStatusUnhealthy
 	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
 		deviceStatus = db.DeviceStatusHealthy
-	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
-		deviceStatus = db.DeviceStatusUnhealthy
 	}
 	_, err := d.exec(
 		"update project__device set rdp_status=?, winrm_status=?, device_status=?, last_updated=? "+
@@ -209,7 +207,7 @@ func (d *SqlDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) 
 		case db.DeviceStatusChecking:
 			stats.Checking += r.Count
 		default:
-			stats.Unknown += r.Count
+			stats.Unhealthy += r.Count
 		}
 	}
 	return

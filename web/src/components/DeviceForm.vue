@@ -198,7 +198,7 @@ export default {
         ansible_port: 5985,
         rdp_port: 3389,
         ansible_winrm_server_cert_validation: 'ignore',
-        device_status: 'unknown',
+        device_status: 'unhealthy',
       };
     },
     afterLoadData() {

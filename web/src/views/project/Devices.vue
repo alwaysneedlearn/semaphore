@@ -443,7 +443,7 @@
           </v-btn>
           <v-btn
             :title="$t('deviceAbnormalReason')"
-            :disabled="item.device_status === 'healthy' || item.device_status === 'unknown'"
+            :disabled="item.device_status === 'healthy'"
             @click="openReasonDialog(item)"
           >
             <v-icon>mdi-alert-circle-outline</v-icon>
@@ -536,10 +536,10 @@ export default {
   },
   computed: {
     statusFilterOptions() {
-      return ['healthy', 'unhealthy', 'checking', 'unknown'];
+      return ['healthy', 'unhealthy', 'checking'];
     },
     protocolFilterOptions() {
-      return ['online', 'offline', 'unknown'];
+      return ['online', 'offline'];
     },
     pageDeviceIds() {
       return (this.items || []).map((x) => x.id);
@@ -988,9 +988,9 @@ export default {
         .map((x) => ({
           hostname: (x.hostname || '').trim(),
           ip_address: (x.ip_address || x.ip || '').trim(),
-          device_status: x.device_status || x.status || 'unknown',
-          rdp_status: x.rdp_status || 'unknown',
-          winrm_status: x.winrm_status || 'unknown',
+          device_status: x.device_status || x.status || 'unhealthy',
+          rdp_status: x.rdp_status || 'offline',
+          winrm_status: x.winrm_status || 'offline',
           abnormal_reason: x.abnormal_reason || null,
         }))
         .filter((x) => x.hostname);

@@ -74,17 +74,17 @@ func (d Device) Validate() error {
 		return &ValidationError{"Device ip_address must be a valid IPv4/IPv6 address"}
 	}
 	switch d.DeviceStatus {
-	case "", DeviceStatusUnknown, DeviceStatusHealthy, DeviceStatusUnhealthy, DeviceStatusChecking:
+	case "", DeviceStatusHealthy, DeviceStatusUnhealthy, DeviceStatusChecking:
 	default:
 		return &ValidationError{"Device status is invalid"}
 	}
 	switch d.RDPStatus {
-	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
+	case "", DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device rdp_status is invalid"}
 	}
 	switch d.WinRMStatus {
-	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
+	case "", DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device winrm_status is invalid"}
 	}
