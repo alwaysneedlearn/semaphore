@@ -232,21 +232,30 @@
             Where-Object { $_ } |
             Select-Object -First 1
 
+            $resolved = $null
+            $source = 'unknown'
             if ($explorerUser) {
-              Write-Output $explorerUser
+              $resolved = $explorerUser
+              $source = 'explorer_GetOwner'
             } else {
               $logon = Get-ItemProperty `
                 -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
                 -ErrorAction SilentlyContinue
 
               if ($logon -and $logon.LastLoggedOnSAMUser) {
-                Write-Output ($logon.LastLoggedOnSAMUser.ToString().Split('\')[-1])
+                $resolved = $logon.LastLoggedOnSAMUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnSAMUser'
               } elseif ($logon -and $logon.LastLoggedOnUser) {
-                Write-Output ($logon.LastLoggedOnUser.ToString().Split('\')[-1])
+                $resolved = $logon.LastLoggedOnUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnUser'
               } else {
-                Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+                $resolved = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+                $source = 'ansible_user_fallback'
               }
             }
+
+            Write-Host "[get_username] source=$source resolved_user=$resolved"
+            Write-Output $resolved
           register: get_username_result
           changed_when: false
 
