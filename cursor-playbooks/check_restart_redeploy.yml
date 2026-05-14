@@ -1,0 +1,827 @@
+# 按需检查 + 综合判定（API + 日志 Tail 时间窗口）；重配/启动验证与 device_restart.yml 对齐。
+---
+- name: 按需检查并重配重启（综合判定；日志 Tail 扫描）
+  hosts: windows_hosts
+  gather_facts: false
+  vars:
+    # Variable Group 环境变量（非空）优先，否则使用下列默认值
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
+    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NEWARE', true) }}"
+    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
+    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}.exe"
+    zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('NWReport_DBWB.iconf', true) }}"
+    api_host: "{{ inventory_hostname }}"
+    api_port: "{{ (hostvars[inventory_hostname].api_port | default(0) | int) > 0 | ternary(hostvars[inventory_hostname].api_port | int, (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}"
+    api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
+    api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
+    api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
+    api_start_timeout_seconds: "{{ ((lookup('env', 'API_START_TIMEOUT_SECONDS') | default('', true) | trim) | default(api_timeout_seconds | string, true)) | int }}"
+    api_start_retries: "{{ ((lookup('env', 'API_START_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
+    api_start_retry_delay: "{{ ((lookup('env', 'API_START_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int }}"
+    api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
+    api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
+    export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
+    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
+    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
+    merged_cfg_json: "{{ merged_cfg | to_json }}"
+    log_path: "{{ exe_dir }}\\{{ zip_name }}\\LogData\\NWReport_DBWB{{ lookup('pipe', 'date +%Y%m%d') }}.log"
+    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
+    log_tail_lines: "{{ ((lookup('env', 'LOG_TAIL_LINES') | default('', true) | trim) | default('50', true)) | int }}"
+    log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
+    log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
+    export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
+    export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
+    log_health_tail_lines: "{{ ((lookup('env', 'LOG_HEALTH_TAIL_LINES') | default('', true) | trim) | default('8000', true)) | int }}"
+    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
+
+  tasks:
+    - name: 前置检查：检查程序运行状态
+      win_shell: |
+        $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+        if ($proc) {
+          $info = $proc | Select-Object Id, @{N='Memory_MB';E={[math]::Round($_.WorkingSet64/1MB,2)}}, StartTime
+          $info | ForEach-Object {
+            Write-Output "RUNNING|PID:$($_.Id)|Memory:$($_.Memory_MB)MB|Started:$($_.StartTime)"
+          }
+        } else {
+          Write-Output "NOT_RUNNING"
+        }
+      register: check_result
+      changed_when: false
+      ignore_unreachable: true
+
+    - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          device_status: unhealthy
+          api_status: offline
+          rdp_status: offline
+          winrm_status: offline
+          abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+      when: check_result.unreachable | default(false)
+
+    - name: 前置检查：跳过不可达主机
+      ansible.builtin.meta: end_host
+      when: check_result.unreachable | default(false)
+
+    - name: 状态判断：重启策略判定
+      block:
+        - name: 状态判断：输出程序状态
+          ansible.builtin.debug:
+            msg: "[程序状态] {{ check_result.stdout | trim }}"
+        - name: 状态判断：是否在运行
+          ansible.builtin.set_fact:
+            process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
+        - name: 状态判断：输出重启策略
+          ansible.builtin.debug:
+            msg: >
+              [重启策略] process_running={{ process_running }}；
+              {{ '有运行，先停止再执行重配重启流程' if process_running else '未运行，直接执行重配重启流程' }}
+
+    - name: 进程未运行时标记需要执行重配
+      ansible.builtin.set_fact:
+        need_reconfigure: true
+      when: >
+        check_result is defined and 'stdout' in check_result and
+        'NOT_RUNNING' in check_result.stdout
+
+    - name: 状态判断：综合判断是否需要重配（仅进程已运行时；日志读 Tail）
+      when: >
+        check_result is defined and 'stdout' in check_result and
+        'NOT_RUNNING' not in check_result.stdout
+      block:
+        - name: 状态判断：调用API查询上报状态
+          ansible.builtin.uri:
+            url: "http://{{ api_host }}:{{ api_port }}"
+            method: "POST"
+            body_format: json
+            body:
+              CallType: "{{ api_status_call_type | int }}"
+            headers:
+              Content-Type: "application/json; charset=utf-8"
+            return_content: true
+            status_code: 200
+            timeout: "{{ api_timeout_seconds | int }}"
+          register: api_status_result
+          delegate_to: localhost
+          failed_when: false
+
+        - name: 状态判断：解析API响应
+          ansible.builtin.set_fact:
+            api_status_ok: >-
+              {{
+                api_status_result is defined and
+                not (api_status_result.skipped | default(false)) and
+                api_status_result.status | default(0) | int == 200 and
+                ((api_status_result.content | from_json).ResponeResultCode | default(-1) | int == api_expected_response_code | int) and
+                ((api_status_result.content | from_json).ExecResultCode | default(-1) | int == api_expected_exec_success_code | int)
+              }}
+            is_export_started: >-
+              {{
+                api_status_result is defined and
+                not (api_status_result.skipped | default(false)) and
+                api_status_result.status | default(0) | int == 200 and
+                ((api_status_result.content | from_json).ExecResultData | default(-1) | int) == (export_started | int)
+              }}
+
+        - name: 状态判断：检查日志上报状态（Tail + 时间窗口；避免整文件扫描）
+          environment:
+            LOG_HEALTH_KEYWORD: "{{ log_success_keyword | default('', true) }}"
+          win_shell: |
+            $logDir = "{{ exe_dir ~ '\\' ~ zip_name ~ '\\LogData' }}"
+            $tailN = {{ log_health_tail_lines | int }}
+            $recentMin = {{ log_health_recent_minutes | int }}
+            $keyword = [string]$env:LOG_HEALTH_KEYWORD
+            $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } |
+              Sort-Object LastWriteTime -Descending
+            if (-not $logFiles -or $logFiles.Count -eq 0) {
+              Write-Output "NO_LOGS_FOUND"
+              exit 0
+            }
+            $latestLog = $logFiles[0].FullName
+            if (-not (Test-Path -LiteralPath $latestLog)) {
+              Write-Output "NO_LOGS_FOUND"
+              exit 0
+            }
+            $lines = @(Get-Content -LiteralPath $latestLog -Tail $tailN -ErrorAction SilentlyContinue)
+            if ($lines.Count -eq 0) {
+              Write-Output "NO_KEYWORD"
+              exit 0
+            }
+            $now = Get-Date
+            $cutoff = $now.AddMinutes(-$recentMin)
+            $found = $false
+            foreach ($line in $lines) {
+              if ($line -notmatch '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') { continue }
+              try {
+                $logTime = [datetime]::ParseExact($matches[1], "yyyy-MM-dd HH:mm:ss", $null)
+              } catch { continue }
+              if ($logTime -lt $cutoff) { continue }
+              if ($logTime -gt $now) { continue }
+              if ($keyword.Length -eq 0) { continue }
+              if ($line.IndexOf($keyword, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $found = $true
+                break
+              }
+            }
+            if ($found) { Write-Output "FOUND_KEYWORD" } else { Write-Output "NO_KEYWORD" }
+          register: log_check_result
+          failed_when: false
+
+        - name: 状态判断：双保险判定重配需求
+          ansible.builtin.set_fact:
+            log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
+            need_reconfigure: >-
+              {{
+                not (
+                  ((api_status_ok | default(false) | bool) and (is_export_started | default(false) | bool)) or
+                  ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
+                )
+              }}
+
+        - name: 状态判断：输出综合判断结果
+          ansible.builtin.debug:
+            msg: >
+              [综合判断] 程序状态={{ check_result.stdout | trim | regex_search('^[^|]+') }} |
+              API_OK={{ api_status_ok | default('n/a') }} |
+              已启动上报={{ is_export_started | default('n/a') }} |
+              日志_OK={{ log_status_ok | default('n/a') }} |
+              Tail行数={{ log_health_tail_lines }} |
+              需要重配={{ need_reconfigure }}
+
+    
+    - name: 诊断：是否需要重配（false 时整块「重配执行」跳过）
+      ansible.builtin.debug:
+        msg: >-
+          [CFG-DIAG] need_reconfigure={{ need_reconfigure | default(false) }} host={{ inventory_hostname }}
+      when: check_result is defined and not (check_result.unreachable | default(false))
+
+
+
+    - name: 重配执行：执行重配重启流程
+      when: need_reconfigure | bool
+      block:
+        - name: 重配执行：停止程序（仅在运行中执行）
+          win_shell: |
+            $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+            if ($proc) {
+              try {
+                Stop-Process -Name "{{ exe_name }}" -Force -ErrorAction Stop
+                Start-Sleep -Seconds 2
+                $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+                if (-not $verify) {
+                  Write-Output "STOPPED"
+                } else {
+                  taskkill /F /T /IM "{{ exe_name }}.exe" 2>$null
+                  Start-Sleep -Seconds 2
+                  $verify2 = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+                  if (-not $verify2) {
+                    Write-Output "STOPPED_BY_TASKKILL"
+                  } else {
+                    Write-Output "STOP_FAILED"
+                  }
+                }
+              } catch {
+                Write-Output "STOP_ERROR:$($_.Exception.Message)"
+              }
+            } else {
+              Write-Output "NOT_RUNNING"
+            }
+          register: stop_result
+          when: process_running | bool
+          failed_when: >
+            stop_result is defined and 'stdout' in stop_result and
+            ('STOP_FAILED' in stop_result.stdout or 'STOP_ERROR' in stop_result.stdout)
+
+        - name: 重配执行：获取当前用户名
+          win_shell: |
+            # 仅 Write-Output 一行用户名到 stdout；排障用 Console.Error，避免污染 path 模板
+            $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+              if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+            } |
+            Where-Object { $_ } |
+            Select-Object -First 1
+
+            $resolved = $null
+            $source = 'unknown'
+            if ($explorerUser) {
+              $resolved = $explorerUser
+              $source = 'explorer_GetOwner'
+            } else {
+              $logon = Get-ItemProperty `
+                -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
+                -ErrorAction SilentlyContinue
+
+              if ($logon -and $logon.LastLoggedOnSAMUser) {
+                $resolved = $logon.LastLoggedOnSAMUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnSAMUser'
+              } elseif ($logon -and $logon.LastLoggedOnUser) {
+                $resolved = $logon.LastLoggedOnUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnUser'
+              } else {
+                $resolved = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+                $source = 'ansible_user_fallback'
+              }
+            }
+
+            [Console]::Error.WriteLine("[get_username] source=$source resolved_user=$resolved")
+            # 以下多行供 Semaphore/Ansible 日志直接查看；最后一行必须是纯用户名（供 set_fact 取 stdout_lines|last）
+            Write-Output "RECONFIG_LOG_PROFILE_USER=$resolved"
+            Write-Output "RECONFIG_LOG_SOURCE=$source"
+            $bd = "C:\Users\$resolved\Documents\NEWARE\BTSClient"
+            Write-Output "RECONFIG_LOG_USER_BTS_DIR=$bd"
+            Write-Output "RECONFIG_LOG_USER_CFG=$bd\{{ config_file_name }}"
+            Write-Output "RECONFIG_LOG_PUBLIC_CFG=C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
+            Write-Output "RECONFIG_LOG_SRC={{ zip_path }}/{{ config_file_name }}"
+            Write-Output $resolved
+          register: get_username_result
+          changed_when: false
+
+        - name: 重配执行：规范化配置文件路径变量
+          ansible.builtin.set_fact:
+            _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+        - name: 重配执行：派生 BTSClient 与配置文件完整路径
+          ansible.builtin.set_fact:
+            _reconfig_user_bts_dir: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient"
+            _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
+
+        - name: 重配执行：DEBUG 用户名与路径（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }}"
+              - "[DEBUG-重配-用户] get_username stdout_lines={{ get_username_result.stdout_lines | default([]) }}"
+              - "[DEBUG-重配-路径] user_cfg={{ _reconfig_user_cfg_file }}"
+              - "[DEBUG-重配-路径] public_cfg={{ _reconfig_public_cfg_file }}"
+              - "[DEBUG-重配-路径] zip_src={{ _reconfig_cfg_src }}"
+
+        - name: 重配执行：创建配置文件目录（当前用户）
+          ansible.builtin.win_file:
+            path: "{{ _reconfig_user_bts_dir }}"
+            state: directory
+
+        - name: 重配执行：创建配置文件目录（Public用户）
+          ansible.builtin.win_file:
+            path: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient"
+            state: directory
+
+        - name: 重配执行：从服务器复制配置文件（当前用户）
+          ansible.builtin.win_copy:
+            src: "{{ _reconfig_cfg_src }}"
+            dest: "{{ _reconfig_user_cfg_file }}"
+          register: config_copy_result_user
+
+        - name: 重配执行：从服务器复制配置文件（Public用户）
+          ansible.builtin.win_copy:
+            src: "{{ _reconfig_cfg_src }}"
+            dest: "{{ _reconfig_public_cfg_file }}"
+          register: config_copy_result_public
+
+        - name: 重配执行：修改配置文件（对接默认配置+设备自定义配置）
+          win_shell: |
+            # 只在值发生变化时打印 CFG_CHANGE；未变化不输出，避免日志噪音
+            function Upsert-SectionKey {
+              param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, [string]$value, [string]$logPath)
+              $secStart = -1
+              $secEnd = $lines.Count
+              for ($i = 0; $i -lt $lines.Count; $i++) {
+                $trim = $lines[$i].Trim()
+                if ($trim -eq "[$section]") {
+                  $secStart = $i
+                  for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                    if ($lines[$j].Trim() -match "^\[.*\]$") { $secEnd = $j; break }
+                  }
+                  break
+                }
+              }
+              $newLine = "$key=$value"
+              if ($secStart -lt 0) {
+                if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
+                $lines.Add("[$section]")
+                $lines.Add($newLine)
+                Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine (new section)"
+                return
+              }
+              for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
+                if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") {
+                  $oldLine = $lines[$k]
+                  if ($oldLine -ne $newLine) {
+                    $oldVal = ($oldLine -replace "^$([regex]::Escape($key))=", "")
+                    $lines[$k] = $newLine
+                    Write-Output "CFG_CHANGE|$logPath|[$section]|${key}: $oldVal -> $value"
+                  }
+                  return
+                }
+              }
+              $lines.Insert($secEnd, $newLine)
+              Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine"
+            }
+
+            # 把 PSCustomObject(json) 与 Hashtable 递归转为 Hashtable，兼容 Windows PowerShell 5.1（无 -AsHashtable）
+            function ConvertTo-HT {
+              param($obj)
+              if ($null -eq $obj) { return @{} }
+              if ($obj -is [System.Collections.IDictionary]) {
+                $h = @{}
+                foreach ($k in $obj.Keys) {
+                  $val = $obj[$k]
+                  if ($val -is [pscustomobject] -or $val -is [System.Collections.IDictionary]) { $val = ConvertTo-HT $val }
+                  $h[[string]$k] = $val
+                }
+                return $h
+              }
+              if ($obj -is [pscustomobject]) {
+                $h = @{}
+                foreach ($p in $obj.psobject.Properties) {
+                  $val = $p.Value
+                  if ($val -is [pscustomobject] -or $val -is [System.Collections.IDictionary]) { $val = ConvertTo-HT $val }
+                  $h[[string]$p.Name] = $val
+                }
+                return $h
+              }
+              return $obj
+            }
+
+            # ReportApiSettings 这类 "key=<json对象>" 的整行：解析已有 JSON、深合并更新、再压成单行 JSON 写回。
+            # 打印**逐字段差异**（仅出现实际变化的子键），避免把整段 JSON 前后都贴一遍。
+            function Merge-JsonKey {
+              param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, $updates, [string]$logPath)
+              $updHT = ConvertTo-HT $updates
+              $secStart = -1
+              $secEnd = $lines.Count
+              for ($i = 0; $i -lt $lines.Count; $i++) {
+                $trim = $lines[$i].Trim()
+                if ($trim -eq "[$section]") {
+                  $secStart = $i
+                  for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                    if ($lines[$j].Trim() -match "^\[.*\]$") { $secEnd = $j; break }
+                  }
+                  break
+                }
+              }
+              $existingIdx = -1
+              $existing = @{}
+              if ($secStart -ge 0) {
+                for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
+                  if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") { $existingIdx = $k; break }
+                }
+                if ($existingIdx -ge 0) {
+                  $raw = $lines[$existingIdx]
+                  $eq = $raw.IndexOf("=")
+                  if ($eq -gt 0) {
+                    $jsonText = $raw.Substring($eq + 1).Trim()
+                    try {
+                      $parsed = ConvertFrom-Json -InputObject $jsonText
+                      $existing = ConvertTo-HT $parsed
+                    } catch {
+                      Write-Output "CFG_CHANGE|$logPath|[$section]|$key (parse failed: $($_.Exception.Message))"
+                    }
+                  }
+                }
+              }
+              $merged = @{}
+              foreach ($k0 in @($existing.Keys)) { $merged[[string]$k0] = $existing[$k0] }
+              foreach ($u in @($updHT.Keys)) { $merged[[string]$u] = $updHT[$u] }
+              $newJson = ($merged | ConvertTo-Json -Compress -Depth 10)
+              $newLine = "$key=$newJson"
+              # 计算变化的子键（只看本次 updates 涉及的字段）
+              $changes = New-Object System.Collections.Generic.List[string]
+              foreach ($u in @($updHT.Keys)) {
+                $newV = $updHT[$u]
+                $newS = ConvertTo-Json -Compress -Depth 5 -InputObject $newV
+                if (-not $existing.ContainsKey($u)) {
+                  $changes.Add("${u}: <absent> -> $newS")
+                } else {
+                  $oldV = $existing[$u]
+                  $oldS = ConvertTo-Json -Compress -Depth 5 -InputObject $oldV
+                  if ($oldS -ne $newS) { $changes.Add("${u}: $oldS -> $newS") }
+                }
+              }
+              if ($existingIdx -ge 0) {
+                if ($lines[$existingIdx] -ne $newLine) {
+                  $lines[$existingIdx] = $newLine
+                  foreach ($c in $changes) { Write-Output "CFG_CHANGE|$logPath|[$section]|$key.$c" }
+                }
+                return
+              }
+              if ($secStart -lt 0) {
+                if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
+                $lines.Add("[$section]")
+                $lines.Add($newLine)
+                Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine (new section)"
+                return
+              }
+              $lines.Insert($secEnd, $newLine)
+              Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine"
+            }
+
+            function Update-ConfigFile {
+              param([string]$configPath, [string]$cfgJson, [string]$calbIp, [int]$serverPort, [string]$fromDate, [string]$toDate)
+              if (-not (Test-Path $configPath)) {
+                Write-Output "CONFIG_NOT_FOUND:$configPath"
+                return $false
+              }
+              try {
+                $rawCfg = ConvertFrom-Json -InputObject $cfgJson
+                $cfg = ConvertTo-HT $rawCfg
+                if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
+                $sysCfg = $cfg["SystemConfig"]
+                # ReportApiSettings 是 SystemConfig 下的整段 JSON 值：合并 ServerIpAddrStr/ServerPort，保留其余字段
+                $reportApi = @{}
+                if ($sysCfg.ContainsKey("ReportApiSettings")) { $reportApi = ConvertTo-HT $sysCfg["ReportApiSettings"] }
+                # 兼容：旧的 cfg 顶层平铺 ServerIpAddrStr/ServerPort（不再写入文件根，统一进 ReportApiSettings）
+                if (-not $reportApi.ContainsKey("ServerIpAddrStr") -or [string]::IsNullOrEmpty([string]$reportApi["ServerIpAddrStr"])) {
+                  if ($sysCfg.ContainsKey("ServerIpAddrStr") -and -not [string]::IsNullOrEmpty([string]$sysCfg["ServerIpAddrStr"])) {
+                    $reportApi["ServerIpAddrStr"] = [string]$sysCfg["ServerIpAddrStr"]
+                  } else {
+                    $reportApi["ServerIpAddrStr"] = $calbIp
+                  }
+                }
+                if (-not $reportApi.ContainsKey("ServerPort")) {
+                  if ($sysCfg.ContainsKey("ServerPort")) { $reportApi["ServerPort"] = [int]$sysCfg["ServerPort"] }
+                  else { $reportApi["ServerPort"] = [int]$serverPort }
+                } else {
+                  try { $reportApi["ServerPort"] = [int]$reportApi["ServerPort"] } catch {}
+                }
+                # 默认开启 API 回调；如 merged_cfg 显式设置则尊重用户选择
+                if (-not $reportApi.ContainsKey("EnableReportApiCall")) {
+                  $reportApi["EnableReportApiCall"] = $true
+                } else {
+                  $rawEnable = $reportApi["EnableReportApiCall"]
+                  if ($rawEnable -is [string]) {
+                    $reportApi["EnableReportApiCall"] = ($rawEnable -match '^(?i:true|1|yes)$')
+                  } else {
+                    try { $reportApi["EnableReportApiCall"] = [bool]$rawEnable } catch { $reportApi["EnableReportApiCall"] = $true }
+                  }
+                }
+                $sysCfg.Remove("ServerIpAddrStr") | Out-Null
+                $sysCfg.Remove("ServerPort") | Out-Null
+                $sysCfg.Remove("EnableReportApiCall") | Out-Null
+                $sysCfg["ReportApiSettings"] = $reportApi
+                if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
+                if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
+                $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
+                foreach ($section in @($cfg.Keys)) {
+                  $vals = $cfg[$section]
+                  if (-not ($vals -is [System.Collections.IDictionary])) { continue }
+                  foreach ($k in @($vals.Keys)) {
+                    $v = $vals[$k]
+                    if ($v -is [System.Collections.IDictionary]) {
+                      Merge-JsonKey -lines $lines -section $section -key ([string]$k) -updates $v -logPath $configPath
+                    } else {
+                      Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$v) -logPath $configPath
+                    }
+                  }
+                }
+                $null = $lines | Set-Content -LiteralPath $configPath
+                Write-Output "CONFIG_MODIFIED|$configPath"
+                return $true
+              } catch {
+                Write-Output "CONFIG_MODIFY_ERROR:$configPath|$($_.Exception.Message)"
+                return $false
+              }
+            }
+
+            $calbIp = "{{ merged_system_config.ServerIpAddrStr | default(api_host) }}"
+            $serverPort = [int]"{{ api_port | int }}"
+            $fromDate = "{{ merged_system_config.HisDataFromTime | default(his_data_from_time) }}"
+            if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
+            $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
+            if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
+            $username = "{{ _reconfig_profile_user }}"
+            $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
+            $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
+            # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
+            $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
+            Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
+            Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
+            Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort|EnableReportApiCall=true"
+            $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+            $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+            if (-not $userResult -and -not $publicResult) { exit 1 }
+            Write-Output "RECONFIG_CFG_RUN_SUMMARY|user_ok=$userResult|public_ok=$publicResult"
+          register: config_result
+          failed_when: >
+            config_result is defined and 'stdout' in config_result and
+            ('CONFIG_MODIFY_ERROR' in config_result.stdout)
+
+        # win_shell 已经只输出"实际变化(CFG_CHANGE) + 路径 + 摘要"，直接 dump stdout_lines，不再做正则过滤
+        - name: 重配执行：配置修改变更明细（仅打印实际变化与摘要）
+          ansible.builtin.debug:
+            msg:
+              - "stdout_lines={{ config_result.stdout_lines | default([]) }}"
+              - "stderr={{ (config_result.stderr | default('') | string | trim) }}"
+
+        - name: 重配执行：检查程序文件是否存在
+          win_shell: |
+            if (Test-Path "{{ exe_path }}") {
+              Write-Output "EXE_FOUND"
+            } else {
+              Write-Output "EXE_NOT_FOUND"
+            }
+          register: exe_check_result
+          changed_when: false
+
+        - name: 重配执行：检查本地压缩包是否存在
+          win_shell: |
+            if (Test-Path "{{ exe_dir }}\\{{ zip_name }}.zip") {
+              Write-Output "ZIP_FOUND"
+            } else {
+              Write-Output "ZIP_NOT_FOUND"
+            }
+          register: zip_local_check_result
+          changed_when: false
+          when: "'EXE_NOT_FOUND' in (exe_check_result.stdout | default(''))"
+
+        - name: 重配执行：创建程序根目录
+          ansible.builtin.win_file:
+            path: "{{ exe_dir }}"
+            state: directory
+          when: "'EXE_NOT_FOUND' in (exe_check_result.stdout | default(''))"
+
+        - name: 重配执行：从服务器复制安装包
+          ansible.builtin.win_copy:
+            src: "{{ zip_path }}/{{ zip_name }}.zip"
+            dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
+          register: zip_copy_result
+          when: >
+            'EXE_NOT_FOUND' in (exe_check_result.stdout | default('')) and
+            (zip_local_check_result is skipped or 'ZIP_NOT_FOUND' in (zip_local_check_result.stdout | default('')))
+
+        - name: 重配执行：解压程序包
+          win_shell: |
+            $zipPath = "{{ exe_dir }}\\{{ zip_name }}.zip"
+            $destDir = "{{ exe_dir }}"
+            if (-not (Test-Path $destDir)) {
+              New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            }
+            try {
+              Expand-Archive -Path $zipPath -DestinationPath $destDir -Force
+              Write-Output "EXTRACT_OK"
+            } catch {
+              Write-Output "EXTRACT_ERROR:$($_.Exception.Message)"
+            }
+          register: extract_result
+          failed_when: >
+            extract_result is defined and 'stdout' in extract_result and
+            'EXTRACT_ERROR' in extract_result.stdout
+          when: "'EXE_NOT_FOUND' in (exe_check_result.stdout | default(''))"
+
+
+        - name: 重配执行：启动程序
+          when: >
+            'EXE_FOUND' in (exe_check_result.stdout | default('')) or
+            (extract_result is defined and not (extract_result.skipped | default(false)) and
+             'EXTRACT_OK' in (extract_result.stdout | default('')))
+          win_shell: |
+            if (Test-Path "{{ exe_path }}") {
+              try {
+                $taskName = "Start-{{ exe_name }}"
+                if ("{{ exe_args }}" -ne "") {
+                  $action = New-ScheduledTaskAction -Execute "{{ exe_path }}" -Argument "{{ exe_args }}"
+                } else {
+                  $action = New-ScheduledTaskAction -Execute "{{ exe_path }}"
+                }
+                $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date)
+                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+                $userId = "{{ _reconfig_profile_user }}"
+                $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
+                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
+                $taskStatus = (Get-ScheduledTask -TaskName $taskName).State
+                if ($taskStatus -ne "Running") {
+                  Start-ScheduledTask -TaskName $taskName
+                }
+                Start-Sleep -Seconds {{ restart_delay }}
+                $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+                if ($verify) {
+                  Write-Output "VERIFY_OK|PID:$($verify.Id)"
+                } else {
+                  Write-Output "VERIFY_FAILED"
+                }
+              } catch {
+                Write-Output "START_ERROR:$($_.Exception.Message)"
+              }
+            } else {
+              Write-Output "EXE_NOT_FOUND"
+            }
+          register: relaunch_result
+          failed_when: >
+            relaunch_result is defined and 'stdout' in relaunch_result and
+            ('START_ERROR' in relaunch_result.stdout or 'VERIFY_FAILED' in relaunch_result.stdout)
+
+      rescue:
+        - name: 错误处理：重配阶段失败
+          ansible.builtin.set_fact:
+            host_failed_task: "{{ ansible_failed_task.name | default('重配执行') }}"
+            host_failure_reason: "{{ (ansible_failed_result.stdout | default('')) | trim | default(ansible_failed_result.msg | default('未知错误'), true) }}"
+
+        - name: 错误处理：输出重配失败信息
+          ansible.builtin.debug:
+            msg: "[失败] 主机 {{ inventory_hostname }} 重配阶段 [{{ host_failed_task }}]: {{ host_failure_reason }}"
+
+    - name: 启动验证：验证数据上报启动状态
+      when:
+        - need_reconfigure | bool
+        - host_failure_reason is not defined
+      block:
+        - name: 启动验证：调用启动API
+          ansible.builtin.uri:
+            url: "http://{{ api_host }}:{{ api_port }}"
+            method: "POST"
+            body_format: json
+            body:
+              CallType: "{{ api_start_call_type | int }}"
+            headers:
+              Content-Type: "application/json; charset=utf-8"
+            return_content: true
+            status_code: 200
+            timeout: "{{ api_start_timeout_seconds | int }}"
+          register: api_start_result
+          delegate_to: localhost
+          failed_when: false
+          until: (api_start_result.status | default(-1) | int) == 200
+          retries: "{{ api_start_retries | int }}"
+          delay: "{{ api_start_retry_delay | int }}"
+
+        - name: 启动验证：DEBUG 启动 POST API 响应（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-API] POST 启动 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_start_call_type }}"
+              - "[DEBUG-API] POST 启动 attempts={{ api_start_result.attempts | default(1) }} retries_cfg={{ api_start_retries }} delay_s={{ api_start_retry_delay }}"
+              - "[DEBUG-API] POST 启动 http_status={{ api_start_result.status | default('n/a') }}"
+              - "[DEBUG-API] POST 启动 response_body={{ api_start_result.content | default('') }}"
+
+        - name: 启动验证：调用API查询状态
+          ansible.builtin.uri:
+            url: "http://{{ api_host }}:{{ api_port }}"
+            method: "POST"
+            body_format: json
+            body:
+              CallType: "{{ api_status_call_type | int }}"
+            headers:
+              Content-Type: "application/json"
+            return_content: true
+            status_code: 200
+            timeout: 10
+          register: api_check_after
+          delegate_to: localhost
+          failed_when: false
+
+        - name: 启动验证：DEBUG 状态查询 POST API 响应（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-API] POST 状态 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
+              - "[DEBUG-API] POST 状态 http_status={{ api_check_after.status | default('n/a') }}"
+              - "[DEBUG-API] POST 状态 response_body={{ api_check_after.content | default('') }}"
+
+        # 使用字面量 true/false 的 set_fact，避免 "{{ false }}" 变成字符串 "False" 导致 when 误判为真
+        - name: 启动验证：判断API是否成功（布尔）
+          ansible.builtin.set_fact:
+            api_final_ok: true
+          when:
+            - api_check_after.status | default(0) | int == 200
+            - (api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int
+
+        - name: 启动验证：判断API未成功（布尔）
+          ansible.builtin.set_fact:
+            api_final_ok: false
+          when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
+
+        - name: 启动验证：日志轮询确认
+          win_shell: |
+            $logPath = "{{ log_path }}"
+            $keyword = "{{ log_success_keyword }}"
+            if (!(Test-Path $logPath)) { exit 1 }
+            $content = Get-Content $logPath -Tail {{ log_tail_lines }}
+            $match = $content | Select-String -Pattern $keyword
+            if ($match) { Write-Output "LOG_OK" } else { exit 1 }
+          register: log_poll
+          retries: "{{ log_poll_retries }}"
+          delay: "{{ log_poll_delay }}"
+          until: log_poll.rc == 0
+          when: not api_final_ok
+          failed_when: false
+
+        - name: 启动验证：综合判断启动结果（成功）
+          ansible.builtin.set_fact:
+            final_start_ok: true
+          when: api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0)
+
+        - name: 启动验证：综合判断启动结果（失败）
+          ansible.builtin.set_fact:
+            final_start_ok: false
+          when: not (api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0))
+
+        - name: 启动验证：DEBUG 验证结果汇总（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-启动验证] final_start_ok={{ final_start_ok }} api_final_ok={{ api_final_ok }}"
+              - "[DEBUG-启动验证] 原始 API 响应见上两条 DEBUG-API 任务"
+
+        - name: 启动验证：启动失败则终止
+          ansible.builtin.fail:
+            msg: |
+              [失败] 启动验证失败（双保险判定失败）
+              API结果: {{ api_final_ok }}
+              日志结果: {{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
+          when: not final_start_ok
+
+      rescue:
+        - name: 错误处理：启动验证阶段失败
+          ansible.builtin.set_fact:
+            host_failed_task: "{{ ansible_failed_task.name | default('启动验证') }}"
+            host_failure_reason: "{{ (ansible_failed_result.stdout | default('')) | trim | default(ansible_failed_result.msg | default('未知错误'), true) }}"
+
+        - name: 错误处理：输出验证失败信息
+          ansible.builtin.debug:
+            msg: "[失败] 主机 {{ inventory_hostname }} 验证阶段 [{{ host_failed_task }}]: {{ host_failure_reason }}"
+
+  post_tasks:
+    - name: 登记 Semaphore 回调行
+      when: not (check_result.unreachable | default(false))
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          device_status: >-
+            {% if host_failure_reason is defined %}unhealthy
+            {% elif check_result is not defined %}unhealthy
+            {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}unhealthy
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
+            {% elif api_final_ok is defined and not api_final_ok %}unhealthy
+            {% elif final_start_ok is defined and not final_start_ok %}unhealthy
+            {% else %}healthy{% endif %}
+          api_status: >-
+            {% if check_result.unreachable | default(false) %}offline{% elif host_failure_reason is defined %}offline{% elif api_final_ok is defined %}{{ 'online' if api_final_ok else 'offline' }}{% endif %}
+          rdp_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
+          winrm_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
+          abnormal_reason: >-
+            {% if host_failure_reason is defined %}{{ host_failure_reason }}
+            {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}Process was not running and start/verify did not succeed
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}Reconfigure/start verification failed
+            {% endif %}
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 执行 bulk 回调
+      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml

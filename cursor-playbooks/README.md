@@ -10,6 +10,7 @@ Play-level defaults use **`lookup('env', 'VAR')`**: if the Variable Group / temp
 - **`device_status.yml`**, **`device_start.yml`**, **`device_restart.yml`**: each resolves the HTTP **`api_port`** as **device inventory/extra-var `api_port` first** (Semaphore injects it from the device record when set), then Variable Group **`API_PORT`**, then default **9002**. Shared vars include `EXE_NAME`, `EXE_DIR`, `ZIP_NAME`, `API_STATUS_CALL_TYPE`, `API_TIMEOUT_SECONDS`, `API_EXPECTED_RESPONSE_CODE`, `API_EXPECTED_EXEC_SUCCESS_CODE`, `EXPORT_STARTED`.
 - **`device_start.yml`**: the shared vars above plus `ZIP_PATH`, `EXE_ARGS`, `CONFIG_FILE_NAME`, `API_START_CALL_TYPE`, `EXPORT_NOT_STARTED`, `EXPORT_STARTING`, `POLL_RETRIES`, `POLL_DELAY`, `HIS_DATA_FROM_TIME`, `RESTART_DELAY`, `LOG_SUCCESS_KEYWORD`, `LOG_TAIL_LINES`, `LOG_POLL_RETRIES`, `LOG_POLL_DELAY`, **`API_START_TIMEOUT_SECONDS`** (per-request timeout for the start API call; defaults to `API_TIMEOUT_SECONDS`), **`API_START_RETRIES`** / **`API_START_RETRY_DELAY`** (`until` retries on the “启动验证：调用启动API” `uri` task; defaults `5` / `3`).
 - **`device_restart.yml`**: same pattern as start where applicable (`EXPORT_STARTED`, `HIS_DATA_FROM_TIME`, `RESTART_DELAY`, log-related env vars, **`API_START_TIMEOUT_SECONDS`**, **`API_START_RETRIES`**, **`API_START_RETRY_DELAY`**, etc.).
+- **`check_restart_redeploy.yml`**: extends **`device_restart.yml`** with a **pre-gate**: when the process is already running, it calls the status API and scans **only the tail** of the latest `NWReport_DBWB*.log` within a **recent time window** before deciding **`need_reconfigure`**. If the process is **not** running, it sets **`need_reconfigure: true`** immediately. The reconfigure + start-verify blocks match **`device_restart.yml`** (username resolution, `ReportApiSettings` merge, `api_status` callback, optional **zip copy + Expand-Archive** when the EXE is missing). Extra env vars: **`LOG_HEALTH_TAIL_LINES`** (default `8000`), **`LOG_HEALTH_RECENT_MINUTES`** (default `8`), plus **`EXPORT_NOT_STARTED`** / **`EXPORT_STARTING`** for parity with **`device_start.yml`**.
 - **`device_stop.yml`**: `EXE_NAME`.
 
 Callback task env: see table above (`SEMAPHORE_*`). `tasks/semaphore_bulk_put_from_hostvars.yml` uses the same **empty-env → default** rule for `SEMAPHORE_URL`.
@@ -27,7 +28,7 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 | `SEMAPHORE_URL` | Optional; default `http://127.0.0.1:3000` (must reach Semaphore from the Ansible controller) |
 
 - **`device_discovery.yml`** — **No** bulk callback: only prints a JSON array for the UI to parse; persistence is **Import selected** → API `discovery/import`.
-- **`device_status.yml`**, **`device_start.yml`**, **`device_restart.yml`**, **`device_stop.yml`** — Second play on `localhost` runs `tasks/semaphore_bulk_put_from_hostvars.yml` using per-host `semaphore_callback_row`.
+- **`device_status.yml`**, **`device_start.yml`**, **`device_restart.yml`**, **`device_stop.yml`**, **`check_restart_redeploy.yml`** — Second play on `localhost` runs `tasks/semaphore_bulk_put_from_hostvars.yml` using per-host `semaphore_callback_row`.
 
 Patrol all sets devices to `checking` first; the status template should run a playbook like **`device_status.yml`** so the callback clears `checking` to healthy/unhealthy.
 
