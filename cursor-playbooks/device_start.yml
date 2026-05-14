@@ -347,6 +347,23 @@
               Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|INSERT_NEW_LINE|$key=$value"
             }
 
+            # 把 PSCustomObject(json) 与 Hashtable 都转为 Hashtable，兼容 Windows PowerShell 5.1（无 -AsHashtable）
+            function ConvertTo-HT {
+              param($obj)
+              if ($null -eq $obj) { return @{} }
+              if ($obj -is [System.Collections.IDictionary]) {
+                $h = @{}
+                foreach ($k in $obj.Keys) { $h[[string]$k] = $obj[$k] }
+                return $h
+              }
+              if ($obj -is [pscustomobject]) {
+                $h = @{}
+                foreach ($p in $obj.psobject.Properties) { $h[[string]$p.Name] = $p.Value }
+                return $h
+              }
+              return @{}
+            }
+
             function Update-ConfigFile {
               param([string]$configPath, [string]$cfgJson, [string]$calbIp, [string]$fromDate, [string]$toDate)
               if (-not (Test-Path $configPath)) {
@@ -356,7 +373,10 @@
               }
               Write-Output "RECONFIG_CFG_DEBUG|PATH_OK|$configPath"
               try {
-                $cfg = ConvertFrom-Json -InputObject $cfgJson -AsHashtable
+                # Windows PowerShell 5.1 has no -AsHashtable; convert manually.
+                $rawCfg = ConvertFrom-Json -InputObject $cfgJson
+                $cfg = ConvertTo-HT $rawCfg
+                foreach ($section in @($cfg.Keys)) { $cfg[$section] = ConvertTo-HT $cfg[$section] }
                 Write-Output "RECONFIG_CFG_DEBUG|JSON_OK|sections=$($cfg.Keys.Count)"
                 if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
                 if (-not $cfg["SystemConfig"].ContainsKey("ServerIpAddrStr")) { $cfg["SystemConfig"]["ServerIpAddrStr"] = $calbIp }
@@ -374,9 +394,9 @@
                 Write-Output "RECONFIG_CFG_PLAN_END|$configPath"
                 $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
                 Write-Output "RECONFIG_CFG_DEBUG|FILE_READ|$configPath|line_count=$($lines.Count)"
-                foreach ($section in $cfg.Keys) {
+                foreach ($section in @($cfg.Keys)) {
                   $vals = $cfg[$section]
-                  foreach ($k in $vals.Keys) {
+                  foreach ($k in @($vals.Keys)) {
                     Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$vals[$k]) -logPath $configPath
                   }
                 }
