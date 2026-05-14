@@ -40,6 +40,7 @@ func normalizeDeviceHealthStatus(status db.DeviceStatus) db.DeviceStatus {
 func normalizeDeviceStatuses(device *db.Device) {
 	device.RDPStatus = normalizeProtocolStatus(device.RDPStatus)
 	device.WinRMStatus = normalizeProtocolStatus(device.WinRMStatus)
+	device.APIStatus = normalizeProtocolStatus(device.APIStatus)
 	device.DeviceStatus = normalizeDeviceHealthStatus(device.DeviceStatus)
 }
 
@@ -80,6 +81,9 @@ func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSetti
 	}
 	if device.RDPPort <= 0 || device.RDPPort > 65535 {
 		device.RDPPort = db.DefaultDeviceRDPPort
+	}
+	if device.APIPort <= 0 || device.APIPort > 65535 {
+		device.APIPort = db.DefaultDeviceAPIPort
 	}
 }
 
@@ -139,6 +143,9 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	parts = append(parts, "ansible_port="+strconv.Itoa(port))
 	parts = append(parts, "ansible_winrm_server_cert_validation="+certValidation)
 	parts = append(parts, "rdp_port="+strconv.Itoa(db.EffectiveDeviceRDPPort(dev)))
+	if ap := db.EffectiveDeviceAPIPortForInventory(dev); ap > 0 {
+		parts = append(parts, "api_port="+strconv.Itoa(ap))
+	}
 	return strings.Join(parts, " ")
 }
 
@@ -255,6 +262,7 @@ func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
 		DeviceStatus:      strings.TrimSpace(q.Get("device_status")),
 		RDPStatus:         strings.TrimSpace(q.Get("rdp_status")),
 		WinRMStatus:       strings.TrimSpace(q.Get("winrm_status")),
+		APIStatus:         strings.TrimSpace(q.Get("api_status")),
 	}
 	if f.DeviceStatus == string(db.DeviceStatusUnknown) {
 		f.DeviceStatus = string(db.DeviceStatusUnhealthy)
@@ -265,8 +273,11 @@ func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
 	if f.WinRMStatus == string(db.DeviceStatusUnknown) {
 		f.WinRMStatus = string(db.DeviceStatusOffline)
 	}
+	if f.APIStatus == string(db.DeviceStatusUnknown) {
+		f.APIStatus = string(db.DeviceStatusOffline)
+	}
 	if f.HostnameSubstring == "" && f.IPSubstring == "" && f.DeviceStatus == "" &&
-		f.RDPStatus == "" && f.WinRMStatus == "" {
+		f.RDPStatus == "" && f.WinRMStatus == "" && f.APIStatus == "" {
 		return nil
 	}
 	return f
@@ -456,6 +467,7 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
 	device.RDPStatus = old.RDPStatus
 	device.WinRMStatus = old.WinRMStatus
+	device.APIStatus = old.APIStatus
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = old.DeviceStatus
 	}
@@ -712,11 +724,15 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	if subnet == "" {
 		subnet = strings.TrimSpace(body.NetworkCIDR)
 	}
-	if subnet != "" {
-		// Keep both keys for compatibility with existing templates.
-		extraVars["subnet"] = subnet
-		extraVars["network_cidr"] = subnet
+	if subnet == "" {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "subnet is required (CIDR or single IP)",
+		})
+		return
 	}
+	// Keep both keys for compatibility with existing templates.
+	extraVars["subnet"] = subnet
+	extraVars["network_cidr"] = subnet
 
 	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
 	if err != nil {
@@ -780,6 +796,7 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		// manually configured ports when discovery JSON does not specify ports.
 		dev.AnsiblePort = 0
 		dev.RDPPort = 0
+		dev.APIPort = 0
 		if useIPFilter && !selectedByIP[dev.IPAddress] {
 			continue
 		}
@@ -855,6 +872,9 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		if u.WinRMStatus != "" {
 			dev.WinRMStatus = u.WinRMStatus
 		}
+		if u.APIStatus != "" {
+			dev.APIStatus = u.APIStatus
+		}
 		normalizeDeviceStatuses(&dev)
 		dev.AbnormalReason = u.AbnormalReason
 		dev.LastUpdated = &refreshed
@@ -870,6 +890,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 				Status:         u.Status,
 				RDPStatus:      dev.RDPStatus,
 				WinRMStatus:    dev.WinRMStatus,
+				APIStatus:      dev.APIStatus,
 				AbnormalReason: u.AbnormalReason,
 				Payload:        string(payloadBytes),
 				Created:        refreshed,
@@ -944,12 +965,18 @@ func normalizeBulkUpdates(updates []db.DeviceStatusUpdate) {
 		if updates[i].WinRMStatus != "" {
 			updates[i].WinRMStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].WinRMStatus))))
 		}
+		if updates[i].APIStatus != "" {
+			updates[i].APIStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].APIStatus))))
+		}
 		updates[i].Status = normalizeDeviceHealthStatus(updates[i].Status)
 		if updates[i].RDPStatus != "" {
 			updates[i].RDPStatus = normalizeProtocolStatus(updates[i].RDPStatus)
 		}
 		if updates[i].WinRMStatus != "" {
 			updates[i].WinRMStatus = normalizeProtocolStatus(updates[i].WinRMStatus)
+		}
+		if updates[i].APIStatus != "" {
+			updates[i].APIStatus = normalizeProtocolStatus(updates[i].APIStatus)
 		}
 	}
 }
@@ -962,6 +989,7 @@ type bulkDeviceStatusUpdate struct {
 	RDP            string     `json:"rdp"`
 	WinRMStatus    string     `json:"winrm_status"`
 	WINRM          string     `json:"winrm"`
+	APIStatus      string     `json:"api_status"`
 	AbnormalReason *string    `json:"abnormal_reason,omitempty"`
 	Reason         *string    `json:"reason,omitempty"`
 	CheckedAt      *time.Time `json:"checked_at,omitempty"`
@@ -982,6 +1010,7 @@ func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
 	if strings.TrimSpace(winrm) == "" {
 		winrm = u.WINRM
 	}
+	api := u.APIStatus
 	reason := u.AbnormalReason
 	if reason == nil {
 		reason = u.Reason
@@ -999,6 +1028,7 @@ func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
 		Status:         db.DeviceStatus(status),
 		RDPStatus:      db.DeviceStatus(rdp),
 		WinRMStatus:    db.DeviceStatus(winrm),
+		APIStatus:      db.DeviceStatus(api),
 		AbnormalReason: reason,
 		CheckedAt:      checkedAt,
 	}
@@ -1030,6 +1060,7 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 			"rdp_password": d.RDPPassword,
 			"rdp_port":     db.EffectiveDeviceRDPPort(d),
 			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
 	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
@@ -1136,6 +1167,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 			"rdp_password": device.RDPPassword,
 			"rdp_port":     db.EffectiveDeviceRDPPort(device),
 			"ansible_port": db.EffectiveDeviceAnsiblePort(device, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(device),
 		},
 	}
 
@@ -1225,6 +1257,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 			"rdp_password": d.RDPPassword,
 			"rdp_port":     db.EffectiveDeviceRDPPort(d),
 			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
 	if len(selected) == 0 {
@@ -1277,8 +1310,9 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusCreated, task)
 }
 
-// ProbeDevice runs an immediate server-side TCP port probe of RDP and WinRM
-// for one device and persists rdp_status, winrm_status, and last_updated only
+// ProbeDevice runs an immediate server-side TCP port probe of RDP, WinRM,
+// and the configured application API port for one device and persists
+// rdp_status, winrm_status, api_status, and last_updated only
 // (device_status is unchanged). Useful for instant feedback when no status
 // template is configured.
 func ProbeDevice(w http.ResponseWriter, r *http.Request) {
@@ -1288,15 +1322,16 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	rdp, winrm, refreshed := server.ProbeDevice(device, settings)
+	rdp, winrm, api, refreshed := server.ProbeDevice(device, settings)
 	if err := helpers.Store(r).UpdateDevicePortProbeStatuses(
-		device.ProjectID, device.ID, rdp, winrm, refreshed,
+		device.ProjectID, device.ID, rdp, winrm, api, refreshed,
 	); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	device.APIStatus = api
 	normalizeDeviceStatuses(&device)
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)

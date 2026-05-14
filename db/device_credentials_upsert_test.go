@@ -38,19 +38,19 @@ func TestMergeDeviceCredentialsOnUpsertOverwritesWhenIncomingNonEmpty(t *testing
 }
 
 func TestMergeDevicePortsOnUpsertPreservesWhenIncomingZero(t *testing.T) {
-	existing := Device{RDPPort: 3390, AnsiblePort: 5986}
+	existing := Device{RDPPort: 3390, AnsiblePort: 5986, APIPort: 9003}
 	incoming := Device{}
 	MergeDevicePortsOnUpsert(&existing, incoming)
-	if existing.RDPPort != 3390 || existing.AnsiblePort != 5986 {
+	if existing.RDPPort != 3390 || existing.AnsiblePort != 5986 || existing.APIPort != 9003 {
 		t.Fatalf("expected ports preserved, got %+v", existing)
 	}
 }
 
 func TestMergeDevicePortsOnUpsertOverwritesWhenIncomingValid(t *testing.T) {
-	existing := Device{RDPPort: 3389, AnsiblePort: 5985}
-	incoming := Device{RDPPort: 13389, AnsiblePort: 15985}
+	existing := Device{RDPPort: 3389, AnsiblePort: 5985, APIPort: 9002}
+	incoming := Device{RDPPort: 13389, AnsiblePort: 15985, APIPort: 19002}
 	MergeDevicePortsOnUpsert(&existing, incoming)
-	if existing.RDPPort != 13389 || existing.AnsiblePort != 15985 {
+	if existing.RDPPort != 13389 || existing.AnsiblePort != 15985 || existing.APIPort != 19002 {
 		t.Fatalf("expected incoming ports applied, got %+v", existing)
 	}
 }
@@ -73,5 +73,23 @@ func TestEffectiveDeviceAnsiblePort(t *testing.T) {
 	}
 	if got := EffectiveDeviceAnsiblePort(Device{AnsiblePort: 5986}, ProjectDeviceSettings{DefaultAnsiblePort: 15985}); got != 5986 {
 		t.Fatalf("expected device port 5986, got %d", got)
+	}
+}
+
+func TestEffectiveDeviceAPIPortForInventory(t *testing.T) {
+	if got := EffectiveDeviceAPIPortForInventory(Device{}); got != 0 {
+		t.Fatalf("expected 0 when unset, got %d", got)
+	}
+	if got := EffectiveDeviceAPIPortForInventory(Device{APIPort: 9002}); got != 9002 {
+		t.Fatalf("expected 9002, got %d", got)
+	}
+}
+
+func TestEffectiveDeviceAPIProbePort(t *testing.T) {
+	if got := EffectiveDeviceAPIProbePort(Device{}); got != DefaultDeviceAPIPort {
+		t.Fatalf("expected probe default %d, got %d", DefaultDeviceAPIPort, got)
+	}
+	if got := EffectiveDeviceAPIProbePort(Device{APIPort: 9100}); got != 9100 {
+		t.Fatalf("expected 9100, got %d", got)
 	}
 }

@@ -91,9 +91,9 @@ func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings
 	}
 
 	for _, device := range devices {
-		rdp, winrm, refreshed := ProbeDevice(device, settings)
+		rdp, winrm, api, refreshed := ProbeDevice(device, settings)
 		if err := s.store.UpdateDeviceStatus(
-			settings.ProjectID, device.ID, rdp, winrm, refreshed,
+			settings.ProjectID, device.ID, rdp, winrm, api, refreshed,
 		); err != nil {
 			log.WithError(err).
 				WithField("project_id", settings.ProjectID).
@@ -135,6 +135,7 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 			"rdp_password": d.RDPPassword,
 			"rdp_port":     db.EffectiveDeviceRDPPort(d),
 			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
 	envBytes, err := json.Marshal(map[string]any{

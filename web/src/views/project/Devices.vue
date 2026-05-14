@@ -54,7 +54,7 @@
           <v-data-table
             :headers="discoveryHeaders"
             :items="discoveredDevices"
-            item-key="hostname"
+            item-key="ip_address"
             show-select
             v-model="selectedDiscovered"
             dense
@@ -72,6 +72,11 @@
             <template v-slot:item.winrm_status="{ item }">
               <v-chip x-small :color="statusColor(item.winrm_status)" dark>
                 {{ item.winrm_status }}
+              </v-chip>
+            </template>
+            <template v-slot:item.api_status="{ item }">
+              <v-chip x-small :color="statusColor(item.api_status)" dark>
+                {{ item.api_status }}
               </v-chip>
             </template>
           </v-data-table>
@@ -329,7 +334,7 @@
       </template>
       <template v-slot:top>
         <v-row dense class="px-4 pt-3">
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-text-field
               v-model.trim="filters.ip"
               :label="$t('deviceFilterIp')"
@@ -338,7 +343,7 @@
               outlined
             />
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-text-field
               v-model.trim="filters.hostname"
               :label="$t('deviceFilterHostname')"
@@ -377,6 +382,16 @@
               outlined
             />
           </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.apiStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceApiStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
         </v-row>
         <div class="px-4 pb-1 text--secondary caption">
           {{ $t('devicePaginationSelectionHint') }}
@@ -395,6 +410,11 @@
       <template v-slot:item.winrm_status="{ item }">
         <v-chip x-small :color="statusColor(item.winrm_status)" dark>
           {{ item.winrm_status }}
+        </v-chip>
+      </template>
+      <template v-slot:item.api_status="{ item }">
+        <v-chip x-small :color="statusColor(item.api_status)" dark>
+          {{ item.api_status }}
         </v-chip>
       </template>
       <template v-slot:item.last_updated="{ item }">
@@ -494,6 +514,7 @@ export default {
         { text: this.$i18n.t('deviceStatus'), value: 'status' },
         { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status' },
         { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status' },
+        { text: this.$i18n.t('deviceApiStatus'), value: 'api_status' },
         { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
       ],
       discoveryDialog: false,
@@ -524,6 +545,7 @@ export default {
         deviceStatus: null,
         rdpStatus: null,
         winrmStatus: null,
+        apiStatus: null,
       },
       discoveryHeaders: [
         { text: 'IP', value: 'ip_address' },
@@ -531,6 +553,7 @@ export default {
         { text: 'Status', value: 'device_status' },
         { text: 'RDP', value: 'rdp_status' },
         { text: 'WinRM', value: 'winrm_status' },
+        { text: 'API', value: 'api_status' },
       ],
     };
   },
@@ -626,6 +649,7 @@ export default {
         { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
         { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status', width: '9%' },
         { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '9%' },
+        { text: this.$i18n.t('deviceApiStatus'), value: 'api_status', width: '9%' },
         { text: this.$i18n.t('deviceLastUpdated'), value: 'last_updated', width: '15%' },
         { value: 'actions', sortable: false, width: '0%' },
       ];
@@ -690,6 +714,7 @@ export default {
         if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
         if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
         if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
+        if (this.filters.apiStatus) params.api_status = this.filters.apiStatus;
 
         const [devicesRes, statsRes] = await Promise.all([
           axios.get(this.getItemsUrl(), { params }),
@@ -767,10 +792,18 @@ export default {
     },
 
     async discoverDevices() {
+      const sub = String(this.discoverySubnet || '').trim();
+      if (!sub) {
+        EventBus.$emit('i-snackbar', {
+          color: 'error',
+          text: this.$i18n.t('deviceDiscoverySubnetRequired'),
+        });
+        return;
+      }
       this.discovering = true;
       try {
         const payload = {
-          subnet: this.discoverySubnet || null,
+          subnet: sub,
         };
         const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
         const taskId = res.data && res.data.id;
@@ -991,9 +1024,10 @@ export default {
           device_status: x.device_status || x.status || 'unhealthy',
           rdp_status: x.rdp_status || 'offline',
           winrm_status: x.winrm_status || 'offline',
+          api_status: x.api_status || 'offline',
           abnormal_reason: x.abnormal_reason || null,
         }))
-        .filter((x) => x.hostname);
+        .filter((x) => x.ip_address || x.hostname);
       this.selectedDiscovered = [...this.discoveredDevices];
     },
     async runDiscoverTemplate() {

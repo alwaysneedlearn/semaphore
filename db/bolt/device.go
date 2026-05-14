@@ -48,6 +48,7 @@ func filterDevicesInMemory(devices []db.Device, filter *db.DeviceListFilter) []d
 	ds := strings.TrimSpace(filter.DeviceStatus)
 	rs := strings.TrimSpace(filter.RDPStatus)
 	ws := strings.TrimSpace(filter.WinRMStatus)
+	as := strings.TrimSpace(filter.APIStatus)
 
 	out := make([]db.Device, 0, len(devices))
 	for _, dev := range devices {
@@ -64,6 +65,9 @@ func filterDevicesInMemory(devices []db.Device, filter *db.DeviceListFilter) []d
 			continue
 		}
 		if ws != "" && string(dev.WinRMStatus) != ws {
+			continue
+		}
+		if as != "" && string(dev.APIStatus) != as {
 			continue
 		}
 		out = append(out, dev)
@@ -155,6 +159,12 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 	if device.RDPPort <= 0 || device.RDPPort > 65535 {
 		device.RDPPort = db.DefaultDeviceRDPPort
 	}
+	if device.APIPort <= 0 || device.APIPort > 65535 {
+		device.APIPort = db.DefaultDeviceAPIPort
+	}
+	if device.APIStatus == "" {
+		device.APIStatus = db.DeviceStatusOffline
+	}
 	device.Created = tz.Now()
 
 	res, err := d.createObject(device.ProjectID, db.DeviceProps, device)
@@ -164,13 +174,14 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 	return res.(db.Device), nil
 }
 
-func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
+func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api db.DeviceStatus, refreshed time.Time) error {
 	device, err := d.GetDevice(projectID, deviceID)
 	if err != nil {
 		return err
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	device.APIStatus = api
 	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
 		device.DeviceStatus = db.DeviceStatusHealthy
 	} else {
@@ -181,13 +192,14 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.Devic
 	return d.updateObject(projectID, db.DeviceProps, device)
 }
 
-func (d *BoltDb) UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
+func (d *BoltDb) UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm, api db.DeviceStatus, refreshed time.Time) error {
 	device, err := d.GetDevice(projectID, deviceID)
 	if err != nil {
 		return err
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	device.APIStatus = api
 	t := refreshed
 	device.LastUpdated = &t
 	return d.updateObject(projectID, db.DeviceProps, device)
@@ -268,6 +280,9 @@ func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([
 			}
 			if dev.WinRMStatus != "" {
 				old.WinRMStatus = dev.WinRMStatus
+			}
+			if dev.APIStatus != "" {
+				old.APIStatus = dev.APIStatus
 			}
 			old.AbnormalReason = dev.AbnormalReason
 			now := tz.Now()

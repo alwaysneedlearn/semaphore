@@ -1,6 +1,7 @@
 ---
   # 与 playbook/network_discovery.yml：端口扫描用 ThreadPool + JSON；IP 列表用 ipaddress（掩码正确）。
   # 主机名获取：对开放 WinRM 的主机 delegate + win_command hostname。
+  # API 端口：TCP 探测（默认 9002，环境变量 API_PORT / Variable Group 可覆盖）。
   - name: 网络发现 - 检测WinRM端口并获取主机名
     hosts: localhost
     gather_facts: no
@@ -9,18 +10,22 @@
       network_subnet: "{{ (lookup('env', 'NETWORK_SUBNET') | default('', true) | trim) | default(subnet | default('', true) | trim, true) | default(network_cidr | default('', true) | trim, true) | default('192.168.1.0/24', true) }}"
       winrm_port: "{{ (lookup('env', 'WINRM_PORT') | default('', true) | trim) | default('5985', true) }}"
       rdp_port: "{{ (lookup('env', 'RDP_PORT') | default('', true) | trim) | default('3389', true) }}"
+      api_scan_port: "{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) }}"
       winrm_user: "{{ (lookup('env', 'WINRM_USER') | default('', true) | trim) | default('administrator', true) }}"
       winrm_password: "{{ (lookup('env', 'WINRM_PASSWORD') | default('', true) | trim) | default('', true) }}"
       timeout_seconds: "{{ (lookup('env', 'SCAN_TIMEOUT_SECONDS') | default('', true) | trim) | default('2', true) }}"
       scan_workers: "{{ (lookup('env', 'SCAN_WORKERS') | default('', true) | trim) | default('64', true) }}"
 
     tasks:
-      - name: 解析网段生成IP列表（Python，按真实掩码）
+      - name: 解析网段生成IP列表（Python，按真实掩码；单 IP /32 兼容）
         ansible.builtin.shell: |
           python3 - << 'PY'
           import ipaddress
-          network = ipaddress.ip_network("{{ network_subnet }}", strict=False)
-          for ip in network.hosts():
+          net = ipaddress.ip_network("{{ network_subnet }}", strict=False)
+          addrs = list(net.hosts())
+          if not addrs:
+              addrs = [net.network_address]
+          for ip in addrs:
               print(str(ip))
           PY
         register: ip_list
@@ -34,7 +39,7 @@
         ansible.builtin.debug:
           msg: "待扫描 {{ target_ips | length }} 台主机 ({{ network_subnet }})"
 
-      - name: 使用Python扫描WinRM和RDP端口（限流并发）
+      - name: 使用Python扫描WinRM、RDP与API端口（限流并发）
         ansible.builtin.shell: |
           cat > /tmp/scan_ports.py << EOF
           import socket
@@ -45,6 +50,7 @@
           ip_list = ip_str.split() if ip_str else []
           winrm_port = {{ winrm_port }}
           rdp_port = {{ rdp_port }}
+          api_port = {{ api_scan_port }}
           timeout = {{ timeout_seconds }}
           max_workers = {{ scan_workers }}
 
@@ -60,24 +66,29 @@
 
           open_winrm_ips = set()
           open_rdp_ips = set()
+          open_api_ips = set()
 
           with ThreadPoolExecutor(max_workers=max_workers) as executor:
               futures = {}
               for ip in ip_list:
                   futures[executor.submit(is_port_open, ip, winrm_port)] = (ip, "winrm")
                   futures[executor.submit(is_port_open, ip, rdp_port)] = (ip, "rdp")
+                  futures[executor.submit(is_port_open, ip, api_port)] = (ip, "api")
 
               for future in as_completed(futures):
                   ip, proto = futures[future]
                   if future.result():
                       if proto == "winrm":
                           open_winrm_ips.add(ip)
-                      else:
+                      elif proto == "rdp":
                           open_rdp_ips.add(ip)
+                      else:
+                          open_api_ips.add(ip)
 
           print(json.dumps({
               "winrm_ips": sorted(open_winrm_ips),
-              "rdp_ips": sorted(open_rdp_ips)
+              "rdp_ips": sorted(open_rdp_ips),
+              "api_ips": sorted(open_api_ips)
           }, ensure_ascii=False))
           EOF
           python3 /tmp/scan_ports.py
@@ -96,6 +107,10 @@
         ansible.builtin.set_fact:
           open_rdp_ips: "{{ scan_output.rdp_ips | default([]) }}"
 
+      - name: 提取API端口开放IP
+        ansible.builtin.set_fact:
+          open_api_ips: "{{ scan_output.api_ips | default([]) }}"
+
       - name: 显示开放WinRM端口的主机数量
         ansible.builtin.debug:
           msg: "发现 {{ open_winrm_ips | length }} 台主机开放WinRM端口 ({{ winrm_port }})"
@@ -103,6 +118,10 @@
       - name: 显示开放RDP端口的主机数量
         ansible.builtin.debug:
           msg: "发现 {{ open_rdp_ips | length }} 台主机开放RDP端口 ({{ rdp_port }})"
+
+      - name: 显示开放API端口的主机数量
+        ansible.builtin.debug:
+          msg: "发现 {{ open_api_ips | length }} 台主机开放API端口 ({{ api_scan_port }})"
 
       - name: 使用WinRM连接获取主机名
         ansible.windows.win_command: hostname
@@ -133,23 +152,26 @@
 
       - name: 汇总发现结果（简版）
         ansible.builtin.debug:
-          msg: "扫描完成：网段={{ network_subnet }}，总数={{ target_ips | length }}，WinRM在线={{ open_winrm_ips | length }}，RDP在线={{ open_rdp_ips | length }}"
+          msg: "扫描完成：网段={{ network_subnet }}，总数={{ target_ips | length }}，WinRM在线={{ open_winrm_ips | length }}，RDP在线={{ open_rdp_ips | length }}，API在线={{ open_api_ips | length }}"
 
       - name: 汇总 discovered_devices 结构化结果
         ansible.builtin.set_fact:
           discovered_devices: "{{ discovered_devices | default([]) + [device_item] }}"
-        loop: "{{ (open_winrm_ips + open_rdp_ips) | unique }}"
+        loop: "{{ (open_winrm_ips + open_rdp_ips + open_api_ips) | unique }}"
         vars:
           host_ip: "{{ item }}"
           host_name: "{{ (hostname_map | default({})).get(host_ip, '') }}"
           effective_hostname: "{{ host_name if (host_name | trim) else host_ip }}"
           winrm_online: "{{ host_ip in open_winrm_ips }}"
           rdp_online: "{{ host_ip in open_rdp_ips }}"
+          api_online: "{{ host_ip in open_api_ips }}"
           device_item:
             hostname: "{{ effective_hostname }}"
             ip_address: "{{ host_ip }}"
+            api_port: "{{ api_scan_port | int }}"
             winrm_status: "{{ 'online' if winrm_online else 'offline' }}"
             rdp_status: "{{ 'online' if rdp_online else 'offline' }}"
+            api_status: "{{ 'online' if api_online else 'offline' }}"
             device_status: >-
               {{ 'healthy' if (winrm_online and rdp_online) else 'unhealthy' }}
 

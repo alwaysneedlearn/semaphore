@@ -69,6 +69,18 @@
     ></v-text-field>
 
     <v-text-field
+      v-model.number="item.api_port"
+      :label="$t('deviceApiPort')"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="number"
+      min="1"
+      max="65535"
+      placeholder="9002"
+    ></v-text-field>
+
+    <v-text-field
       v-model="item.ansible_user"
       :label="$t('deviceAnsibleUser')"
       :disabled="formSaving"
@@ -177,6 +189,12 @@ export default {
       } else {
         this.item.rdp_port = rp;
       }
+      const ap = parseInt(this.item.api_port, 10);
+      if (!Number.isFinite(ap) || ap < 1 || ap > 65535) {
+        this.item.api_port = 9002;
+      } else {
+        this.item.api_port = ap;
+      }
     },
     getItemsUrl() {
       return `/api/project/${this.projectId}/devices`;
@@ -197,6 +215,7 @@ export default {
         ansible_winrm_scheme: 'http',
         ansible_port: 5985,
         rdp_port: 3389,
+        api_port: 9002,
         ansible_winrm_server_cert_validation: 'ignore',
         device_status: 'unhealthy',
       };
@@ -206,6 +225,9 @@ export default {
       this.showRdpPassword = false;
       if (this.item && (this.item.rdp_port == null || this.item.rdp_port === '')) {
         this.item.rdp_port = 3389;
+      }
+      if (this.item && (this.item.api_port == null || this.item.api_port === '')) {
+        this.item.api_port = 9002;
       }
     },
   },
