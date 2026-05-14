@@ -16,6 +16,11 @@
     api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
     api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
     api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
+    # 启动验证「调用启动 API」单次 HTTP 超时；未设置时与 api_timeout_seconds 相同
+    api_start_timeout_seconds: "{{ ((lookup('env', 'API_START_TIMEOUT_SECONDS') | default('', true) | trim) | default(api_timeout_seconds | string, true)) | int }}"
+    # until 重试：Ansible 在 until 为假时按 delay 秒重试，最多 retries 次（不含首次尝试）
+    api_start_retries: "{{ ((lookup('env', 'API_START_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
+    api_start_retry_delay: "{{ ((lookup('env', 'API_START_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int }}"
     api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
     api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
     export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
@@ -479,10 +484,22 @@
               Content-Type: "application/json; charset=utf-8"
             return_content: true
             status_code: 200
-            timeout: "{{ api_timeout_seconds | int }}"
+            timeout: "{{ api_start_timeout_seconds | int }}"
           register: api_start_result
           delegate_to: localhost
           failed_when: false
+          until: >
+            api_start_result is defined and
+            not (api_start_result.skipped | default(false)) and
+            (api_start_result.status | default(0) | int == 200) and
+            (
+              (api_start_result.content | default('{}') | from_json).ResponeResultCode | default(-1) | int == (api_expected_response_code | int)
+            ) and
+            (
+              (api_start_result.content | default('{}') | from_json).ExecResultCode | default(-1) | int == (api_expected_exec_success_code | int)
+            )
+          retries: "{{ api_start_retries }}"
+          delay: "{{ api_start_retry_delay }}"
 
         - name: 启动验证：检查启动API响应
           ansible.builtin.fail:

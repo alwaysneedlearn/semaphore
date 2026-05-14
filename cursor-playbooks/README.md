@@ -8,8 +8,8 @@ Play-level defaults use **`lookup('env', 'VAR')`**: if the Variable Group / temp
 
 - **`device_discovery.yml`**: `NETWORK_SUBNET` (then Semaphore extra-vars `subnet`, `network_cidr` if env empty), `WINRM_PORT`, `RDP_PORT`, `WINRM_USER`, `WINRM_PASSWORD`, `SCAN_TIMEOUT_SECONDS`, `SCAN_WORKERS`.
 - **`device_status.yml`**: `EXE_NAME`, `EXE_DIR`, `ZIP_NAME`, `API_PORT`, `API_STATUS_CALL_TYPE`, `API_TIMEOUT_SECONDS`, `API_EXPECTED_RESPONSE_CODE`, `API_EXPECTED_EXEC_SUCCESS_CODE`, `EXPORT_STARTED`.
-- **`device_start.yml`**: the status vars plus `ZIP_PATH`, `EXE_ARGS`, `CONFIG_FILE_NAME`, `API_START_CALL_TYPE`, `EXPORT_NOT_STARTED`, `EXPORT_STARTING`, `POLL_RETRIES`, `POLL_DELAY`, `HIS_DATA_FROM_TIME`, `RESTART_DELAY`, `LOG_SUCCESS_KEYWORD`, `LOG_TAIL_LINES`, `LOG_POLL_RETRIES`, `LOG_POLL_DELAY`.
-- **`device_restart.yml`**: same pattern as start where applicable (`EXPORT_STARTED`, `HIS_DATA_FROM_TIME`, `RESTART_DELAY`, log-related env vars, etc.).
+- **`device_start.yml`**: the status vars plus `ZIP_PATH`, `EXE_ARGS`, `CONFIG_FILE_NAME`, `API_START_CALL_TYPE`, `EXPORT_NOT_STARTED`, `EXPORT_STARTING`, `POLL_RETRIES`, `POLL_DELAY`, `HIS_DATA_FROM_TIME`, `RESTART_DELAY`, `LOG_SUCCESS_KEYWORD`, `LOG_TAIL_LINES`, `LOG_POLL_RETRIES`, `LOG_POLL_DELAY`, **`API_START_TIMEOUT_SECONDS`** (per-request timeout for the start API call; defaults to `API_TIMEOUT_SECONDS`), **`API_START_RETRIES`** / **`API_START_RETRY_DELAY`** (`until` retries on the “启动验证：调用启动API” `uri` task; defaults `5` / `3`).
+- **`device_restart.yml`**: same pattern as start where applicable (`EXPORT_STARTED`, `HIS_DATA_FROM_TIME`, `RESTART_DELAY`, log-related env vars, **`API_START_TIMEOUT_SECONDS`**, **`API_START_RETRIES`**, **`API_START_RETRY_DELAY`**, etc.).
 - **`device_stop.yml`**: `EXE_NAME`.
 
 Callback task env: see table above (`SEMAPHORE_*`). `tasks/semaphore_bulk_put_from_hostvars.yml` uses the same **empty-env → default** rule for `SEMAPHORE_URL`.
