@@ -204,7 +204,7 @@
         - name: 重配执行：修改配置文件（对接默认配置+设备自定义配置）
           win_shell: |
             function Upsert-SectionKey {
-              param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, [string]$value)
+              param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, [string]$value, [string]$logPath)
               $secStart = -1
               $secEnd = $lines.Count
               for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -221,22 +221,32 @@
                 if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
                 $lines.Add("[$section]")
                 $lines.Add("$key=$value")
+                Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|NEW_SECTION|$key=$value"
                 return
               }
               for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
                 if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") {
+                  $oldLine = $lines[$k]
                   $lines[$k] = "$key=$value"
+                  Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|REPLACE|$oldLine -> $key=$value"
                   return
                 }
               }
               $lines.Insert($secEnd, "$key=$value")
+              Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|INSERT_NEW_LINE|$key=$value"
             }
 
             function Update-ConfigFile {
               param([string]$configPath, [string]$cfgJson, [string]$calbIp, [string]$fromDate, [string]$toDate)
-              if (-not (Test-Path $configPath)) { Write-Output "CONFIG_NOT_FOUND:$configPath"; return $false }
+              if (-not (Test-Path $configPath)) {
+                Write-Output "RECONFIG_CFG_DEBUG|PATH_MISSING|$configPath"
+                Write-Output "CONFIG_NOT_FOUND:$configPath"
+                return $false
+              }
+              Write-Output "RECONFIG_CFG_DEBUG|PATH_OK|$configPath"
               try {
                 $cfg = ConvertFrom-Json -InputObject $cfgJson -AsHashtable
+                Write-Output "RECONFIG_CFG_DEBUG|JSON_OK|sections=$($cfg.Keys.Count)"
                 if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
                 if (-not $cfg["SystemConfig"].ContainsKey("ServerIpAddrStr")) { $cfg["SystemConfig"]["ServerIpAddrStr"] = $calbIp }
                 if (-not $cfg["SystemConfig"].ContainsKey("HisDataFromTime")) { $cfg["SystemConfig"]["HisDataFromTime"] = $fromDate }
@@ -252,13 +262,14 @@
                 }
                 Write-Output "RECONFIG_CFG_PLAN_END|$configPath"
                 $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
+                Write-Output "RECONFIG_CFG_DEBUG|FILE_READ|$configPath|line_count=$($lines.Count)"
                 foreach ($section in $cfg.Keys) {
                   $vals = $cfg[$section]
                   foreach ($k in $vals.Keys) {
-                    Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$vals[$k])
+                    Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$vals[$k]) -logPath $configPath
                   }
                 }
-                $lines | Set-Content $configPath
+                $null = $lines | Set-Content -LiteralPath $configPath
                 Write-Output "CONFIG_MODIFIED|$configPath"
                 return $true
               } catch {
@@ -281,6 +292,7 @@
             $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -fromDate $fromDate -toDate $toDate
             $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -fromDate $fromDate -toDate $toDate
             if (-not $userResult -and -not $publicResult) { exit 1 }
+            Write-Output "RECONFIG_CFG_RUN_SUMMARY|user_ok=$userResult|public_ok=$publicResult"
           register: config_result
           failed_when: >
             config_result is defined and 'stdout' in config_result and
@@ -288,7 +300,13 @@
 
         - name: 重配执行：DEBUG 配置修改任务 stdout（含 RECONFIG_CFG_PLAN，成功也打印）
           ansible.builtin.debug:
-            msg: "{{ config_result.stdout_lines | default(['(无 stdout)']) }}"
+            msg:
+              - "[DEBUG-重配-配置] rc={{ config_result.rc | default('n/a') }}"
+              - "[DEBUG-重配-配置] stdout_len={{ (config_result.stdout | default('') | string | length) }}"
+              - "[DEBUG-重配-配置] stdout_lines_count={{ (config_result.stdout_lines | default([]) | length) }}"
+              - "[DEBUG-重配-配置] stderr={{ config_result.stderr | default('') }}"
+              - "[DEBUG-重配-配置] stdout(raw)={{ config_result.stdout | default('') }}"
+              - "[DEBUG-重配-配置] stdout_lines={{ config_result.stdout_lines | default([]) }}"
 
         - name: 重配执行：检查程序文件是否存在
           win_shell: |

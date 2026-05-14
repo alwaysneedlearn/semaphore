@@ -35,5 +35,9 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 |-----------------|--------|
 | `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved profile user and INI paths after username detection (`device_start` / `device_restart`) |
 | `RECONFIG_LOG_*` / `RECONFIG_MODIFY_*` | Same info from the Windows `win_shell` task stdout (visible without expanding `debug`) |
-| `RECONFIG_CFG_PLAN_*` lines | Each section/key=value written to the INI (merged JSON + injected `SystemConfig`) |
+| `RECONFIG_CFG_DEBUG|…` | Path exists, JSON section count, file line count before write |
+| `RECONFIG_CFG_ADJUST|…` | Each upsert: **NEW_SECTION** / **REPLACE** (old line → new) / **INSERT_NEW_LINE** |
+| `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |
+
+Note: piping `$lines | Set-Content` used to echo every line into PowerShell’s success stream and could leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
 | `[DEBUG-API]` | HTTP status + **raw response body** for device HTTP API POSTs and for Semaphore `PUT …/devices/status/bulk` |
