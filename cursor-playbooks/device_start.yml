@@ -557,6 +557,8 @@
         - name: 重配执行：配置修改变更明细（仅打印实际变化与摘要）
           ansible.builtin.debug:
             msg:
+              - "[RECONFIG] 生效 API 端口 api_port={{ api_port }}（写入 ReportApiSettings.ServerPort；见下方 RECONFIG_REPORT_API_DEFAULTS）"
+              - "[RECONFIG] 程序完整路径 exe_path={{ exe_path }}"
               - "stdout_lines={{ config_result.stdout_lines | default([]) }}"
               - "stderr={{ (config_result.stderr | default('') | string | trim) }}"
 
@@ -570,6 +572,23 @@
           register: exe_check_result
           changed_when: false
 
+        - name: 重配执行：规范化 exe 检查输出文本
+          ansible.builtin.set_fact:
+            _reconfig_exe_check_text: >-
+              {{
+                ((exe_check_result.stdout_lines | default([])) | length > 0)
+                | ternary(exe_check_result.stdout_lines | join('\n'), exe_check_result.stdout | default('', true) | string | trim)
+              }}
+
+        - name: 重配执行：EXE 检查与启动条件（诊断）
+          ansible.builtin.debug:
+            msg:
+              - "[RECONFIG] exe_path={{ exe_path }}"
+              - "[RECONFIG] exe_check stdout={{ exe_check_result.stdout | default('') | string | trim }}"
+              - "[RECONFIG] exe_check stdout_lines={{ exe_check_result.stdout_lines | default([]) }}"
+              - "[RECONFIG] 规范化文本含 EXE_FOUND={{ ('EXE_FOUND' in _reconfig_exe_check_text) }} 含 EXE_NOT_FOUND={{ ('EXE_NOT_FOUND' in _reconfig_exe_check_text) }}"
+              - "[RECONFIG] 将尝试解压安装包={{ ('EXE_NOT_FOUND' in _reconfig_exe_check_text) }}；启动 when=EXE_FOUND 或 EXTRACT_OK"
+
         - name: 重配执行：检查本地压缩包是否存在
           win_shell: |
             if (Test-Path "{{ exe_dir }}\\{{ zip_name }}.zip") {
@@ -579,13 +598,13 @@
             }
           register: zip_local_check_result
           changed_when: false
-          when: "'EXE_NOT_FOUND' in (exe_check_result.stdout | default(''))"
+          when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
 
         - name: 重配执行：创建目标目录
           ansible.builtin.win_file:
             path: "{{ exe_dir }}"
             state: directory
-          when: "'EXE_NOT_FOUND' in (exe_check_result.stdout | default(''))"
+          when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
 
         - name: 重配执行：从服务器复制安装包
           ansible.builtin.win_copy:
@@ -593,7 +612,7 @@
             dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
           register: zip_copy_result
           when: >
-            'EXE_NOT_FOUND' in (exe_check_result.stdout | default('')) and
+            'EXE_NOT_FOUND' in _reconfig_exe_check_text and
             (zip_local_check_result is skipped or 'ZIP_NOT_FOUND' in (zip_local_check_result.stdout | default('')))
 
         - name: 重配执行：解压程序包
@@ -613,12 +632,13 @@
           failed_when: >
             extract_result is defined and 'stdout' in extract_result and
             'EXTRACT_ERROR' in extract_result.stdout
-          when: "'EXE_NOT_FOUND' in (exe_check_result.stdout | default(''))"
+          when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
 
         - name: 重配执行：启动程序
           when: >
-            'EXE_FOUND' in (exe_check_result.stdout | default('')) or
-            (extract_result is defined and not (extract_result.skipped | default(false)) and 'EXTRACT_OK' in extract_result.stdout)
+            'EXE_FOUND' in _reconfig_exe_check_text or
+            (extract_result is defined and not (extract_result.skipped | default(false)) and
+             'EXTRACT_OK' in (extract_result.stdout | default('')))
           win_shell: |
             if (Test-Path "{{ exe_path }}") {
               try {
