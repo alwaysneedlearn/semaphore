@@ -115,17 +115,65 @@
 
         - name: 重配执行：获取当前用户名
           win_shell: |
-            $username = (Get-CimInstance -ClassName Win32_ComputerSystem).PrimaryOwnerName
-            if (-not $username) {
-              $username = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+            # 仅 Write-Output 一行用户名到 stdout；排障用 Console.Error，避免污染 path 模板
+            $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+              if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+            } |
+            Where-Object { $_ } |
+            Select-Object -First 1
+
+            $resolved = $null
+            $source = 'unknown'
+            if ($explorerUser) {
+              $resolved = $explorerUser
+              $source = 'explorer_GetOwner'
+            } else {
+              $logon = Get-ItemProperty `
+                -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
+                -ErrorAction SilentlyContinue
+
+              if ($logon -and $logon.LastLoggedOnSAMUser) {
+                $resolved = $logon.LastLoggedOnSAMUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnSAMUser'
+              } elseif ($logon -and $logon.LastLoggedOnUser) {
+                $resolved = $logon.LastLoggedOnUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnUser'
+              } else {
+                $resolved = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+                $source = 'ansible_user_fallback'
+              }
             }
-            Write-Output $username
+
+            [Console]::Error.WriteLine("[get_username] source=$source resolved_user=$resolved")
+            Write-Output $resolved
           register: get_username_result
           changed_when: false
 
+        - name: 重配执行：规范化配置文件路径变量
+          ansible.builtin.set_fact:
+            _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+        - name: 重配执行：派生 BTSClient 与配置文件完整路径
+          ansible.builtin.set_fact:
+            _reconfig_user_bts_dir: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient"
+            _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
+
+        - name: 重配执行：排障打印用户名与配置文件路径（成功也会打印）
+          ansible.builtin.debug:
+            msg:
+              - "[重配-用户] profile_user={{ _reconfig_profile_user }} (win_shell 末行 stdout)"
+              - "[重配-源] config_zip_src={{ _reconfig_cfg_src }}"
+              - "[重配-目录] user_BTSClient={{ _reconfig_user_bts_dir }}"
+              - "[重配-目标] user_config_file={{ _reconfig_user_cfg_file }}"
+              - "[重配-目标] public_config_file={{ _reconfig_public_cfg_file }}"
+
         - name: 重配执行：创建配置文件目录（当前用户）
           ansible.builtin.win_file:
-            path: "C:\\Users\\{{ get_username_result.stdout | trim }}\\Documents\\NEWARE\\BTSClient"
+            path: "{{ _reconfig_user_bts_dir }}"
             state: directory
 
         - name: 重配执行：创建配置文件目录（Public用户）
@@ -135,14 +183,14 @@
 
         - name: 重配执行：从服务器复制配置文件（当前用户）
           ansible.builtin.win_copy:
-            src: "{{ zip_path }}/{{ config_file_name }}"
-            dest: "C:\\Users\\{{ get_username_result.stdout | trim }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            src: "{{ _reconfig_cfg_src }}"
+            dest: "{{ _reconfig_user_cfg_file }}"
           register: config_copy_result_user
 
         - name: 重配执行：从服务器复制配置文件（Public用户）
           ansible.builtin.win_copy:
-            src: "{{ zip_path }}/{{ config_file_name }}"
-            dest: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            src: "{{ _reconfig_cfg_src }}"
+            dest: "{{ _reconfig_public_cfg_file }}"
           register: config_copy_result_public
 
         - name: 重配执行：修改配置文件（对接默认配置+设备自定义配置）
@@ -206,7 +254,7 @@
             if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
             $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
             if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-            $username = "{{ get_username_result.stdout | trim }}"
+            $username = "{{ _reconfig_profile_user }}"
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $cfgJson = @'{{ merged_cfg_json }}'@
@@ -217,6 +265,10 @@
           failed_when: >
             config_result is defined and 'stdout' in config_result and
             ('CONFIG_MODIFY_ERROR' in config_result.stdout)
+
+        - name: 重配执行：排障打印配置修改任务输出
+          ansible.builtin.debug:
+            msg: "[重配-配置修改] stdout_lines={{ config_result.stdout_lines | default([]) }}"
 
         - name: 重配执行：检查程序文件是否存在
           win_shell: |
