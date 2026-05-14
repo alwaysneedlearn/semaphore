@@ -54,7 +54,7 @@
           <v-data-table
             :headers="discoveryHeaders"
             :items="discoveredDevices"
-            item-key="hostname"
+            item-key="ip_address"
             show-select
             v-model="selectedDiscovered"
             dense
@@ -72,6 +72,11 @@
             <template v-slot:item.winrm_status="{ item }">
               <v-chip x-small :color="statusColor(item.winrm_status)" dark>
                 {{ item.winrm_status }}
+              </v-chip>
+            </template>
+            <template v-slot:item.api_status="{ item }">
+              <v-chip x-small :color="statusColor(item.api_status)" dark>
+                {{ item.api_status }}
               </v-chip>
             </template>
           </v-data-table>
@@ -205,7 +210,7 @@
           </v-btn>
         </template>
         <v-list dense>
-          <v-list-item @click="runBulkProbe()">
+          <v-list-item :title="$t('deviceProbeTooltip')" @click="runBulkProbe()">
             <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
           </v-list-item>
@@ -329,19 +334,19 @@
       </template>
       <template v-slot:top>
         <v-row dense class="px-4 pt-3">
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-text-field
-              v-model.trim="filters.hostname"
-              :label="$t('deviceFilterHostname')"
+              v-model.trim="filters.ip"
+              :label="$t('deviceFilterIp')"
               clearable
               dense
               outlined
             />
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-text-field
-              v-model.trim="filters.ip"
-              :label="$t('deviceFilterIp')"
+              v-model.trim="filters.hostname"
+              :label="$t('deviceFilterHostname')"
               clearable
               dense
               outlined
@@ -377,6 +382,16 @@
               outlined
             />
           </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.apiStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceApiStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
         </v-row>
         <div class="px-4 pb-1 text--secondary caption">
           {{ $t('devicePaginationSelectionHint') }}
@@ -397,13 +412,18 @@
           {{ item.winrm_status }}
         </v-chip>
       </template>
+      <template v-slot:item.api_status="{ item }">
+        <v-chip x-small :color="statusColor(item.api_status)" dark>
+          {{ item.api_status }}
+        </v-chip>
+      </template>
       <template v-slot:item.last_updated="{ item }">
         {{ formatTime(item.last_updated) }}
       </template>
       <template v-slot:item.actions="{ item }">
         <v-btn-toggle dense :value-comparator="() => false">
           <v-btn
-            :title="$t('deviceProbe')"
+            :title="$t('deviceProbeTooltip')"
             :loading="busyId === item.id"
             @click="probeDevice(item)"
           >
@@ -443,7 +463,7 @@
           </v-btn>
           <v-btn
             :title="$t('deviceAbnormalReason')"
-            :disabled="item.device_status === 'healthy' || item.device_status === 'unknown'"
+            :disabled="item.device_status === 'healthy'"
             @click="openReasonDialog(item)"
           >
             <v-icon>mdi-alert-circle-outline</v-icon>
@@ -494,6 +514,7 @@ export default {
         { text: this.$i18n.t('deviceStatus'), value: 'status' },
         { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status' },
         { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status' },
+        { text: this.$i18n.t('deviceApiStatus'), value: 'api_status' },
         { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
       ],
       discoveryDialog: false,
@@ -524,22 +545,24 @@ export default {
         deviceStatus: null,
         rdpStatus: null,
         winrmStatus: null,
+        apiStatus: null,
       },
       discoveryHeaders: [
-        { text: 'Hostname', value: 'hostname' },
         { text: 'IP', value: 'ip_address' },
+        { text: 'Hostname', value: 'hostname' },
         { text: 'Status', value: 'device_status' },
         { text: 'RDP', value: 'rdp_status' },
         { text: 'WinRM', value: 'winrm_status' },
+        { text: 'API', value: 'api_status' },
       ],
     };
   },
   computed: {
     statusFilterOptions() {
-      return ['healthy', 'unhealthy', 'checking', 'unknown'];
+      return ['healthy', 'unhealthy', 'checking'];
     },
     protocolFilterOptions() {
-      return ['online', 'offline', 'unknown'];
+      return ['online', 'offline'];
     },
     pageDeviceIds() {
       return (this.items || []).map((x) => x.id);
@@ -626,6 +649,7 @@ export default {
         { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
         { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status', width: '9%' },
         { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '9%' },
+        { text: this.$i18n.t('deviceApiStatus'), value: 'api_status', width: '9%' },
         { text: this.$i18n.t('deviceLastUpdated'), value: 'last_updated', width: '15%' },
         { value: 'actions', sortable: false, width: '0%' },
       ];
@@ -690,6 +714,7 @@ export default {
         if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
         if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
         if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
+        if (this.filters.apiStatus) params.api_status = this.filters.apiStatus;
 
         const [devicesRes, statsRes] = await Promise.all([
           axios.get(this.getItemsUrl(), { params }),
@@ -767,10 +792,18 @@ export default {
     },
 
     async discoverDevices() {
+      const sub = String(this.discoverySubnet || '').trim();
+      if (!sub) {
+        EventBus.$emit('i-snackbar', {
+          color: 'error',
+          text: this.$i18n.t('deviceDiscoverySubnetRequired'),
+        });
+        return;
+      }
       this.discovering = true;
       try {
         const payload = {
-          subnet: this.discoverySubnet || null,
+          subnet: sub,
         };
         const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
         const taskId = res.data && res.data.id;
@@ -888,6 +921,11 @@ export default {
         }
       }
 
+      const yamlLike = this.tryParseYamlLikeDiscoveryList(clean);
+      if (yamlLike) {
+        return yamlLike;
+      }
+
       return null;
     },
     extractPrefixedDiscoveryJson(text) {
@@ -903,6 +941,52 @@ export default {
       const endLine = after.indexOf('\n');
       const candidate = (endLine >= 0 ? after.slice(0, endLine) : after).trim();
       return this.tryParseJsonArray(candidate);
+    },
+    tryParseYamlLikeDiscoveryList(text) {
+      if (!text || !text.includes('device_status:')) {
+        return null;
+      }
+
+      const lines = text.split('\n');
+      const items = [];
+      let current = null;
+
+      const parseValue = (v) => {
+        const raw = (v || '').trim();
+        if (!raw) {
+          return '';
+        }
+        if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith('\'') && raw.endsWith('\''))) {
+          return raw.slice(1, -1);
+        }
+        return raw;
+      };
+
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = this.stripAnsiCodes(lines[i] || '');
+        const itemStart = line.match(/^\s*-\s+([a-z_]+)\s*:\s*(.*)$/i);
+        if (itemStart) {
+          if (current) {
+            items.push(current);
+          }
+          current = { [itemStart[1]]: parseValue(itemStart[2]) };
+        } else {
+          const kv = line.match(/^\s{2,}([a-z_]+)\s*:\s*(.*)$/i);
+          if (kv && current) {
+            current[kv[1]] = parseValue(kv[2]);
+          }
+        }
+      }
+
+      if (current) {
+        items.push(current);
+      }
+
+      if (items.length === 0 || !items.some((x) => x.ip_address || x.hostname)) {
+        return null;
+      }
+
+      return items;
     },
     async loadDiscoveryResultFromTask(taskId) {
       const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
@@ -937,12 +1021,13 @@ export default {
         .map((x) => ({
           hostname: (x.hostname || '').trim(),
           ip_address: (x.ip_address || x.ip || '').trim(),
-          device_status: x.device_status || x.status || 'unknown',
-          rdp_status: x.rdp_status || 'unknown',
-          winrm_status: x.winrm_status || 'unknown',
+          device_status: x.device_status || x.status || 'unhealthy',
+          rdp_status: x.rdp_status || 'offline',
+          winrm_status: x.winrm_status || 'offline',
+          api_status: x.api_status || 'offline',
           abnormal_reason: x.abnormal_reason || null,
         }))
-        .filter((x) => x.hostname);
+        .filter((x) => x.ip_address || x.hostname);
       this.selectedDiscovered = [...this.discoveredDevices];
     },
     async runDiscoverTemplate() {
@@ -954,7 +1039,9 @@ export default {
       try {
         const payload = {
           devices: this.discoveredDevices,
-          selected_hostnames: this.selectedDiscovered.map((x) => x.hostname),
+          selected_ips: this.selectedDiscovered
+            .map((x) => String(x.ip_address || x.ip || '').trim())
+            .filter((ip) => ip),
         };
         const res = await axios.post(`${this.getItemsUrl()}/discovery/import`, payload);
         EventBus.$emit('i-snackbar', {

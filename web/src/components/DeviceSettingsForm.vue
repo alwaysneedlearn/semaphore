@@ -100,7 +100,10 @@
           :disabled="saving"
           outlined
           dense
-          type="password"
+          :type="showDefaultAnsiblePassword ? 'text' : 'password'"
+          autocomplete="new-password"
+          :append-icon="showDefaultAnsiblePassword ? 'mdi-eye-off' : 'mdi-eye'"
+          @click:append="showDefaultAnsiblePassword = !showDefaultAnsiblePassword"
         />
       </v-col>
       <v-col cols="12" md="6">
@@ -199,6 +202,7 @@ export default {
       },
       saving: false,
       formError: null,
+      showDefaultAnsiblePassword: false,
       defaultConfigItems: [],
       defaultConfigHeaders: [
         { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
@@ -228,6 +232,7 @@ export default {
         // copy fields the server returned, falling back to defaults
         this.settings = { ...this.settings, ...(res.data || {}) };
         this.defaultConfigItems = this.parseDefaultConfigJson(this.settings.default_config_json);
+        this.showDefaultAnsiblePassword = false;
         if (this.settings.status_refresh_interval_min == null) {
           this.settings.status_refresh_interval_min = 0;
         }

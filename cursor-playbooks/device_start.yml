@@ -3,26 +3,33 @@
   hosts: windows_hosts
   gather_facts: no
   vars:
-    exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu') }}"
-    exe_dir: "{{ lookup('env', 'EXE_DIR') | default('C:\\Program Files\\NEWARE') }}"
-    zip_name: "{{ lookup('env', 'ZIP_NAME') | default('test') }}"
+    # Variable Group 环境变量（非空）优先，否则使用下列默认值
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
+    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NEWARE', true) }}"
+    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}.exe"
-    zip_path: "{{ lookup('env', 'ZIP_PATH') | default('/root/neware/dbwb') }}"
-    exe_args: "{{ lookup('env', 'EXE_ARGS') | default('') }}"
-    config_file_name: "{{ lookup('env', 'CONFIG_FILE_NAME') | default('NWReport_DBWB.iconf') }}"
+    zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('NWReport_DBWB.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{{ lookup('env', 'API_PORT') | default('9002') }}"
-    api_status_call_type: 1
-    api_start_call_type: 1000
-    api_timeout_seconds: 15
-    api_expected_response_code: "{{ lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('0') }}"
-    api_expected_exec_success_code: "{{ lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('0') }}"
-    export_not_started: "{{ lookup('env', 'EXPORT_NOT_STARTED') | default('1', true) }}"
-    export_starting: "{{ lookup('env', 'EXPORT_STARTING') | default('2', true) }}"
-    export_started: "{{ lookup('env', 'EXPORT_STARTED') | default('3', true) }}"
-    poll_retries: "{{ (lookup('env', 'POLL_RETRIES') | int > 0) | ternary(lookup('env', 'POLL_RETRIES'), '3') | int }}"
-    poll_delay: "{{ (lookup('env', 'POLL_DELAY') | int > 0) | ternary(lookup('env', 'POLL_DELAY'), '10') | int }}"
-    his_data_from_time: "${his_data_from_time}"
+    api_port: "{{ (hostvars[inventory_hostname].api_port | default(0) | int) > 0 | ternary(hostvars[inventory_hostname].api_port | int, (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}"
+    api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
+    api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
+    api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
+    # 启动验证「调用启动 API」单次 HTTP 超时；未设置时与 api_timeout_seconds 相同
+    api_start_timeout_seconds: "{{ ((lookup('env', 'API_START_TIMEOUT_SECONDS') | default('', true) | trim) | default(api_timeout_seconds | string, true)) | int }}"
+    # until 重试：Ansible 在 until 为假时按 delay 秒重试，最多 retries 次（不含首次尝试）
+    api_start_retries: "{{ ((lookup('env', 'API_START_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
+    api_start_retry_delay: "{{ ((lookup('env', 'API_START_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int }}"
+    api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
+    api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
+    export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
+    export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
+    export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
+    poll_retries: "{{ ((lookup('env', 'POLL_RETRIES') | default('', true) | trim) | default('3', true)) | int }}"
+    poll_delay: "{{ ((lookup('env', 'POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
+    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -32,10 +39,10 @@
     merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
     log_path: "{{ exe_dir }}\\{{ zip_name }}\\LogData\\NWReport_DBWB{{ lookup('pipe', 'date +%Y%m%d') }}.log"
-    log_success_keyword: "提示 本轮通道状态上传成功"
-    log_tail_lines: 50
-    log_poll_retries: 6
-    log_poll_delay: 10
+    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
+    log_tail_lines: "{{ ((lookup('env', 'LOG_TAIL_LINES') | default('', true) | trim) | default('50', true)) | int }}"
+    log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
+    log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
 
   tasks:
     - name: 前置检查：检查程序运行状态
@@ -57,9 +64,10 @@
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
-          device_status: unknown
+          device_status: unhealthy
           rdp_status: offline
           winrm_status: offline
+          api_status: offline
           abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
@@ -215,17 +223,46 @@
 
         - name: 重配执行：获取当前用户名
           win_shell: |
-            $username = (Get-CimInstance -ClassName Win32_ComputerSystem).PrimaryOwnerName
-            if (-not $username) {
-              $username = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+            # 优先获取当前桌面用户；无人登录时读 LogonUI（SAM 优先）；再无则 ansible 连接用户
+            $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+              if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+            } |
+            Where-Object { $_ } |
+            Select-Object -First 1
+
+            $resolved = $null
+            $source = 'unknown'
+            if ($explorerUser) {
+              $resolved = $explorerUser
+              $source = 'explorer_GetOwner'
+            } else {
+              $logon = Get-ItemProperty `
+                -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
+                -ErrorAction SilentlyContinue
+
+              if ($logon -and $logon.LastLoggedOnSAMUser) {
+                $resolved = $logon.LastLoggedOnSAMUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnSAMUser'
+              } elseif ($logon -and $logon.LastLoggedOnUser) {
+                $resolved = $logon.LastLoggedOnUser.ToString().Split('\')[-1].Trim()
+                $source = 'LogonUI_LastLoggedOnUser'
+              } else {
+                $resolved = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+                $source = 'ansible_user_fallback'
+              }
             }
-            Write-Output $username
+
+            # 排障信息必须走 stderr：Write-Host 会混入 win_shell 的 stdout，破坏后续 path 模板
+            [Console]::Error.WriteLine("[get_username] source=$source resolved_user=$resolved")
+            Write-Output $resolved
           register: get_username_result
           changed_when: false
 
         - name: 重配执行：创建配置文件目录（当前用户）
           ansible.builtin.win_file:
-            path: "C:\\Users\\{{ get_username_result.stdout | trim }}\\Documents\\NEWARE\\BTSClient"
+            path: "C:\\Users\\{{ get_username_result.stdout_lines | last | trim }}\\Documents\\NEWARE\\BTSClient"
             state: directory
 
         - name: 重配执行：创建配置文件目录（Public用户）
@@ -236,7 +273,7 @@
         - name: 重配执行：从服务器复制配置文件（当前用户）
           ansible.builtin.win_copy:
             src: "{{ zip_path }}/{{ config_file_name }}"
-            dest: "C:\\Users\\{{ get_username_result.stdout | trim }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            dest: "C:\\Users\\{{ get_username_result.stdout_lines | last | trim }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
           register: config_copy_result_user
 
         - name: 重配执行：从服务器复制配置文件（Public用户）
@@ -306,7 +343,7 @@
             if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
             $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
             if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-            $username = "{{ get_username_result.stdout | trim }}"
+            $username = "{{ get_username_result.stdout_lines | last | trim }}"
 
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
@@ -396,14 +433,14 @@
                 }
                 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date)
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-                $userId = "{{ get_username_result.stdout | trim }}"
+                $userId = "{{ get_username_result.stdout_lines | last | trim }}"
                 $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
                 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
                 $taskStatus = (Get-ScheduledTask -TaskName $taskName).State
                 if ($taskStatus -ne "Running") {
                   Start-ScheduledTask -TaskName $taskName
                 }
-                Start-Sleep -Seconds {{ restart_delay | default(30) }}
+                Start-Sleep -Seconds {{ restart_delay }}
                 $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
                 if ($verify) {
                   Write-Output "VERIFY_OK|PID:$($verify.Id)"
@@ -427,7 +464,7 @@
             msg: |
               ==================== 重配执行结果 ====================
               停止程序: {{ stop_result.stdout | default('未执行') | trim }}
-              获取用户名: {{ get_username_result.stdout | default('未执行') | trim }}
+              获取用户名: {{ get_username_result.stdout_lines | last | default(get_username_result.stdout | default('未执行')) | trim }}
               复制配置文件(用户): {{ config_copy_result_user.changed | ternary('成功', '未变化') | default('未执行') }}
               复制配置文件(Public): {{ config_copy_result_public.changed | ternary('成功', '未变化') | default('未执行') }}
               修改配置: {{ config_result.stdout | default('未执行') | trim }}
@@ -477,10 +514,22 @@
               Content-Type: "application/json; charset=utf-8"
             return_content: true
             status_code: 200
-            timeout: "{{ api_timeout_seconds | int }}"
+            timeout: "{{ api_start_timeout_seconds | int }}"
           register: api_start_result
           delegate_to: localhost
           failed_when: false
+          until: >
+            api_start_result is defined and
+            not (api_start_result.skipped | default(false)) and
+            (api_start_result.status | default(0) | int == 200) and
+            (
+              (api_start_result.content | default('{}') | from_json).ResponeResultCode | default(-1) | int == (api_expected_response_code | int)
+            ) and
+            (
+              (api_start_result.content | default('{}') | from_json).ExecResultCode | default(-1) | int == (api_expected_exec_success_code | int)
+            )
+          retries: "{{ api_start_retries }}"
+          delay: "{{ api_start_retry_delay }}"
 
         - name: 启动验证：检查启动API响应
           ansible.builtin.fail:
@@ -573,12 +622,13 @@
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: >-
             {% if host_failure_reason is defined %}unhealthy
-            {% elif check_result is not defined %}unknown
+            {% elif check_result is not defined %}unhealthy
             {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}unhealthy
             {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
             {% else %}healthy{% endif %}
           rdp_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
           winrm_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
+          api_status: "{{ 'offline' if host_failure_reason is defined else ('online' if (final_start_ok | default(false) | bool) else 'offline') }}"
           abnormal_reason: >-
             {% if host_failure_reason is defined %}{{ host_failure_reason }}
             {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}Process was not running and start/verify did not succeed

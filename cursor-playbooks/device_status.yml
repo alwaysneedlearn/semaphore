@@ -3,16 +3,17 @@
   hosts: windows_hosts
   gather_facts: no
   vars:
-    exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu') }}"
-    exe_dir: "{{ lookup('env', 'EXE_DIR') | default('C:\\Program Files\\NEWARE') }}"
-    zip_name: "{{ lookup('env', 'ZIP_NAME') | default('test') }}"
+    # Variable Group 环境变量（非空）优先，否则使用下列默认值
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
+    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NEWARE', true) }}"
+    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{{ lookup('env', 'API_PORT') | default('9002') }}"
-    api_status_call_type: 1
-    api_timeout_seconds: 15
-    api_expected_response_code: "{{ lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('0') }}"
-    api_expected_exec_success_code: "{{ lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('0') }}"
-    export_started: "{{ lookup('env', 'EXPORT_STARTED') | default('3', true) }}"
+    api_port: "{{ (hostvars[inventory_hostname].api_port | default(0) | int) > 0 | ternary(hostvars[inventory_hostname].api_port | int, (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}"
+    api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
+    api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
+    api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
+    api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
+    export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -35,9 +36,10 @@
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
-          device_status: unknown
+          device_status: unhealthy
           rdp_status: offline
           winrm_status: offline
+          api_status: offline
           abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
@@ -156,12 +158,17 @@
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: >-
-            {% if status is not defined or ('stdout' not in status) %}unknown
+            {% if status is not defined or ('stdout' not in status) %}unhealthy
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy
             {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
             {% else %}healthy{% endif %}
           rdp_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
           winrm_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
+          api_status: >-
+            {% if status is not defined or ('stdout' not in status) %}offline
+            {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
+            {% elif api_status_ok is defined and (api_status_ok | bool) %}online
+            {% else %}offline{% endif %}
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
             {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: API or log indicates abnormal (need reconfigure)

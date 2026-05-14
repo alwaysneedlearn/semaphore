@@ -33,12 +33,62 @@
     ></v-text-field>
 
     <v-text-field
+      v-model="item.rdp_user"
+      :label="$t('deviceRdpUser')"
+      :disabled="formSaving"
+      outlined
+      dense
+      clearable
+      @click:clear="item.rdp_user = ''"
+    ></v-text-field>
+
+    <v-text-field
+      v-model="item.rdp_password"
+      :label="$t('deviceRdpPassword')"
+      :disabled="formSaving"
+      outlined
+      dense
+      :type="showRdpPassword ? 'text' : 'password'"
+      autocomplete="new-password"
+      clearable
+      :append-icon="showRdpPassword ? 'mdi-eye-off' : 'mdi-eye'"
+      @click:append="showRdpPassword = !showRdpPassword"
+      @click:clear="item.rdp_password = ''"
+    ></v-text-field>
+
+    <v-text-field
+      v-model.number="item.rdp_port"
+      :label="$t('deviceRdpPort')"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="number"
+      min="1"
+      max="65535"
+      placeholder="3389"
+    ></v-text-field>
+
+    <v-text-field
+      v-model.number="item.api_port"
+      :label="$t('deviceApiPort')"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="number"
+      min="1"
+      max="65535"
+      placeholder="9002"
+    ></v-text-field>
+
+    <v-text-field
       v-model="item.ansible_user"
       :label="$t('deviceAnsibleUser')"
       :disabled="formSaving"
       outlined
       dense
+      clearable
       placeholder="winrmuser"
+      @click:clear="item.ansible_user = ''"
     ></v-text-field>
 
     <v-text-field
@@ -47,8 +97,13 @@
       :disabled="formSaving"
       outlined
       dense
-      type="password"
+      :type="showAnsiblePassword ? 'text' : 'password'"
+      autocomplete="new-password"
+      clearable
       placeholder="winrmpass"
+      :append-icon="showAnsiblePassword ? 'mdi-eye-off' : 'mdi-eye'"
+      @click:append="showAnsiblePassword = !showAnsiblePassword"
+      @click:clear="item.ansible_password = ''"
     ></v-text-field>
 
     <v-text-field
@@ -105,7 +160,42 @@ import ItemFormBase from '@/components/ItemFormBase';
 export default {
   mixins: [ItemFormBase],
 
+  data() {
+    return {
+      showAnsiblePassword: false,
+      showRdpPassword: false,
+    };
+  },
+
   methods: {
+    beforeSave() {
+      if (!this.item) {
+        return;
+      }
+      // Cleared WinRM fields must be '' (not undefined) so PUT persists clears.
+      this.item.ansible_user = this.item.ansible_user == null
+        ? ''
+        : String(this.item.ansible_user).trim();
+      this.item.ansible_password = this.item.ansible_password == null
+        ? ''
+        : String(this.item.ansible_password).trim();
+      this.item.rdp_user = this.item.rdp_user == null ? '' : String(this.item.rdp_user).trim();
+      this.item.rdp_password = this.item.rdp_password == null
+        ? ''
+        : String(this.item.rdp_password).trim();
+      const rp = parseInt(this.item.rdp_port, 10);
+      if (!Number.isFinite(rp) || rp < 1 || rp > 65535) {
+        this.item.rdp_port = 3389;
+      } else {
+        this.item.rdp_port = rp;
+      }
+      const ap = parseInt(this.item.api_port, 10);
+      if (!Number.isFinite(ap) || ap < 1 || ap > 65535) {
+        this.item.api_port = 9002;
+      } else {
+        this.item.api_port = ap;
+      }
+    },
     getItemsUrl() {
       return `/api/project/${this.projectId}/devices`;
     },
@@ -116,15 +206,29 @@ export default {
       return {
         ip_address: '',
         hostname: '',
+        rdp_user: '',
+        rdp_password: '',
         ansible_user: '',
         ansible_password: '',
         ansible_connection: 'winrm',
         ansible_winrm_transport: 'basic',
         ansible_winrm_scheme: 'http',
         ansible_port: 5985,
+        rdp_port: 3389,
+        api_port: 9002,
         ansible_winrm_server_cert_validation: 'ignore',
-        device_status: 'unknown',
+        device_status: 'unhealthy',
       };
+    },
+    afterLoadData() {
+      this.showAnsiblePassword = false;
+      this.showRdpPassword = false;
+      if (this.item && (this.item.rdp_port == null || this.item.rdp_port === '')) {
+        this.item.rdp_port = 3389;
+      }
+      if (this.item && (this.item.api_port == null || this.item.api_port === '')) {
+        this.item.api_port = 9002;
+      }
     },
   },
 };
