@@ -50,7 +50,22 @@ Note: previously `$lines | Set-Content` could echo every line into PowerShell’
 
 **Merged config JSON into `win_shell`:** `merged_cfg_json` is injected as a **single-line** PowerShell assignment (`$cfgJson = '…'`) with **`replace("\u0027", "\u0027\u0027")`** so JSON values containing `'` stay valid in PowerShell **and** Ansible never sees unindented lines after Jinja (which breaks YAML `|` blocks). Do **not** use a multiline `@' … '@` here-string for this value: YAML requires every continuation line to stay indented, while PowerShell historically required the closing `'@` at the start of the script line—those rules conflict inside a playbook literal block.
 
-**Windows PowerShell 5.1 compatibility:** the config update task does **not** use `ConvertFrom-Json -AsHashtable` (added in PowerShell 6). It calls a local **`ConvertTo-HT`** helper that converts the `PSCustomObject` returned by `ConvertFrom-Json` into a `Hashtable` (and recursively for each section). When you add new code that walks the parsed config, keep using the helper instead of `-AsHashtable` so Windows 10/Server (which still ships PowerShell 5.1) keeps working.
+**Windows PowerShell 5.1 compatibility:** the config update task does **not** use `ConvertFrom-Json -AsHashtable` (added in PowerShell 6). It calls a local **`ConvertTo-HT`** helper that recursively converts the `PSCustomObject` returned by `ConvertFrom-Json` into nested `Hashtable`s. When you add new code that walks the parsed config, keep using the helper instead of `-AsHashtable` so Windows 10/Server (which still ships PowerShell 5.1) keeps working.
+
+**`ReportApiSettings` (and other `key=<json-object>` lines):** the BTSClient `.iconf` stores some keys as **one INI line whose value is a JSON object**, e.g.
+
+```ini
+[SystemConfig]
+ReportApiSettings={"EnableReportApiCall":false,"ServerIpAddrStr":"","ServerPort":9002}
+```
+
+When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other section/key whose value is an object), the playbook calls **`Merge-JsonKey`** instead of the flat `Upsert-SectionKey`:
+
+1. parse the existing JSON value from the line in the file,
+2. **deep-merge** the updates on top (so `EnableReportApiCall` and other unrelated fields stay),
+3. write back a **single-line** compact JSON value (`ConvertTo-Json -Compress -Depth 10`).
+
+`device_start.yml` / `device_restart.yml` populate `SystemConfig.ReportApiSettings.ServerIpAddrStr` (from `merged_system_config.ServerIpAddrStr` or the device IP `api_host`) and `SystemConfig.ReportApiSettings.ServerPort` (from `api_port`, default `9002`) before running the merge, so on every (re)start the device's app callback config is forced to the current API endpoint. Old configs that pinned `SystemConfig.ServerIpAddrStr` / `SystemConfig.ServerPort` at the **top level** still work (they are folded into `ReportApiSettings` and the flat keys are removed). Override priorities for both fields: **device-config in DB → project default config → playbook defaults (device IP / `api_port`).**
 
 ### Start API retry (`device_start.yml` / `device_restart.yml`)
 

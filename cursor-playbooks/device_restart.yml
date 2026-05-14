@@ -239,25 +239,90 @@
               Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|INSERT_NEW_LINE|$key=$value"
             }
 
-            # 把 PSCustomObject(json) 与 Hashtable 都转为 Hashtable，兼容 Windows PowerShell 5.1（无 -AsHashtable）
+            # 把 PSCustomObject(json) 与 Hashtable 递归转为 Hashtable，兼容 Windows PowerShell 5.1（无 -AsHashtable）
             function ConvertTo-HT {
               param($obj)
               if ($null -eq $obj) { return @{} }
               if ($obj -is [System.Collections.IDictionary]) {
                 $h = @{}
-                foreach ($k in $obj.Keys) { $h[[string]$k] = $obj[$k] }
+                foreach ($k in $obj.Keys) {
+                  $val = $obj[$k]
+                  if ($val -is [pscustomobject] -or $val -is [System.Collections.IDictionary]) { $val = ConvertTo-HT $val }
+                  $h[[string]$k] = $val
+                }
                 return $h
               }
               if ($obj -is [pscustomobject]) {
                 $h = @{}
-                foreach ($p in $obj.psobject.Properties) { $h[[string]$p.Name] = $p.Value }
+                foreach ($p in $obj.psobject.Properties) {
+                  $val = $p.Value
+                  if ($val -is [pscustomobject] -or $val -is [System.Collections.IDictionary]) { $val = ConvertTo-HT $val }
+                  $h[[string]$p.Name] = $val
+                }
                 return $h
               }
-              return @{}
+              return $obj
+            }
+
+            # 用于 ReportApiSettings 这类 "key=<json对象>" 的整行：解析已有 JSON、深合并更新、再压成单行 JSON 写回；
+            # 保留如 EnableReportApiCall 等未传字段。
+            function Merge-JsonKey {
+              param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, $updates, [string]$logPath)
+              $updHT = ConvertTo-HT $updates
+              $secStart = -1
+              $secEnd = $lines.Count
+              for ($i = 0; $i -lt $lines.Count; $i++) {
+                $trim = $lines[$i].Trim()
+                if ($trim -eq "[$section]") {
+                  $secStart = $i
+                  for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                    if ($lines[$j].Trim() -match "^\[.*\]$") { $secEnd = $j; break }
+                  }
+                  break
+                }
+              }
+              $existingIdx = -1
+              $current = @{}
+              if ($secStart -ge 0) {
+                for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
+                  if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") { $existingIdx = $k; break }
+                }
+                if ($existingIdx -ge 0) {
+                  $raw = $lines[$existingIdx]
+                  $eq = $raw.IndexOf("=")
+                  if ($eq -gt 0) {
+                    $jsonText = $raw.Substring($eq + 1).Trim()
+                    try {
+                      $parsed = ConvertFrom-Json -InputObject $jsonText
+                      $current = ConvertTo-HT $parsed
+                    } catch {
+                      Write-Output "RECONFIG_CFG_DEBUG|JSON_MERGE_PARSE_FAIL|$logPath|[$section]|$key|$($_.Exception.Message)"
+                    }
+                  }
+                }
+              }
+              foreach ($u in @($updHT.Keys)) { $current[[string]$u] = $updHT[$u] }
+              $newJson = ($current | ConvertTo-Json -Compress -Depth 10)
+              $newLine = "$key=$newJson"
+              if ($existingIdx -ge 0) {
+                $oldLine = $lines[$existingIdx]
+                $lines[$existingIdx] = $newLine
+                Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|JSON_REPLACE|$oldLine -> $newLine"
+                return
+              }
+              if ($secStart -lt 0) {
+                if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
+                $lines.Add("[$section]")
+                $lines.Add($newLine)
+                Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|JSON_NEW_SECTION|$newLine"
+                return
+              }
+              $lines.Insert($secEnd, $newLine)
+              Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|JSON_INSERT|$newLine"
             }
 
             function Update-ConfigFile {
-              param([string]$configPath, [string]$cfgJson, [string]$calbIp, [string]$fromDate, [string]$toDate)
+              param([string]$configPath, [string]$cfgJson, [string]$calbIp, [int]$serverPort, [string]$fromDate, [string]$toDate)
               if (-not (Test-Path $configPath)) {
                 Write-Output "RECONFIG_CFG_DEBUG|PATH_MISSING|$configPath"
                 Write-Output "CONFIG_NOT_FOUND:$configPath"
@@ -265,22 +330,47 @@
               }
               Write-Output "RECONFIG_CFG_DEBUG|PATH_OK|$configPath"
               try {
-                # Windows PowerShell 5.1 has no -AsHashtable; convert manually.
                 $rawCfg = ConvertFrom-Json -InputObject $cfgJson
                 $cfg = ConvertTo-HT $rawCfg
-                foreach ($section in @($cfg.Keys)) { $cfg[$section] = ConvertTo-HT $cfg[$section] }
                 Write-Output "RECONFIG_CFG_DEBUG|JSON_OK|sections=$($cfg.Keys.Count)"
                 if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
-                if (-not $cfg["SystemConfig"].ContainsKey("ServerIpAddrStr")) { $cfg["SystemConfig"]["ServerIpAddrStr"] = $calbIp }
-                if (-not $cfg["SystemConfig"].ContainsKey("HisDataFromTime")) { $cfg["SystemConfig"]["HisDataFromTime"] = $fromDate }
-                if (-not $cfg["SystemConfig"].ContainsKey("HisDataToTime")) { $cfg["SystemConfig"]["HisDataToTime"] = $toDate }
+                $sysCfg = $cfg["SystemConfig"]
+                # ReportApiSettings 是 SystemConfig 下的整段 JSON 值：合并 ServerIpAddrStr/ServerPort，保留其余字段
+                $reportApi = @{}
+                if ($sysCfg.ContainsKey("ReportApiSettings")) { $reportApi = ConvertTo-HT $sysCfg["ReportApiSettings"] }
+                # 兼容：旧的 cfg 顶层平铺 ServerIpAddrStr/ServerPort（不再写入文件根，统一进 ReportApiSettings）
+                if (-not $reportApi.ContainsKey("ServerIpAddrStr") -or [string]::IsNullOrEmpty([string]$reportApi["ServerIpAddrStr"])) {
+                  if ($sysCfg.ContainsKey("ServerIpAddrStr") -and -not [string]::IsNullOrEmpty([string]$sysCfg["ServerIpAddrStr"])) {
+                    $reportApi["ServerIpAddrStr"] = [string]$sysCfg["ServerIpAddrStr"]
+                  } else {
+                    $reportApi["ServerIpAddrStr"] = $calbIp
+                  }
+                }
+                if (-not $reportApi.ContainsKey("ServerPort")) {
+                  if ($sysCfg.ContainsKey("ServerPort")) { $reportApi["ServerPort"] = [int]$sysCfg["ServerPort"] }
+                  else { $reportApi["ServerPort"] = [int]$serverPort }
+                } else {
+                  try { $reportApi["ServerPort"] = [int]$reportApi["ServerPort"] } catch {}
+                }
+                $sysCfg.Remove("ServerIpAddrStr") | Out-Null
+                $sysCfg.Remove("ServerPort") | Out-Null
+                $sysCfg["ReportApiSettings"] = $reportApi
+                if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
+                if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
                 Write-Output "RECONFIG_CFG_PLAN_BEGIN|$configPath"
                 foreach ($section in @($cfg.Keys)) {
                   $vals = $cfg[$section]
+                  if (-not ($vals -is [System.Collections.IDictionary])) { continue }
                   foreach ($k in @($vals.Keys)) {
-                    $v = [string]$vals[$k]
-                    $vOne = $v -replace "`r`n", ' ' -replace "`n", ' '
-                    Write-Output "RECONFIG_CFG_PLAN|$configPath|[$section]|$k=$vOne"
+                    $v = $vals[$k]
+                    if ($v -is [System.Collections.IDictionary]) {
+                      $vJson = ($v | ConvertTo-Json -Compress -Depth 10)
+                      Write-Output "RECONFIG_CFG_PLAN|$configPath|[$section]|$k=$vJson"
+                    } else {
+                      $vs = [string]$v
+                      $vOne = $vs -replace "`r`n", ' ' -replace "`n", ' '
+                      Write-Output "RECONFIG_CFG_PLAN|$configPath|[$section]|$k=$vOne"
+                    }
                   }
                 }
                 Write-Output "RECONFIG_CFG_PLAN_END|$configPath"
@@ -288,8 +378,14 @@
                 Write-Output "RECONFIG_CFG_DEBUG|FILE_READ|$configPath|line_count=$($lines.Count)"
                 foreach ($section in @($cfg.Keys)) {
                   $vals = $cfg[$section]
+                  if (-not ($vals -is [System.Collections.IDictionary])) { continue }
                   foreach ($k in @($vals.Keys)) {
-                    Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$vals[$k]) -logPath $configPath
+                    $v = $vals[$k]
+                    if ($v -is [System.Collections.IDictionary]) {
+                      Merge-JsonKey -lines $lines -section $section -key ([string]$k) -updates $v -logPath $configPath
+                    } else {
+                      Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$v) -logPath $configPath
+                    }
                   }
                 }
                 $null = $lines | Set-Content -LiteralPath $configPath
@@ -302,6 +398,7 @@
             }
 
             $calbIp = "{{ merged_system_config.ServerIpAddrStr | default(api_host) }}"
+            $serverPort = [int]"{{ api_port | int }}"
             $fromDate = "{{ merged_system_config.HisDataFromTime | default(his_data_from_time) }}"
             if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
             $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
@@ -313,8 +410,9 @@
             $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
             Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
             Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
-            $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -fromDate $fromDate -toDate $toDate
-            $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -fromDate $fromDate -toDate $toDate
+            Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort"
+            $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+            $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
             if (-not $userResult -and -not $publicResult) { exit 1 }
             Write-Output "RECONFIG_CFG_RUN_SUMMARY|user_ok=$userResult|public_ok=$publicResult"
           register: config_result
