@@ -48,6 +48,7 @@ func filterDevicesInMemory(devices []db.Device, filter *db.DeviceListFilter) []d
 	ds := strings.TrimSpace(filter.DeviceStatus)
 	rs := strings.TrimSpace(filter.RDPStatus)
 	ws := strings.TrimSpace(filter.WinRMStatus)
+	as := strings.TrimSpace(filter.APIStatus)
 
 	out := make([]db.Device, 0, len(devices))
 	for _, dev := range devices {
@@ -64,6 +65,9 @@ func filterDevicesInMemory(devices []db.Device, filter *db.DeviceListFilter) []d
 			continue
 		}
 		if ws != "" && string(dev.WinRMStatus) != ws {
+			continue
+		}
+		if as != "" && string(dev.APIStatus) != as {
 			continue
 		}
 		out = append(out, dev)
@@ -149,6 +153,12 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 	if device.WinRMStatus == "" {
 		device.WinRMStatus = db.DeviceStatusUnknown
 	}
+	if device.APIStatus == "" {
+		device.APIStatus = db.DeviceStatusUnknown
+	}
+	if device.APIPort == 0 {
+		device.APIPort = db.DefaultDeviceAPIPort
+	}
 	device.Created = tz.Now()
 
 	res, err := d.createObject(device.ProjectID, db.DeviceProps, device)
@@ -158,13 +168,14 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 	return res.(db.Device), nil
 }
 
-func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm db.DeviceStatus, refreshed time.Time) error {
+func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api db.DeviceStatus, refreshed time.Time) error {
 	device, err := d.GetDevice(projectID, deviceID)
 	if err != nil {
 		return err
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	device.APIStatus = api
 	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
 		device.DeviceStatus = db.DeviceStatusHealthy
 	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {

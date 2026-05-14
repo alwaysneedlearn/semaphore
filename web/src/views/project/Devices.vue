@@ -377,6 +377,16 @@
               outlined
             />
           </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.apiStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceFilterApiStatus')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
         </v-row>
         <div class="px-4 pb-1 text--secondary caption">
           {{ $t('devicePaginationSelectionHint') }}
@@ -397,13 +407,18 @@
           {{ item.winrm_status }}
         </v-chip>
       </template>
+      <template v-slot:item.api_status="{ item }">
+        <v-chip x-small :color="statusColor(item.api_status)" dark>
+          {{ item.api_status }}
+        </v-chip>
+      </template>
       <template v-slot:item.last_updated="{ item }">
         {{ formatTime(item.last_updated) }}
       </template>
       <template v-slot:item.actions="{ item }">
         <v-btn-toggle dense :value-comparator="() => false">
           <v-btn
-            :title="$t('deviceProbe')"
+            :title="`${$t('deviceProbe')}: ${$t('deviceProbeHelp')}`"
             :loading="busyId === item.id"
             @click="probeDevice(item)"
           >
@@ -524,6 +539,7 @@ export default {
         deviceStatus: null,
         rdpStatus: null,
         winrmStatus: null,
+        apiStatus: null,
       },
       discoveryHeaders: [
         { text: 'Hostname', value: 'hostname' },
@@ -625,8 +641,9 @@ export default {
         { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '25%' },
         { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
         { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status', width: '9%' },
-        { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '9%' },
-        { text: this.$i18n.t('deviceLastUpdated'), value: 'last_updated', width: '15%' },
+        { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '8%' },
+        { text: this.$i18n.t('deviceApiStatus'), value: 'api_status', width: '8%' },
+        { text: this.$i18n.t('deviceLastUpdated'), value: 'last_updated', width: '12%' },
         { value: 'actions', sortable: false, width: '0%' },
       ];
     },
@@ -690,6 +707,7 @@ export default {
         if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
         if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
         if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
+        if (this.filters.apiStatus) params.api_status = this.filters.apiStatus;
 
         const [devicesRes, statsRes] = await Promise.all([
           axios.get(this.getItemsUrl(), { params }),

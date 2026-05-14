@@ -31,6 +31,18 @@ const (
 	DeviceActionConfig   DeviceAction = "config"
 )
 
+// DefaultDeviceAPIPort is the TCP port used for application API reachability probes
+// when device.api_port is unset (0).
+const DefaultDeviceAPIPort = 9002
+
+// EffectiveDeviceAPIProbePort returns the TCP port to dial for API probes from Semaphore.
+func EffectiveDeviceAPIProbePort(d Device) int {
+	if d.APIPort > 0 && d.APIPort <= 65535 {
+		return d.APIPort
+	}
+	return DefaultDeviceAPIPort
+}
+
 // Device is a managed host belonging to a project.
 type Device struct {
 	ID                               int          `db:"id" json:"id" backup:"-"`
@@ -48,6 +60,8 @@ type Device struct {
 	DeviceStatus                     DeviceStatus `db:"device_status" json:"device_status"`
 	RDPStatus                        DeviceStatus `db:"rdp_status" json:"rdp_status"`
 	WinRMStatus                      DeviceStatus `db:"winrm_status" json:"winrm_status"`
+	APIPort                          int          `db:"api_port" json:"api_port"`
+	APIStatus                        DeviceStatus `db:"api_status" json:"api_status"`
 	AbnormalReason                   *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
 	LastUpdated                      *time.Time   `db:"last_updated" json:"last_updated,omitempty"`
 	Created                          time.Time    `db:"created" json:"created" backup:"-"`
@@ -60,6 +74,7 @@ type DeviceListFilter struct {
 	DeviceStatus      string
 	RDPStatus         string
 	WinRMStatus       string
+	APIStatus         string
 }
 
 // Validate enforces the device invariants checked at the API/store boundary.
@@ -84,6 +99,14 @@ func (d Device) Validate() error {
 	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device winrm_status is invalid"}
+	}
+	switch d.APIStatus {
+	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
+	default:
+		return &ValidationError{"Device api_status is invalid"}
+	}
+	if d.APIPort != 0 && (d.APIPort < 1 || d.APIPort > 65535) {
+		return &ValidationError{"Device api_port must be between 1 and 65535"}
 	}
 	return nil
 }

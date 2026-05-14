@@ -22,7 +22,7 @@ const deviceStatusTickInterval = 60 * time.Second
 // DeviceStatusScheduler runs periodically and:
 //
 //  1. For every project whose ProjectDeviceSettings.StatusRefreshIntervalMin
-//     interval has elapsed, performs a TCP port probe (RDP + WinRM) on every
+//     interval has elapsed, performs a TCP port probe (RDP + WinRM + API) on every
 //     device in the project and persists the results.
 //  2. Optionally enqueues the project's configured status template via the
 //     TaskPool, so user-defined ansible/script-based checks also run.
@@ -91,9 +91,9 @@ func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings
 	}
 
 	for _, device := range devices {
-		rdp, winrm, refreshed := ProbeDevice(device)
+		rdp, winrm, api, refreshed := ProbeDevice(device)
 		if err := s.store.UpdateDeviceStatus(
-			settings.ProjectID, device.ID, rdp, winrm, refreshed,
+			settings.ProjectID, device.ID, rdp, winrm, api, refreshed,
 		); err != nil {
 			log.WithError(err).
 				WithField("project_id", settings.ProjectID).

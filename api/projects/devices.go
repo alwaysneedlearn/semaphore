@@ -58,6 +58,9 @@ func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSetti
 	if device.AnsibleWinRMServerCertValidation == "" {
 		device.AnsibleWinRMServerCertValidation = "ignore"
 	}
+	if device.APIPort == 0 {
+		device.APIPort = db.DefaultDeviceAPIPort
+	}
 }
 
 func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string {
@@ -216,9 +219,10 @@ func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
 		DeviceStatus:      strings.TrimSpace(q.Get("device_status")),
 		RDPStatus:         strings.TrimSpace(q.Get("rdp_status")),
 		WinRMStatus:       strings.TrimSpace(q.Get("winrm_status")),
+		APIStatus:         strings.TrimSpace(q.Get("api_status")),
 	}
 	if f.HostnameSubstring == "" && f.IPSubstring == "" && f.DeviceStatus == "" &&
-		f.RDPStatus == "" && f.WinRMStatus == "" {
+		f.RDPStatus == "" && f.WinRMStatus == "" && f.APIStatus == "" {
 		return nil
 	}
 	return f
@@ -343,6 +347,9 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	if device.WinRMStatus == "" {
 		device.WinRMStatus = db.DeviceStatusUnknown
 	}
+	if device.APIStatus == "" {
+		device.APIStatus = db.DeviceStatusUnknown
+	}
 	normalizeDeviceConnection(&device, settings)
 
 	if err := device.Validate(); err != nil {
@@ -392,6 +399,7 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.Name = device.Hostname
 	device.RDPStatus = old.RDPStatus
 	device.WinRMStatus = old.WinRMStatus
+	device.APIStatus = old.APIStatus
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = old.DeviceStatus
 	}
@@ -1162,20 +1170,20 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusCreated, task)
 }
 
-// ProbeDevice runs an immediate server-side TCP port probe of RDP and WinRM
-// for one device and persists the result. Useful for instant feedback when
-// no status template is configured.
+// ProbeDevice runs an immediate server-side TCP port probe of RDP, WinRM,
+// and the device application API port, then persists the protocol statuses.
 func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
-	rdp, winrm, refreshed := server.ProbeDevice(device)
+	rdp, winrm, api, refreshed := server.ProbeDevice(device)
 	if err := helpers.Store(r).UpdateDeviceStatus(
-		device.ProjectID, device.ID, rdp, winrm, refreshed,
+		device.ProjectID, device.ID, rdp, winrm, api, refreshed,
 	); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
+	device.APIStatus = api
 	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
 		device.DeviceStatus = db.DeviceStatusHealthy
 	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {

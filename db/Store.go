@@ -315,7 +315,7 @@ type DeviceManager interface {
 	GetDevice(projectID, deviceID int) (Device, error)
 	CreateDevice(device Device) (Device, error)
 	UpdateDevice(device Device) error
-	UpdateDeviceStatus(projectID, deviceID int, rdp, winrm DeviceStatus, refreshed time.Time) error
+	UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api DeviceStatus, refreshed time.Time) error
 	UpdateDeviceStatusByHostname(projectID int, hostname string, status DeviceStatus, refreshed time.Time) error
 	UpsertDevicesByHostname(projectID int, devices []Device) ([]Device, error)
 	GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit int) ([]DeviceStatusCallbackLog, error)
@@ -635,7 +635,7 @@ var DeviceProps = ObjectProps{
 	Type:                  reflect.TypeOf(Device{}),
 	PrimaryColumnName:     "id",
 	ReferringColumnSuffix: "device_id",
-	SortableColumns:       []string{"name", "ip_address", "hostname", "device_status", "rdp_status", "winrm_status", "last_updated"},
+	SortableColumns:       []string{"name", "ip_address", "hostname", "device_status", "rdp_status", "winrm_status", "api_status", "last_updated"},
 	DefaultSortingColumn:  "name",
 }
 

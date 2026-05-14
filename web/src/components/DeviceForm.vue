@@ -90,6 +90,19 @@
     ></v-text-field>
 
     <v-text-field
+      v-model.number="item.api_port"
+      :label="$t('deviceApiPort')"
+      :rules="[v => v == null || v === '' || (v >= 1 && v <= 65535) || $t('deviceApiPortInvalid')]"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="number"
+      min="1"
+      max="65535"
+      placeholder="9002"
+    ></v-text-field>
+
+    <v-text-field
       v-model="item.ansible_winrm_server_cert_validation"
       :label="$t('deviceAnsibleWinrmCertValidation')"
       :disabled="formSaving"
@@ -106,6 +119,20 @@ export default {
   mixins: [ItemFormBase],
 
   methods: {
+    afterLoadData() {
+      if (!this.item) return;
+      const p = this.item.api_port;
+      if (p === undefined || p === null || p === '' || p === 0) {
+        this.$set(this.item, 'api_port', 9002);
+      }
+    },
+    beforeSave() {
+      if (!this.item) return;
+      const p = this.item.api_port;
+      if (p === '' || p === undefined || p === null || p === 0) {
+        this.item.api_port = 9002;
+      }
+    },
     getItemsUrl() {
       return `/api/project/${this.projectId}/devices`;
     },
@@ -123,6 +150,7 @@ export default {
         ansible_winrm_scheme: 'http',
         ansible_port: 5985,
         ansible_winrm_server_cert_validation: 'ignore',
+        api_port: 9002,
         device_status: 'unknown',
       };
     },
