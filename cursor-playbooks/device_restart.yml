@@ -147,6 +147,14 @@
             }
 
             [Console]::Error.WriteLine("[get_username] source=$source resolved_user=$resolved")
+            # 以下多行供 Semaphore/Ansible 日志直接查看；最后一行必须是纯用户名（供 set_fact 取 stdout_lines|last）
+            Write-Output "RECONFIG_LOG_PROFILE_USER=$resolved"
+            Write-Output "RECONFIG_LOG_SOURCE=$source"
+            $bd = "C:\Users\$resolved\Documents\NEWARE\BTSClient"
+            Write-Output "RECONFIG_LOG_USER_BTS_DIR=$bd"
+            Write-Output "RECONFIG_LOG_USER_CFG=$bd\{{ config_file_name }}"
+            Write-Output "RECONFIG_LOG_PUBLIC_CFG=C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
+            Write-Output "RECONFIG_LOG_SRC={{ zip_path }}/{{ config_file_name }}"
             Write-Output $resolved
           register: get_username_result
           changed_when: false
@@ -161,15 +169,6 @@
             _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
             _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
             _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
-
-        - name: 重配执行：排障打印用户名与配置文件路径（成功也会打印）
-          ansible.builtin.debug:
-            msg:
-              - "[重配-用户] profile_user={{ _reconfig_profile_user }} (win_shell 末行 stdout)"
-              - "[重配-源] config_zip_src={{ _reconfig_cfg_src }}"
-              - "[重配-目录] user_BTSClient={{ _reconfig_user_bts_dir }}"
-              - "[重配-目标] user_config_file={{ _reconfig_user_cfg_file }}"
-              - "[重配-目标] public_config_file={{ _reconfig_public_cfg_file }}"
 
         - name: 重配执行：创建配置文件目录（当前用户）
           ansible.builtin.win_file:
@@ -258,6 +257,8 @@
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $cfgJson = @'{{ merged_cfg_json }}'@
+            Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
+            Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
             $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -fromDate $fromDate -toDate $toDate
             $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -fromDate $fromDate -toDate $toDate
             if (-not $userResult -and -not $publicResult) { exit 1 }
@@ -265,10 +266,6 @@
           failed_when: >
             config_result is defined and 'stdout' in config_result and
             ('CONFIG_MODIFY_ERROR' in config_result.stdout)
-
-        - name: 重配执行：排障打印配置修改任务输出
-          ansible.builtin.debug:
-            msg: "[重配-配置修改] stdout_lines={{ config_result.stdout_lines | default([]) }}"
 
         - name: 重配执行：检查程序文件是否存在
           win_shell: |
@@ -293,7 +290,7 @@
                 }
                 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date)
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-                $userId = "{{ get_username_result.stdout | trim }}"
+                $userId = "{{ _reconfig_profile_user }}"
                 $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
                 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
                 $taskStatus = (Get-ScheduledTask -TaskName $taskName).State
