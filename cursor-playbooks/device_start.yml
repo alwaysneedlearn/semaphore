@@ -223,38 +223,30 @@
 
         - name: 重配执行：获取当前用户名
           win_shell: |
-            # 优先：上次在登录界面输入的用户（无人桌面会话时 explorer 可能不存在）
-            $username = $null
-            $logonUi = Get-ItemProperty `
-              -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
-              -ErrorAction SilentlyContinue
-            $raw = $null
-            if ($logonUi) { $raw = $logonUi.LastLoggedOnUser }
-            if ($raw) {
-              $t = [string]$raw.Trim()
-              if ($t.Length -gt 0) {
-                $idx = $t.LastIndexOf('\')
-                if ($idx -ge 0 -and $idx -lt ($t.Length - 1)) {
-                  $username = $t.Substring($idx + 1).Trim()
-                } else {
-                  $username = $t
-                }
+            # 优先获取当前桌面用户；无人登录时读 LogonUI（SAM 优先）；再无则 ansible 连接用户
+            $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+              if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+            } |
+            Where-Object { $_ } |
+            Select-Object -First 1
+
+            if ($explorerUser) {
+              Write-Output $explorerUser
+            } else {
+              $logon = Get-ItemProperty `
+                -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
+                -ErrorAction SilentlyContinue
+
+              if ($logon -and $logon.LastLoggedOnSAMUser) {
+                Write-Output ($logon.LastLoggedOnSAMUser.ToString().Split('\')[-1])
+              } elseif ($logon -and $logon.LastLoggedOnUser) {
+                Write-Output ($logon.LastLoggedOnUser.ToString().Split('\')[-1])
+              } else {
+                Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
               }
             }
-            # 回退：explorer.exe 进程属主
-            if (-not $username) {
-              $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($explorer) {
-                $own = $explorer | Invoke-CimMethod -MethodName GetOwner
-                if ($own -and $own.ReturnValue -eq 0 -and $own.User) {
-                  $username = [string]$own.User.Trim()
-                }
-              }
-            }
-            if (-not $username) {
-              $username = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
-            }
-            Write-Output $username
           register: get_username_result
           changed_when: false
 
