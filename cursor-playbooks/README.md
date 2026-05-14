@@ -47,7 +47,7 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 | `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |
 | `[DEBUG-API]` | HTTP status + **raw response body** for device HTTP API POSTs and for Semaphore `PUT …/devices/status/bulk` |
 
-The `重配执行：配置修改变更明细（仅打印实际变化与摘要）` Ansible debug task filters `stdout_lines` down to `CFG_CHANGE` / `RECONFIG_REPORT_API_DEFAULTS` / `RECONFIG_MODIFY_` / `CONFIG_*` / `RECONFIG_CFG_RUN_SUMMARY`, so the log shows only what actually changed plus the run summary. Raw output is still available in `config_result.stdout` if you need to debug the script itself.
+The `重配执行：配置修改变更明细（仅打印实际变化与摘要）` Ansible debug task prints `stdout_lines` directly (plus `stderr` if any). The `win_shell` script no longer emits `PATH_OK` / `JSON_OK` / `PLAN_*` / `FILE_READ` noise, so what you see is exactly: device IP/port defaults, per-file `RECONFIG_MODIFY_*=…` paths, any `CFG_CHANGE|…` lines (only on real value changes), `CONFIG_MODIFIED|<path>`, and the per-file `RECONFIG_CFG_RUN_SUMMARY`. **Do not** rely on an Ansible-side `select('match', ...)` filter here: older Ansibles can swallow every line silently if the `match` test resolves differently.
 
 Note: previously `$lines | Set-Content` could echo every line into PowerShell’s success stream and leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
 

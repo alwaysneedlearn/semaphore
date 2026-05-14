@@ -547,9 +547,12 @@
             config_result is defined and 'stdout' in config_result and
             ('CONFIG_MODIFY_ERROR' in config_result.stdout)
 
+        # win_shell 已经只输出"实际变化(CFG_CHANGE) + 路径 + 摘要"，直接 dump stdout_lines，不再做正则过滤
         - name: 重配执行：配置修改变更明细（仅打印实际变化与摘要）
           ansible.builtin.debug:
-            msg: "{{ config_result.stdout_lines | default([]) | select('match', '^(CFG_CHANGE|RECONFIG_REPORT_API_DEFAULTS|RECONFIG_MODIFY_|CONFIG_MODIFIED|CONFIG_NOT_FOUND|CONFIG_MODIFY_ERROR|RECONFIG_CFG_RUN_SUMMARY)') | list }}"
+            msg:
+              - "stdout_lines={{ config_result.stdout_lines | default([]) }}"
+              - "stderr={{ (config_result.stderr | default('') | string | trim) }}"
 
         - name: 重配执行：检查程序文件是否存在
           win_shell: |
