@@ -398,9 +398,8 @@
 
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
-            $cfgJson = @'
-{{ merged_cfg_json }}
-'@
+            # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
+            $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
 
             Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
             Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"

@@ -42,7 +42,7 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 
 Note: previously `$lines | Set-Content` could echo every line into PowerShell’s success stream and leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
 
-**PowerShell here-strings:** `$cfgJson` must use a multiline `@' … '@` block (opening `@'` must be the last token on its line). A single line `@'{{ merged_cfg_json }}'@` is invalid and causes `UnexpectedCharactersAfterHereStringHeader`.
+**Merged config JSON into `win_shell`:** `merged_cfg_json` is injected as a **single-line** PowerShell assignment (`$cfgJson = '…'`) with **`replace("\u0027", "\u0027\u0027")`** so JSON values containing `'` stay valid in PowerShell **and** Ansible never sees unindented lines after Jinja (which breaks YAML `|` blocks). Do **not** use a multiline `@' … '@` here-string for this value: YAML requires every continuation line to stay indented, while PowerShell historically required the closing `'@` at the start of the script line—those rules conflict inside a playbook literal block.
 
 ### Start API retry (`device_start.yml` / `device_restart.yml`)
 
