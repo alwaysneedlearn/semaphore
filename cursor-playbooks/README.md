@@ -34,7 +34,7 @@ Patrol all sets devices to `checking` first; the status template should run a pl
 
 ### `semaphore_callback_row` and API status
 
-- **`device_start.yml` / `device_restart.yml`** set **`api_status`** (`online` / `offline`) from the same app-API check used for start verification, so a failed restart does not leave **`device_status: healthy`** while the API is down.
+- **`device_start.yml` / `device_restart.yml`** set **`api_status`** (`online` / `offline`) from the same app-API check used for start verification, so a failed restart does not leave **`device_status: healthy`** while the API is down. **`semaphore_callback_row.api_status` is always one of `online` or `offline`** (never empty): an empty value causes **`PUT …/devices/status/bulk`** to skip updating **`api_status`**, leaving the UI stuck on **`offline`** / **`checking`** even after a successful run.
 - **`device_status.yml` (Patrol):** the bulk callback’s **`device_status` / `api_status` follow `need_reconfigure`** (same rule as the end-of-play “NORMAL / 异常” counts: API+export **or** log keyword). That keeps the written Semaphore state consistent with the printed summary and avoids **`CoerceDeviceStatusIfAPIOffline`** turning a **log-healthy** host into **`unhealthy`** because the HTTP probe alone failed.
 - **Ansible boolean gotcha:** `set_fact: x: "{{ false }}"` stores the **string** `"False"`, which is **truthy** in Jinja `when:` tests — use two tasks with literal YAML `true` / `false` (as in those playbooks) for flags that gate `fail` / callbacks.
 - The Semaphore API also **rejects inconsistent rows**: `PUT …/devices/status/bulk` coerces **`device_status` away from `healthy` when `api_status` is `offline`** (after merging optional `api_status` from the payload with the stored device).
