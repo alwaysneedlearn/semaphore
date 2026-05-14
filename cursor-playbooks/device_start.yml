@@ -12,8 +12,8 @@
     exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('NWReport_DBWB.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    # 必须 ((x>0)|ternary)；否则 api_port 会变成布尔值，ServerPort=0
-    api_port: "{{ ((hostvars[inventory_hostname].api_port | default(0) | int) > 0) | ternary(hostvars[inventory_hostname].api_port | int, (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}"
+    # 显式 if 计算端口，避免 ternary/比较符优先级导致 api_port 变成 True/False
+    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int }}{% endif %}"
     api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
     api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
     api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
