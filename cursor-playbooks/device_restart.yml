@@ -12,7 +12,8 @@
     exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('NWReport_DBWB.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{{ (hostvars[inventory_hostname].api_port | default(0) | int) > 0 | ternary(hostvars[inventory_hostname].api_port | int, (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}"
+    # 必须写成 ((x > 0) | ternary(...))；否则 Jinja 会解析成 (x > (0|ternary(...)))，得到布尔比较结果，api_port 变成 True/False，ServerPort=0
+    api_port: "{{ ((hostvars[inventory_hostname].api_port | default(0) | int) > 0) | ternary(hostvars[inventory_hostname].api_port | int, (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}"
     api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
     api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
     api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
@@ -523,13 +524,15 @@
             (extract_result is defined and not (extract_result.skipped | default(false)) and
              'EXTRACT_OK' in (extract_result.stdout | default('')))
           win_shell: |
-            if (Test-Path "{{ exe_path }}") {
+            $startExe = "{{ exe_path }}"
+            Write-Output "RECONFIG_START_EXE_PATH=$startExe|exists=$(Test-Path -LiteralPath $startExe)"
+            if (Test-Path -LiteralPath $startExe) {
               try {
                 $taskName = "Start-{{ exe_name }}"
                 if ("{{ exe_args }}" -ne "") {
-                  $action = New-ScheduledTaskAction -Execute "{{ exe_path }}" -Argument "{{ exe_args }}"
+                  $action = New-ScheduledTaskAction -Execute $startExe -Argument "{{ exe_args }}"
                 } else {
-                  $action = New-ScheduledTaskAction -Execute "{{ exe_path }}"
+                  $action = New-ScheduledTaskAction -Execute $startExe
                 }
                 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date)
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
@@ -551,7 +554,7 @@
                 Write-Output "START_ERROR:$($_.Exception.Message)"
               }
             } else {
-              Write-Output "EXE_NOT_FOUND"
+              Write-Output "EXE_NOT_FOUND_AT_START|path=$startExe"
             }
           register: relaunch_result
           failed_when: >
