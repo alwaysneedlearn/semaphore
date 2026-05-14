@@ -3,7 +3,8 @@
   hosts: windows_hosts
   gather_facts: no
   vars:
-    exe_name: "{{ lookup('env', 'EXE_NAME') | default('uu') }}"
+    # Variable Group 环境变量（非空）优先，否则使用下列默认值
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"

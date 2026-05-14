@@ -91,7 +91,7 @@ func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings
 	}
 
 	for _, device := range devices {
-		rdp, winrm, api, refreshed := ProbeDevice(device)
+		rdp, winrm, api, refreshed := ProbeDevice(device, settings)
 		if err := s.store.UpdateDeviceStatus(
 			settings.ProjectID, device.ID, rdp, winrm, api, refreshed,
 		); err != nil {
@@ -127,10 +127,15 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 	devicePayload := make([]map[string]any, 0, len(devices))
 	for _, d := range devices {
 		devicePayload = append(devicePayload, map[string]any{
-			"id":       d.ID,
-			"name":     d.Name,
-			"ip":       d.IPAddress,
-			"hostname": d.Hostname,
+			"id":           d.ID,
+			"name":         d.Name,
+			"ip":           d.IPAddress,
+			"hostname":     d.Hostname,
+			"rdp_user":     d.RDPUser,
+			"rdp_password": d.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(d),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
 	envBytes, err := json.Marshal(map[string]any{

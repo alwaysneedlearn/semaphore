@@ -75,19 +75,25 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		device.Name = device.Hostname
 	}
 	if device.DeviceStatus == "" {
-		device.DeviceStatus = db.DeviceStatusUnknown
+		device.DeviceStatus = db.DeviceStatusUnhealthy
 	}
 	if device.RDPStatus == "" {
-		device.RDPStatus = db.DeviceStatusUnknown
+		device.RDPStatus = db.DeviceStatusOffline
 	}
 	if device.WinRMStatus == "" {
-		device.WinRMStatus = db.DeviceStatusUnknown
+		device.WinRMStatus = db.DeviceStatusOffline
+	}
+	if device.AnsiblePort <= 0 || device.AnsiblePort > 65535 {
+		device.AnsiblePort = db.DefaultDeviceAnsiblePort
+	}
+	if device.RDPPort <= 0 || device.RDPPort > 65535 {
+		device.RDPPort = db.DefaultDeviceRDPPort
+	}
+	if device.APIPort <= 0 || device.APIPort > 65535 {
+		device.APIPort = db.DefaultDeviceAPIPort
 	}
 	if device.APIStatus == "" {
-		device.APIStatus = db.DeviceStatusUnknown
-	}
-	if device.APIPort == 0 {
-		device.APIPort = db.DefaultDeviceAPIPort
+		device.APIStatus = db.DeviceStatusOffline
 	}
 	device.Created = tz.Now()
 
@@ -96,8 +102,9 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		"insert into project__device ("+
 			"project_id, name, ip_address, hostname, ansible_user, ansible_password, ansible_connection, "+
 			"ansible_winrm_transport, ansible_winrm_scheme, ansible_port, ansible_winrm_server_cert_validation, "+
-			"device_status, rdp_status, winrm_status, api_port, api_status, abnormal_reason, last_updated, created) values "+
-			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"rdp_user, rdp_password, rdp_port, api_port, api_status, "+
+			"device_status, rdp_status, winrm_status, abnormal_reason, last_updated, created) values "+
+			"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		device.ProjectID,
 		device.Name,
 		device.IPAddress,
@@ -109,11 +116,14 @@ func (d *SqlDb) CreateDevice(device db.Device) (newDevice db.Device, err error) 
 		device.AnsibleWinRMScheme,
 		device.AnsiblePort,
 		device.AnsibleWinRMServerCertValidation,
+		device.RDPUser,
+		device.RDPPassword,
+		device.RDPPort,
+		device.APIPort,
+		device.APIStatus,
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
-		device.APIPort,
-		device.APIStatus,
 		device.AbnormalReason,
 		device.LastUpdated,
 		device.Created,
@@ -132,7 +142,8 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 		"update project__device set "+
 			"name=?, ip_address=?, hostname=?, ansible_user=?, ansible_password=?, ansible_connection=?, "+
 			"ansible_winrm_transport=?, ansible_winrm_scheme=?, ansible_port=?, ansible_winrm_server_cert_validation=?, "+
-			"device_status=?, rdp_status=?, winrm_status=?, api_port=?, api_status=?, abnormal_reason=?, last_updated=? "+
+			"rdp_user=?, rdp_password=?, rdp_port=?, api_port=?, api_status=?, "+
+			"device_status=?, rdp_status=?, winrm_status=?, abnormal_reason=?, last_updated=? "+
 			"where id=? and project_id=?",
 		device.Name,
 		device.IPAddress,
@@ -144,11 +155,14 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 		device.AnsibleWinRMScheme,
 		device.AnsiblePort,
 		device.AnsibleWinRMServerCertValidation,
+		device.RDPUser,
+		device.RDPPassword,
+		device.RDPPort,
+		device.APIPort,
+		device.APIStatus,
 		device.DeviceStatus,
 		device.RDPStatus,
 		device.WinRMStatus,
-		device.APIPort,
-		device.APIStatus,
 		device.AbnormalReason,
 		device.LastUpdated,
 		device.ID,
@@ -163,6 +177,15 @@ func (d *SqlDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api db.D
 		"update project__device set rdp_status=?, winrm_status=?, api_status=?, device_status=?, last_updated=? "+
 			"where id=? and project_id=?",
 		rdp, winrm, api, deviceStatus, refreshed, deviceID, projectID,
+	)
+	return err
+}
+
+func (d *SqlDb) UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm, api db.DeviceStatus, refreshed time.Time) error {
+	_, err := d.exec(
+		"update project__device set rdp_status=?, winrm_status=?, api_status=?, last_updated=? "+
+			"where id=? and project_id=?",
+		rdp, winrm, api, refreshed, deviceID, projectID,
 	)
 	return err
 }
@@ -194,7 +217,7 @@ func (d *SqlDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) 
 		case db.DeviceStatusChecking:
 			stats.Checking += r.Count
 		default:
-			stats.Unknown += r.Count
+			stats.Unhealthy += r.Count
 		}
 	}
 	return
@@ -211,19 +234,29 @@ func (d *SqlDb) UpdateDeviceStatusByHostname(projectID int, hostname string, sta
 	return err
 }
 
-func (d *SqlDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]db.Device, error) {
+func (d *SqlDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]db.Device, error) {
 	var saved []db.Device
 	for _, dev := range devices {
+		ip := strings.TrimSpace(dev.IPAddress)
+		if ip == "" {
+			continue
+		}
+		dev.IPAddress = ip
+
 		var existing db.Device
 		err := d.selectOne(&existing,
-			"select * from project__device where project_id=? and hostname=?",
-			projectID, dev.Hostname)
+			"select * from project__device where project_id=? and ip_address=?",
+			projectID, ip)
 		if err != nil && !errors.Is(err, db.ErrNotFound) {
 			return nil, err
 		}
 
 		if errors.Is(err, db.ErrNotFound) {
 			dev.ProjectID = projectID
+			if strings.TrimSpace(dev.Hostname) == "" {
+				dev.Hostname = ip
+			}
+			dev.Name = dev.Hostname
 			created, cErr := d.CreateDevice(dev)
 			if cErr != nil {
 				return nil, cErr
@@ -232,13 +265,16 @@ func (d *SqlDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]d
 			continue
 		}
 
-		existing.IPAddress = dev.IPAddress
-		existing.AnsibleUser = dev.AnsibleUser
-		existing.AnsiblePassword = dev.AnsiblePassword
+		existing.IPAddress = ip
+		if strings.TrimSpace(dev.Hostname) != "" {
+			existing.Hostname = strings.TrimSpace(dev.Hostname)
+			existing.Name = existing.Hostname
+		}
+		db.MergeDeviceCredentialsOnUpsert(&existing, dev)
+		db.MergeDevicePortsOnUpsert(&existing, dev)
 		existing.AnsibleConnection = dev.AnsibleConnection
 		existing.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
 		existing.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
-		existing.AnsiblePort = dev.AnsiblePort
 		existing.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
 		if dev.DeviceStatus != "" {
 			existing.DeviceStatus = dev.DeviceStatus
@@ -251,9 +287,6 @@ func (d *SqlDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]d
 		}
 		if dev.APIStatus != "" {
 			existing.APIStatus = dev.APIStatus
-		}
-		if dev.APIPort != 0 {
-			existing.APIPort = dev.APIPort
 		}
 		existing.AbnormalReason = dev.AbnormalReason
 		now := tz.Now()
@@ -288,10 +321,15 @@ func (d *SqlDb) CreateDeviceStatusCallbackLog(l db.DeviceStatusCallbackLog) (db.
 		}
 	}
 
+	api := l.APIStatus
+	if api == "" {
+		api = db.DeviceStatusOffline
+	}
+
 	id, err := d.insert("id", "insert into project__device_status_callback ("+
-		"project_id, device_id, hostname, status, rdp_status, winrm_status, abnormal_reason, payload, created"+
-		") values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		l.ProjectID, l.DeviceID, l.Hostname, l.Status, l.RDPStatus, l.WinRMStatus, l.AbnormalReason, l.Payload, l.Created,
+		"project_id, device_id, hostname, status, rdp_status, winrm_status, api_status, abnormal_reason, payload, created"+
+		") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		l.ProjectID, l.DeviceID, l.Hostname, l.Status, l.RDPStatus, l.WinRMStatus, api, l.AbnormalReason, l.Payload, l.Created,
 	)
 	if err != nil {
 		return db.DeviceStatusCallbackLog{}, err

@@ -55,18 +55,6 @@ const (
 	DeviceActionConfig   DeviceAction = "config"
 )
 
-// DefaultDeviceAPIPort is the TCP port used for application API reachability probes
-// when device.api_port is unset (0).
-const DefaultDeviceAPIPort = 9002
-
-// EffectiveDeviceAPIProbePort returns the TCP port to dial for API probes from Semaphore.
-func EffectiveDeviceAPIProbePort(d Device) int {
-	if d.APIPort > 0 && d.APIPort <= 65535 {
-		return d.APIPort
-	}
-	return DefaultDeviceAPIPort
-}
-
 // Device is a managed host belonging to a project.
 type Device struct {
 	ID                               int          `db:"id" json:"id" backup:"-"`
@@ -81,10 +69,13 @@ type Device struct {
 	AnsibleWinRMScheme               string       `db:"ansible_winrm_scheme" json:"ansible_winrm_scheme"`
 	AnsiblePort                      int          `db:"ansible_port" json:"ansible_port"`
 	AnsibleWinRMServerCertValidation string       `db:"ansible_winrm_server_cert_validation" json:"ansible_winrm_server_cert_validation"`
+	RDPUser                          string       `db:"rdp_user" json:"rdp_user"`
+	RDPPassword                      string       `db:"rdp_password" json:"rdp_password"`
+	RDPPort                          int          `db:"rdp_port" json:"rdp_port"`
+	APIPort                          int          `db:"api_port" json:"api_port"`
 	DeviceStatus                     DeviceStatus `db:"device_status" json:"device_status"`
 	RDPStatus                        DeviceStatus `db:"rdp_status" json:"rdp_status"`
 	WinRMStatus                      DeviceStatus `db:"winrm_status" json:"winrm_status"`
-	APIPort                          int          `db:"api_port" json:"api_port"`
 	APIStatus                        DeviceStatus `db:"api_status" json:"api_status"`
 	AbnormalReason                   *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
 	LastUpdated                      *time.Time   `db:"last_updated" json:"last_updated,omitempty"`
@@ -110,22 +101,22 @@ func (d Device) Validate() error {
 		return &ValidationError{"Device ip_address must be a valid IPv4/IPv6 address"}
 	}
 	switch d.DeviceStatus {
-	case "", DeviceStatusUnknown, DeviceStatusHealthy, DeviceStatusUnhealthy, DeviceStatusChecking:
+	case "", DeviceStatusHealthy, DeviceStatusUnhealthy, DeviceStatusChecking:
 	default:
 		return &ValidationError{"Device status is invalid"}
 	}
 	switch d.RDPStatus {
-	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
+	case "", DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device rdp_status is invalid"}
 	}
 	switch d.WinRMStatus {
-	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
+	case "", DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device winrm_status is invalid"}
 	}
 	switch d.APIStatus {
-	case "", DeviceStatusUnknown, DeviceStatusOnline, DeviceStatusOffline:
+	case "", DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device api_status is invalid"}
 	}
@@ -133,6 +124,88 @@ func (d Device) Validate() error {
 		return &ValidationError{"Device api_port must be between 1 and 65535"}
 	}
 	return nil
+}
+
+// Default TCP ports for device connectivity (RDP / WinRM over HTTP).
+const (
+	DefaultDeviceRDPPort     = 3389
+	DefaultDeviceAnsiblePort = 5985
+	DefaultDeviceAPIPort     = 9002
+)
+
+// EffectiveDeviceRDPPort returns a valid RDP TCP port for probes and inventory.
+func EffectiveDeviceRDPPort(d Device) int {
+	if d.RDPPort > 0 && d.RDPPort <= 65535 {
+		return d.RDPPort
+	}
+	return DefaultDeviceRDPPort
+}
+
+// EffectiveDeviceAnsiblePort returns the WinRM/Ansible TCP port for probes and inventory.
+func EffectiveDeviceAnsiblePort(d Device, settings ProjectDeviceSettings) int {
+	if d.AnsiblePort > 0 && d.AnsiblePort <= 65535 {
+		return d.AnsiblePort
+	}
+	if settings.DefaultAnsiblePort > 0 && settings.DefaultAnsiblePort <= 65535 {
+		return settings.DefaultAnsiblePort
+	}
+	return DefaultDeviceAnsiblePort
+}
+
+// EffectiveDeviceAPIPortForInventory returns a positive TCP port to embed as host var `api_port`
+// when generating Ansible inventory. Returns 0 when the device has no explicit port so playbooks
+// fall back to Variable Group env `API_PORT` then default 9002.
+func EffectiveDeviceAPIPortForInventory(d Device) int {
+	if d.APIPort > 0 && d.APIPort <= 65535 {
+		return d.APIPort
+	}
+	return 0
+}
+
+// EffectiveDeviceAPIPortForExtraVars returns the device api_port for task extra-vars, or 0 when
+// unset so JSON consumers treat it as "use env / default" (same semantics as inventory).
+func EffectiveDeviceAPIPortForExtraVars(d Device) int {
+	return EffectiveDeviceAPIPortForInventory(d)
+}
+
+// EffectiveDeviceAPIProbePort returns the TCP port used for API reachability probes (defaults to 9002).
+func EffectiveDeviceAPIProbePort(d Device) int {
+	if d.APIPort > 0 && d.APIPort <= 65535 {
+		return d.APIPort
+	}
+	return DefaultDeviceAPIPort
+}
+
+// MergeDeviceCredentialsOnUpsert copies Ansible/RDP credential fields from incoming onto existing
+// only when incoming provides non-empty trimmed values. Discovery import payloads usually omit
+// secrets; assigning empty strings would erase manually configured credentials.
+func MergeDeviceCredentialsOnUpsert(existing *Device, incoming Device) {
+	if strings.TrimSpace(incoming.AnsibleUser) != "" {
+		existing.AnsibleUser = incoming.AnsibleUser
+	}
+	if strings.TrimSpace(incoming.AnsiblePassword) != "" {
+		existing.AnsiblePassword = incoming.AnsiblePassword
+	}
+	if strings.TrimSpace(incoming.RDPUser) != "" {
+		existing.RDPUser = incoming.RDPUser
+	}
+	if strings.TrimSpace(incoming.RDPPassword) != "" {
+		existing.RDPPassword = incoming.RDPPassword
+	}
+}
+
+// MergeDevicePortsOnUpsert copies RDP/Ansible TCP ports when incoming sets valid values.
+// Import clears ports to 0 before upsert so normalized defaults do not overwrite stored ports.
+func MergeDevicePortsOnUpsert(existing *Device, incoming Device) {
+	if incoming.RDPPort > 0 && incoming.RDPPort <= 65535 {
+		existing.RDPPort = incoming.RDPPort
+	}
+	if incoming.AnsiblePort > 0 && incoming.AnsiblePort <= 65535 {
+		existing.AnsiblePort = incoming.AnsiblePort
+	}
+	if incoming.APIPort > 0 && incoming.APIPort <= 65535 {
+		existing.APIPort = incoming.APIPort
+	}
 }
 
 // DeviceConfigItem is a key/value belonging to a device, grouped by Category.
@@ -216,6 +289,7 @@ type DeviceStatusCallbackLog struct {
 	Status         DeviceStatus `db:"status" json:"status"`
 	RDPStatus      DeviceStatus `db:"rdp_status" json:"rdp_status"`
 	WinRMStatus    DeviceStatus `db:"winrm_status" json:"winrm_status"`
+	APIStatus      DeviceStatus `db:"api_status" json:"api_status"`
 	AbnormalReason *string      `db:"abnormal_reason" json:"abnormal_reason,omitempty"`
 	Payload        string       `db:"payload" json:"payload"`
 	Created        time.Time    `db:"created" json:"created"`

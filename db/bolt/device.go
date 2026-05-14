@@ -145,19 +145,25 @@ func (d *BoltDb) CreateDevice(device db.Device) (db.Device, error) {
 		device.Name = device.Hostname
 	}
 	if device.DeviceStatus == "" {
-		device.DeviceStatus = db.DeviceStatusUnknown
+		device.DeviceStatus = db.DeviceStatusUnhealthy
 	}
 	if device.RDPStatus == "" {
-		device.RDPStatus = db.DeviceStatusUnknown
+		device.RDPStatus = db.DeviceStatusOffline
 	}
 	if device.WinRMStatus == "" {
-		device.WinRMStatus = db.DeviceStatusUnknown
+		device.WinRMStatus = db.DeviceStatusOffline
+	}
+	if device.AnsiblePort <= 0 || device.AnsiblePort > 65535 {
+		device.AnsiblePort = db.DefaultDeviceAnsiblePort
+	}
+	if device.RDPPort <= 0 || device.RDPPort > 65535 {
+		device.RDPPort = db.DefaultDeviceRDPPort
+	}
+	if device.APIPort <= 0 || device.APIPort > 65535 {
+		device.APIPort = db.DefaultDeviceAPIPort
 	}
 	if device.APIStatus == "" {
-		device.APIStatus = db.DeviceStatusUnknown
-	}
-	if device.APIPort == 0 {
-		device.APIPort = db.DefaultDeviceAPIPort
+		device.APIStatus = db.DeviceStatusOffline
 	}
 	device.Created = tz.Now()
 
@@ -182,6 +188,19 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api db.
 	return d.updateObject(projectID, db.DeviceProps, device)
 }
 
+func (d *BoltDb) UpdateDevicePortProbeStatuses(projectID, deviceID int, rdp, winrm, api db.DeviceStatus, refreshed time.Time) error {
+	device, err := d.GetDevice(projectID, deviceID)
+	if err != nil {
+		return err
+	}
+	device.RDPStatus = rdp
+	device.WinRMStatus = winrm
+	device.APIStatus = api
+	t := refreshed
+	device.LastUpdated = &t
+	return d.updateObject(projectID, db.DeviceProps, device)
+}
+
 func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error) {
 	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
@@ -197,7 +216,7 @@ func (d *BoltDb) GetDeviceStats(projectID int) (stats db.DeviceStats, err error)
 		case db.DeviceStatusChecking:
 			stats.Checking++
 		default:
-			stats.Unknown++
+			stats.Unhealthy++
 		}
 	}
 	return
@@ -219,39 +238,67 @@ func (d *BoltDb) UpdateDeviceStatusByHostname(projectID int, hostname string, st
 	return db.ErrNotFound
 }
 
-func (d *BoltDb) UpsertDevicesByHostname(projectID int, devices []db.Device) ([]db.Device, error) {
+func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]db.Device, error) {
 	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		return nil, err
 	}
-	byHost := map[string]db.Device{}
+	byIP := map[string]db.Device{}
 	for _, dev := range existing {
-		byHost[dev.Hostname] = dev
+		if ip := strings.TrimSpace(dev.IPAddress); ip != "" {
+			byIP[ip] = dev
+		}
 	}
 	var saved []db.Device
 	for _, dev := range devices {
-		if old, ok := byHost[dev.Hostname]; ok {
-			old.IPAddress = dev.IPAddress
-			old.AnsibleUser = dev.AnsibleUser
-			old.AnsiblePassword = dev.AnsiblePassword
+		ip := strings.TrimSpace(dev.IPAddress)
+		if ip == "" {
+			continue
+		}
+		dev.IPAddress = ip
+		if old, ok := byIP[ip]; ok {
+			old.IPAddress = ip
+			if strings.TrimSpace(dev.Hostname) != "" {
+				old.Hostname = strings.TrimSpace(dev.Hostname)
+				old.Name = old.Hostname
+			}
+			db.MergeDeviceCredentialsOnUpsert(&old, dev)
+			db.MergeDevicePortsOnUpsert(&old, dev)
 			old.AnsibleConnection = dev.AnsibleConnection
 			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
 			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
-			old.AnsiblePort = dev.AnsiblePort
 			old.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
 			if dev.DeviceStatus != "" {
 				old.DeviceStatus = dev.DeviceStatus
 			}
+			if dev.RDPStatus != "" {
+				old.RDPStatus = dev.RDPStatus
+			}
+			if dev.WinRMStatus != "" {
+				old.WinRMStatus = dev.WinRMStatus
+			}
+			if dev.APIStatus != "" {
+				old.APIStatus = dev.APIStatus
+			}
+			old.AbnormalReason = dev.AbnormalReason
+			now := tz.Now()
+			old.LastUpdated = &now
 			if err = d.UpdateDevice(old); err != nil {
 				return nil, err
 			}
+			byIP[ip] = old
 			saved = append(saved, old)
 		} else {
 			dev.ProjectID = projectID
+			if strings.TrimSpace(dev.Hostname) == "" {
+				dev.Hostname = ip
+			}
+			dev.Name = dev.Hostname
 			created, cErr := d.CreateDevice(dev)
 			if cErr != nil {
 				return nil, cErr
 			}
+			byIP[ip] = created
 			saved = append(saved, created)
 		}
 	}

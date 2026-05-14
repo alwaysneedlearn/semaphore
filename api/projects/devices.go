@@ -21,13 +21,34 @@ const (
 	deviceAutoInventoryGroup = "windows_hosts"
 )
 
+func normalizeProtocolStatus(status db.DeviceStatus) db.DeviceStatus {
+	if status == db.DeviceStatusOnline {
+		return db.DeviceStatusOnline
+	}
+	return db.DeviceStatusOffline
+}
+
+func normalizeDeviceHealthStatus(status db.DeviceStatus) db.DeviceStatus {
+	switch status {
+	case db.DeviceStatusHealthy, db.DeviceStatusChecking:
+		return status
+	default:
+		return db.DeviceStatusUnhealthy
+	}
+}
+
+func normalizeDeviceStatuses(device *db.Device) {
+	device.RDPStatus = normalizeProtocolStatus(device.RDPStatus)
+	device.WinRMStatus = normalizeProtocolStatus(device.WinRMStatus)
+	device.APIStatus = normalizeProtocolStatus(device.APIStatus)
+	device.DeviceStatus = normalizeDeviceHealthStatus(device.DeviceStatus)
+}
+
+// normalizeDeviceConnection fills connection-related fields from project defaults when the
+// device leaves them blank. ansible_user / ansible_password are intentionally omitted here so
+// empty values stay empty in the database; buildInventoryLine still applies project defaults
+// when generating Ansible inventory for tasks.
 func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSettings) {
-	if device.AnsibleUser == "" {
-		device.AnsibleUser = settings.DefaultAnsibleUser
-	}
-	if device.AnsiblePassword == "" {
-		device.AnsiblePassword = settings.DefaultAnsiblePassword
-	}
 	if device.AnsibleConnection == "" {
 		device.AnsibleConnection = settings.DefaultAnsibleConnection
 	}
@@ -58,7 +79,10 @@ func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSetti
 	if device.AnsibleWinRMServerCertValidation == "" {
 		device.AnsibleWinRMServerCertValidation = "ignore"
 	}
-	if device.APIPort == 0 {
+	if device.RDPPort <= 0 || device.RDPPort > 65535 {
+		device.RDPPort = db.DefaultDeviceRDPPort
+	}
+	if device.APIPort <= 0 || device.APIPort > 65535 {
 		device.APIPort = db.DefaultDeviceAPIPort
 	}
 }
@@ -93,13 +117,7 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	if scheme == "" {
 		scheme = "http"
 	}
-	port := dev.AnsiblePort
-	if port == 0 {
-		port = settings.DefaultAnsiblePort
-	}
-	if port == 0 {
-		port = 5985
-	}
+	port := db.EffectiveDeviceAnsiblePort(dev, settings)
 	certValidation := dev.AnsibleWinRMServerCertValidation
 	if certValidation == "" {
 		certValidation = settings.DefaultAnsibleWinRMServerCertValidation
@@ -108,7 +126,8 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 		certValidation = "ignore"
 	}
 
-	parts := []string{dev.Hostname}
+	inventoryHost := strings.TrimSpace(dev.IPAddress)
+	parts := []string{inventoryHost}
 	if dev.IPAddress != "" {
 		parts = append(parts, "ansible_host="+dev.IPAddress)
 	}
@@ -123,14 +142,38 @@ func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string
 	parts = append(parts, "ansible_winrm_scheme="+scheme)
 	parts = append(parts, "ansible_port="+strconv.Itoa(port))
 	parts = append(parts, "ansible_winrm_server_cert_validation="+certValidation)
+	parts = append(parts, "rdp_port="+strconv.Itoa(db.EffectiveDeviceRDPPort(dev)))
+	if ap := db.EffectiveDeviceAPIPortForInventory(dev); ap > 0 {
+		parts = append(parts, "api_port="+strconv.Itoa(ap))
+	}
 	return strings.Join(parts, " ")
+}
+
+func projectHasDeviceWithIP(r *http.Request, projectID int, ip string, exceptID int) (bool, error) {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return false, nil
+	}
+
+	devices, err := helpers.Store(r).GetDevices(projectID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		return false, err
+	}
+
+	for _, d := range devices {
+		if strings.TrimSpace(d.IPAddress) == ip && d.ID != exceptID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func renderWindowsInventory(devices []db.Device, settings db.ProjectDeviceSettings) string {
 	var b strings.Builder
 	b.WriteString("[" + deviceAutoInventoryGroup + "]\n")
 	for _, dev := range devices {
-		if strings.TrimSpace(dev.Hostname) == "" {
+		if strings.TrimSpace(dev.IPAddress) == "" {
 			continue
 		}
 		b.WriteString(buildInventoryLine(dev, settings))
@@ -221,6 +264,18 @@ func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
 		WinRMStatus:       strings.TrimSpace(q.Get("winrm_status")),
 		APIStatus:         strings.TrimSpace(q.Get("api_status")),
 	}
+	if f.DeviceStatus == string(db.DeviceStatusUnknown) {
+		f.DeviceStatus = string(db.DeviceStatusUnhealthy)
+	}
+	if f.RDPStatus == string(db.DeviceStatusUnknown) {
+		f.RDPStatus = string(db.DeviceStatusOffline)
+	}
+	if f.WinRMStatus == string(db.DeviceStatusUnknown) {
+		f.WinRMStatus = string(db.DeviceStatusOffline)
+	}
+	if f.APIStatus == string(db.DeviceStatusUnknown) {
+		f.APIStatus = string(db.DeviceStatusOffline)
+	}
 	if f.HostnameSubstring == "" && f.IPSubstring == "" && f.DeviceStatus == "" &&
 		f.RDPStatus == "" && f.WinRMStatus == "" && f.APIStatus == "" {
 		return nil
@@ -271,6 +326,9 @@ func GetDevices(w http.ResponseWriter, r *http.Request) {
 	if devices == nil {
 		devices = []db.Device{}
 	}
+	for i := range devices {
+		normalizeDeviceStatuses(&devices[i])
+	}
 
 	total := len(devices)
 	if params.Count > 0 {
@@ -290,11 +348,13 @@ func GetDevices(w http.ResponseWriter, r *http.Request) {
 // GetDevice returns one device (loaded by DeviceMiddleware).
 func GetDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
+	normalizeDeviceStatuses(&device)
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
 
 func GetDeviceStatusReason(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
+	normalizeDeviceStatuses(&device)
 	logs, err := helpers.Store(r).GetDeviceStatusCallbackLogs(device.ProjectID, device.ID, 20)
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -338,22 +398,26 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
 	device.Name = device.Hostname
-	if device.DeviceStatus == "" {
-		device.DeviceStatus = db.DeviceStatusUnknown
-	}
-	if device.RDPStatus == "" {
-		device.RDPStatus = db.DeviceStatusUnknown
-	}
-	if device.WinRMStatus == "" {
-		device.WinRMStatus = db.DeviceStatusUnknown
-	}
-	if device.APIStatus == "" {
-		device.APIStatus = db.DeviceStatusUnknown
-	}
+	device.AnsibleUser = strings.TrimSpace(device.AnsibleUser)
+	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
+	device.RDPUser = strings.TrimSpace(device.RDPUser)
+	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
+	normalizeDeviceStatuses(&device)
 	normalizeDeviceConnection(&device, settings)
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
+		return
+	}
+	duplicateIP, err := projectHasDeviceWithIP(r, project.ID, device.IPAddress, 0)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if duplicateIP {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Device ip_address already exists in this project",
+		})
 		return
 	}
 
@@ -397,18 +461,34 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
 	device.Name = device.Hostname
+	device.AnsibleUser = strings.TrimSpace(device.AnsibleUser)
+	device.AnsiblePassword = strings.TrimSpace(device.AnsiblePassword)
+	device.RDPUser = strings.TrimSpace(device.RDPUser)
+	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
 	device.RDPStatus = old.RDPStatus
 	device.WinRMStatus = old.WinRMStatus
 	device.APIStatus = old.APIStatus
 	if device.DeviceStatus == "" {
 		device.DeviceStatus = old.DeviceStatus
 	}
+	normalizeDeviceStatuses(&device)
 	device.AbnormalReason = old.AbnormalReason
 	device.LastUpdated = old.LastUpdated
 	normalizeDeviceConnection(&device, settings)
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
+		return
+	}
+	duplicateIP, err := projectHasDeviceWithIP(r, old.ProjectID, device.IPAddress, old.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if duplicateIP {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Device ip_address already exists in this project",
+		})
 		return
 	}
 
@@ -644,11 +724,15 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	if subnet == "" {
 		subnet = strings.TrimSpace(body.NetworkCIDR)
 	}
-	if subnet != "" {
-		// Keep both keys for compatibility with existing templates.
-		extraVars["subnet"] = subnet
-		extraVars["network_cidr"] = subnet
+	if subnet == "" {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "subnet is required (CIDR or single IP)",
+		})
+		return
 	}
+	// Keep both keys for compatibility with existing templates.
+	extraVars["subnet"] = subnet
+	extraVars["network_cidr"] = subnet
 
 	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
 	if err != nil {
@@ -667,45 +751,65 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Devices           []db.Device `json:"devices"`
-		SelectedHostnames []string    `json:"selected_hostnames"`
+		SelectedIPs       []string    `json:"selected_ips"`
+		SelectedHostnames []string    `json:"selected_hostnames"` // legacy: used only if selected_ips is empty
 	}
 	if !helpers.Bind(w, r, &body) {
 		return
 	}
-	selected := map[string]bool{}
-	for _, h := range body.SelectedHostnames {
-		selected[strings.TrimSpace(h)] = true
+	selectedByIP := map[string]bool{}
+	for _, ip := range body.SelectedIPs {
+		if t := strings.TrimSpace(ip); t != "" {
+			selectedByIP[t] = true
+		}
 	}
-	var toUpsert []db.Device
+	selectedByHostname := map[string]bool{}
+	for _, h := range body.SelectedHostnames {
+		if t := strings.TrimSpace(h); t != "" {
+			selectedByHostname[t] = true
+		}
+	}
+	useIPFilter := len(selectedByIP) > 0
+	useHostnameFilter := !useIPFilter && len(selectedByHostname) > 0
+
+	byIP := map[string]db.Device{}
 	for _, dev := range body.Devices {
 		dev.Hostname = strings.TrimSpace(dev.Hostname)
 		dev.IPAddress = strings.TrimSpace(dev.IPAddress)
+		if dev.IPAddress == "" {
+			continue
+		}
+		if dev.Hostname == "" {
+			dev.Hostname = dev.IPAddress
+		}
 		dev.Name = dev.Hostname
 		if dev.DeviceStatus == "" {
 			if dev.RDPStatus == db.DeviceStatusOnline && dev.WinRMStatus == db.DeviceStatusOnline {
 				dev.DeviceStatus = db.DeviceStatusHealthy
-			} else if dev.RDPStatus == db.DeviceStatusOffline && dev.WinRMStatus == db.DeviceStatusOffline {
-				dev.DeviceStatus = db.DeviceStatusUnhealthy
 			} else {
-				dev.DeviceStatus = db.DeviceStatusUnknown
+				dev.DeviceStatus = db.DeviceStatusUnhealthy
 			}
 		}
-		if dev.RDPStatus == "" {
-			dev.RDPStatus = db.DeviceStatusUnknown
-		}
-		if dev.WinRMStatus == "" {
-			dev.WinRMStatus = db.DeviceStatusUnknown
-		}
-		if dev.Hostname == "" {
-			continue
-		}
+		normalizeDeviceStatuses(&dev)
 		normalizeDeviceConnection(&dev, settings)
-		if len(selected) > 0 && !selected[dev.Hostname] {
+		// Upsert merges ports only when non-zero; avoid normalized defaults overwriting
+		// manually configured ports when discovery JSON does not specify ports.
+		dev.AnsiblePort = 0
+		dev.RDPPort = 0
+		dev.APIPort = 0
+		if useIPFilter && !selectedByIP[dev.IPAddress] {
 			continue
 		}
+		if useHostnameFilter && !selectedByHostname[dev.Hostname] {
+			continue
+		}
+		byIP[dev.IPAddress] = dev
+	}
+	toUpsert := make([]db.Device, 0, len(byIP))
+	for _, dev := range byIP {
 		toUpsert = append(toUpsert, dev)
 	}
-	saved, err := helpers.Store(r).UpsertDevicesByHostname(project.ID, toUpsert)
+	saved, err := helpers.Store(r).UpsertDevicesByIPAddress(project.ID, toUpsert)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -753,7 +857,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		switch u.Status {
-		case db.DeviceStatusHealthy, db.DeviceStatusUnhealthy, db.DeviceStatusChecking, db.DeviceStatusUnknown:
+		case db.DeviceStatusHealthy, db.DeviceStatusUnhealthy, db.DeviceStatusChecking:
 		default:
 			continue
 		}
@@ -771,6 +875,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			dev.APIStatus = u.APIStatus
 		}
 		dev.DeviceStatus = db.CoerceDeviceStatusIfAPIOffline(u.Status, dev.APIStatus)
+		normalizeDeviceStatuses(&dev)
 		dev.AbnormalReason = u.AbnormalReason
 		dev.LastUpdated = &refreshed
 		if err := helpers.Store(r).UpdateDevice(dev); err != nil {
@@ -785,6 +890,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 				Status:         dev.DeviceStatus,
 				RDPStatus:      dev.RDPStatus,
 				WinRMStatus:    dev.WinRMStatus,
+				APIStatus:      dev.APIStatus,
 				AbnormalReason: u.AbnormalReason,
 				Payload:        string(payloadBytes),
 				Created:        refreshed,
@@ -861,6 +967,16 @@ func normalizeBulkUpdates(updates []db.DeviceStatusUpdate) {
 		}
 		if updates[i].APIStatus != "" {
 			updates[i].APIStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].APIStatus))))
+		}
+		updates[i].Status = normalizeDeviceHealthStatus(updates[i].Status)
+		if updates[i].RDPStatus != "" {
+			updates[i].RDPStatus = normalizeProtocolStatus(updates[i].RDPStatus)
+		}
+		if updates[i].WinRMStatus != "" {
+			updates[i].WinRMStatus = normalizeProtocolStatus(updates[i].WinRMStatus)
+		}
+		if updates[i].APIStatus != "" {
+			updates[i].APIStatus = normalizeProtocolStatus(updates[i].APIStatus)
 		}
 	}
 }
@@ -941,9 +1057,14 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 	payload := make([]map[string]any, 0, len(devices))
 	for _, d := range devices {
 		payload = append(payload, map[string]any{
-			"id":       d.ID,
-			"hostname": d.Hostname,
-			"ip":       d.IPAddress,
+			"id":           d.ID,
+			"hostname":     d.Hostname,
+			"ip":           d.IPAddress,
+			"rdp_user":     d.RDPUser,
+			"rdp_password": d.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(d),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
 	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
@@ -1036,19 +1157,24 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	extraVars := map[string]any{
-		"device": map[string]any{
-			"id":       device.ID,
-			"ip":       device.IPAddress,
-			"hostname": device.Hostname,
-		},
-	}
-
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
+	extraVars := map[string]any{
+		"device": map[string]any{
+			"id":           device.ID,
+			"ip":           device.IPAddress,
+			"hostname":     device.Hostname,
+			"rdp_user":     device.RDPUser,
+			"rdp_password": device.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(device),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(device, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(device),
+		},
+	}
+
 	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
 		extraVars["default_config"] = defaultConfig
 	}
@@ -1110,6 +1236,11 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	for _, id := range body.DeviceIDs {
 		idSet[id] = true
 	}
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 	allDevices, err := helpers.Store(r).GetDevices(project.ID, db.RetrieveQueryParams{}, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -1123,9 +1254,14 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		}
 		selected = append(selected, d)
 		payload = append(payload, map[string]any{
-			"id":       d.ID,
-			"hostname": d.Hostname,
-			"ip":       d.IPAddress,
+			"id":           d.ID,
+			"hostname":     d.Hostname,
+			"ip":           d.IPAddress,
+			"rdp_user":     d.RDPUser,
+			"rdp_password": d.RDPPassword,
+			"rdp_port":     db.EffectiveDeviceRDPPort(d),
+			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
 	if len(selected) == 0 {
@@ -1141,11 +1277,6 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	extraVars := map[string]any{"devices": payload}
-	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
 	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
 		extraVars["default_config"] = defaultConfig
 	}
@@ -1184,11 +1315,19 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // ProbeDevice runs an immediate server-side TCP port probe of RDP, WinRM,
-// and the device application API port, then persists the protocol statuses.
+// and the configured application API port for one device and persists
+// rdp_status, winrm_status, api_status, and last_updated only
+// (device_status is unchanged). Useful for instant feedback when no status
+// template is configured.
 func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
-	rdp, winrm, api, refreshed := server.ProbeDevice(device)
-	if err := helpers.Store(r).UpdateDeviceStatus(
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(device.ProjectID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	rdp, winrm, api, refreshed := server.ProbeDevice(device, settings)
+	if err := helpers.Store(r).UpdateDevicePortProbeStatuses(
 		device.ProjectID, device.ID, rdp, winrm, api, refreshed,
 	); err != nil {
 		helpers.WriteError(w, err)
@@ -1197,7 +1336,7 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
 	device.APIStatus = api
-	device.DeviceStatus = db.DeviceStatusFromChannelProbes(rdp, winrm, api)
+	normalizeDeviceStatuses(&device)
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
