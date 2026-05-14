@@ -20,6 +20,12 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 
 Patrol all sets devices to `checking` first; the status template should run a playbook like **`device_status.yml`** so the callback clears `checking` to healthy/unhealthy.
 
+### `semaphore_callback_row` and API status
+
+- **`device_start.yml` / `device_restart.yml`** set **`api_status`** (`online` / `offline`) from the same app-API check used for start verification, so a failed restart does not leave **`device_status: healthy`** while the API is down.
+- **Ansible boolean gotcha:** `set_fact: x: "{{ false }}"` stores the **string** `"False"`, which is **truthy** in Jinja `when:` tests — use two tasks with literal YAML `true` / `false` (as in those playbooks) for flags that gate `fail` / callbacks.
+- The Semaphore API also **rejects inconsistent rows**: `PUT …/devices/status/bulk` coerces **`device_status` away from `healthy` when `api_status` is `offline`** (after merging optional `api_status` from the payload with the stored device).
+
 ### Bulk vs single-device extra-vars
 
 - **Bulk** actions pass `devices: [{ id, hostname, ip }, ...]` plus **`configs_by_host`**: the same per-device config map is keyed by **both** `ip` and `hostname` so playbooks can resolve it when `inventory_hostname` is the WinRM target IP.

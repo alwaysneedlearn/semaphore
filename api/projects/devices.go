@@ -761,25 +761,28 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		if u.CheckedAt != nil {
 			refreshed = *u.CheckedAt
 		}
-		dev.DeviceStatus = u.Status
 		if u.RDPStatus != "" {
 			dev.RDPStatus = u.RDPStatus
 		}
 		if u.WinRMStatus != "" {
 			dev.WinRMStatus = u.WinRMStatus
 		}
+		if u.APIStatus != "" {
+			dev.APIStatus = u.APIStatus
+		}
+		dev.DeviceStatus = db.CoerceDeviceStatusIfAPIOffline(u.Status, dev.APIStatus)
 		dev.AbnormalReason = u.AbnormalReason
 		dev.LastUpdated = &refreshed
 		if err := helpers.Store(r).UpdateDevice(dev); err != nil {
 			continue
 		}
-		if shouldRecordAbnormalLog(u) {
+		if shouldRecordAbnormalLog(dev.DeviceStatus, u) {
 			payloadBytes, _ := json.Marshal(u)
 			_, _ = helpers.Store(r).CreateDeviceStatusCallbackLog(db.DeviceStatusCallbackLog{
 				ProjectID:      project.ID,
 				DeviceID:       &dev.ID,
 				Hostname:       hostname,
-				Status:         u.Status,
+				Status:         dev.DeviceStatus,
 				RDPStatus:      dev.RDPStatus,
 				WinRMStatus:    dev.WinRMStatus,
 				AbnormalReason: u.AbnormalReason,
@@ -792,8 +795,8 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
 }
 
-func shouldRecordAbnormalLog(u db.DeviceStatusUpdate) bool {
-	if u.Status == db.DeviceStatusUnhealthy {
+func shouldRecordAbnormalLog(finalStatus db.DeviceStatus, u db.DeviceStatusUpdate) bool {
+	if finalStatus == db.DeviceStatusUnhealthy {
 		return true
 	}
 	return u.AbnormalReason != nil && strings.TrimSpace(*u.AbnormalReason) != ""
@@ -856,6 +859,9 @@ func normalizeBulkUpdates(updates []db.DeviceStatusUpdate) {
 		if updates[i].WinRMStatus != "" {
 			updates[i].WinRMStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].WinRMStatus))))
 		}
+		if updates[i].APIStatus != "" {
+			updates[i].APIStatus = db.DeviceStatus(strings.ToLower(strings.TrimSpace(string(updates[i].APIStatus))))
+		}
 	}
 }
 
@@ -867,6 +873,8 @@ type bulkDeviceStatusUpdate struct {
 	RDP            string     `json:"rdp"`
 	WinRMStatus    string     `json:"winrm_status"`
 	WINRM          string     `json:"winrm"`
+	APIStatus      string     `json:"api_status"`
+	API            string     `json:"api"`
 	AbnormalReason *string    `json:"abnormal_reason,omitempty"`
 	Reason         *string    `json:"reason,omitempty"`
 	CheckedAt      *time.Time `json:"checked_at,omitempty"`
@@ -887,6 +895,10 @@ func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
 	if strings.TrimSpace(winrm) == "" {
 		winrm = u.WINRM
 	}
+	api := u.APIStatus
+	if strings.TrimSpace(api) == "" {
+		api = u.API
+	}
 	reason := u.AbnormalReason
 	if reason == nil {
 		reason = u.Reason
@@ -904,6 +916,7 @@ func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
 		Status:         db.DeviceStatus(status),
 		RDPStatus:      db.DeviceStatus(rdp),
 		WinRMStatus:    db.DeviceStatus(winrm),
+		APIStatus:      db.DeviceStatus(api),
 		AbnormalReason: reason,
 		CheckedAt:      checkedAt,
 	}
@@ -1184,13 +1197,7 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
 	device.APIStatus = api
-	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
-		device.DeviceStatus = db.DeviceStatusHealthy
-	} else if rdp == db.DeviceStatusOffline && winrm == db.DeviceStatusOffline {
-		device.DeviceStatus = db.DeviceStatusUnhealthy
-	} else {
-		device.DeviceStatus = db.DeviceStatusUnknown
-	}
+	device.DeviceStatus = db.DeviceStatusFromChannelProbes(rdp, winrm, api)
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)
 }

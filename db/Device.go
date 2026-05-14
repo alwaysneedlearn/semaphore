@@ -18,6 +18,30 @@ const (
 	DeviceStatusChecking  DeviceStatus = "checking"
 )
 
+// DeviceStatusFromChannelProbes derives aggregate device_status from RDP, WinRM, and
+// application API reachability. If the app API port is offline, the device cannot be
+// considered healthy even when RDP and WinRM probes succeed.
+func DeviceStatusFromChannelProbes(rdp, winrm, api DeviceStatus) DeviceStatus {
+	if api == DeviceStatusOffline {
+		return DeviceStatusUnhealthy
+	}
+	if rdp == DeviceStatusOffline && winrm == DeviceStatusOffline {
+		return DeviceStatusUnhealthy
+	}
+	if rdp == DeviceStatusOnline && winrm == DeviceStatusOnline {
+		return DeviceStatusHealthy
+	}
+	return DeviceStatusUnknown
+}
+
+// CoerceDeviceStatusIfAPIOffline forces unhealthy when status is healthy but API is offline.
+func CoerceDeviceStatusIfAPIOffline(device DeviceStatus, api DeviceStatus) DeviceStatus {
+	if device == DeviceStatusHealthy && api == DeviceStatusOffline {
+		return DeviceStatusUnhealthy
+	}
+	return device
+}
+
 // DeviceAction is the catalog of operations that can be performed on a device.
 // Each action maps to an optional template id stored in ProjectDeviceSettings.
 type DeviceAction string
@@ -179,6 +203,7 @@ type DeviceStatusUpdate struct {
 	Status         DeviceStatus `json:"status"`
 	RDPStatus      DeviceStatus `json:"rdp_status,omitempty"`
 	WinRMStatus    DeviceStatus `json:"winrm_status,omitempty"`
+	APIStatus      DeviceStatus `json:"api_status,omitempty"`
 	AbnormalReason *string      `json:"abnormal_reason,omitempty"`
 	CheckedAt      *time.Time   `json:"checked_at,omitempty"`
 }

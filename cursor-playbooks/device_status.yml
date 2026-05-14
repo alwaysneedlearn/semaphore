@@ -36,6 +36,7 @@
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: unknown
+          api_status: offline
           rdp_status: offline
           winrm_status: offline
           abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"

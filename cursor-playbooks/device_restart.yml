@@ -56,6 +56,7 @@
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: unknown
+          api_status: offline
           rdp_status: offline
           winrm_status: offline
           abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
@@ -422,13 +423,18 @@
               - "[DEBUG-API] POST 状态 http_status={{ api_check_after.status | default('n/a') }}"
               - "[DEBUG-API] POST 状态 response_body={{ api_check_after.content | default('') }}"
 
-        - name: 启动验证：判断API是否成功
+        # 使用字面量 true/false 的 set_fact，避免 "{{ false }}" 变成字符串 "False" 导致 when 误判为真
+        - name: 启动验证：判断API是否成功（布尔）
           ansible.builtin.set_fact:
-            api_final_ok: >-
-              {{
-                api_check_after.status | default(0) | int == 200 and
-                (api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int
-              }}
+            api_final_ok: true
+          when:
+            - api_check_after.status | default(0) | int == 200
+            - (api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int
+
+        - name: 启动验证：判断API未成功（布尔）
+          ansible.builtin.set_fact:
+            api_final_ok: false
+          when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
 
         - name: 启动验证：日志轮询确认
           win_shell: |
@@ -445,9 +451,15 @@
           when: not api_final_ok
           failed_when: false
 
-        - name: 启动验证：综合判断启动结果
+        - name: 启动验证：综合判断启动结果（成功）
           ansible.builtin.set_fact:
-            final_start_ok: "{{ api_final_ok or (log_poll is defined and (log_poll.rc | default(1)) == 0) }}"
+            final_start_ok: true
+          when: api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0)
+
+        - name: 启动验证：综合判断启动结果（失败）
+          ansible.builtin.set_fact:
+            final_start_ok: false
+          when: not (api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0))
 
         - name: 启动验证：DEBUG 验证结果汇总（成功也打印）
           ansible.builtin.debug:
@@ -484,7 +496,11 @@
             {% elif check_result is not defined %}unknown
             {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}unhealthy
             {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
+            {% elif api_final_ok is defined and not api_final_ok %}unhealthy
+            {% elif final_start_ok is defined and not final_start_ok %}unhealthy
             {% else %}healthy{% endif %}
+          api_status: >-
+            {% if check_result.unreachable | default(false) %}offline{% elif host_failure_reason is defined %}offline{% elif api_final_ok is defined %}{{ 'online' if api_final_ok else 'offline' }}{% endif %}
           rdp_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
           winrm_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
           abnormal_reason: >-
