@@ -74,7 +74,7 @@
               - "[DEBUG-API] 状态检查 http_status={{ api_status_result.status | default('n/a') }}"
               - "[DEBUG-API] 状态检查 response_body={{ api_status_result.content | default('') }}"
 
-        - name: 解析API响应
+        - name: 解析API响应（布尔用 YAML 字面量，避免字符串 True/False 在 when 里误判）
           ansible.builtin.set_fact:
             api_status_ok: >-
               {{
@@ -87,6 +87,26 @@
                 api_status_result.status | default(0) | int == 200 and
                 ((api_status_result.content | from_json).ExecResultData | default(-1) | int) == (export_started | int)
               }}
+
+        - name: 解析API响应 — 规范化布尔
+          ansible.builtin.set_fact:
+            api_status_ok_bool: true
+          when: api_status_ok | default(false) | bool
+
+        - name: 解析API响应 — 规范化布尔（否）
+          ansible.builtin.set_fact:
+            api_status_ok_bool: false
+          when: not (api_status_ok | default(false) | bool)
+
+        - name: 解析API响应 — 已启动上报布尔
+          ansible.builtin.set_fact:
+            is_export_started_bool: true
+          when: is_export_started | default(false) | bool
+
+        - name: 解析API响应 — 已启动上报布尔（否）
+          ansible.builtin.set_fact:
+            is_export_started_bool: false
+          when: not (is_export_started | default(false) | bool)
       when: >
         status is defined and
         'stdout' in status and
@@ -141,7 +161,7 @@
             need_reconfigure: >-
               {{
                 not (
-                  ((api_status_ok | default(false) | bool) and (is_export_started | default(false) | bool)) or
+                  ((api_status_ok_bool | default(false) | bool) and (is_export_started_bool | default(false) | bool)) or
                   ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
                 )
               }}
@@ -155,6 +175,9 @@
               日志_OK={{ log_status_ok | default('n/a') }} |
               需要重配={{ need_reconfigure }}
 
+    # device_status 必须与「综合判断 / need_reconfigure」一致：日志通过时不能仅因 HTTP API 失败就标 unhealthy，
+    # 否则 post_tasks 会显示 NORMAL 而 bulk 写回 unhealthy。api_status 与 device_status 对齐，避免
+    # Semaphore CoerceDeviceStatusIfAPIOffline(healthy, offline) 把健康机强制改成 unhealthy。
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
@@ -163,22 +186,15 @@
           device_status: >-
             {% if status is not defined or ('stdout' not in status) %}unhealthy
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy
-            {% elif api_status_ok is defined and not (api_status_ok | bool) %}unhealthy
             {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
             {% else %}healthy{% endif %}
-          api_status: >-
-            {% if status.unreachable | default(false) %}offline
-            {% elif status is defined and 'stdout' in status and 'NOT_RUNNING' in (status.stdout | default('')) %}offline
-            {% elif api_status_ok is defined and (api_status_ok | bool) %}online
-            {% elif api_status_ok is defined %}offline
-            {% endif %}
           rdp_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
           winrm_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
           api_status: >-
             {% if status is not defined or ('stdout' not in status) %}offline
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
-            {% elif api_status_ok is defined and (api_status_ok | bool) %}online
-            {% else %}offline{% endif %}
+            {% elif need_reconfigure is defined and need_reconfigure | bool %}offline
+            {% else %}online{% endif %}
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
             {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: API or log indicates abnormal (need reconfigure)
