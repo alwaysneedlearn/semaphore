@@ -42,6 +42,8 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 
 Note: previously `$lines | Set-Content` could echo every line into PowerShell’s success stream and leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
 
+**PowerShell here-strings:** `$cfgJson` must use a multiline `@' … '@` block (opening `@'` must be the last token on its line). A single line `@'{{ merged_cfg_json }}'@` is invalid and causes `UnexpectedCharactersAfterHereStringHeader`.
+
 ### Start API retry (`device_start.yml` / `device_restart.yml`)
 
 **「启动验证：调用启动API」** uses **`until` / `retries` / `delay`** until **`uri` returns HTTP 200** (e.g. service still starting; **`http_status: -1`** usually means connect/timeout from the controller to `http://device:port`).

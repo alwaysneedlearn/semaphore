@@ -398,7 +398,9 @@
 
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
-            $cfgJson = @'{{ merged_cfg_json }}'@
+            $cfgJson = @'
+{{ merged_cfg_json }}
+'@
 
             Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
             Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
