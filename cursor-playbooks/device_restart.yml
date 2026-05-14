@@ -121,7 +121,15 @@
 
         - name: 重配执行：获取当前用户名
           win_shell: |
-            $username = (Get-CimInstance -ClassName Win32_ComputerSystem).PrimaryOwnerName
+            # 桌面登录用户：explorer.exe 进程属主（Win32_ComputerSystem.PrimaryOwnerName 常为空）
+            $username = $null
+            $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($explorer) {
+              $own = $explorer | Invoke-CimMethod -MethodName GetOwner
+              if ($own -and $own.ReturnValue -eq 0 -and $own.User) {
+                $username = [string]$own.User.Trim()
+              }
+            }
             if (-not $username) {
               $username = "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
             }
