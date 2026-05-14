@@ -170,6 +170,15 @@
             _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
             _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
 
+        - name: 重配执行：DEBUG 用户名与路径（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }}"
+              - "[DEBUG-重配-用户] get_username stdout_lines={{ get_username_result.stdout_lines | default([]) }}"
+              - "[DEBUG-重配-路径] user_cfg={{ _reconfig_user_cfg_file }}"
+              - "[DEBUG-重配-路径] public_cfg={{ _reconfig_public_cfg_file }}"
+              - "[DEBUG-重配-路径] zip_src={{ _reconfig_cfg_src }}"
+
         - name: 重配执行：创建配置文件目录（当前用户）
           ansible.builtin.win_file:
             path: "{{ _reconfig_user_bts_dir }}"
@@ -232,6 +241,16 @@
                 if (-not $cfg["SystemConfig"].ContainsKey("ServerIpAddrStr")) { $cfg["SystemConfig"]["ServerIpAddrStr"] = $calbIp }
                 if (-not $cfg["SystemConfig"].ContainsKey("HisDataFromTime")) { $cfg["SystemConfig"]["HisDataFromTime"] = $fromDate }
                 if (-not $cfg["SystemConfig"].ContainsKey("HisDataToTime")) { $cfg["SystemConfig"]["HisDataToTime"] = $toDate }
+                Write-Output "RECONFIG_CFG_PLAN_BEGIN|$configPath"
+                foreach ($section in @($cfg.Keys)) {
+                  $vals = $cfg[$section]
+                  foreach ($k in @($vals.Keys)) {
+                    $v = [string]$vals[$k]
+                    $vOne = $v -replace "`r`n", ' ' -replace "`n", ' '
+                    Write-Output "RECONFIG_CFG_PLAN|$configPath|[$section]|$k=$vOne"
+                  }
+                }
+                Write-Output "RECONFIG_CFG_PLAN_END|$configPath"
                 $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
                 foreach ($section in $cfg.Keys) {
                   $vals = $cfg[$section]
@@ -266,6 +285,10 @@
           failed_when: >
             config_result is defined and 'stdout' in config_result and
             ('CONFIG_MODIFY_ERROR' in config_result.stdout)
+
+        - name: 重配执行：DEBUG 配置修改任务 stdout（含 RECONFIG_CFG_PLAN，成功也打印）
+          ansible.builtin.debug:
+            msg: "{{ config_result.stdout_lines | default(['(无 stdout)']) }}"
 
         - name: 重配执行：检查程序文件是否存在
           win_shell: |
@@ -344,6 +367,13 @@
           delegate_to: localhost
           failed_when: false
 
+        - name: 启动验证：DEBUG 启动 POST API 响应（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-API] POST 启动 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_start_call_type }}"
+              - "[DEBUG-API] POST 启动 http_status={{ api_start_result.status | default('n/a') }}"
+              - "[DEBUG-API] POST 启动 response_body={{ api_start_result.content | default('') }}"
+
         - name: 启动验证：调用API查询状态
           ansible.builtin.uri:
             url: "http://{{ api_host }}:{{ api_port }}"
@@ -359,6 +389,13 @@
           register: api_check_after
           delegate_to: localhost
           failed_when: false
+
+        - name: 启动验证：DEBUG 状态查询 POST API 响应（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-API] POST 状态 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
+              - "[DEBUG-API] POST 状态 http_status={{ api_check_after.status | default('n/a') }}"
+              - "[DEBUG-API] POST 状态 response_body={{ api_check_after.content | default('') }}"
 
         - name: 启动验证：判断API是否成功
           ansible.builtin.set_fact:
@@ -386,6 +423,12 @@
         - name: 启动验证：综合判断启动结果
           ansible.builtin.set_fact:
             final_start_ok: "{{ api_final_ok or (log_poll is defined and (log_poll.rc | default(1)) == 0) }}"
+
+        - name: 启动验证：DEBUG 验证结果汇总（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-启动验证] final_start_ok={{ final_start_ok }} api_final_ok={{ api_final_ok }}"
+              - "[DEBUG-启动验证] 原始 API 响应见上两条 DEBUG-API 任务"
 
         - name: 启动验证：启动失败则终止
           ansible.builtin.fail:

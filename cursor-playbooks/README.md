@@ -26,3 +26,14 @@ Patrol all sets devices to `checking` first; the status template should run a pl
 - **Single-device** actions pass **`device: { id, hostname, ip }`** (no `devices` list). Playbooks build **`_semaphore_device_rows`** from either `devices` or `[device]` so **`hostname` in the bulk status API** matches the DB and callbacks are not dropped.
 
 **Stop** actions intentionally report **`device_status: unhealthy`** when the process is stopped (service not running), with **`abnormal_reason`** describing unreachable vs stop result vs already-not-running.
+
+## Debug logging (always printed on success)
+
+Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so Semaphore logs stay useful even when tasks succeed:
+
+| Prefix / marker | Meaning |
+|-----------------|--------|
+| `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved profile user and INI paths after username detection (`device_start` / `device_restart`) |
+| `RECONFIG_LOG_*` / `RECONFIG_MODIFY_*` | Same info from the Windows `win_shell` task stdout (visible without expanding `debug`) |
+| `RECONFIG_CFG_PLAN_*` lines | Each section/key=value written to the INI (merged JSON + injected `SystemConfig`) |
+| `[DEBUG-API]` | HTTP status + **raw response body** for device HTTP API POSTs and for Semaphore `PUT …/devices/status/bulk` |

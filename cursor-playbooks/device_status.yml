@@ -65,9 +65,12 @@
           delegate_to: localhost
           failed_when: false
 
-        - name: 输出API响应内容
+        - name: DEBUG 打印状态 API 响应（成功也打印）
           ansible.builtin.debug:
-            msg: "[API响应] HTTP={{ api_status_result.status | default('n/a') }} | 内容={{ api_status_result.content | default('未获取') }}"
+            msg:
+              - "[DEBUG-API] 状态检查 POST url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
+              - "[DEBUG-API] 状态检查 http_status={{ api_status_result.status | default('n/a') }}"
+              - "[DEBUG-API] 状态检查 response_body={{ api_status_result.content | default('') }}"
 
         - name: 解析API响应
           ansible.builtin.set_fact:
