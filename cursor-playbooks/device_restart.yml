@@ -352,8 +352,20 @@
                 } else {
                   try { $reportApi["ServerPort"] = [int]$reportApi["ServerPort"] } catch {}
                 }
+                # 默认开启 API 回调；如 merged_cfg 显式设置则尊重用户选择
+                if (-not $reportApi.ContainsKey("EnableReportApiCall")) {
+                  $reportApi["EnableReportApiCall"] = $true
+                } else {
+                  $rawEnable = $reportApi["EnableReportApiCall"]
+                  if ($rawEnable -is [string]) {
+                    $reportApi["EnableReportApiCall"] = ($rawEnable -match '^(?i:true|1|yes)$')
+                  } else {
+                    try { $reportApi["EnableReportApiCall"] = [bool]$rawEnable } catch { $reportApi["EnableReportApiCall"] = $true }
+                  }
+                }
                 $sysCfg.Remove("ServerIpAddrStr") | Out-Null
                 $sysCfg.Remove("ServerPort") | Out-Null
+                $sysCfg.Remove("EnableReportApiCall") | Out-Null
                 $sysCfg["ReportApiSettings"] = $reportApi
                 if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
                 if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
@@ -410,7 +422,7 @@
             $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
             Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
             Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
-            Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort"
+            Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort|EnableReportApiCall=true"
             $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
             $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
             if (-not $userResult -and -not $publicResult) { exit 1 }
