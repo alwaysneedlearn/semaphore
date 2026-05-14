@@ -41,10 +41,13 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 |-----------------|--------|
 | `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved profile user and INI paths after username detection (`device_start` / `device_restart`) |
 | `RECONFIG_LOG_*` / `RECONFIG_MODIFY_*` | Same info from the Windows `win_shell` task stdout (visible without expanding `debug`) |
-| `RECONFIG_CFG_DEBUG|…` | Path exists, JSON section count, file line count before write |
-| `RECONFIG_CFG_ADJUST|…` | Each upsert: **NEW_SECTION** / **REPLACE** (old line → new) / **INSERT_NEW_LINE** |
+| `RECONFIG_REPORT_API_DEFAULTS` | Effective `ServerIpAddrStr` / `ServerPort` / `EnableReportApiCall` defaults computed from the device |
+| `CFG_CHANGE|<path>|[<section>]|…` | **Only printed when a value really changes.** Flat keys: `key: <old> -> <new>` or `+ key=<new>` for inserts. JSON keys: one line per changed sub-key, e.g. `ReportApiSettings.EnableReportApiCall: false -> true` |
+| `CONFIG_MODIFIED` / `CONFIG_NOT_FOUND` / `CONFIG_MODIFY_ERROR` | Per-file outcome |
 | `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |
 | `[DEBUG-API]` | HTTP status + **raw response body** for device HTTP API POSTs and for Semaphore `PUT …/devices/status/bulk` |
+
+The `重配执行：配置修改变更明细（仅打印实际变化与摘要）` Ansible debug task filters `stdout_lines` down to `CFG_CHANGE` / `RECONFIG_REPORT_API_DEFAULTS` / `RECONFIG_MODIFY_` / `CONFIG_*` / `RECONFIG_CFG_RUN_SUMMARY`, so the log shows only what actually changed plus the run summary. Raw output is still available in `config_result.stdout` if you need to debug the script itself.
 
 Note: previously `$lines | Set-Content` could echo every line into PowerShell’s success stream and leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
 

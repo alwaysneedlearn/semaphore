@@ -206,6 +206,7 @@
 
         - name: 重配执行：修改配置文件（对接默认配置+设备自定义配置）
           win_shell: |
+            # 只在值发生变化时打印 CFG_CHANGE；未变化不输出，避免日志噪音
             function Upsert-SectionKey {
               param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, [string]$value, [string]$logPath)
               $secStart = -1
@@ -220,23 +221,27 @@
                   break
                 }
               }
+              $newLine = "$key=$value"
               if ($secStart -lt 0) {
                 if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
                 $lines.Add("[$section]")
-                $lines.Add("$key=$value")
-                Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|NEW_SECTION|$key=$value"
+                $lines.Add($newLine)
+                Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine (new section)"
                 return
               }
               for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
                 if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") {
                   $oldLine = $lines[$k]
-                  $lines[$k] = "$key=$value"
-                  Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|REPLACE|$oldLine -> $key=$value"
+                  if ($oldLine -ne $newLine) {
+                    $oldVal = ($oldLine -replace "^$([regex]::Escape($key))=", "")
+                    $lines[$k] = $newLine
+                    Write-Output "CFG_CHANGE|$logPath|[$section]|$key: $oldVal -> $value"
+                  }
                   return
                 }
               }
-              $lines.Insert($secEnd, "$key=$value")
-              Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|INSERT_NEW_LINE|$key=$value"
+              $lines.Insert($secEnd, $newLine)
+              Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine"
             }
 
             # 把 PSCustomObject(json) 与 Hashtable 递归转为 Hashtable，兼容 Windows PowerShell 5.1（无 -AsHashtable）
@@ -264,8 +269,8 @@
               return $obj
             }
 
-            # 用于 ReportApiSettings 这类 "key=<json对象>" 的整行：解析已有 JSON、深合并更新、再压成单行 JSON 写回；
-            # 保留如 EnableReportApiCall 等未传字段。
+            # ReportApiSettings 这类 "key=<json对象>" 的整行：解析已有 JSON、深合并更新、再压成单行 JSON 写回。
+            # 打印**逐字段差异**（仅出现实际变化的子键），避免把整段 JSON 前后都贴一遍。
             function Merge-JsonKey {
               param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, $updates, [string]$logPath)
               $updHT = ConvertTo-HT $updates
@@ -282,7 +287,7 @@
                 }
               }
               $existingIdx = -1
-              $current = @{}
+              $existing = @{}
               if ($secStart -ge 0) {
                 for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
                   if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") { $existingIdx = $k; break }
@@ -294,45 +299,58 @@
                     $jsonText = $raw.Substring($eq + 1).Trim()
                     try {
                       $parsed = ConvertFrom-Json -InputObject $jsonText
-                      $current = ConvertTo-HT $parsed
+                      $existing = ConvertTo-HT $parsed
                     } catch {
-                      Write-Output "RECONFIG_CFG_DEBUG|JSON_MERGE_PARSE_FAIL|$logPath|[$section]|$key|$($_.Exception.Message)"
+                      Write-Output "CFG_CHANGE|$logPath|[$section]|$key (parse failed: $($_.Exception.Message))"
                     }
                   }
                 }
               }
-              foreach ($u in @($updHT.Keys)) { $current[[string]$u] = $updHT[$u] }
-              $newJson = ($current | ConvertTo-Json -Compress -Depth 10)
+              $merged = @{}
+              foreach ($k0 in @($existing.Keys)) { $merged[[string]$k0] = $existing[$k0] }
+              foreach ($u in @($updHT.Keys)) { $merged[[string]$u] = $updHT[$u] }
+              $newJson = ($merged | ConvertTo-Json -Compress -Depth 10)
               $newLine = "$key=$newJson"
+              # 计算变化的子键（只看本次 updates 涉及的字段）
+              $changes = New-Object System.Collections.Generic.List[string]
+              foreach ($u in @($updHT.Keys)) {
+                $newV = $updHT[$u]
+                $newS = ConvertTo-Json -Compress -Depth 5 -InputObject $newV
+                if (-not $existing.ContainsKey($u)) {
+                  $changes.Add("$u: <absent> -> $newS")
+                } else {
+                  $oldV = $existing[$u]
+                  $oldS = ConvertTo-Json -Compress -Depth 5 -InputObject $oldV
+                  if ($oldS -ne $newS) { $changes.Add("$u: $oldS -> $newS") }
+                }
+              }
               if ($existingIdx -ge 0) {
-                $oldLine = $lines[$existingIdx]
-                $lines[$existingIdx] = $newLine
-                Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|JSON_REPLACE|$oldLine -> $newLine"
+                if ($lines[$existingIdx] -ne $newLine) {
+                  $lines[$existingIdx] = $newLine
+                  foreach ($c in $changes) { Write-Output "CFG_CHANGE|$logPath|[$section]|$key.$c" }
+                }
                 return
               }
               if ($secStart -lt 0) {
                 if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
                 $lines.Add("[$section]")
                 $lines.Add($newLine)
-                Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|JSON_NEW_SECTION|$newLine"
+                Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine (new section)"
                 return
               }
               $lines.Insert($secEnd, $newLine)
-              Write-Output "RECONFIG_CFG_ADJUST|$logPath|[$section]|JSON_INSERT|$newLine"
+              Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine"
             }
 
             function Update-ConfigFile {
               param([string]$configPath, [string]$cfgJson, [string]$calbIp, [int]$serverPort, [string]$fromDate, [string]$toDate)
               if (-not (Test-Path $configPath)) {
-                Write-Output "RECONFIG_CFG_DEBUG|PATH_MISSING|$configPath"
                 Write-Output "CONFIG_NOT_FOUND:$configPath"
                 return $false
               }
-              Write-Output "RECONFIG_CFG_DEBUG|PATH_OK|$configPath"
               try {
                 $rawCfg = ConvertFrom-Json -InputObject $cfgJson
                 $cfg = ConvertTo-HT $rawCfg
-                Write-Output "RECONFIG_CFG_DEBUG|JSON_OK|sections=$($cfg.Keys.Count)"
                 if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
                 $sysCfg = $cfg["SystemConfig"]
                 # ReportApiSettings 是 SystemConfig 下的整段 JSON 值：合并 ServerIpAddrStr/ServerPort，保留其余字段
@@ -369,25 +387,7 @@
                 $sysCfg["ReportApiSettings"] = $reportApi
                 if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
                 if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
-                Write-Output "RECONFIG_CFG_PLAN_BEGIN|$configPath"
-                foreach ($section in @($cfg.Keys)) {
-                  $vals = $cfg[$section]
-                  if (-not ($vals -is [System.Collections.IDictionary])) { continue }
-                  foreach ($k in @($vals.Keys)) {
-                    $v = $vals[$k]
-                    if ($v -is [System.Collections.IDictionary]) {
-                      $vJson = ($v | ConvertTo-Json -Compress -Depth 10)
-                      Write-Output "RECONFIG_CFG_PLAN|$configPath|[$section]|$k=$vJson"
-                    } else {
-                      $vs = [string]$v
-                      $vOne = $vs -replace "`r`n", ' ' -replace "`n", ' '
-                      Write-Output "RECONFIG_CFG_PLAN|$configPath|[$section]|$k=$vOne"
-                    }
-                  }
-                }
-                Write-Output "RECONFIG_CFG_PLAN_END|$configPath"
                 $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
-                Write-Output "RECONFIG_CFG_DEBUG|FILE_READ|$configPath|line_count=$($lines.Count)"
                 foreach ($section in @($cfg.Keys)) {
                   $vals = $cfg[$section]
                   if (-not ($vals -is [System.Collections.IDictionary])) { continue }
@@ -432,15 +432,9 @@
             config_result is defined and 'stdout' in config_result and
             ('CONFIG_MODIFY_ERROR' in config_result.stdout)
 
-        - name: 重配执行：DEBUG 配置修改任务 stdout（含 RECONFIG_CFG_PLAN，成功也打印）
+        - name: 重配执行：配置修改变更明细（仅打印实际变化与摘要）
           ansible.builtin.debug:
-            msg:
-              - "[DEBUG-重配-配置] rc={{ config_result.rc | default('n/a') }}"
-              - "[DEBUG-重配-配置] stdout_len={{ (config_result.stdout | default('') | string | length) }}"
-              - "[DEBUG-重配-配置] stdout_lines_count={{ (config_result.stdout_lines | default([]) | length) }}"
-              - "[DEBUG-重配-配置] stderr={{ config_result.stderr | default('') }}"
-              - "[DEBUG-重配-配置] stdout(raw)={{ config_result.stdout | default('') }}"
-              - "[DEBUG-重配-配置] stdout_lines={{ config_result.stdout_lines | default([]) }}"
+            msg: "{{ config_result.stdout_lines | default([]) | select('match', '^(CFG_CHANGE|RECONFIG_REPORT_API_DEFAULTS|RECONFIG_MODIFY_|CONFIG_MODIFIED|CONFIG_NOT_FOUND|CONFIG_MODIFY_ERROR|RECONFIG_CFG_RUN_SUMMARY)') | list }}"
 
         - name: 重配执行：检查程序文件是否存在
           win_shell: |
