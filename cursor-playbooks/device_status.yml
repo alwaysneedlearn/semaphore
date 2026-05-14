@@ -160,10 +160,17 @@
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           device_status: >-
-            {% if status is not defined or ('stdout' not in status) %}unknown
+            {% if status is not defined or ('stdout' not in status) %}unhealthy
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy
+            {% elif api_status_ok is defined and not (api_status_ok | bool) %}unhealthy
             {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
             {% else %}healthy{% endif %}
+          api_status: >-
+            {% if status.unreachable | default(false) %}offline
+            {% elif status is defined and 'stdout' in status and 'NOT_RUNNING' in (status.stdout | default('')) %}offline
+            {% elif api_status_ok is defined and (api_status_ok | bool) %}online
+            {% elif api_status_ok is defined %}offline
+            {% endif %}
           rdp_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
           winrm_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
           abnormal_reason: >-
