@@ -38,6 +38,17 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 | `RECONFIG_CFG_DEBUG|…` | Path exists, JSON section count, file line count before write |
 | `RECONFIG_CFG_ADJUST|…` | Each upsert: **NEW_SECTION** / **REPLACE** (old line → new) / **INSERT_NEW_LINE** |
 | `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |
-
-Note: piping `$lines | Set-Content` used to echo every line into PowerShell’s success stream and could leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
 | `[DEBUG-API]` | HTTP status + **raw response body** for device HTTP API POSTs and for Semaphore `PUT …/devices/status/bulk` |
+
+Note: previously `$lines | Set-Content` could echo every line into PowerShell’s success stream and leave Ansible’s captured **`stdout`/`stdout_lines` empty** even when the file was modified (`changed`). Writes now use **`$null = … | Set-Content`** so logs stay intact.
+
+### Start API retry (`device_start.yml` / `device_restart.yml`)
+
+**「启动验证：调用启动API」** uses **`until` / `retries` / `delay`** until **`uri` returns HTTP 200** (e.g. service still starting; **`http_status: -1`** usually means connect/timeout from the controller to `http://device:port`).
+
+| Env (Variable Group) | Play default | Meaning |
+|----------------------|--------------|--------|
+| `API_START_RETRIES` | `8` | Ansible **`retries`** (number of *re*tries after the first attempt; **total tries = retries + 1**) |
+| `API_START_RETRY_DELAY` | `4` | Seconds between attempts |
+
+The DEBUG line **`attempts=`** shows how many tries ran; logs will show **`FAILED - RETRYING`** between attempts when status is not 200 yet.
