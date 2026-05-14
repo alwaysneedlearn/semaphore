@@ -223,13 +223,32 @@
 
         - name: 重配执行：获取当前用户名
           win_shell: |
-            # 桌面登录用户：explorer.exe 进程属主（Win32_ComputerSystem.PrimaryOwnerName 常为空）
+            # 优先：上次在登录界面输入的用户（无人桌面会话时 explorer 可能不存在）
             $username = $null
-            $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($explorer) {
-              $own = $explorer | Invoke-CimMethod -MethodName GetOwner
-              if ($own -and $own.ReturnValue -eq 0 -and $own.User) {
-                $username = [string]$own.User.Trim()
+            $logonUi = Get-ItemProperty `
+              -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' `
+              -ErrorAction SilentlyContinue
+            $raw = $null
+            if ($logonUi) { $raw = $logonUi.LastLoggedOnUser }
+            if ($raw) {
+              $t = [string]$raw.Trim()
+              if ($t.Length -gt 0) {
+                $idx = $t.LastIndexOf('\')
+                if ($idx -ge 0 -and $idx -lt ($t.Length - 1)) {
+                  $username = $t.Substring($idx + 1).Trim()
+                } else {
+                  $username = $t
+                }
+              }
+            }
+            # 回退：explorer.exe 进程属主
+            if (-not $username) {
+              $explorer = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($explorer) {
+                $own = $explorer | Invoke-CimMethod -MethodName GetOwner
+                if ($own -and $own.ReturnValue -eq 0 -and $own.User) {
+                  $username = [string]$own.User.Trim()
+                }
               }
             }
             if (-not $username) {
