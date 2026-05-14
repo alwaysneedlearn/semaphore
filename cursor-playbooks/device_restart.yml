@@ -152,14 +152,15 @@
               }
             }
 
-            Write-Host "[get_username] source=$source resolved_user=$resolved"
+            # 排障信息必须走 stderr：Write-Host 会混入 win_shell 的 stdout，破坏后续 path 模板
+            [Console]::Error.WriteLine("[get_username] source=$source resolved_user=$resolved")
             Write-Output $resolved
           register: get_username_result
           changed_when: false
 
         - name: 重配执行：创建配置文件目录（当前用户）
           ansible.builtin.win_file:
-            path: "C:\\Users\\{{ get_username_result.stdout | trim }}\\Documents\\NEWARE\\BTSClient"
+            path: "C:\\Users\\{{ get_username_result.stdout_lines | last | trim }}\\Documents\\NEWARE\\BTSClient"
             state: directory
 
         - name: 重配执行：创建配置文件目录（Public用户）
@@ -170,7 +171,7 @@
         - name: 重配执行：从服务器复制配置文件（当前用户）
           ansible.builtin.win_copy:
             src: "{{ zip_path }}/{{ config_file_name }}"
-            dest: "C:\\Users\\{{ get_username_result.stdout | trim }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+            dest: "C:\\Users\\{{ get_username_result.stdout_lines | last | trim }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
           register: config_copy_result_user
 
         - name: 重配执行：从服务器复制配置文件（Public用户）
@@ -240,7 +241,7 @@
             if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
             $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
             if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-            $username = "{{ get_username_result.stdout | trim }}"
+            $username = "{{ get_username_result.stdout_lines | last | trim }}"
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $cfgJson = @'{{ merged_cfg_json }}'@
@@ -275,7 +276,7 @@
                 }
                 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date)
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-                $userId = "{{ get_username_result.stdout | trim }}"
+                $userId = "{{ get_username_result.stdout_lines | last | trim }}"
                 $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
                 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
                 $taskStatus = (Get-ScheduledTask -TaskName $taskName).State
