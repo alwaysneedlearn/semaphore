@@ -343,7 +343,7 @@
                   if ($oldLine -ne $newLine) {
                     $oldVal = ($oldLine -replace "^$([regex]::Escape($key))=", "")
                     $lines[$k] = $newLine
-                    Write-Output "CFG_CHANGE|$logPath|[$section]|$key: $oldVal -> $value"
+                    Write-Output "CFG_CHANGE|$logPath|[$section]|${key}: $oldVal -> $value"
                   }
                   return
                 }
@@ -424,11 +424,11 @@
                 $newV = $updHT[$u]
                 $newS = ConvertTo-Json -Compress -Depth 5 -InputObject $newV
                 if (-not $existing.ContainsKey($u)) {
-                  $changes.Add("$u: <absent> -> $newS")
+                  $changes.Add("${u}: <absent> -> $newS")
                 } else {
                   $oldV = $existing[$u]
                   $oldS = ConvertTo-Json -Compress -Depth 5 -InputObject $oldV
-                  if ($oldS -ne $newS) { $changes.Add("$u: $oldS -> $newS") }
+                  if ($oldS -ne $newS) { $changes.Add("${u}: $oldS -> $newS") }
                 }
               }
               if ($existingIdx -ge 0) {
