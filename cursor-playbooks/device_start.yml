@@ -475,12 +475,13 @@
                     $reportApi["ServerIpAddrStr"] = $calbIp
                   }
                 }
-                if (-not $reportApi.ContainsKey("ServerPort")) {
-                  if ($sysCfg.ContainsKey("ServerPort")) { $reportApi["ServerPort"] = [int]$sysCfg["ServerPort"] }
-                  else { $reportApi["ServerPort"] = [int]$serverPort }
-                } else {
-                  try { $reportApi["ServerPort"] = [int]$reportApi["ServerPort"] } catch {}
-                }
+                # ServerPort：始终以 Ansible 解析值写入（host api_port > 变量组 API_PORT > 9002），
+                # 覆盖旧 ini / merged JSON 中的空值、0 或无效残留，避免启动/重配后未写入正确 API 端口。
+                try {
+                  $effApiPort = [int]$serverPort
+                  if ($effApiPort -lt 1 -or $effApiPort -gt 65535) { $effApiPort = 9002 }
+                } catch { $effApiPort = 9002 }
+                $reportApi["ServerPort"] = $effApiPort
                 # 默认开启 API 回调；如 merged_cfg 显式设置则尊重用户选择
                 if (-not $reportApi.ContainsKey("EnableReportApiCall")) {
                   $reportApi["EnableReportApiCall"] = $true
