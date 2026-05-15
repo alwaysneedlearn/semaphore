@@ -35,9 +35,9 @@
     merged_cfg_json: "{{ merged_cfg | to_json }}"
     log_path: "{{ exe_dir }}\\{{ zip_name }}\\LogData\\NWReport_DBWB{{ lookup('pipe', 'date +%Y%m%d') }}.log"
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
-    log_tail_lines: "{{ ((lookup('env', 'LOG_TAIL_LINES') | default('', true) | trim) | default('50', true)) | int }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
+    log_poll_state_path: "C:\\Windows\\Temp\\sem_logpoll_{{ inventory_hostname | regex_replace('[^A-Za-z0-9_-]', '_') }}_{{ log_path | string | hash('sha1') }}.state"
 
   tasks:
     - name: 前置检查：检查程序运行状态
@@ -637,14 +637,73 @@
             api_final_ok: false
           when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
 
+        - name: 启动验证：重置日志轮询行偏移（本轮首次进入日志轮询；until 重试之间累加读取）
+          ansible.builtin.win_file:
+            path: "{{ log_poll_state_path }}"
+            state: absent
+          when: not api_final_ok
+
         - name: 启动验证：日志轮询确认
           win_shell: |
-            $logPath = "{{ log_path }}"
-            $keyword = "{{ log_success_keyword }}"
-            if (!(Test-Path $logPath)) { exit 1 }
-            $content = Get-Content $logPath -Tail {{ log_tail_lines }}
-            $match = $content | Select-String -Pattern $keyword
-            if ($match) { Write-Output "LOG_OK" } else { exit 1 }
+            $ErrorActionPreference = 'Stop'
+            $logPath = $env:SEM_LOG_PATH
+            $statePath = $env:SEM_LOG_POLL_STATE
+            $keyword = $env:SEM_LOG_KEYWORD
+            if ([string]::IsNullOrWhiteSpace($logPath) -or [string]::IsNullOrWhiteSpace($statePath) -or [string]::IsNullOrWhiteSpace($keyword)) {
+              [Console]::Error.WriteLine('[LOG_POLL] missing SEM_LOG_PATH / SEM_LOG_POLL_STATE / SEM_LOG_KEYWORD')
+              exit 1
+            }
+            if (!(Test-Path -LiteralPath $logPath)) { exit 1 }
+
+            $lastLine = [int64]0
+            if (Test-Path -LiteralPath $statePath) {
+              try {
+                $raw = (Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop).Trim()
+                if ($raw.Length -gt 0) { $lastLine = [int64]$raw }
+              } catch {
+                $lastLine = 0
+              }
+            }
+
+            function Scan-Log([int64]$startAfter, [ref]$totalLines, [ref]$foundMatch) {
+              $foundMatch.Value = $false
+              $totalLines.Value = [int64]0
+              $reader = $null
+              try {
+                $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
+                while ($null -ne ($line = $reader.ReadLine())) {
+                  $totalLines.Value++
+                  if ($totalLines.Value -gt $startAfter) {
+                    if (-not $foundMatch.Value -and ($line | Select-String -Pattern $keyword -Quiet)) {
+                      $foundMatch.Value = $true
+                    }
+                  }
+                }
+              } finally {
+                if ($null -ne $reader) { $reader.Close() }
+              }
+            }
+
+            $total = [int64]0
+            $found = $false
+            Scan-Log $lastLine ([ref]$total) ([ref]$found)
+
+            if ($total -lt $lastLine) {
+              $lastLine = [int64]0
+              Scan-Log $lastLine ([ref]$total) ([ref]$found)
+            }
+
+            [System.IO.File]::WriteAllText($statePath, $total.ToString())
+
+            if ($found) {
+              Write-Output "LOG_OK"
+              exit 0
+            }
+            exit 1
+          environment:
+            SEM_LOG_PATH: "{{ log_path }}"
+            SEM_LOG_POLL_STATE: "{{ log_poll_state_path }}"
+            SEM_LOG_KEYWORD: "{{ log_success_keyword }}"
           register: log_poll
           retries: "{{ log_poll_retries }}"
           delay: "{{ log_poll_delay }}"
