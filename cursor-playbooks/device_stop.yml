@@ -68,9 +68,6 @@
                 {% if stop_result is not defined %}unhealthy
                 {% elif stop_result.unreachable | default(false) %}unhealthy
                 {% else %}unhealthy{% endif %}
-              api_status: offline
-              rdp_status: "{{ 'offline' if (stop_result is defined and (stop_result.unreachable | default(false))) else 'online' }}"
-              winrm_status: "{{ 'offline' if (stop_result is defined and (stop_result.unreachable | default(false))) else 'online' }}"
               abnormal_reason: >-
                 {% if stop_result is not defined %}No task result
                 {% elif stop_result.unreachable | default(false) %}{{ 'WinRM unreachable: ' ~ (stop_result.msg | default('') | trim) }}

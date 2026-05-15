@@ -1,6 +1,7 @@
 ---
 # Include from a play with hosts: localhost after a windows_hosts play that set
-# hostvar semaphore_callback_row per host.
+# hostvar semaphore_callback_row per host (typically device_status + abnormal_reason;
+# rdp_status / winrm_status / api_status are omitted so Probe/discovery own TCP columns).
 # Env: SEMAPHORE_URL (optional), SEMAPHORE_PROJECT_ID, SEMAPHORE_API_TOKEN
 
 - name: 汇总各主机 semaphore_callback_row
