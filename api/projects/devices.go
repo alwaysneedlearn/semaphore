@@ -784,11 +784,7 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		}
 		dev.Name = dev.Hostname
 		if dev.DeviceStatus == "" {
-			if dev.RDPStatus == db.DeviceStatusOnline && dev.WinRMStatus == db.DeviceStatusOnline {
-				dev.DeviceStatus = db.DeviceStatusHealthy
-			} else {
-				dev.DeviceStatus = db.DeviceStatusUnhealthy
-			}
+			dev.DeviceStatus = db.DeviceStatusFromChannelProbes(dev.RDPStatus, dev.WinRMStatus, dev.APIStatus)
 		}
 		normalizeDeviceStatuses(&dev)
 		normalizeDeviceConnection(&dev, settings)

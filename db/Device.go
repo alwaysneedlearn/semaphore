@@ -18,17 +18,19 @@ const (
 	DeviceStatusChecking  DeviceStatus = "checking"
 )
 
-// DeviceStatusFromChannelProbes derives aggregate device_status from RDP, WinRM, and
-// application API reachability. If the app API port is offline, the device cannot be
-// considered healthy even when RDP and WinRM probes succeed.
+// DeviceStatusFromChannelProbes derives aggregate device_status from WinRM and application
+// API reachability. RDP is treated as informational only: RDP offline does not downgrade
+// healthy when WinRM and API indicate the device is fine. If the app API port is offline,
+// the device cannot be considered healthy. If WinRM is offline, automation cannot reach the host.
 func DeviceStatusFromChannelProbes(rdp, winrm, api DeviceStatus) DeviceStatus {
+	_ = rdp
 	if api == DeviceStatusOffline {
 		return DeviceStatusUnhealthy
 	}
-	if rdp == DeviceStatusOffline && winrm == DeviceStatusOffline {
+	if winrm == DeviceStatusOffline {
 		return DeviceStatusUnhealthy
 	}
-	if rdp == DeviceStatusOnline && winrm == DeviceStatusOnline {
+	if winrm == DeviceStatusOnline {
 		return DeviceStatusHealthy
 	}
 	return DeviceStatusUnknown
