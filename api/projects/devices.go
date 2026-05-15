@@ -886,7 +886,10 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		if u.APIStatus != "" {
 			dev.APIStatus = u.APIStatus
 		}
-		dev.DeviceStatus = db.CoerceDeviceStatusIfAPIOffline(u.Status, dev.APIStatus)
+		// Trust playbook-supplied aggregate device_status. Templates may report healthy when the
+		// log/upload path proves OK while api_status stays offline (HTTP != 200 per column rules).
+		// Do not downgrade healthy→unhealthy here — that caused Patrol "NORMAL" vs UI mismatch.
+		dev.DeviceStatus = u.Status
 		normalizeDeviceStatuses(&dev)
 		dev.AbnormalReason = u.AbnormalReason
 		dev.LastUpdated = &refreshed

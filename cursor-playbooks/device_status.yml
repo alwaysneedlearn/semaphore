@@ -161,10 +161,13 @@
         - name: 双保险判定综合状态
           ansible.builtin.set_fact:
             log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
-            # 日志任务 unreachable：不能当作「仅缺关键字」否则 API 双保险仍可能判 healthy
+            # 日志 unreachable → 异常。进程在跑时状态 POST 必须 HTTP 200，否则不能 NORMAL（不能仅靠日志绕过 API 端口不通）。
+            # 在 HTTP 200 前提下：(API 业务双条件) 或 (日志关键字) 任一通过 → 不需重配。
             need_reconfigure: >-
               {{
                 (log_check_result is defined and (log_check_result.unreachable | default(false)))
+                or
+                (api_status_result is not defined or (api_status_result.status | default(0) | int) != 200)
                 or
                 (
                   not (
@@ -184,7 +187,7 @@
               需要重配={{ need_reconfigure }}
 
     # 不传 rdp_status（**Probe** 维护 RDP TCP）。winrm_status：本 play 内 WinRM 成功且日志检查未中途 unreachable
-    # 则为 online。api_status：状态查询 POST **HTTP 200** 即 online（与响应体业务字段无关）。device_status 仍按综合判断。
+    # 则为 online。api_status：NORMAL/healthy 时必有 HTTP 200（见 need_reconfigure）；异常但 HTTP 200 → online（端口通）；其余 offline。
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
@@ -200,6 +203,7 @@
           api_status: >-
             {% if status is not defined or ('stdout' not in status) %}offline
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
+            {% elif need_reconfigure is defined and not (need_reconfigure | bool) %}online
             {% elif api_status_result is defined and (api_status_result.status | default(0) | int) == 200 %}online
             {% elif api_status_result is defined %}offline
             {% else %}offline{% endif %}

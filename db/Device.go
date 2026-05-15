@@ -36,14 +36,6 @@ func DeviceStatusFromChannelProbes(rdp, winrm, api DeviceStatus) DeviceStatus {
 	return DeviceStatusUnknown
 }
 
-// CoerceDeviceStatusIfAPIOffline forces unhealthy when status is healthy but API is offline.
-func CoerceDeviceStatusIfAPIOffline(device DeviceStatus, api DeviceStatus) DeviceStatus {
-	if device == DeviceStatusHealthy && api == DeviceStatusOffline {
-		return DeviceStatusUnhealthy
-	}
-	return device
-}
-
 // DeviceAction is the catalog of operations that can be performed on a device.
 // Each action maps to an optional template id stored in ProjectDeviceSettings.
 type DeviceAction string
