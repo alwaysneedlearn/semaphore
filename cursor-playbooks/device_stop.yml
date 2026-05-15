@@ -5,6 +5,11 @@
   vars:
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
+    api_host: "{{ inventory_hostname }}"
+    # 与 device_status / start 一致，避免 api_port 被 Jinja 解析成布尔
+    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int }}{% endif %}"
+    api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
+    api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -59,6 +64,30 @@
           when: stop_result is defined and not (stop_result.unreachable | default(false))
 
       always:
+        - name: Stop 后 API 状态探测（仅排障日志；bulk 仍强制 api_status=offline）
+          ansible.builtin.uri:
+            url: "http://{{ api_host }}:{{ api_port }}"
+            method: POST
+            body_format: json
+            body:
+              CallType: "{{ api_status_call_type | int }}"
+            headers:
+              Content-Type: "application/json; charset=utf-8"
+            return_content: true
+            timeout: "{{ api_timeout_seconds | int }}"
+          register: stop_api_probe
+          delegate_to: localhost
+          failed_when: false
+          when: stop_result is defined and not (stop_result.unreachable | default(false))
+
+        - name: DEBUG Stop 后 API 探测结果（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-STOP-API] POST url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
+              - "[DEBUG-STOP-API] http_status={{ stop_api_probe.status | default('n/a') }}"
+              - "[DEBUG-STOP-API] response_body={{ stop_api_probe.content | default('') }}"
+          when: stop_api_probe is defined and not (stop_api_probe.skipped | default(false))
+
         - name: 登记 Semaphore 回调行
           ansible.builtin.set_fact:
             semaphore_callback_row:
@@ -68,6 +97,9 @@
                 {% if stop_result is not defined %}unhealthy
                 {% elif stop_result.unreachable | default(false) %}unhealthy
                 {% else %}unhealthy{% endif %}
+              winrm_status: "{{ 'offline' if (stop_result is defined and (stop_result.unreachable | default(false))) else 'online' }}"
+              # 停服后业务 API 一律标 offline（与 Probe TCP 无关）；上方 uri 仅作验证日志
+              api_status: offline
               abnormal_reason: >-
                 {% if stop_result is not defined %}No task result
                 {% elif stop_result.unreachable | default(false) %}{{ 'WinRM unreachable: ' ~ (stop_result.msg | default('') | trim) }}

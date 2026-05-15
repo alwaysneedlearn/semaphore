@@ -39,6 +39,8 @@
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
           device_status: unhealthy
+          winrm_status: offline
+          api_status: offline
           abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
@@ -181,9 +183,8 @@
               日志_OK={{ log_status_ok | default('n/a') }} |
               需要重配={{ need_reconfigure }}
 
-    # bulk 仅写 device_status + abnormal_reason；不传 rdp_status / winrm_status / api_status，避免用
-    # Ansible 会话或 HTTP 业务结论覆盖 **Probe / 发现扫描** 维护的 **TCP 端口** 在线状态。
-    # CoerceDeviceStatusIfAPIOffline 仍用数据库里已有的 api_status（来自 Probe）与本次 device_status 合并。
+    # 不传 rdp_status（**Probe** 维护 RDP TCP）。winrm_status：本 play 内 WinRM 成功且日志检查未中途 unreachable
+    # 则为 online。api_status：状态查询 POST 与 need_reconfigure 一致（成功路径 online）。device_status 同综合判断。
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
@@ -195,6 +196,12 @@
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy
             {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
             {% else %}healthy{% endif %}
+          winrm_status: "{{ 'offline' if (log_check_result is defined and (log_check_result.unreachable | default(false))) else 'online' }}"
+          api_status: >-
+            {% if status is not defined or ('stdout' not in status) %}offline
+            {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
+            {% elif need_reconfigure is defined and need_reconfigure | bool %}offline
+            {% else %}online{% endif %}
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
             {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
