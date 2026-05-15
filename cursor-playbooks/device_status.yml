@@ -184,7 +184,7 @@
               需要重配={{ need_reconfigure }}
 
     # 不传 rdp_status（**Probe** 维护 RDP TCP）。winrm_status：本 play 内 WinRM 成功且日志检查未中途 unreachable
-    # 则为 online。api_status：状态查询 POST 与 need_reconfigure 一致（成功路径 online）。device_status 同综合判断。
+    # 则为 online。api_status：状态查询 POST **HTTP 200** 即 online（与响应体业务字段无关）。device_status 仍按综合判断。
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
@@ -200,8 +200,9 @@
           api_status: >-
             {% if status is not defined or ('stdout' not in status) %}offline
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
-            {% elif need_reconfigure is defined and need_reconfigure | bool %}offline
-            {% else %}online{% endif %}
+            {% elif api_status_result is defined and (api_status_result.status | default(0) | int) == 200 %}online
+            {% elif api_status_result is defined %}offline
+            {% else %}offline{% endif %}
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
             {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
