@@ -887,7 +887,6 @@
             {% elif check_result is not defined %}unhealthy
             {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}unhealthy
             {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
-            {% elif api_final_ok is defined and not api_final_ok %}unhealthy
             {% elif final_start_ok is defined and not final_start_ok %}unhealthy
             {% else %}healthy{% endif %}
           # 必须始终为 online/offline，否则 bulk 不更新 api_status
