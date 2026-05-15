@@ -30,6 +30,7 @@
     body:
       updates: "{{ semaphore_status_bulk_updates | default([]) }}"
     status_code: [200]
+  register: _sem_bulk_put_result
   vars:
     _sem_url: "{{ (lookup('env', 'SEMAPHORE_URL') | default('', true) | trim) | default('http://127.0.0.1:3000', true) }}"
     # Injected by Semaphore task extra-vars (runDeviceTemplate / scheduler); env is fallback.
@@ -39,3 +40,16 @@
     - _sem_pid | length > 0
     - _sem_token | length > 0
     - (semaphore_status_bulk_updates | default([])) | length > 0
+
+- name: DEBUG Semaphore bulk PUT 响应（成功也打印）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-API] bulk PUT url={{ _sem_url }}/api/project/{{ _sem_pid }}/devices/status/bulk"
+      - "[DEBUG-API] bulk PUT http_status={{ _sem_bulk_put_result.status | default('n/a') }}"
+      - "[DEBUG-API] bulk PUT response_body={{ _sem_bulk_put_result.content | default('') }}"
+  vars:
+    _sem_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
+    _sem_pid: "{{ (semaphore_project_id | default(lookup('env', 'SEMAPHORE_PROJECT_ID'), true)) | trim | string }}"
+  when:
+    - _sem_bulk_put_result is defined
+    - not (_sem_bulk_put_result.skipped | default(false))

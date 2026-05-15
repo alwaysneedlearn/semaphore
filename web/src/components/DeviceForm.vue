@@ -69,18 +69,6 @@
     ></v-text-field>
 
     <v-text-field
-      v-model.number="item.api_port"
-      :label="$t('deviceApiPort')"
-      :disabled="formSaving"
-      outlined
-      dense
-      type="number"
-      min="1"
-      max="65535"
-      placeholder="9002"
-    ></v-text-field>
-
-    <v-text-field
       v-model="item.ansible_user"
       :label="$t('deviceAnsibleUser')"
       :disabled="formSaving"
@@ -142,6 +130,19 @@
       type="number"
       min="1"
       placeholder="5985"
+    ></v-text-field>
+
+    <v-text-field
+      v-model.number="item.api_port"
+      :label="$t('deviceApiPort')"
+      :rules="[v => v == null || v === '' || (v >= 1 && v <= 65535) || $t('deviceApiPortInvalid')]"
+      :disabled="formSaving"
+      outlined
+      dense
+      type="number"
+      min="1"
+      max="65535"
+      placeholder="9002"
     ></v-text-field>
 
     <v-text-field

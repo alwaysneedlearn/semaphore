@@ -182,11 +182,7 @@ func (d *BoltDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api db.
 	device.RDPStatus = rdp
 	device.WinRMStatus = winrm
 	device.APIStatus = api
-	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
-		device.DeviceStatus = db.DeviceStatusHealthy
-	} else {
-		device.DeviceStatus = db.DeviceStatusUnhealthy
-	}
+	device.DeviceStatus = db.DeviceStatusFromChannelProbes(rdp, winrm, api)
 	t := refreshed
 	device.LastUpdated = &t
 	return d.updateObject(projectID, db.DeviceProps, device)

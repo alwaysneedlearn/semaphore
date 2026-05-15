@@ -18,6 +18,30 @@ const (
 	DeviceStatusChecking  DeviceStatus = "checking"
 )
 
+// DeviceStatusFromChannelProbes derives aggregate device_status from RDP, WinRM, and
+// application API reachability. If the app API port is offline, the device cannot be
+// considered healthy even when RDP and WinRM probes succeed.
+func DeviceStatusFromChannelProbes(rdp, winrm, api DeviceStatus) DeviceStatus {
+	if api == DeviceStatusOffline {
+		return DeviceStatusUnhealthy
+	}
+	if rdp == DeviceStatusOffline && winrm == DeviceStatusOffline {
+		return DeviceStatusUnhealthy
+	}
+	if rdp == DeviceStatusOnline && winrm == DeviceStatusOnline {
+		return DeviceStatusHealthy
+	}
+	return DeviceStatusUnknown
+}
+
+// CoerceDeviceStatusIfAPIOffline forces unhealthy when status is healthy but API is offline.
+func CoerceDeviceStatusIfAPIOffline(device DeviceStatus, api DeviceStatus) DeviceStatus {
+	if device == DeviceStatusHealthy && api == DeviceStatusOffline {
+		return DeviceStatusUnhealthy
+	}
+	return device
+}
+
 // DeviceAction is the catalog of operations that can be performed on a device.
 // Each action maps to an optional template id stored in ProjectDeviceSettings.
 type DeviceAction string
@@ -95,6 +119,9 @@ func (d Device) Validate() error {
 	case "", DeviceStatusOnline, DeviceStatusOffline:
 	default:
 		return &ValidationError{"Device api_status is invalid"}
+	}
+	if d.APIPort != 0 && (d.APIPort < 1 || d.APIPort > 65535) {
+		return &ValidationError{"Device api_port must be between 1 and 65535"}
 	}
 	return nil
 }
@@ -246,6 +273,7 @@ type DeviceStats struct {
 
 type DeviceStatusUpdate struct {
 	Hostname       string       `json:"hostname"`
+	IPAddress      string       `json:"ip,omitempty"` // optional; bulk callbacks match device by IP when set (see BulkUpdateDeviceStatus)
 	Status         DeviceStatus `json:"status"`
 	RDPStatus      DeviceStatus `json:"rdp_status,omitempty"`
 	WinRMStatus    DeviceStatus `json:"winrm_status,omitempty"`

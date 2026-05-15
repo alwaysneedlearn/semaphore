@@ -172,10 +172,7 @@ func (d *SqlDb) UpdateDevice(device db.Device) error {
 }
 
 func (d *SqlDb) UpdateDeviceStatus(projectID, deviceID int, rdp, winrm, api db.DeviceStatus, refreshed time.Time) error {
-	deviceStatus := db.DeviceStatusUnhealthy
-	if rdp == db.DeviceStatusOnline && winrm == db.DeviceStatusOnline {
-		deviceStatus = db.DeviceStatusHealthy
-	}
+	deviceStatus := db.DeviceStatusFromChannelProbes(rdp, winrm, api)
 	_, err := d.exec(
 		"update project__device set rdp_status=?, winrm_status=?, api_status=?, device_status=?, last_updated=? "+
 			"where id=? and project_id=?",

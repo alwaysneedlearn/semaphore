@@ -1,7 +1,8 @@
+# 按需检查 + 综合判定（API + 日志 Tail 时间窗口）；重配/启动验证与 device_restart.yml 对齐。
 ---
-- name: 巡检程序运行状态并通过 API 启动数据上报
+- name: 按需检查并重配重启（综合判定；日志 Tail 扫描）
   hosts: windows_hosts
-  gather_facts: no
+  gather_facts: false
   vars:
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
@@ -17,18 +18,12 @@
     api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
     api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
     api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
-    # 启动验证「调用启动 API」单次 HTTP 超时；未设置时与 api_timeout_seconds 相同
     api_start_timeout_seconds: "{{ ((lookup('env', 'API_START_TIMEOUT_SECONDS') | default('', true) | trim) | default(api_timeout_seconds | string, true)) | int }}"
-    # until 重试：Ansible 在 until 为假时按 delay 秒重试，最多 retries 次（不含首次尝试）
     api_start_retries: "{{ ((lookup('env', 'API_START_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
     api_start_retry_delay: "{{ ((lookup('env', 'API_START_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int }}"
     api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
     api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
-    export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
-    export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
     export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
-    poll_retries: "{{ ((lookup('env', 'POLL_RETRIES') | default('', true) | trim) | default('3', true)) | int }}"
-    poll_delay: "{{ ((lookup('env', 'POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
@@ -44,6 +39,10 @@
     log_tail_lines: "{{ ((lookup('env', 'LOG_TAIL_LINES') | default('', true) | trim) | default('50', true)) | int }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
+    export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
+    export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
+    log_health_tail_lines: "{{ ((lookup('env', 'LOG_HEALTH_TAIL_LINES') | default('', true) | trim) | default('8000', true)) | int }}"
+    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
 
   tasks:
     - name: 前置检查：检查程序运行状态
@@ -66,7 +65,7 @@
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
           ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
-          device_status: unknown
+          device_status: unhealthy
           api_status: offline
           rdp_status: offline
           winrm_status: offline
@@ -79,24 +78,32 @@
       ansible.builtin.meta: end_host
       when: check_result.unreachable | default(false)
 
-    - name: 进程未运行时标记需要执行启动/重配流程
+    - name: 状态判断：重启策略判定
+      block:
+        - name: 状态判断：输出程序状态
+          ansible.builtin.debug:
+            msg: "[程序状态] {{ check_result.stdout | trim }}"
+        - name: 状态判断：是否在运行
+          ansible.builtin.set_fact:
+            process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
+        - name: 状态判断：输出重启策略
+          ansible.builtin.debug:
+            msg: >
+              [重启策略] process_running={{ process_running }}；
+              {{ '有运行，先停止再执行重配重启流程' if process_running else '未运行，直接执行重配重启流程' }}
+
+    - name: 进程未运行时标记需要执行重配
       ansible.builtin.set_fact:
         need_reconfigure: true
       when: >
         check_result is defined and 'stdout' in check_result and
         'NOT_RUNNING' in check_result.stdout
 
-    - name: 状态判断：综合判断是否需要重配
+    - name: 状态判断：综合判断是否需要重配（仅进程已运行时；日志读 Tail）
       when: >
-        check_result is defined and
-        'stdout' in check_result and
+        check_result is defined and 'stdout' in check_result and
         'NOT_RUNNING' not in check_result.stdout
       block:
-        - name: 状态判断：输出程序状态
-          ansible.builtin.debug:
-            msg: "[程序状态] {{ check_result.stdout | trim }}"
-          when: check_result is defined and 'stdout' in check_result
-
         - name: 状态判断：调用API查询上报状态
           ansible.builtin.uri:
             url: "http://{{ api_host }}:{{ api_port }}"
@@ -111,19 +118,7 @@
             timeout: "{{ api_timeout_seconds | int }}"
           register: api_status_result
           delegate_to: localhost
-          when: >
-            check_result is defined and
-            'stdout' in check_result and
-            'NOT_RUNNING' not in check_result.stdout
           failed_when: false
-
-        - name: 状态判断：DEBUG 打印状态 API 响应（成功也打印）
-          ansible.builtin.debug:
-            msg:
-              - "[DEBUG-API] 状态判断 POST url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
-              - "[DEBUG-API] 状态判断 http_status={{ api_status_result.status | default('n/a') }}"
-              - "[DEBUG-API] 状态判断 response_body={{ api_status_result.content | default('') }}"
-          when: api_status_result is defined and not (api_status_result.skipped | default(false))
 
         - name: 状态判断：解析API响应
           ansible.builtin.set_fact:
@@ -143,36 +138,50 @@
                 ((api_status_result.content | from_json).ExecResultData | default(-1) | int) == (export_started | int)
               }}
 
-        - name: 状态判断：检查日志上报状态
+        - name: 状态判断：检查日志上报状态（Tail + 时间窗口；避免整文件扫描）
+          environment:
+            LOG_HEALTH_KEYWORD: "{{ log_success_keyword | default('', true) }}"
           win_shell: |
-            $logDir = "{{ exe_dir }}\\{{ zip_name }}\\LogData"
-            $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } | Sort-Object LastWriteTime -Descending
-            if ($logFiles -and $logFiles.Count -gt 0) {
-              $latestLog = $logFiles[0].FullName
-              $content = Get-Content $latestLog | Where-Object {
-                $logDate = ($_ -match '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') | Out-Null
-                $logTime = $matches[1]
-                $logTime = [datetime]::ParseExact($logTime, "yyyy-MM-dd HH:mm:ss", $null)
-                $currentTime = (Get-Date)
-                $timeDiff = $currentTime - $logTime
-                return $timeDiff.TotalMinutes -le 8
-              }
-              $keyword = "本轮通道状态上传成功"
-              $matches = $content | Select-String -Pattern $keyword
-              if ($matches) {
-                Write-Output "FOUND_KEYWORD"
-              } else {
-                Write-Output "NO_KEYWORD"
-              }
-            } else {
+            $logDir = "{{ exe_dir ~ '\\' ~ zip_name ~ '\\LogData' }}"
+            $tailN = {{ log_health_tail_lines | int }}
+            $recentMin = {{ log_health_recent_minutes | int }}
+            $keyword = [string]$env:LOG_HEALTH_KEYWORD
+            $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } |
+              Sort-Object LastWriteTime -Descending
+            if (-not $logFiles -or $logFiles.Count -eq 0) {
               Write-Output "NO_LOGS_FOUND"
+              exit 0
             }
+            $latestLog = $logFiles[0].FullName
+            if (-not (Test-Path -LiteralPath $latestLog)) {
+              Write-Output "NO_LOGS_FOUND"
+              exit 0
+            }
+            $lines = @(Get-Content -LiteralPath $latestLog -Tail $tailN -ErrorAction SilentlyContinue)
+            if ($lines.Count -eq 0) {
+              Write-Output "NO_KEYWORD"
+              exit 0
+            }
+            $now = Get-Date
+            $cutoff = $now.AddMinutes(-$recentMin)
+            $found = $false
+            foreach ($line in $lines) {
+              if ($line -notmatch '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') { continue }
+              try {
+                $logTime = [datetime]::ParseExact($matches[1], "yyyy-MM-dd HH:mm:ss", $null)
+              } catch { continue }
+              if ($logTime -lt $cutoff) { continue }
+              if ($logTime -gt $now) { continue }
+              if ($keyword.Length -eq 0) { continue }
+              if ($line.IndexOf($keyword, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $found = $true
+                break
+              }
+            }
+            if ($found) { Write-Output "FOUND_KEYWORD" } else { Write-Output "NO_KEYWORD" }
           register: log_check_result
           failed_when: false
-          when: >
-            check_result is defined and
-            'stdout' in check_result and
-            'NOT_RUNNING' not in check_result.stdout
 
         - name: 状态判断：双保险判定重配需求
           ansible.builtin.set_fact:
@@ -192,11 +201,22 @@
               API_OK={{ api_status_ok | default('n/a') }} |
               已启动上报={{ is_export_started | default('n/a') }} |
               日志_OK={{ log_status_ok | default('n/a') }} |
+              Tail行数={{ log_health_tail_lines }} |
               需要重配={{ need_reconfigure }}
 
+    
+    - name: 诊断：是否需要重配（false 时整块「重配执行」跳过）
+      ansible.builtin.debug:
+        msg: >-
+          [CFG-DIAG] need_reconfigure={{ need_reconfigure | default(false) }} host={{ inventory_hostname }}
+      when: check_result is defined and not (check_result.unreachable | default(false))
+
+
+
     - name: 重配执行：执行重配重启流程
+      when: need_reconfigure | bool
       block:
-        - name: 重配执行：停止程序
+        - name: 重配执行：停止程序（仅在运行中执行）
           win_shell: |
             $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
             if ($proc) {
@@ -223,10 +243,7 @@
               Write-Output "NOT_RUNNING"
             }
           register: stop_result
-          when: >
-            check_result is defined and
-            'stdout' in check_result and
-            'NOT_RUNNING' not in check_result.stdout
+          when: process_running | bool
           failed_when: >
             stop_result is defined and 'stdout' in stop_result and
             ('STOP_FAILED' in stop_result.stdout or 'STOP_ERROR' in stop_result.stdout)
@@ -291,7 +308,7 @@
         - name: 重配执行：DEBUG 用户名与路径（成功也打印）
           ansible.builtin.debug:
             msg:
-              - "[DEBUG-重配-用户] win_shell 末行解析 profile_user={{ _reconfig_profile_user }}"
+              - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }}"
               - "[DEBUG-重配-用户] get_username stdout_lines={{ get_username_result.stdout_lines | default([]) }}"
               - "[DEBUG-重配-路径] user_cfg={{ _reconfig_user_cfg_file }}"
               - "[DEBUG-重配-路径] public_cfg={{ _reconfig_public_cfg_file }}"
@@ -319,7 +336,7 @@
             dest: "{{ _reconfig_public_cfg_file }}"
           register: config_copy_result_public
 
-        - name: 重配执行：修改配置文件
+        - name: 重配执行：修改配置文件（对接默认配置+设备自定义配置）
           win_shell: |
             # 只在值发生变化时打印 CFG_CHANGE；未变化不输出，避免日志噪音
             function Upsert-SectionKey {
@@ -426,6 +443,7 @@
               foreach ($u in @($updHT.Keys)) { $merged[[string]$u] = $updHT[$u] }
               $newJson = ($merged | ConvertTo-Json -Compress -Depth 10)
               $newLine = "$key=$newJson"
+              # 计算变化的子键（只看本次 updates 涉及的字段）
               $changes = New-Object System.Collections.Generic.List[string]
               foreach ($u in @($updHT.Keys)) {
                 $newV = $updHT[$u]
@@ -470,6 +488,7 @@
                 # ReportApiSettings 是 SystemConfig 下的整段 JSON 值：合并 ServerIpAddrStr/ServerPort，保留其余字段
                 $reportApi = @{}
                 if ($sysCfg.ContainsKey("ReportApiSettings")) { $reportApi = ConvertTo-HT $sysCfg["ReportApiSettings"] }
+                # 兼容：旧的 cfg 顶层平铺 ServerIpAddrStr/ServerPort（不再写入文件根，统一进 ReportApiSettings）
                 if (-not $reportApi.ContainsKey("ServerIpAddrStr") -or [string]::IsNullOrEmpty([string]$reportApi["ServerIpAddrStr"])) {
                   if ($sysCfg.ContainsKey("ServerIpAddrStr") -and -not [string]::IsNullOrEmpty([string]$sysCfg["ServerIpAddrStr"])) {
                     $reportApi["ServerIpAddrStr"] = [string]$sysCfg["ServerIpAddrStr"]
@@ -478,7 +497,7 @@
                   }
                 }
                 # ServerPort：始终以 Ansible 解析值写入（host api_port > 变量组 API_PORT > 9002），
-                # 覆盖旧 ini / merged JSON 中的空值、0 或无效残留，避免启动/重配后未写入正确 API 端口。
+                # 覆盖旧 ini / merged JSON 中的空值、0 或无效残留。
                 try {
                   $effApiPort = [int]$serverPort
                   if ($effApiPort -lt 1 -or $effApiPort -gt 65535) { $effApiPort = 9002 }
@@ -514,7 +533,6 @@
                     }
                   }
                 }
-                # 禁止 Set-Content 把每一行再写入 success 流，否则 Ansible 捕获的 stdout 可能被清空/异常
                 $null = $lines | Set-Content -LiteralPath $configPath
                 Write-Output "CONFIG_MODIFIED|$configPath"
                 return $true
@@ -531,24 +549,16 @@
             $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
             if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
             $username = "{{ _reconfig_profile_user }}"
-
             $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
             $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
-
             Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
             Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
             Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort|EnableReportApiCall=true"
-            Write-Output "=== 处理当前用户配置文件 ==="
             $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
-
-            Write-Output "`n=== 处理Public用户配置文件 ==="
             $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
-
-            if (-not $userResult -and -not $publicResult) {
-              exit 1
-            }
+            if (-not $userResult -and -not $publicResult) { exit 1 }
             Write-Output "RECONFIG_CFG_RUN_SUMMARY|user_ok=$userResult|public_ok=$publicResult"
           register: config_result
           failed_when: >
@@ -602,7 +612,7 @@
           changed_when: false
           when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
 
-        - name: 重配执行：创建目标目录
+        - name: 重配执行：创建程序根目录
           ansible.builtin.win_file:
             path: "{{ exe_dir }}"
             state: directory
@@ -635,6 +645,7 @@
             extract_result is defined and 'stdout' in extract_result and
             'EXTRACT_ERROR' in extract_result.stdout
           when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
+
 
         - name: 重配执行：启动程序
           when: >
@@ -677,30 +688,8 @@
           register: relaunch_result
           failed_when: >
             relaunch_result is defined and 'stdout' in relaunch_result and
-            ('START_ERROR' in relaunch_result.stdout or
-            'VERIFY_FAILED' in relaunch_result.stdout)
+            ('START_ERROR' in relaunch_result.stdout or 'VERIFY_FAILED' in relaunch_result.stdout)
 
-        - name: 重配执行：输出重配结果
-          ansible.builtin.debug:
-            msg: |
-              ==================== 重配执行结果 ====================
-              停止程序: {{ stop_result.stdout | default('未执行') | trim }}
-              获取用户名(profile_user): {{ _reconfig_profile_user | default('未执行') }}
-              用户配置路径: {{ _reconfig_user_cfg_file | default('未执行') }}
-              Public配置路径: {{ _reconfig_public_cfg_file | default('未执行') }}
-              复制配置文件(用户): {{ config_copy_result_user.changed | ternary('成功', '未变化') | default('未执行') }}
-              复制配置文件(Public): {{ config_copy_result_public.changed | ternary('成功', '未变化') | default('未执行') }}
-              修改配置: {{ config_result.stdout | default('未执行') | trim }}
-              检查EXE: {{ exe_check_result.stdout | default('未执行') | trim }}
-              {% if zip_copy_result is defined and not (zip_copy_result.skipped | default(false)) %}
-              复制压缩包: {{ zip_copy_result.changed | ternary('成功', '未变化') }}
-              {% endif %}
-              {% if extract_result is defined and not (extract_result.skipped | default(false)) %}
-              解压程序包: {{ extract_result.stdout | default('未执行') | trim }}
-              {% endif %}
-              启动程序: {% if relaunch_result is defined and not (relaunch_result.skipped | default(false)) %}{{ relaunch_result.stdout | default('未执行') | trim }}{% else %}未执行{% endif %}
-
-      when: need_reconfigure | bool
       rescue:
         - name: 错误处理：重配阶段失败
           ansible.builtin.set_fact:
@@ -716,16 +705,6 @@
         - need_reconfigure | bool
         - host_failure_reason is not defined
       block:
-        - name: 启动验证：记录启动前日志行数
-          win_shell: |
-            if (Test-Path "{{ log_path }}") {
-              (Get-Content "{{ log_path }}").Length
-            } else {
-              0
-            }
-          register: log_before
-          changed_when: false
-
         - name: 启动验证：调用启动API
           ansible.builtin.uri:
             url: "http://{{ api_host }}:{{ api_port }}"
@@ -753,108 +732,90 @@
               - "[DEBUG-API] POST 启动 http_status={{ api_start_result.status | default('n/a') }}"
               - "[DEBUG-API] POST 启动 response_body={{ api_start_result.content | default('') }}"
 
-        - name: 启动验证：检查启动API响应
+        - name: 启动验证：调用API查询状态
+          ansible.builtin.uri:
+            url: "http://{{ api_host }}:{{ api_port }}"
+            method: "POST"
+            body_format: json
+            body:
+              CallType: "{{ api_status_call_type | int }}"
+            headers:
+              Content-Type: "application/json"
+            return_content: true
+            status_code: 200
+            timeout: 10
+          register: api_check_after
+          delegate_to: localhost
+          failed_when: false
+
+        - name: 启动验证：DEBUG 状态查询 POST API 响应（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-API] POST 状态 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
+              - "[DEBUG-API] POST 状态 http_status={{ api_check_after.status | default('n/a') }}"
+              - "[DEBUG-API] POST 状态 response_body={{ api_check_after.content | default('') }}"
+
+        # 使用字面量 true/false 的 set_fact，避免 "{{ false }}" 变成字符串 "False" 导致 when 误判为真
+        - name: 启动验证：判断API是否成功（布尔）
+          ansible.builtin.set_fact:
+            api_final_ok: true
+          when:
+            - api_check_after.status | default(0) | int == 200
+            - (api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int
+
+        - name: 启动验证：判断API未成功（布尔）
+          ansible.builtin.set_fact:
+            api_final_ok: false
+          when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
+
+        - name: 启动验证：日志轮询确认
+          win_shell: |
+            $logPath = "{{ log_path }}"
+            $keyword = "{{ log_success_keyword }}"
+            if (!(Test-Path $logPath)) { exit 1 }
+            $content = Get-Content $logPath -Tail {{ log_tail_lines }}
+            $match = $content | Select-String -Pattern $keyword
+            if ($match) { Write-Output "LOG_OK" } else { exit 1 }
+          register: log_poll
+          retries: "{{ log_poll_retries }}"
+          delay: "{{ log_poll_delay }}"
+          until: log_poll.rc == 0
+          when: not api_final_ok
+          failed_when: false
+
+        - name: 启动验证：综合判断启动结果（成功）
+          ansible.builtin.set_fact:
+            final_start_ok: true
+          when: api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0)
+
+        - name: 启动验证：综合判断启动结果（失败）
+          ansible.builtin.set_fact:
+            final_start_ok: false
+          when: not (api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0))
+
+        - name: 启动验证：DEBUG 验证结果汇总（成功也打印）
+          ansible.builtin.debug:
+            msg:
+              - "[DEBUG-启动验证] final_start_ok={{ final_start_ok }} api_final_ok={{ api_final_ok }}"
+              - "[DEBUG-启动验证] 原始 API 响应见上两条 DEBUG-API 任务"
+
+        - name: 启动验证：启动失败则终止
           ansible.builtin.fail:
-            msg: "[失败] API启动失败: HTTP={{ api_start_result.status | default('n/a') }}, 响应={{ api_start_result.content | default('') }}"
-          when: >
-            api_start_result is defined and
-            not (api_start_result.skipped | default(false)) and
-            (api_start_result.status | default(0) | int != 200 or
-            (api_start_result.content | from_json).ResponeResultCode | default(-1) | int != api_expected_response_code | int or
-            (api_start_result.content | from_json).ExecResultCode | default(-1) | int != api_expected_exec_success_code | int)
-
-        - name: 启动验证：API+日志双保险验证
-          block:
-            - name: 启动验证：调用API查询状态
-              ansible.builtin.uri:
-                url: "http://{{ api_host }}:{{ api_port }}"
-                method: "POST"
-                body_format: json
-                body:
-                  CallType: "{{ api_status_call_type | int }}"
-                headers:
-                  Content-Type: "application/json"
-                return_content: true
-                status_code: 200
-                timeout: 10
-              register: api_check_after
-              delegate_to: localhost
-              failed_when: false
-
-            - name: 启动验证：DEBUG 状态查询 POST API 响应（成功也打印）
-              ansible.builtin.debug:
-                msg:
-                  - "[DEBUG-API] POST 状态 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
-                  - "[DEBUG-API] POST 状态 http_status={{ api_check_after.status | default('n/a') }}"
-                  - "[DEBUG-API] POST 状态 response_body={{ api_check_after.content | default('') }}"
-
-            # 使用字面量 true/false 的 set_fact，避免 "{{ false }}" 变成字符串 "False" 导致 when 误判为真
-            - name: 启动验证：判断API是否成功（布尔）
-              ansible.builtin.set_fact:
-                api_final_ok: true
-              when:
-                - api_check_after.status | default(0) | int == 200
-                - (api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int
-
-            - name: 启动验证：判断API未成功（布尔）
-              ansible.builtin.set_fact:
-                api_final_ok: false
-              when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
-
-            - name: 启动验证：日志轮询确认
-              win_shell: |
-                $logPath = "{{ log_path }}"
-                $keyword = "{{ log_success_keyword }}"
-                if (!(Test-Path $logPath)) {
-                  exit 1
-                }
-                $content = Get-Content $logPath -Tail {{ log_tail_lines }}
-                $match = $content | Select-String -Pattern $keyword
-                if ($match) {
-                  Write-Output "LOG_OK"
-                } else {
-                  exit 1
-                }
-              register: log_poll
-              retries: "{{ log_poll_retries }}"
-              delay: "{{ log_poll_delay }}"
-              until: log_poll.rc == 0
-              when: not api_final_ok
-              failed_when: false
-
-            - name: 启动验证：综合判断启动结果（成功）
-              ansible.builtin.set_fact:
-                final_start_ok: true
-              when: api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0)
-
-            - name: 启动验证：综合判断启动结果（失败）
-              ansible.builtin.set_fact:
-                final_start_ok: false
-              when: not (api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0))
-
-            - name: 启动验证：输出验证结果
-              ansible.builtin.debug:
-                msg:
-                  - "[启动验证] 最终结果={{ final_start_ok }} (API={{ api_final_ok }}, 日志={{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }})"
-                  - "[DEBUG-API] 汇总 api_final_ok={{ api_final_ok }} 首次POST见上条 DEBUG 任务"
-
-            - name: 启动验证：启动失败则终止
-              ansible.builtin.fail:
-                msg: |
-                  [失败] 启动验证失败（双保险判定失败）
-                  API结果: {{ api_final_ok }}
-                  日志结果: {{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
-              when: not final_start_ok
+            msg: |
+              [失败] 启动验证失败（双保险判定失败）
+              API结果: {{ api_final_ok }}
+              日志结果: {{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
+          when: not final_start_ok
 
       rescue:
-        - name: 错误处理：记录失败原因
+        - name: 错误处理：启动验证阶段失败
           ansible.builtin.set_fact:
-            host_failed_task: "{{ ansible_failed_task.name | default('未知步骤') }}"
+            host_failed_task: "{{ ansible_failed_task.name | default('启动验证') }}"
             host_failure_reason: "{{ (ansible_failed_result.stdout | default('')) | trim | default(ansible_failed_result.msg | default('未知错误'), true) }}"
 
-        - name: 错误处理：输出失败信息
+        - name: 错误处理：输出验证失败信息
           ansible.builtin.debug:
-            msg: "[失败] 主机 {{ inventory_hostname }} 在步骤 [{{ host_failed_task }}] 失败: {{ host_failure_reason }}"
+            msg: "[失败] 主机 {{ inventory_hostname }} 验证阶段 [{{ host_failed_task }}]: {{ host_failure_reason }}"
 
   post_tasks:
     - name: 登记 Semaphore 回调行
@@ -889,51 +850,6 @@
             {% endif %}
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
-
-    - name: 汇总报告：批量执行结果汇总
-      when: ansible_play_hosts_all is defined
-      run_once: true
-      vars:
-        reachable_count: >-
-          {{ ansible_play_hosts_all | map('extract', hostvars) |
-             map(attribute='check_result') |
-             select('defined') |
-             selectattr('stdout', 'defined') |
-             list | length | int }}
-        failed_count: >-
-          {{ ansible_play_hosts_all | map('extract', hostvars) |
-             selectattr('host_failure_reason', 'defined') |
-             list | length | int }}
-        normal_count: >-
-          {{ reachable_count | int - failed_count | int }}
-      debug:
-        msg: |
-          ========== API 巡检汇总 ==========
-          主机总数: {{ ansible_play_hosts_all | length }}
-          正常: {{ normal_count | int }}
-          异常: {{ ansible_play_hosts_all | length - normal_count | int }}
-          ========== 详细状态 ==========
-          {% for host in ansible_play_hosts_all %}
-          {% if hostvars[host].check_result is defined and 'stdout' in hostvars[host].check_result %}
-          {% if hostvars[host].host_failure_reason is defined %}
-          [异常] {{ host }}: {{ hostvars[host].check_result.stdout | trim }}
-          -> 失败阶段: {{ hostvars[host].host_failed_task | default('未知步骤') }}
-          -> 失败原因: {{ hostvars[host].host_failure_reason }}
-          {% else %}
-          [正常] {{ host }}: {{ hostvars[host].check_result.stdout | trim }}
-          {% if hostvars[host].need_reconfigure is defined %}
-          -> 需要重配: {{ hostvars[host].need_reconfigure }}
-          {% endif %}
-          {% if hostvars[host].api_start_result is defined and hostvars[host].api_start_result.content is defined and not (hostvars[host].api_start_result.skipped | default(false)) %}
-          -> API启动: {{ hostvars[host].api_start_result.content | trim }}
-          {% endif %}
-          {% endif %}
-          {% else %}
-          [异常] {{ host }}: 主机不可达
-          -> 失败阶段: 检查程序运行状态
-          -> 失败原因: {{ hostvars[host].check_result.msg | default('连接失败') }}
-          {% endif %}
-          {% endfor %}
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost

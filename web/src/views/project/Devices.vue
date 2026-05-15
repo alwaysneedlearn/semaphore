@@ -386,7 +386,7 @@
             <v-select
               v-model="filters.apiStatus"
               :items="protocolFilterOptions"
-              :label="$t('deviceApiStatus')"
+              :label="$t('deviceFilterApiStatus')"
               clearable
               dense
               outlined
@@ -423,7 +423,7 @@
       <template v-slot:item.actions="{ item }">
         <v-btn-toggle dense :value-comparator="() => false">
           <v-btn
-            :title="$t('deviceProbeTooltip')"
+            :title="`${$t('deviceProbe')}: ${$t('deviceProbeHelp')}`"
             :loading="busyId === item.id"
             @click="probeDevice(item)"
           >
