@@ -173,7 +173,7 @@
             rdp_status: "{{ 'online' if rdp_online else 'offline' }}"
             api_status: "{{ 'online' if api_online else 'offline' }}"
             device_status: >-
-              {{ 'healthy' if (winrm_online and rdp_online) else 'unhealthy' }}
+              {{ 'healthy' if (winrm_online and api_online) else 'unhealthy' }}
 
       - name: 清理临时文件
         ansible.builtin.file:
