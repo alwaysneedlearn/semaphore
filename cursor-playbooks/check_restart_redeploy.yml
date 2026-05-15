@@ -185,11 +185,16 @@
         - name: 状态判断：双保险判定重配需求
           ansible.builtin.set_fact:
             log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
+            # 与巡检对齐：进程在跑时状态 POST 必须 HTTP 200，才允许「日志关键字」单独免重配。
             need_reconfigure: >-
               {{
-                not (
-                  ((api_status_ok | default(false) | bool) and (is_export_started | default(false) | bool)) or
-                  ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
+                (api_status_result is not defined or (api_status_result.status | default(0) | int) != 200)
+                or
+                (
+                  not (
+                    ((api_status_ok | default(false) | bool) and (is_export_started | default(false) | bool)) or
+                    ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
+                  )
                 )
               }}
 
@@ -889,13 +894,13 @@
             {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
             {% elif final_start_ok is defined and not final_start_ok %}unhealthy
             {% else %}healthy{% endif %}
-          # 必须始终为 online/offline，否则 bulk 不更新 api_status
-          # api_status：仅表示「本 play 内 HTTP 是否 200 可达」，与响应体业务码无关；未发起 API 请求则留空（bulk 不覆盖）
+          # api_status：本 play 内任一 HTTP 200（启动/状态 POST）→ online；有请求但无 200 → offline；未请求留空（bulk 不覆盖）
           api_status: >-
             {% if check_result.unreachable | default(false) %}offline
             {% elif host_failure_reason is defined %}offline
             {% elif ((api_check_after is defined and not (api_check_after.skipped | default(false)) and (api_check_after.status | default(0) | int) == 200) or (api_start_result is defined and not (api_start_result.skipped | default(false)) and (api_start_result.status | default(0) | int) == 200)) %}online
-            {% elif ((api_check_after is defined and not (api_check_after.skipped | default(false))) or (api_start_result is defined and not (api_start_result.skipped | default(false)))) %}offline
+            {% elif api_status_result is defined and not (api_status_result.skipped | default(false)) and (api_status_result.status | default(0) | int) == 200 %}online
+            {% elif ((api_check_after is defined and not (api_check_after.skipped | default(false))) or (api_start_result is defined and not (api_start_result.skipped | default(false))) or (api_status_result is defined and not (api_status_result.skipped | default(false)))) %}offline
             {% else %}{% endif %}
           winrm_status: online
           abnormal_reason: >-
