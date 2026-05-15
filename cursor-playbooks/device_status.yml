@@ -142,10 +142,12 @@
             }
           register: log_check_result
           failed_when: false
+          # 中途 WinRM 断开时默认会 fatal 并跳过后续任务，导致无 semaphore_callback_row、bulk 不写回，设备一直 checking
+          ignore_unreachable: true
 
         - name: 输出日志检查结果
           ansible.builtin.debug:
-            msg: "[日志检查] 结果={{ log_check_result.stdout | default('未执行') | trim }}"
+            msg: "[日志检查] 结果={{ log_check_result.stdout | default('未执行') | trim }} unreachable={{ log_check_result.unreachable | default(false) }}"
       when: >
         status is defined and
         'stdout' in status and
@@ -160,11 +162,16 @@
         - name: 双保险判定综合状态
           ansible.builtin.set_fact:
             log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
+            # 日志任务 unreachable：不能当作「仅缺关键字」否则 API 双保险仍可能判 healthy
             need_reconfigure: >-
               {{
-                not (
-                  ((api_status_ok_bool | default(false) | bool) and (is_export_started_bool | default(false) | bool)) or
-                  ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
+                (log_check_result is defined and (log_check_result.unreachable | default(false)))
+                or
+                (
+                  not (
+                    ((api_status_ok_bool | default(false) | bool) and (is_export_started_bool | default(false) | bool)) or
+                    ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
+                  )
                 )
               }}
 
@@ -192,7 +199,7 @@
             {% elif need_reconfigure is defined and need_reconfigure | bool %}unhealthy
             {% else %}healthy{% endif %}
           rdp_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
-          winrm_status: "{{ 'offline' if (status.unreachable | default(false)) else 'online' }}"
+          winrm_status: "{{ 'offline' if (status.unreachable | default(false) or (log_check_result is defined and (log_check_result.unreachable | default(false)))) else 'online' }}"
           api_status: >-
             {% if status is not defined or ('stdout' not in status) %}offline
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
@@ -200,6 +207,7 @@
             {% else %}online{% endif %}
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
+            {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
             {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: API or log indicates abnormal (need reconfigure)
             {% else %}{% endif %}
       vars:
