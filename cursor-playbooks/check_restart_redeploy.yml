@@ -67,7 +67,6 @@
           ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
           device_status: unhealthy
           api_status: offline
-          rdp_status: offline
           winrm_status: offline
           abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
       vars:
@@ -841,8 +840,7 @@
             {% elif api_final_ok is defined and (api_final_ok | bool) %}online
             {% elif api_final_ok is defined %}offline
             {% else %}offline{% endif %}
-          rdp_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
-          winrm_status: "{{ 'offline' if (check_result.unreachable | default(false)) else 'online' }}"
+          winrm_status: online
           abnormal_reason: >-
             {% if host_failure_reason is defined %}{{ host_failure_reason }}
             {% elif 'NOT_RUNNING' in (check_result.stdout | default('')) and not (final_start_ok | default(false) | bool) %}Process was not running and start/verify did not succeed

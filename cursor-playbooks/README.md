@@ -32,20 +32,21 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 
 Patrol all sets devices to `checking` first; the status template should run a playbook like **`device_status.yml`** so the callback clears `checking` to healthy/unhealthy.
 
-### `semaphore_callback_row` and API status
+### `semaphore_callback_row` (WinRM / API vs RDP)
 
-- **`device_start.yml` / `device_restart.yml`** set **`api_status`** (`online` / `offline`) from the same app-API check used for start verification, so a failed restart does not leave **`device_status: healthy`** while the API is down. **`semaphore_callback_row.api_status` is always one of `online` or `offline`** (never empty): an empty value causes **`PUT …/devices/status/bulk`** to skip updating **`api_status`**, leaving the UI stuck on **`offline`** / **`checking`** even after a successful run.
-- **`device_status.yml` (Patrol):** the bulk callback’s **`device_status` / `api_status` follow `need_reconfigure`** (same rule as the end-of-play “NORMAL / 异常” counts: API+export **or** log keyword). That keeps the written Semaphore state consistent with the printed summary and avoids **`CoerceDeviceStatusIfAPIOffline`** turning a **log-healthy** host into **`unhealthy`** because the HTTP probe alone failed.
+- **`rdp_status`** is **not** written by patrol/start/restart/stop templates — use **`POST …/devices/{id}/probe`** (or discovery import) for **RDP TCP** in the UI. **`PUT …/devices/status/bulk`** skips empty fields, so omitting **`rdp_status`** keeps the last probe/import value.
+- **`winrm_status`**: **`online`** when this template run successfully used WinRM through the callback path (e.g. post_tasks after the first `win_shell` was reachable; patrol sets **`offline`** if the **log-check** `win_shell` hit **`unreachable`**). **`offline`** on the first-task unreachable rows.
+- **`api_status`**: **`online`/`offline`** from **application HTTP** checks in the playbook (Patrol: aligned with **`need_reconfigure`** / status `POST`; start/restart: start-verify + status `POST`). Values are always **`online`** or **`offline`** (never empty) so bulk updates apply — see `api/projects/devices.go` merge rules.
 - **Patrol / `device_status.yml` — log task unreachable:** **`检查日志上报状态`** uses **`ignore_unreachable: true`**. Without it, a WinRM disconnect on that task **fatal**s the host and **skips** setting **`semaphore_callback_row`**, so the localhost bulk play **omits** that host (`semaphore_bulk_put_from_hostvars.yml` only loops hosts with **`semaphore_callback_row` defined**) and the UI can stay **`checking`**. When unreachable, **`need_reconfigure`** is forced so the callback writes **unhealthy** / **`winrm_status: offline`** and a dedicated **`abnormal_reason`**.
 - **Ansible boolean gotcha:** `set_fact: x: "{{ false }}"` stores the **string** `"False"`, which is **truthy** in Jinja `when:` tests — use two tasks with literal YAML `true` / `false` (as in those playbooks) for flags that gate `fail` / callbacks.
-- The Semaphore API also **rejects inconsistent rows**: `PUT …/devices/status/bulk` coerces **`device_status` away from `healthy` when `api_status` is `offline`** (after merging optional `api_status` from the payload with the stored device).
+- The Semaphore API also **rejects inconsistent rows**: `PUT …/devices/status/bulk` coerces **`device_status` away from `healthy` when the merged `api_status` is `offline`** (payload may omit **`api_status`**, e.g. **`device_stop.yml`**, in which case the **stored** value is used).
 
 ### Bulk vs single-device extra-vars
 
 - **Bulk** actions pass `devices: [{ id, hostname, ip }, ...]` plus **`configs_by_host`**: the same per-device config map is keyed by **both** `ip` and `hostname` so playbooks can resolve it when `inventory_hostname` is the WinRM target IP.
 - **Single-device** actions pass **`device: { id, hostname, ip }`** (no `devices` list). Playbooks build **`_semaphore_device_rows`** from either `devices` or `[device]`. Each **`semaphore_callback_row`** includes **`hostname`** and **`ip`** (device IP, defaulting to `inventory_hostname`). **`PUT …/devices/status/bulk`** matches the project device **first by `ip` when present**, then by **`hostname`**, then treats **`hostname` as an IP** if it equals a device’s **`ip_address`** — so inventory keyed by IP still updates the correct row when DB hostnames differ.
 
-**Stop** actions intentionally report **`device_status: unhealthy`** when the process is stopped (service not running), with **`abnormal_reason`** describing unreachable vs stop result vs already-not-running.
+**Stop** actions intentionally report **`device_status: unhealthy`** when the process is stopped (service not running), with **`abnormal_reason`** describing unreachable vs stop result vs already-not-running. The bulk row includes **`winrm_status`** only (no **`api_status`** / **`rdp_status`**) so those columns keep their previous values unless you **Probe** again.
 
 ## Debug logging (always printed on success)
 
