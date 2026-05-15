@@ -118,7 +118,18 @@
     <SystemInfoDialog v-model="systemInfoDialog" v-if="user && user.admin" />
 
     <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="3000" top>
-      {{ snackbarText }}
+      <span class="snackbar-message">
+        <template v-if="snackbarTaskId">
+          {{ snackbarTextPrefix }}
+          <a
+            class="snackbar-task-link"
+            href="#"
+            @click.prevent="onSnackbarTaskClick"
+          >#{{ snackbarTaskId }}</a>
+          {{ snackbarTextSuffix }}
+        </template>
+        <span v-else>{{ snackbarText }}</span>
+      </span>
       <v-btn text @click="snackbar = false">
         {{ $t('close') }}
       </v-btn>
@@ -666,6 +677,24 @@
   height: 100dvh !important;
 }
 
+.snackbar-message {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2em;
+}
+
+.snackbar-task-link {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    opacity: 0.85;
+  }
+}
+
 .NewProSubscriptionMenuItem {
   transition: 0.2s transform;
 
@@ -1014,6 +1043,9 @@ export default {
       state: 'loading',
       snackbar: false,
       snackbarText: '',
+      snackbarTextPrefix: '',
+      snackbarTextSuffix: '',
+      snackbarTaskId: null,
       snackbarColor: '',
       projects: null,
       newProjectDialog: null,
@@ -1163,7 +1195,10 @@ export default {
     EventBus.$on('i-snackbar', (e) => {
       this.snackbar = true;
       this.snackbarColor = e.color;
-      this.snackbarText = e.text;
+      this.snackbarText = e.text || '';
+      this.snackbarTaskId = e.taskId || null;
+      this.snackbarTextPrefix = e.textPrefix || '';
+      this.snackbarTextSuffix = e.textSuffix || '';
     });
 
     EventBus.$on('i-account-change', async () => {
@@ -1481,10 +1516,21 @@ export default {
       f.click();
     },
 
+    onSnackbarTaskClick() {
+      if (!this.snackbarTaskId) {
+        return;
+      }
+      EventBus.$emit('i-show-task', { taskId: this.snackbarTaskId });
+      this.snackbar = false;
+    },
+
     async signOut() {
       this.snackbar = false;
       this.snackbarColor = '';
       this.snackbarText = '';
+      this.snackbarTaskId = null;
+      this.snackbarTextPrefix = '';
+      this.snackbarTextSuffix = '';
 
       try {
         await axios({

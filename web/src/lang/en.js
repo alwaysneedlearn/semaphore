@@ -481,6 +481,8 @@ export default {
   deviceConfigAddRow: 'Add item',
   keyIsRequired: 'Key is required',
   deviceTaskQueued: 'Task #{id} queued',
+  deviceTaskQueuedPrefix: 'Task',
+  deviceTaskQueuedSuffix: 'queued',
   deviceAbnormalReason: 'Abnormal reason',
   deviceReasonEmpty: 'No abnormal reason recorded.',
   deviceBulkOps: 'Bulk operations',

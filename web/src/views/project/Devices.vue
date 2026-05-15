@@ -598,6 +598,20 @@ export default {
   // ItemListPageBase has askDeleteItem call /refs which we don't expose;
   // override to skip the refs check and go straight to the confirm dialog.
   methods: {
+    /** Snackbar with clickable task id + open task log dialog (same as single-device actions). */
+    notifyDeviceTaskQueued(taskId) {
+      const id = taskId != null ? Number(taskId) : null;
+      if (!id) {
+        return;
+      }
+      EventBus.$emit('i-snackbar', {
+        color: 'success',
+        textPrefix: this.$t('deviceTaskQueuedPrefix'),
+        textSuffix: this.$t('deviceTaskQueuedSuffix'),
+        taskId: id,
+      });
+      EventBus.$emit('i-show-task', { taskId: id });
+    },
     async askDeleteItem(itemId) {
       this.itemId = itemId;
       this.deleteItemDialog = true;
@@ -777,13 +791,7 @@ export default {
           action,
           device_ids: [device.id],
         });
-        EventBus.$emit('i-snackbar', {
-          color: 'success',
-          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
-        });
-        if (res.data && res.data.id) {
-          EventBus.$emit('i-show-task', { taskId: res.data.id });
-        }
+        this.notifyDeviceTaskQueued(res.data && res.data.id);
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
@@ -807,12 +815,8 @@ export default {
         };
         const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
         const taskId = res.data && res.data.id;
-        EventBus.$emit('i-snackbar', {
-          color: 'success',
-          text: this.$i18n.t('deviceTaskQueued', { id: taskId }),
-        });
         if (taskId) {
-          EventBus.$emit('i-show-task', { taskId });
+          this.notifyDeviceTaskQueued(taskId);
           await this.waitAndLoadDiscoveryResult(taskId);
         }
       } catch (e) {
@@ -1060,13 +1064,7 @@ export default {
       this.patrolling = true;
       try {
         const res = await axios.post(`${this.getItemsUrl()}/patrol`);
-        EventBus.$emit('i-snackbar', {
-          color: 'success',
-          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
-        });
-        if (res.data && res.data.id) {
-          EventBus.$emit('i-show-task', { taskId: res.data.id });
-        }
+        this.notifyDeviceTaskQueued(res.data && res.data.id);
         await this.loadItems();
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
@@ -1096,10 +1094,7 @@ export default {
           action,
           device_ids: this.selectedDeviceIds,
         });
-        EventBus.$emit('i-snackbar', {
-          color: 'success',
-          text: this.$i18n.t('deviceTaskQueued', { id: res.data && res.data.id }),
-        });
+        this.notifyDeviceTaskQueued(res.data && res.data.id);
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
