@@ -37,6 +37,7 @@
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
           device_status: unhealthy
           rdp_status: offline
           winrm_status: offline
@@ -184,6 +185,7 @@
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
           device_status: >-
             {% if status is not defined or ('stdout' not in status) %}unhealthy
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}unhealthy

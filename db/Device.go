@@ -273,6 +273,7 @@ type DeviceStats struct {
 
 type DeviceStatusUpdate struct {
 	Hostname       string       `json:"hostname"`
+	IPAddress      string       `json:"ip,omitempty"` // optional; bulk callbacks match device by IP when set (see BulkUpdateDeviceStatus)
 	Status         DeviceStatus `json:"status"`
 	RDPStatus      DeviceStatus `json:"rdp_status,omitempty"`
 	WinRMStatus    DeviceStatus `json:"winrm_status,omitempty"`
