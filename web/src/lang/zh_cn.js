@@ -408,6 +408,8 @@ export default {
   deviceConfigAddRow: '新增配置项',
   keyIsRequired: '键不能为空',
   deviceTaskQueued: '任务 #{id} 已排队',
+  deviceTaskQueuedPrefix: '任务',
+  deviceTaskQueuedSuffix: '已排队',
   deviceAbnormalReason: '异常原因',
   deviceReasonEmpty: '未记录异常原因',
   deviceBulkOps: '批量操作',
