@@ -15,6 +15,8 @@
     api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
     api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
     export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
+    # 日志状态检查：仅统计最近 N 分钟内的日志行（与 check_restart_redeploy 的 LOG_HEALTH_RECENT_MINUTES 一致）
+    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -127,7 +129,7 @@
                 $logTime = [datetime]::ParseExact($logTime, "yyyy-MM-dd HH:mm:ss", $null)
                 $currentTime = (Get-Date)
                 $timeDiff = $currentTime - $logTime
-                return $timeDiff.TotalMinutes -le 8
+                return $timeDiff.TotalMinutes -le {{ log_health_recent_minutes | int }}
               }
               $keyword = "本轮通道状态上传成功"
               $matches = $content | Select-String -Pattern $keyword

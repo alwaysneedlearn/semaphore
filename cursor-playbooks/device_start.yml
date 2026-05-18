@@ -43,6 +43,8 @@
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
+    # 状态判断「日志状态检查」：仅统计最近 N 分钟内的日志行（与 check_restart_redeploy 的 LOG_HEALTH_RECENT_MINUTES 一致）
+    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
     # 启动验证「日志轮询」按行偏移增量读取；状态文件在首次进入该轮询前删除（见下 win_file 任务）
     log_poll_state_path: "C:\\Windows\\Temp\\sem_logpoll_{{ inventory_hostname | regex_replace('[^A-Za-z0-9_-]', '_') }}_{{ log_path | string | hash('sha1') }}.state"
 
@@ -155,7 +157,7 @@
                 $logTime = [datetime]::ParseExact($logTime, "yyyy-MM-dd HH:mm:ss", $null)
                 $currentTime = (Get-Date)
                 $timeDiff = $currentTime - $logTime
-                return $timeDiff.TotalMinutes -le 8
+                return $timeDiff.TotalMinutes -le {{ log_health_recent_minutes | int }}
               }
               $keyword = "本轮通道状态上传成功"
               $matches = $content | Select-String -Pattern $keyword
