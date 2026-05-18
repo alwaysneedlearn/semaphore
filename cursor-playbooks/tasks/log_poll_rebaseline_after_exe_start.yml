@@ -1,0 +1,40 @@
+---
+# 启动 exe 后：若日志行数小于启动前书签，说明文件被截断/重建，重置书签
+- name: 重配执行：启动后校正日志行书签（截断检测）
+  win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $logPath = "{{ log_path }}"
+    $statePath = "{{ log_poll_state_path }}"
+    $prev = [int64]{{ log_poll_baseline | default(0) | int }}
+    $cur = [int64]0
+    if (Test-Path -LiteralPath $logPath) {
+      $reader = $null
+      try {
+        $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
+        while ($null -ne ($reader.ReadLine())) { $cur++ }
+      } finally {
+        if ($null -ne $reader) { $reader.Close() }
+      }
+    }
+    if ($prev -gt 0 -and $cur -lt $prev) {
+      [System.IO.File]::WriteAllText($statePath, $cur.ToString())
+      Write-Output "LOG_BASELINE_RESET=$cur"
+      Write-Output "LOG_BASELINE_BEFORE=$prev"
+    } else {
+      Write-Output "LOG_BASELINE_KEEP=$prev"
+      Write-Output "LOG_BASELINE_AFTER=$cur"
+    }
+  register: log_baseline_after_start
+  changed_when: false
+
+- name: 重配执行：登记截断后的日志轮询基准
+  ansible.builtin.set_fact:
+    _log_reset_line: "{{ (log_baseline_after_start.stdout_lines | default([]) | select('search', 'LOG_BASELINE_RESET=') | list | first) | default('LOG_BASELINE_RESET=0', true) }}"
+    log_poll_baseline: "{{ (_log_reset_line | regex_replace('^LOG_BASELINE_RESET=', '') | trim) | int }}"
+  when: log_baseline_after_start.stdout is search('LOG_BASELINE_RESET=')
+
+- name: 重配执行：DEBUG 启动后日志书签校正
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LOG] after_exe_start={{ log_baseline_after_start.stdout_lines | default([]) }}"
+      - "[DEBUG-LOG] log_poll_baseline={{ log_poll_baseline | default(0) }}"

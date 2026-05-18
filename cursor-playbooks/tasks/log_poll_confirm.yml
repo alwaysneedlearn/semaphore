@@ -46,6 +46,17 @@
       }
     }
 
+    function Test-KeywordLine([string]$line, [string]$kw) {
+      if ([string]::IsNullOrWhiteSpace($line) -or [string]::IsNullOrWhiteSpace($kw)) { return $false }
+      if ($line.IndexOf($kw, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      $alt = $kw.Trim()
+      if ($alt.StartsWith('提示 ')) {
+        $short = $alt.Substring(3)
+        if ($line.IndexOf($short, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      } elseif ($line.IndexOf(('提示 ' + $alt), [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      return $false
+    }
+
     function Scan-Log([int64]$startAfter, [ref]$totalLines, [ref]$foundMatch, [ref]$newLines) {
       $foundMatch.Value = $false
       $totalLines.Value = [int64]0
@@ -57,7 +68,7 @@
           $totalLines.Value++
           if ($totalLines.Value -gt $startAfter) {
             [void]$newLines.Value.Add($line)
-            if (-not $foundMatch.Value -and ($line | Select-String -Pattern $keyword -Quiet)) {
+            if (-not $foundMatch.Value -and (Test-KeywordLine $line $keyword)) {
               $foundMatch.Value = $true
             }
           }
@@ -68,7 +79,7 @@
     }
 
     function Write-PollDebug([int64]$startAfter, [int64]$total, [bool]$found, [System.Collections.Generic.List[string]]$lines, [string]$phase) {
-      Write-Output ("LOG_POLL_ATTEMPT|phase={0}|baseline={1}|start_after={2}|total_lines={3}|new_lines={4}|keyword_found={5}|path={6}" -f $phase, $baseline, $startAfter, $total, $lines.Count, $found, $logPath)
+      Write-Output ("LOG_POLL_ATTEMPT|phase={0}|baseline={1}|start_after={2}|total_lines={3}|new_lines={4}|keyword_found={5}|keyword={6}|path={7}" -f $phase, $baseline, $startAfter, $total, $lines.Count, $found, $keyword, $logPath)
       $shown = 0
       foreach ($l in $lines) {
         if ($maxDbg -gt 0 -and $shown -ge $maxDbg) {
@@ -87,12 +98,18 @@
     Write-PollDebug $lastLine $total $found $newLines 'scan'
 
     if ($total -lt $lastLine) {
-      $lastLine = $baseline
+      if ($total -lt $baseline) {
+        # 启动后日志被截断/重建：当前文件行数 < exe 启动前书签，必须从第 0 行重扫
+        Write-Output ("LOG_POLL_RESET|reason=file_lines_below_baseline|total={0}|baseline={1}" -f $total, $baseline)
+        $lastLine = [int64]0
+      } else {
+        $lastLine = $baseline
+      }
       Scan-Log $lastLine ([ref]$total) ([ref]$found) ([ref]$newLines)
       Write-PollDebug $lastLine $total $found $newLines 'rescan_after_shrink'
     }
 
-    if ($total -lt $baseline) { $total = $baseline }
+    # 勿把 state 写成大于实际行数（旧逻辑会导致截断后永远只扫 >369 的空区间）
     [System.IO.File]::WriteAllText($statePath, $total.ToString())
 
     if ($found) {
