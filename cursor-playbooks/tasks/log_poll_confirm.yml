@@ -10,11 +10,18 @@
     if (-not [string]::IsNullOrWhiteSpace($env:SEM_LOG_BASELINE)) {
       $baseline = [int64]$env:SEM_LOG_BASELINE
     }
+    $maxDbg = [int]100
+    if (-not [string]::IsNullOrWhiteSpace($env:SEM_LOG_DEBUG_MAX_LINES)) {
+      $maxDbg = [int]$env:SEM_LOG_DEBUG_MAX_LINES
+    }
     if ([string]::IsNullOrWhiteSpace($logPath) -or [string]::IsNullOrWhiteSpace($statePath) -or [string]::IsNullOrWhiteSpace($keyword)) {
       [Console]::Error.WriteLine('[LOG_POLL] missing SEM_LOG_PATH / SEM_LOG_POLL_STATE / SEM_LOG_KEYWORD')
       exit 1
     }
-    if (!(Test-Path -LiteralPath $logPath)) { exit 1 }
+    if (!(Test-Path -LiteralPath $logPath)) {
+      Write-Output "LOG_POLL_ATTEMPT|file_missing path=$logPath"
+      exit 1
+    }
 
     $lastLine = $baseline
     if (Test-Path -LiteralPath $statePath) {
@@ -29,15 +36,17 @@
       }
     }
 
-    function Scan-Log([int64]$startAfter, [ref]$totalLines, [ref]$foundMatch) {
+    function Scan-Log([int64]$startAfter, [ref]$totalLines, [ref]$foundMatch, [ref]$newLines) {
       $foundMatch.Value = $false
       $totalLines.Value = [int64]0
+      $newLines.Value = New-Object System.Collections.Generic.List[string]
       $reader = $null
       try {
         $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
         while ($null -ne ($line = $reader.ReadLine())) {
           $totalLines.Value++
           if ($totalLines.Value -gt $startAfter) {
+            [void]$newLines.Value.Add($line)
             if (-not $foundMatch.Value -and ($line | Select-String -Pattern $keyword -Quiet)) {
               $foundMatch.Value = $true
             }
@@ -48,31 +57,59 @@
       }
     }
 
+    function Write-PollDebug([int64]$startAfter, [int64]$total, [bool]$found, [System.Collections.Generic.List[string]]$lines, [string]$phase) {
+      Write-Output ("LOG_POLL_ATTEMPT|phase={0}|baseline={1}|start_after={2}|total_lines={3}|new_lines={4}|keyword_found={5}|path={6}" -f $phase, $baseline, $startAfter, $total, $lines.Count, $found, $logPath)
+      $shown = 0
+      foreach ($l in $lines) {
+        if ($maxDbg -gt 0 -and $shown -ge $maxDbg) {
+          Write-Output ("LOG_POLL_TRUNCATED|remaining={0}" -f ($lines.Count - $shown))
+          break
+        }
+        Write-Output ("LOG_POLL_LINE|" + $l)
+        $shown++
+      }
+    }
+
     $total = [int64]0
     $found = $false
-    Scan-Log $lastLine ([ref]$total) ([ref]$found)
+    $newLines = $null
+    Scan-Log $lastLine ([ref]$total) ([ref]$found) ([ref]$newLines)
+    Write-PollDebug $lastLine $total $found $newLines 'scan'
 
     if ($total -lt $lastLine) {
       $lastLine = $baseline
-      Scan-Log $lastLine ([ref]$total) ([ref]$found)
+      Scan-Log $lastLine ([ref]$total) ([ref]$found) ([ref]$newLines)
+      Write-PollDebug $lastLine $total $found $newLines 'rescan_after_shrink'
     }
 
     if ($total -lt $baseline) { $total = $baseline }
     [System.IO.File]::WriteAllText($statePath, $total.ToString())
 
     if ($found) {
-      Write-Output "LOG_OK baseline=$baseline cursor=$lastLine total=$total"
+      Write-Output "LOG_OK|baseline=$baseline|cursor=$lastLine|total=$total"
       exit 0
     }
-    Write-Output "LOG_MISS baseline=$baseline cursor=$lastLine total=$total"
+    Write-Output "LOG_MISS|baseline=$baseline|cursor=$lastLine|total=$total"
     exit 1
   environment:
     SEM_LOG_PATH: "{{ log_path }}"
     SEM_LOG_POLL_STATE: "{{ log_poll_state_path }}"
     SEM_LOG_KEYWORD: "{{ log_success_keyword }}"
     SEM_LOG_BASELINE: "{{ log_poll_baseline | default(0) | int }}"
+    SEM_LOG_DEBUG_MAX_LINES: "{{ log_poll_debug_max_lines | default(100) | int }}"
   register: log_poll
   retries: "{{ log_poll_retries }}"
   delay: "{{ log_poll_delay }}"
   until: log_poll.rc == 0
   failed_when: false
+
+- name: 启动验证：DEBUG 日志轮询每次扫描内容
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LOG-POLL] attempt {{ ansible_loop.index }}/{{ ansible_loop.length }} rc={{ item.rc | default('n/a') }}"
+      - "{{ item.stdout_lines | default([]) | select('match', '^LOG_POLL_') | list }}"
+  loop: "{{ log_poll.results if (log_poll.results is defined) else [log_poll] }}"
+  loop_control:
+    extended: true
+    label: "poll attempt {{ ansible_loop.index }}"
+  when: log_poll is defined
