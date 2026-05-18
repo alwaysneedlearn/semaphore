@@ -37,6 +37,10 @@
       }
     }
 
+    # 清除上轮遗留游标，避免 cursor 大于当前文件行数
+    if (Test-Path -LiteralPath $statePath) {
+      Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+    }
     if (Test-Path -LiteralPath $logPath) {
       $fileExists = $true
       try { $fileLen = (Get-Item -LiteralPath $logPath).Length } catch { $fileLen = -1 }
@@ -78,4 +82,8 @@
       - "[DEBUG-LOG] baseline_lines={{ log_poll_baseline | default(0) }} (exe 启动后、启动 API 调用前；仅轮询此后新增行)"
       - "[DEBUG-LOG] parsed_from={{ _log_baseline_line | default('n/a') }}"
       - "[DEBUG-LOG] win_shell={{ log_baseline_before_start_api.stdout_lines | default([]) }}"
-  when: log_baseline_before_start_api is defined and not (log_baseline_before_start_api.skipped | default(false))
+  when:
+    - log_baseline_before_start_api is defined
+    - not (log_baseline_before_start_api.skipped | default(false))
+    - (log_baseline_before_start_api.rc | default(1)) == 0
+    - log_poll_baseline is defined

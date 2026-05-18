@@ -1,5 +1,5 @@
 ---
-# 依赖：log_path、log_poll_state_path、log_poll_baseline（exe 启动前写入）、log_success_keyword
+# 依赖：log_path、log_poll_state_path、log_poll_baseline（exe 启动后、启动 API 前写入）、log_success_keyword
 - name: 启动验证：日志轮询确认
   win_shell: |
     $ErrorActionPreference = 'Stop'
@@ -10,7 +10,7 @@
     if (-not [string]::IsNullOrWhiteSpace($env:SEM_LOG_BASELINE)) {
       $baseline = [int64]$env:SEM_LOG_BASELINE
     }
-    # Ansible 若未解析 stdout_lines，SEM_LOG_BASELINE 可能为 0；以 state 中 exe 启动前写入的书签为准
+    # Ansible 若未解析 stdout_lines，SEM_LOG_BASELINE 可能为 0；以 state 中启动 API 前写入的书签为准
     if ($baseline -eq 0 -and (Test-Path -LiteralPath $statePath)) {
       try {
         $rawB = (Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop).Trim()

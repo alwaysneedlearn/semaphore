@@ -1,0 +1,10 @@
+---
+# 日志轮询依赖 log_poll_baseline；勿用 default(0) 掩盖书签失败
+- name: 启动验证：书签未登记则中止（避免 baseline=0 误扫全文件）
+  ansible.builtin.fail:
+    msg: >-
+      日志轮询书签未登记（记录启动 API 前日志行数失败或未执行）。
+      请检查上一任务 rc/stderr。log_path={{ log_path | default('n/a') }}
+  when:
+    - not (api_final_ok | default(false) | bool)
+    - log_poll_baseline is not defined
