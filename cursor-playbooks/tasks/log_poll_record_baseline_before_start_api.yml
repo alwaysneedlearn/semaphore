@@ -2,22 +2,45 @@
 # 启动 exe 之后、调用启动 API 之前：数当前日志行数并写入 .state（轮询只匹配此后新增行）
 - name: 启动验证：记录启动 API 调用前日志行数（轮询书签）
   win_shell: |
-    $ErrorActionPreference = 'Stop'
     $logPath = "{{ log_path }}"
     $statePath = "{{ log_poll_state_path }}"
+    $maxRetries = {{ log_read_retries | default(5) | int }}
+    $retryDelay = {{ log_read_retry_delay | default(2) | int }}
     $baseline = [int64]0
     $fileExists = $false
     $fileLen = [int64]0
+
+    function Count-LogLinesShared([string]$Path) {
+      $attempt = 0
+      while ($true) {
+        $attempt++
+        $stream = $null
+        $reader = $null
+        try {
+          # exe 写入日志时常独占文件；须 ReadWrite 共享打开（与轮询一致）
+          $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+          $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8, $true)
+          $count = [int64]0
+          while ($null -ne ($reader.ReadLine())) { $count++ }
+          return $count
+        } catch {
+          if ($attempt -ge $maxRetries) {
+            Write-Output "LOG_READ_ERROR=$($_.Exception.Message)"
+            throw
+          }
+          Write-Output "LOG_READ_RETRY|attempt=$attempt|delay_s=$retryDelay"
+          Start-Sleep -Seconds $retryDelay
+        } finally {
+          if ($null -ne $reader) { $reader.Close() }
+          if ($null -ne $stream) { $stream.Dispose() }
+        }
+      }
+    }
+
     if (Test-Path -LiteralPath $logPath) {
       $fileExists = $true
       try { $fileLen = (Get-Item -LiteralPath $logPath).Length } catch { $fileLen = -1 }
-      $reader = $null
-      try {
-        $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
-        while ($null -ne ($reader.ReadLine())) { $baseline++ }
-      } finally {
-        if ($null -ne $reader) { $reader.Close() }
-      }
+      $baseline = Count-LogLinesShared -Path $logPath
     }
     [System.IO.File]::WriteAllText($statePath, $baseline.ToString())
     Write-Output "LOG_BASELINE=$baseline"

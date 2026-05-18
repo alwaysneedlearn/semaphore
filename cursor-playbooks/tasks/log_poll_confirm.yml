@@ -57,24 +57,39 @@
       return $false
     }
 
+    $readRetries = {{ log_read_retries | default(5) | int }}
+    $readRetryDelay = {{ log_read_retry_delay | default(2) | int }}
+
     function Scan-Log([int64]$startAfter, [ref]$totalLines, [ref]$foundMatch, [ref]$newLines) {
       $foundMatch.Value = $false
       $totalLines.Value = [int64]0
       $newLines.Value = New-Object System.Collections.Generic.List[string]
-      $reader = $null
-      try {
-        $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
-        while ($null -ne ($line = $reader.ReadLine())) {
-          $totalLines.Value++
-          if ($totalLines.Value -gt $startAfter) {
-            [void]$newLines.Value.Add($line)
-            if (-not $foundMatch.Value -and (Test-KeywordLine $line $keyword)) {
-              $foundMatch.Value = $true
+      $attempt = 0
+      while ($true) {
+        $attempt++
+        $stream = $null
+        $reader = $null
+        try {
+          $stream = [System.IO.File]::Open($logPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+          $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8, $true)
+          while ($null -ne ($line = $reader.ReadLine())) {
+            $totalLines.Value++
+            if ($totalLines.Value -gt $startAfter) {
+              [void]$newLines.Value.Add($line)
+              if (-not $foundMatch.Value -and (Test-KeywordLine $line $keyword)) {
+                $foundMatch.Value = $true
+              }
             }
           }
+          return
+        } catch {
+          if ($attempt -ge $readRetries) { throw }
+          Write-Output ("LOG_READ_RETRY|attempt={0}|delay_s={1}" -f $attempt, $readRetryDelay)
+          Start-Sleep -Seconds $readRetryDelay
+        } finally {
+          if ($null -ne $reader) { $reader.Close() }
+          if ($null -ne $stream) { $stream.Dispose() }
         }
-      } finally {
-        if ($null -ne $reader) { $reader.Close() }
       }
     }
 
