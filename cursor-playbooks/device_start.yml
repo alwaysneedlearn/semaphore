@@ -30,6 +30,7 @@
     poll_retries: "{{ ((lookup('env', 'POLL_RETRIES') | default('', true) | trim) | default('3', true)) | int }}"
     poll_delay: "{{ ((lookup('env', 'POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
+    # 启动计划任务后等待进程就绪（秒）；Variable Group 未设或为空 → 30
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
@@ -646,6 +647,10 @@
         - name: 重配执行：解析 Windows 当日日志路径
           ansible.builtin.include_tasks: tasks/log_poll_resolve_windows_path.yml
 
+        - name: 重配执行：DEBUG 启动等待（RESTART_DELAY）
+          ansible.builtin.debug:
+            msg: "[DEBUG-RECONFIG] restart_delay={{ restart_delay }}s (Variable Group RESTART_DELAY 未设或为空时 playbook 默认 30)"
+
         - name: 重配执行：启动程序
           when: >
             'EXE_FOUND' in _reconfig_exe_check_text or
@@ -654,6 +659,7 @@
           win_shell: |
             $startExe = "{{ exe_path }}"
             Write-Output "RECONFIG_START_EXE_PATH=$startExe|exists=$(Test-Path -LiteralPath $startExe)"
+            Write-Output "RECONFIG_RESTART_DELAY_SECONDS={{ restart_delay }}"
             if (Test-Path -LiteralPath $startExe) {
               try {
                 $taskName = "Start-{{ exe_name }}"
