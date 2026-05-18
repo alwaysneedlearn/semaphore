@@ -1,0 +1,14 @@
+---
+# 在目标 Windows 主机上解析当日 NWReport 日志路径（非控制机 date）
+- name: 日志：解析 Windows 当日日志路径
+  win_shell: |
+    $day = Get-Date -Format 'yyyyMMdd'
+    $p = Join-Path -Path "{{ exe_dir }}\{{ zip_name }}\LogData" -ChildPath "NWReport_DBWB$day.log"
+    Write-Output $p
+  register: _sem_windows_log_path
+  changed_when: false
+
+- name: 日志：登记 log_path 与 state 路径
+  ansible.builtin.set_fact:
+    log_path: "{{ _sem_windows_log_path.stdout | trim }}"
+    log_poll_state_path: "C:\\Windows\\Temp\\sem_logpoll_{{ inventory_hostname | regex_replace('[^A-Za-z0-9_-]', '_') }}_{{ (_sem_windows_log_path.stdout | trim) | hash('sha1') }}.state"
