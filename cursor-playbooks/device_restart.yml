@@ -33,7 +33,7 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
     merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
-    # log_path / log_poll_state_path / log_poll_baseline：重配阶段在目标机解析（Windows 当日）并在 exe 启动前写入书签
+    # log_path / log_poll_state_path：重配阶段解析；log_poll_baseline 在 exe 启动后、调用启动 API 前写入
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
@@ -521,9 +521,6 @@
         - name: 重配执行：解析 Windows 当日日志路径
           ansible.builtin.include_tasks: tasks/log_poll_resolve_windows_path.yml
 
-        - name: 重配执行：记录 exe 启动前日志行书签
-          ansible.builtin.include_tasks: tasks/log_poll_record_baseline_before_exe.yml
-
         - name: 重配执行：启动程序
           when: >
             'EXE_FOUND' in _reconfig_exe_check_text or
@@ -567,13 +564,6 @@
             relaunch_result is defined and 'stdout' in relaunch_result and
             ('START_ERROR' in relaunch_result.stdout or 'VERIFY_FAILED' in relaunch_result.stdout)
 
-        - name: 重配执行：启动后校正日志行书签（截断检测）
-          ansible.builtin.include_tasks: tasks/log_poll_rebaseline_after_exe_start.yml
-          when: >
-            relaunch_result is defined and
-            not (relaunch_result.skipped | default(false)) and
-            log_path is defined
-
       rescue:
         - name: 错误处理：重配阶段失败
           ansible.builtin.set_fact:
@@ -587,6 +577,9 @@
     - name: 启动验证：验证数据上报启动状态
       when: host_failure_reason is not defined
       block:
+        - name: 启动验证：记录启动 API 调用前日志行书签
+          ansible.builtin.include_tasks: tasks/log_poll_record_baseline_before_start_api.yml
+
         - name: 启动验证：调用启动API
           ansible.builtin.uri:
             url: "http://{{ api_host }}:{{ api_port }}"
