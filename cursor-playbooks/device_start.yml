@@ -693,6 +693,13 @@
             ('START_ERROR' in relaunch_result.stdout or
             'VERIFY_FAILED' in relaunch_result.stdout)
 
+        - name: 重配执行：启动后校正日志行书签（截断检测）
+          ansible.builtin.include_tasks: tasks/log_poll_rebaseline_after_exe_start.yml
+          when: >
+            relaunch_result is defined and
+            not (relaunch_result.skipped | default(false)) and
+            log_path is defined
+
         - name: 重配执行：输出重配结果
           ansible.builtin.debug:
             msg: |
