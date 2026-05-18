@@ -1,0 +1,26 @@
+---
+# exe 启动前：数当前日志行数并写入 .state（轮询下界；until 重试只在此基础上向后扫）
+- name: 重配执行：记录 exe 启动前日志行数（轮询书签）
+  win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $logPath = "{{ log_path }}"
+    $statePath = "{{ log_poll_state_path }}"
+    $baseline = [int64]0
+    if (Test-Path -LiteralPath $logPath) {
+      $reader = $null
+      try {
+        $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
+        while ($null -ne ($reader.ReadLine())) { $baseline++ }
+      } finally {
+        if ($null -ne $reader) { $reader.Close() }
+      }
+    }
+    [System.IO.File]::WriteAllText($statePath, $baseline.ToString())
+    Write-Output "LOG_BASELINE=$baseline"
+    Write-Output "LOG_PATH=$logPath"
+  register: log_baseline_before_exe
+  changed_when: false
+
+- name: 重配执行：登记日志轮询基准行号
+  ansible.builtin.set_fact:
+    log_poll_baseline: "{{ (log_baseline_before_exe.stdout | default('') | regex_search('LOG_BASELINE=(\\d+)', '\\1') | default('0', true)) | int }}"

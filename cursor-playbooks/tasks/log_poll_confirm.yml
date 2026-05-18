@@ -1,0 +1,78 @@
+---
+# 依赖：log_path、log_poll_state_path、log_poll_baseline（exe 启动前写入）、log_success_keyword
+- name: 启动验证：日志轮询确认
+  win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $logPath = $env:SEM_LOG_PATH
+    $statePath = $env:SEM_LOG_POLL_STATE
+    $keyword = $env:SEM_LOG_KEYWORD
+    $baseline = [int64]0
+    if (-not [string]::IsNullOrWhiteSpace($env:SEM_LOG_BASELINE)) {
+      $baseline = [int64]$env:SEM_LOG_BASELINE
+    }
+    if ([string]::IsNullOrWhiteSpace($logPath) -or [string]::IsNullOrWhiteSpace($statePath) -or [string]::IsNullOrWhiteSpace($keyword)) {
+      [Console]::Error.WriteLine('[LOG_POLL] missing SEM_LOG_PATH / SEM_LOG_POLL_STATE / SEM_LOG_KEYWORD')
+      exit 1
+    }
+    if (!(Test-Path -LiteralPath $logPath)) { exit 1 }
+
+    $lastLine = $baseline
+    if (Test-Path -LiteralPath $statePath) {
+      try {
+        $raw = (Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop).Trim()
+        if ($raw.Length -gt 0) {
+          $cursor = [int64]$raw
+          if ($cursor -gt $lastLine) { $lastLine = $cursor }
+        }
+      } catch {
+        $lastLine = $baseline
+      }
+    }
+
+    function Scan-Log([int64]$startAfter, [ref]$totalLines, [ref]$foundMatch) {
+      $foundMatch.Value = $false
+      $totalLines.Value = [int64]0
+      $reader = $null
+      try {
+        $reader = New-Object System.IO.StreamReader($logPath, [System.Text.Encoding]::UTF8, $true)
+        while ($null -ne ($line = $reader.ReadLine())) {
+          $totalLines.Value++
+          if ($totalLines.Value -gt $startAfter) {
+            if (-not $foundMatch.Value -and ($line | Select-String -Pattern $keyword -Quiet)) {
+              $foundMatch.Value = $true
+            }
+          }
+        }
+      } finally {
+        if ($null -ne $reader) { $reader.Close() }
+      }
+    }
+
+    $total = [int64]0
+    $found = $false
+    Scan-Log $lastLine ([ref]$total) ([ref]$found)
+
+    if ($total -lt $lastLine) {
+      $lastLine = $baseline
+      Scan-Log $lastLine ([ref]$total) ([ref]$found)
+    }
+
+    if ($total -lt $baseline) { $total = $baseline }
+    [System.IO.File]::WriteAllText($statePath, $total.ToString())
+
+    if ($found) {
+      Write-Output "LOG_OK baseline=$baseline cursor=$lastLine total=$total"
+      exit 0
+    }
+    Write-Output "LOG_MISS baseline=$baseline cursor=$lastLine total=$total"
+    exit 1
+  environment:
+    SEM_LOG_PATH: "{{ log_path }}"
+    SEM_LOG_POLL_STATE: "{{ log_poll_state_path }}"
+    SEM_LOG_KEYWORD: "{{ log_success_keyword }}"
+    SEM_LOG_BASELINE: "{{ log_poll_baseline | default(0) | int }}"
+  register: log_poll
+  retries: "{{ log_poll_retries }}"
+  delay: "{{ log_poll_delay }}"
+  until: log_poll.rc == 0
+  failed_when: false
