@@ -9,7 +9,8 @@
   changed_when: false
 
 - name: 日志：登记 log_path 与 state 路径
-  ansible.builtin.set_fact:
+  vars:
     _sem_log_path_line: "{{ (_sem_windows_log_path.stdout_lines | default([]) | first) | default(_sem_windows_log_path.stdout, true) | trim }}"
-    log_path: "{{ (_sem_windows_log_path.stdout_lines | default([]) | first) | default(_sem_windows_log_path.stdout, true) | trim }}"
-    log_poll_state_path: "C:\\Windows\\Temp\\sem_logpoll_{{ inventory_hostname | regex_replace('[^A-Za-z0-9_-]', '_') }}_{{ ((_sem_windows_log_path.stdout_lines | default([]) | first) | default(_sem_windows_log_path.stdout, true) | trim) | hash('sha1') }}.state"
+  ansible.builtin.set_fact:
+    log_path: "{{ _sem_log_path_line }}"
+    log_poll_state_path: "C:\\Windows\\Temp\\sem_logpoll_{{ inventory_hostname | regex_replace('[^A-Za-z0-9_-]', '_') }}_{{ _sem_log_path_line | hash('sha1') }}.state"

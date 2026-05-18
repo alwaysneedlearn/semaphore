@@ -812,14 +812,13 @@
                 api_final_ok: false
               when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
 
-            - name: 启动验证：确保日志轮询基准已登记
-              ansible.builtin.set_fact:
-                log_poll_baseline: "{{ log_poll_baseline | default(0) | int }}"
-              when: not api_final_ok
+            - name: 启动验证：日志轮询前置检查
+              ansible.builtin.include_tasks: tasks/log_poll_assert_baseline_before_poll.yml
+              when: not (api_final_ok | default(false) | bool)
 
             - name: 启动验证：日志轮询确认
               ansible.builtin.include_tasks: tasks/log_poll_confirm.yml
-              when: not api_final_ok
+              when: not (api_final_ok | default(false) | bool)
 
             - name: 启动验证：综合判断启动结果（成功）
               ansible.builtin.set_fact:
