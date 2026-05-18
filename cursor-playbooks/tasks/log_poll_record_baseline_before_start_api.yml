@@ -52,11 +52,22 @@
   changed_when: false
   when: log_path is defined
 
+# 同一 set_fact 内不能引用本任务刚定义的 _log_baseline_line（Ansible 模板求值时尚未存在）
 - name: 启动验证：登记日志轮询基准行号
   ansible.builtin.set_fact:
     _log_baseline_line: "{{ (log_baseline_before_start_api.stdout_lines | default([]) | select('search', 'LOG_BASELINE=') | list | first) | default('LOG_BASELINE=0', true) }}"
+  when:
+    - log_baseline_before_start_api is defined
+    - not (log_baseline_before_start_api.skipped | default(false))
+    - (log_baseline_before_start_api.rc | default(1)) == 0
+
+- name: 启动验证：登记日志轮询基准行号（数值）
+  ansible.builtin.set_fact:
     log_poll_baseline: "{{ (_log_baseline_line | regex_replace('^LOG_BASELINE=', '') | trim) | int }}"
-  when: log_baseline_before_start_api is defined and not (log_baseline_before_start_api.skipped | default(false))
+  when:
+    - log_baseline_before_start_api is defined
+    - not (log_baseline_before_start_api.skipped | default(false))
+    - (log_baseline_before_start_api.rc | default(1)) == 0
 
 - name: 启动验证：DEBUG 启动 API 前日志行数（exe 已启动后）
   ansible.builtin.debug:
