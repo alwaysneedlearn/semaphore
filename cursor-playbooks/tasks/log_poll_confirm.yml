@@ -20,10 +20,6 @@
         }
       } catch { }
     }
-    $maxDbg = [int]100
-    if (-not [string]::IsNullOrWhiteSpace($env:SEM_LOG_DEBUG_MAX_LINES)) {
-      $maxDbg = [int]$env:SEM_LOG_DEBUG_MAX_LINES
-    }
     if ([string]::IsNullOrWhiteSpace($logPath) -or [string]::IsNullOrWhiteSpace($statePath) -or [string]::IsNullOrWhiteSpace($keyword)) {
       [Console]::Error.WriteLine('[LOG_POLL] missing SEM_LOG_PATH / SEM_LOG_POLL_STATE / SEM_LOG_KEYWORD')
       exit 1
@@ -93,24 +89,15 @@
       }
     }
 
-    function Write-PollDebug([int64]$startAfter, [int64]$total, [bool]$found, [System.Collections.Generic.List[string]]$lines, [string]$phase) {
-      Write-Output ("LOG_POLL_ATTEMPT|phase={0}|baseline={1}|start_after={2}|total_lines={3}|new_lines={4}|keyword_found={5}|keyword={6}|path={7}" -f $phase, $baseline, $startAfter, $total, $lines.Count, $found, $keyword, $logPath)
-      $shown = 0
-      foreach ($l in $lines) {
-        if ($maxDbg -gt 0 -and $shown -ge $maxDbg) {
-          Write-Output ("LOG_POLL_TRUNCATED|remaining={0}" -f ($lines.Count - $shown))
-          break
-        }
-        Write-Output ("LOG_POLL_LINE|" + $l)
-        $shown++
-      }
+    function Write-PollDebug([int64]$startAfter, [int64]$total, [bool]$found, [int]$newLineCount, [string]$phase) {
+      Write-Output ("LOG_POLL_ATTEMPT|phase={0}|baseline={1}|start_after={2}|total_lines={3}|new_lines={4}|keyword_found={5}|keyword={6}|path={7}" -f $phase, $baseline, $startAfter, $total, $newLineCount, $found, $keyword, $logPath)
     }
 
     $total = [int64]0
     $found = $false
     $newLines = $null
     Scan-Log $lastLine ([ref]$total) ([ref]$found) ([ref]$newLines)
-    Write-PollDebug $lastLine $total $found $newLines 'scan'
+    Write-PollDebug $lastLine $total $found $newLines.Count 'scan'
 
     if ($total -lt $lastLine) {
       if ($total -lt $baseline) {
@@ -121,7 +108,7 @@
         $lastLine = $baseline
       }
       Scan-Log $lastLine ([ref]$total) ([ref]$found) ([ref]$newLines)
-      Write-PollDebug $lastLine $total $found $newLines 'rescan_after_shrink'
+      Write-PollDebug $lastLine $total $found $newLines.Count 'rescan_after_shrink'
     }
 
     # 勿把 state 写成大于实际行数（旧逻辑会导致截断后永远只扫 >369 的空区间）
@@ -138,7 +125,6 @@
     SEM_LOG_POLL_STATE: "{{ log_poll_state_path }}"
     SEM_LOG_KEYWORD: "{{ log_success_keyword }}"
     SEM_LOG_BASELINE: "{{ log_poll_baseline | default(0) | int }}"
-    SEM_LOG_DEBUG_MAX_LINES: "{{ log_poll_debug_max_lines | default(100) | int }}"
   register: log_poll
   retries: "{{ log_poll_retries }}"
   delay: "{{ log_poll_delay }}"

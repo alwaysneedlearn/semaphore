@@ -44,7 +44,6 @@
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
-    log_poll_debug_max_lines: "{{ ((lookup('env', 'LOG_POLL_DEBUG_MAX_LINES') | default('', true) | trim) | default('100', true)) | int }}"
     log_read_retries: "{{ ((lookup('env', 'LOG_READ_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
     log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
     # 状态判断「日志状态检查」：仅统计最近 N 分钟内的日志行（与 check_restart_redeploy 的 LOG_HEALTH_RECENT_MINUTES 一致）
