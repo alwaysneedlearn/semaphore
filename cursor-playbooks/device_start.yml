@@ -33,6 +33,7 @@
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     # 启动计划任务后等待进程就绪（秒）；Variable Group 未设或为空 → 30
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
+    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -658,49 +659,11 @@
             msg: "[DEBUG-RECONFIG] restart_delay={{ restart_delay }}s (Variable Group RESTART_DELAY 未设或为空时 playbook 默认 30)"
 
         - name: 重配执行：启动程序
+          ansible.builtin.include_tasks: tasks/reconfig_start_program_windows.yml
           when: >
             'EXE_FOUND' in _reconfig_exe_check_text or
             (extract_result is defined and not (extract_result.skipped | default(false)) and
              'EXTRACT_OK' in (extract_result.stdout | default('')))
-          win_shell: |
-            $startExe = "{{ exe_path }}"
-            Write-Output "RECONFIG_START_EXE_PATH=$startExe|exists=$(Test-Path -LiteralPath $startExe)"
-            Write-Output "RECONFIG_RESTART_DELAY_SECONDS={{ restart_delay }}"
-            if (Test-Path -LiteralPath $startExe) {
-              try {
-                $taskName = "Start-{{ exe_name }}"
-                if ("{{ exe_args }}" -ne "") {
-                  $action = New-ScheduledTaskAction -Execute $startExe -Argument "{{ exe_args }}"
-                } else {
-                  $action = New-ScheduledTaskAction -Execute $startExe
-                }
-                $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date)
-                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-                $userId = "{{ _reconfig_profile_user }}"
-                $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
-                Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
-                $taskStatus = (Get-ScheduledTask -TaskName $taskName).State
-                if ($taskStatus -ne "Running") {
-                  Start-ScheduledTask -TaskName $taskName
-                }
-                Start-Sleep -Seconds {{ restart_delay }}
-                $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-                if ($verify) {
-                  Write-Output "VERIFY_OK|PID:$($verify.Id)"
-                } else {
-                  Write-Output "VERIFY_FAILED"
-                }
-              } catch {
-                Write-Output "START_ERROR:$($_.Exception.Message)"
-              }
-            } else {
-              Write-Output "EXE_NOT_FOUND_AT_START|path=$startExe"
-            }
-          register: relaunch_result
-          failed_when: >
-            relaunch_result is defined and 'stdout' in relaunch_result and
-            ('START_ERROR' in relaunch_result.stdout or
-            'VERIFY_FAILED' in relaunch_result.stdout)
 
         - name: 重配执行：输出重配结果
           ansible.builtin.debug:

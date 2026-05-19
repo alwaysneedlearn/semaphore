@@ -1,0 +1,108 @@
+---
+# 重配阶段：计划任务启动 EXE，轮询进程；失败时输出任务 LastTaskResult 并尝试 Start-Process 回退
+- name: 重配执行：启动程序
+  win_shell: |
+    $startExe = "{{ exe_path }}"
+    $workDir = Split-Path -LiteralPath $startExe -Parent
+    $procName = [System.IO.Path]::GetFileNameWithoutExtension($startExe)
+    $envProcName = "{{ exe_name }}".Trim()
+    if ($envProcName.Length -gt 0 -and $envProcName -ne $procName) {
+      Write-Output "RECONFIG_PROC_NAME_HINT=exe_file=$procName|EXE_NAME=$envProcName"
+    }
+    $waitSeconds = [int]{{ restart_delay }}
+    $pollSeconds = [int]{{ process_verify_poll_seconds | default(5) }}
+    if ($pollSeconds -lt 1) { $pollSeconds = 1 }
+
+    function Test-ExeProcessRunning {
+      param([string]$Name, [string]$LiteralPath)
+      $p = Get-Process -Name $Name -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($p) { return $p }
+      if ($envProcName.Length -gt 0 -and $envProcName -ne $Name) {
+        $p2 = Get-Process -Name $envProcName -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($p2) { return $p2 }
+      }
+      $cim = Get-CimInstance Win32_Process -Filter "Name='$Name.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -eq $LiteralPath) } |
+        Select-Object -First 1
+      if ($cim) {
+        return [PSCustomObject]@{ Id = $cim.ProcessId; ProcessName = $cim.Name }
+      }
+      return $null
+    }
+
+    function Wait-ExeProcess {
+      param([int]$TotalSeconds, [int]$IntervalSeconds, [string]$Name, [string]$LiteralPath)
+      $deadline = (Get-Date).AddSeconds($TotalSeconds)
+      $attempt = 0
+      do {
+        $attempt++
+        $found = Test-ExeProcessRunning -Name $Name -LiteralPath $LiteralPath
+        if ($found) {
+          Write-Output "VERIFY_POLL|attempt=$attempt|found=true|pid=$($found.Id)|name=$($found.ProcessName)"
+          return $found
+        }
+        Write-Output "VERIFY_POLL|attempt=$attempt|found=false|waited=$((Get-Date))"
+        if ((Get-Date) -ge $deadline) { break }
+        Start-Sleep -Seconds $IntervalSeconds
+      } while ($true)
+      return $null
+    }
+
+    Write-Output "RECONFIG_START_EXE_PATH=$startExe|exists=$(Test-Path -LiteralPath $startExe)|workdir=$workDir|proc=$procName"
+    Write-Output "RECONFIG_RESTART_DELAY_SECONDS=$waitSeconds"
+    Write-Output "RECONFIG_PROFILE_USER={{ _reconfig_profile_user }}"
+
+    if (-not (Test-Path -LiteralPath $startExe)) {
+      Write-Output "EXE_NOT_FOUND_AT_START|path=$startExe"
+      exit 0
+    }
+
+    try {
+      $taskName = "Start-{{ exe_name }}"
+      $argLine = "{{ exe_args }}"
+      if ($argLine -ne "") {
+        $action = New-ScheduledTaskAction -Execute $startExe -Argument $argLine -WorkingDirectory $workDir
+      } else {
+        $action = New-ScheduledTaskAction -Execute $startExe -WorkingDirectory $workDir
+      }
+      $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
+      $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+      $userId = "{{ _reconfig_profile_user }}"
+      $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
+      Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+      $task = Get-ScheduledTask -TaskName $taskName
+      Write-Output "RECONFIG_TASK_REGISTERED|name=$taskName|state=$($task.State)|user=$userId|logon=Interactive"
+      if ($task.State -ne 'Running') {
+        Start-ScheduledTask -TaskName $taskName
+        Start-Sleep -Seconds 2
+      }
+      $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName
+      Write-Output "RECONFIG_TASK_INFO|last_result=$($taskInfo.LastTaskResult)|last_run=$($taskInfo.LastRunTime)|state=$((Get-ScheduledTask -TaskName $taskName).State)"
+
+      $verify = Wait-ExeProcess -TotalSeconds $waitSeconds -IntervalSeconds $pollSeconds -Name $procName -LiteralPath $startExe
+      if ($verify) {
+        Write-Output "VERIFY_OK|PID:$($verify.Id)|method=scheduled_task"
+        exit 0
+      }
+
+      Write-Output "VERIFY_SCHEDULED_TASK_MISS|last_result=$($taskInfo.LastTaskResult)|hint=Interactive任务需用户已登录桌面会话；可增大RESTART_DELAY或确认目标用户RDP在线"
+      Write-Output "RECONFIG_FALLBACK_START=Start-Process|account=winrm_session"
+      if ($argLine -ne "") {
+        $null = Start-Process -FilePath $startExe -ArgumentList $argLine -WorkingDirectory $workDir -WindowStyle Hidden -PassThru -ErrorAction Stop
+      } else {
+        $null = Start-Process -FilePath $startExe -WorkingDirectory $workDir -WindowStyle Hidden -PassThru -ErrorAction Stop
+      }
+      $verify2 = Wait-ExeProcess -TotalSeconds $waitSeconds -IntervalSeconds $pollSeconds -Name $procName -LiteralPath $startExe
+      if ($verify2) {
+        Write-Output "VERIFY_OK|PID:$($verify2.Id)|method=fallback_start_process"
+        exit 0
+      }
+      Write-Output "VERIFY_FAILED|proc=$procName|scheduled_last_result=$($taskInfo.LastTaskResult)"
+    } catch {
+      Write-Output "START_ERROR:$($_.Exception.Message)"
+    }
+  register: relaunch_result
+  failed_when: >
+    relaunch_result is defined and 'stdout' in relaunch_result and
+    ('START_ERROR' in relaunch_result.stdout or
+    'VERIFY_FAILED' in relaunch_result.stdout)
