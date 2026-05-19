@@ -63,8 +63,11 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 | `RECONFIG_START_EXE_PATH=…\|exists=…` | **`tasks/reconfig_start_program_windows.yml`**: **`exe_path`**, working directory, process name from the `.exe` file |
 | `RECONFIG_TASK_INFO\|…` | Scheduled task **`LastTaskResult`** / **`LastRunTime`** (non-zero often means **Interactive** task could not run — profile user not logged on at the console) |
 | `VERIFY_POLL\|…` | Process poll attempts during the **`RESTART_DELAY`** window |
-| `RECONFIG_FALLBACK_START` / `VERIFY_OK\|method=fallback_start_process` | Scheduled task left no process; **`Start-Process`** in the WinRM session was tried |
-| `VERIFY_FAILED\|…` | Neither path left the EXE running — check **`scheduled_last_result`**, ensure **`_reconfig_profile_user`** (e.g. NEWARE) has an interactive session, or raise **`RESTART_DELAY`** |
+| `RECONFIG_WINRM_RUN_AS=…` | WinRM/Ansible 连接账号（仅下发脚本）；**不会**用该账号 `Start-Process` 启动 EXE |
+| `RECONFIG_INTERACTIVE_SESSION\|…` | 检测到 **`_reconfig_profile_user`** 的 **explorer.exe**（已登录桌面） |
+| `INTERACTIVE_SESSION_REQUIRED\|…` | 无交互会话，跳过计划任务启动；需 **RDP 登录** profile 用户后再跑模板 |
+| `VERIFY_OK\|method=scheduled_task_interactive` | 由 **Interactive** 计划任务在桌面用户下启动成功 |
+| `VERIFY_FAILED\|…` | 计划任务未留下进程 — 查 **`scheduled_last_result`**（如 **0x800710E0**）、确认用户在线或增大 **`RESTART_DELAY`** |
 | `CFG_CHANGE|<path>|[<section>]|…` | **Only printed when a value really changes.** Flat keys: `key: <old> -> <new>` or `+ key=<new>` for inserts. JSON keys: one line per changed sub-key, e.g. `ReportApiSettings.EnableReportApiCall: false -> true` |
 | `CONFIG_MODIFIED` / `CONFIG_NOT_FOUND` / `CONFIG_MODIFY_ERROR` | Per-file outcome |
 | `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |

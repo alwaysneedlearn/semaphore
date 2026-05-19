@@ -1,5 +1,5 @@
 ---
-# 重配阶段：计划任务启动 EXE，轮询进程；失败时输出任务 LastTaskResult 并尝试 Start-Process 回退
+# 重配阶段：仅以已登录桌面的 profile 用户（Interactive 计划任务）启动 EXE，不使用 WinRM 连接账号 Start-Process
 - name: 重配执行：启动程序
   win_shell: |
     $startExe = "{{ exe_path }}"
@@ -12,6 +12,20 @@
     $waitSeconds = [int]{{ restart_delay }}
     $pollSeconds = [int]{{ process_verify_poll_seconds | default(5) }}
     if ($pollSeconds -lt 1) { $pollSeconds = 1 }
+    $profileUser = "{{ _reconfig_profile_user }}".Trim()
+    $profileShort = ($profileUser -split '\\')[-1]
+
+    function Test-ProfileUserInteractiveSession {
+      param([string]$ShortName)
+      $explorers = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue
+      foreach ($e in $explorers) {
+        $o = Invoke-CimMethod -InputObject $e -MethodName GetOwner -ErrorAction SilentlyContinue
+        if ($o -and $o.ReturnValue -eq 0 -and $o.User -and ($o.User.Trim() -ieq $ShortName)) {
+          return @{ ok = $true; explorer_pid = $e.ProcessId }
+        }
+      }
+      return @{ ok = $false; explorer_pid = 0 }
+    }
 
     function Test-ExeProcessRunning {
       param([string]$Name, [string]$LiteralPath)
@@ -50,12 +64,21 @@
 
     Write-Output "RECONFIG_START_EXE_PATH=$startExe|exists=$(Test-Path -LiteralPath $startExe)|workdir=$workDir|proc=$procName"
     Write-Output "RECONFIG_RESTART_DELAY_SECONDS=$waitSeconds"
-    Write-Output "RECONFIG_PROFILE_USER={{ _reconfig_profile_user }}"
+    Write-Output "RECONFIG_PROFILE_USER=$profileUser"
+    Write-Output "RECONFIG_WINRM_RUN_AS=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|note=WinRM账号仅用于下发，不用于启动EXE"
 
     if (-not (Test-Path -LiteralPath $startExe)) {
       Write-Output "EXE_NOT_FOUND_AT_START|path=$startExe"
       exit 0
     }
+
+    $session = Test-ProfileUserInteractiveSession -ShortName $profileShort
+    if (-not $session.ok) {
+      Write-Output "INTERACTIVE_SESSION_REQUIRED|user=$profileUser|reason=no_explorer_for_user|action=请让用户RDP登录桌面后再执行模板"
+      Write-Output "VERIFY_FAILED|proc=$procName|reason=interactive_user_not_logged_on"
+      exit 0
+    }
+    Write-Output "RECONFIG_INTERACTIVE_SESSION|user=$profileUser|explorer_pid=$($session.explorer_pid)|ok=true"
 
     try {
       $taskName = "Start-{{ exe_name }}"
@@ -67,37 +90,29 @@
       }
       $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
       $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
-      $userId = "{{ _reconfig_profile_user }}"
-      $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Highest
+      $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
       Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
       $task = Get-ScheduledTask -TaskName $taskName
-      Write-Output "RECONFIG_TASK_REGISTERED|name=$taskName|state=$($task.State)|user=$userId|logon=Interactive"
+      Write-Output "RECONFIG_TASK_REGISTERED|name=$taskName|state=$($task.State)|user=$profileUser|logon=Interactive|start_as=desktop_user_only"
       if ($task.State -ne 'Running') {
         Start-ScheduledTask -TaskName $taskName
         Start-Sleep -Seconds 2
       }
       $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName
-      Write-Output "RECONFIG_TASK_INFO|last_result=$($taskInfo.LastTaskResult)|last_run=$($taskInfo.LastRunTime)|state=$((Get-ScheduledTask -TaskName $taskName).State)"
+      $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
+      Write-Output "RECONFIG_TASK_INFO|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)|state=$((Get-ScheduledTask -TaskName $taskName).State)"
+      if ($lastHex -eq '800710E0') {
+        Write-Output "RECONFIG_TASK_HINT|code=0x800710E0|meaning=操作员或系统管理员拒绝了请求|likely=用户未在交互桌面登录或UAC策略拒绝"
+      }
 
       $verify = Wait-ExeProcess -TotalSeconds $waitSeconds -IntervalSeconds $pollSeconds -Name $procName -LiteralPath $startExe
       if ($verify) {
-        Write-Output "VERIFY_OK|PID:$($verify.Id)|method=scheduled_task"
+        Write-Output "VERIFY_OK|PID:$($verify.Id)|method=scheduled_task_interactive|user=$profileUser"
         exit 0
       }
 
-      Write-Output "VERIFY_SCHEDULED_TASK_MISS|last_result=$($taskInfo.LastTaskResult)|hint=Interactive任务需用户已登录桌面会话；可增大RESTART_DELAY或确认目标用户RDP在线"
-      Write-Output "RECONFIG_FALLBACK_START=Start-Process|account=winrm_session"
-      if ($argLine -ne "") {
-        $null = Start-Process -FilePath $startExe -ArgumentList $argLine -WorkingDirectory $workDir -WindowStyle Hidden -PassThru -ErrorAction Stop
-      } else {
-        $null = Start-Process -FilePath $startExe -WorkingDirectory $workDir -WindowStyle Hidden -PassThru -ErrorAction Stop
-      }
-      $verify2 = Wait-ExeProcess -TotalSeconds $waitSeconds -IntervalSeconds $pollSeconds -Name $procName -LiteralPath $startExe
-      if ($verify2) {
-        Write-Output "VERIFY_OK|PID:$($verify2.Id)|method=fallback_start_process"
-        exit 0
-      }
-      Write-Output "VERIFY_FAILED|proc=$procName|scheduled_last_result=$($taskInfo.LastTaskResult)"
+      Write-Output "VERIFY_SCHEDULED_TASK_MISS|last_result=$($taskInfo.LastTaskResult)|user=$profileUser|hint=仅通过已登录用户的Interactive计划任务启动；请确认RDP会话在线或增大RESTART_DELAY"
+      Write-Output "VERIFY_FAILED|proc=$procName|scheduled_last_result=$($taskInfo.LastTaskResult)|reason=interactive_scheduled_task_no_process"
     } catch {
       Write-Output "START_ERROR:$($_.Exception.Message)"
     }
