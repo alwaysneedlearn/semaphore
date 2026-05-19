@@ -1,0 +1,67 @@
+---
+# 在目标 Windows 上解析 EXE_DIR：优先 Variable Group 指定盘符（常为 D），不存在则 E，再 C
+- name: 解析 EXE_DIR（盘符 D→E→C 回退）
+  win_shell: |
+    $preferred = @'
+    {{ exe_dir_preferred }}
+    '@.Trim()
+    $defaultSuffix = '\Program Files\NEWARE'
+    $reqLetter = 'D'
+    $suffix = $defaultSuffix
+
+    if ($preferred -match '^([A-Za-z])\s*:?\s*(.*)$') {
+      $reqLetter = $matches[1].ToUpperInvariant()
+      $rest = $matches[2].Trim()
+      if ($rest.Length -gt 0) {
+        $suffix = $(if ($rest.StartsWith('\')) { $rest } else { '\' + $rest })
+      }
+    } elseif ($preferred.Length -gt 0) {
+      $suffix = $(if ($preferred.StartsWith('\')) { $preferred } else { '\' + $preferred })
+      $reqLetter = 'D'
+    }
+
+    function Test-DriveRootExists([string]$letter) {
+      $root = ($letter.TrimEnd(':') + ':\')
+      return Test-Path -LiteralPath $root
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    [void]$candidates.Add($reqLetter)
+    if (-not $candidates.Contains('E')) { [void]$candidates.Add('E') }
+    if (-not $candidates.Contains('C')) { [void]$candidates.Add('C') }
+
+    $chosen = 'C'
+    foreach ($L in $candidates) {
+      if (Test-DriveRootExists $L) {
+        $chosen = $L.TrimEnd(':').ToUpperInvariant()
+        break
+      }
+    }
+
+    $resolved = $chosen + ':' + $suffix
+    Write-Output "EXE_DIR_RESOLVED=$resolved"
+    Write-Output "EXE_DIR_REQUESTED=$reqLetter"
+    Write-Output "EXE_DIR_CHOSEN=$chosen"
+  register: _resolve_exe_dir
+  changed_when: false
+
+- name: 登记 EXE_DIR 解析行
+  ansible.builtin.set_fact:
+    _exe_dir_resolved_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_DIR_RESOLVED=') | list | first) | default('EXE_DIR_RESOLVED=' + exe_dir_preferred, true) }}"
+
+- name: 登记解析后的 EXE_DIR
+  ansible.builtin.set_fact:
+    exe_dir: "{{ (_exe_dir_resolved_line | regex_replace('^EXE_DIR_RESOLVED=', '') | trim) }}"
+
+- name: 登记解析后的 EXE 路径
+  ansible.builtin.set_fact:
+    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}.exe"
+  when: zip_name is defined and exe_name is defined
+
+- name: DEBUG 解析 EXE_DIR 盘符
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-EXE_DIR] preferred={{ exe_dir_preferred }}"
+      - "[DEBUG-EXE_DIR] resolved={{ exe_dir }}"
+      - "[DEBUG-EXE_DIR] win_shell={{ _resolve_exe_dir.stdout_lines | default([]) }}"
+  when: _resolve_exe_dir is defined
