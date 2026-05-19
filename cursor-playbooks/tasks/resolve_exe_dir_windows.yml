@@ -2,9 +2,8 @@
 # 在目标 Windows 上解析 EXE_DIR：优先 Variable Group 指定盘符（常为 D），不存在则 E，再 C
 - name: 解析 EXE_DIR（盘符 D→E→C 回退）
   win_shell: |
-    $preferred = @'
-    {{ exe_dir_preferred }}
-    '@.Trim()
+    # 勿用 @'…'@ here-string 注入 Jinja 变量，会与 Ansible 模板解析冲突
+    $preferred = '{{ exe_dir_preferred | replace("'", "''") }}'.Trim()
     $defaultSuffix = '\Program Files\NEWARE'
     $reqLetter = 'D'
     $suffix = $defaultSuffix
