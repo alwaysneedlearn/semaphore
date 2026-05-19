@@ -5,7 +5,8 @@
   vars:
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
-    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NEWARE', true) }}"
+    exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
+    exe_dir: "{{ exe_dir_preferred }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
     api_host: "{{ inventory_hostname }}"
     # 显式 if 计算端口（同 device_restart），避免 api_port 误解析为布尔
@@ -22,6 +23,10 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
+    - name: 解析 EXE_DIR（目标盘符 D→E→C）
+      ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
+      ignore_unreachable: true
+
     - name: 采集进程状态信息
       win_shell: |
         $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
