@@ -45,7 +45,8 @@
 
   tasks:
     - name: 解析 EXE_DIR（目标盘符 D→E→C）
-      ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
+      block:
+        - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
       ignore_unreachable: true
 
     - name: 前置检查：检查程序运行状态
