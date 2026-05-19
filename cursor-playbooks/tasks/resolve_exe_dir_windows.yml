@@ -1,9 +1,13 @@
 ---
 # 在目标 Windows 上解析 EXE_DIR：优先 Variable Group 指定盘符（常为 D），不存在则 E，再 C
 - name: 解析 EXE_DIR（盘符 D→E→C 回退）
+  environment:
+    SEMAPHORE_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
   win_shell: |
-    # 勿用 @'…'@ here-string 注入 Jinja 变量，会与 Ansible 模板解析冲突
-    $preferred = '{{ exe_dir_preferred | replace("'", "''") }}'.Trim()
+    {% raw %}
+    $preferred = [string]$env:SEMAPHORE_EXE_DIR_PREFERRED
+    if ($null -eq $preferred) { $preferred = '' }
+    $preferred = $preferred.Trim()
     $defaultSuffix = '\Program Files\NEWARE'
     $reqLetter = 'D'
     $suffix = $defaultSuffix
@@ -41,6 +45,7 @@
     Write-Output "EXE_DIR_RESOLVED=$resolved"
     Write-Output "EXE_DIR_REQUESTED=$reqLetter"
     Write-Output "EXE_DIR_CHOSEN=$chosen"
+    {% endraw %}
   register: _resolve_exe_dir
   changed_when: false
 
