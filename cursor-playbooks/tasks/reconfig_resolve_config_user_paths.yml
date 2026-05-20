@@ -1,0 +1,22 @@
+---
+# 在 _reconfig_profile_user 已 set_fact 之后 include：若 C:\Users\<profile> 不存在则用 NEWARE 存配置
+- name: 重配执行：登记 Public 与 zip 源路径
+  ansible.builtin.set_fact:
+    _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+    _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
+    _reconfig_config_fallback_user: "{{ (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USER') | default('', true) | trim) | default('NEWARE', true) }}"
+
+- name: 重配执行：检测 Profile 用户目录是否存在
+  ansible.builtin.win_shell: "if (Test-Path -LiteralPath 'C:\\Users\\{{ _reconfig_profile_user }}') { Write-Output 'PROFILE_DIR_EXISTS=yes' } else { Write-Output 'PROFILE_DIR_EXISTS=no' }"
+  register: _reconfig_profile_dir_check
+  changed_when: false
+
+- name: 重配执行：登记配置文件存储用户
+  ansible.builtin.set_fact:
+    _reconfig_config_user: "{{ _reconfig_config_fallback_user if ('PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))) else _reconfig_profile_user }}"
+    _reconfig_config_user_source: "{{ 'fallback_profile_dir_missing' if ('PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))) else 'detected_profile_user' }}"
+
+- name: 重配执行：派生 BTSClient 与配置文件完整路径
+  ansible.builtin.set_fact:
+    _reconfig_user_bts_dir: "C:\\Users\\{{ _reconfig_config_user }}\\Documents\\NEWARE\\BTSClient"
+    _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_config_user }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"

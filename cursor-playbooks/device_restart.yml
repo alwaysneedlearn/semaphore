@@ -179,17 +179,15 @@
           ansible.builtin.set_fact:
             _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
 
-        - name: 重配执行：派生 BTSClient 与配置文件完整路径
-          ansible.builtin.set_fact:
-            _reconfig_user_bts_dir: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient"
-            _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_profile_user }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
-            _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
-            _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
+        - name: 重配执行：解析配置文件存储用户与路径
+          ansible.builtin.include_tasks: tasks/reconfig_resolve_config_user_paths.yml
 
         - name: 重配执行：DEBUG 用户名与路径（成功也打印）
           ansible.builtin.debug:
             msg:
               - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }}"
+              - "[DEBUG-重配-用户] config_user={{ _reconfig_config_user }}|source={{ _reconfig_config_user_source }}|fallback={{ _reconfig_config_fallback_user }}"
+              - "[DEBUG-重配-用户] profile_dir_check={{ _reconfig_profile_dir_check.stdout | default('') | trim }}"
               - "[DEBUG-重配-用户] get_username stdout_lines={{ get_username_result.stdout_lines | default([]) }}"
               - "[DEBUG-重配-路径] user_cfg={{ _reconfig_user_cfg_file }}"
               - "[DEBUG-重配-路径] public_cfg={{ _reconfig_public_cfg_file }}"
@@ -429,8 +427,7 @@
             if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
             $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
             if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-            $username = "{{ _reconfig_profile_user }}"
-            $userConfigPath = "C:\Users\$username\Documents\NEWARE\BTSClient\{{ config_file_name }}"
+            $userConfigPath = '{{ _reconfig_user_cfg_file | replace("\u0027", "\u0027\u0027") }}'
             $publicConfigPath = "C:\Users\Public\Documents\NEWARE\BTSClient\{{ config_file_name }}"
             # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
             $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
