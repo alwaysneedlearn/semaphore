@@ -1,51 +1,15 @@
 ---
 # 在目标 Windows 上解析 EXE_DIR：优先 Variable Group 指定盘符（常为 D），不存在则 E，再 C
+- name: 部署 EXE_DIR 解析脚本
+  ansible.builtin.win_copy:
+    src: "{{ playbook_dir }}/files/resolve_exe_dir_windows.ps1"
+    dest: C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
+  changed_when: false
+
 - name: 解析 EXE_DIR（盘符 D→E→C 回退）
   environment:
     SEMAPHORE_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
-  win_shell: |
-    {% raw %}
-    $preferred = [string]$env:SEMAPHORE_EXE_DIR_PREFERRED
-    if ($null -eq $preferred) { $preferred = '' }
-    $preferred = $preferred.Trim()
-    $defaultSuffix = '\Program Files\NEWARE'
-    $reqLetter = 'D'
-    $suffix = $defaultSuffix
-
-    if ($preferred -match '^([A-Za-z])\s*:?\s*(.*)$') {
-      $reqLetter = $matches[1].ToUpperInvariant()
-      $rest = $matches[2].Trim()
-      if ($rest.Length -gt 0) {
-        $suffix = $(if ($rest.StartsWith('\')) { $rest } else { '\' + $rest })
-      }
-    } elseif ($preferred.Length -gt 0) {
-      $suffix = $(if ($preferred.StartsWith('\')) { $preferred } else { '\' + $preferred })
-      $reqLetter = 'D'
-    }
-
-    function Test-DriveRootExists([string]$letter) {
-      $root = ($letter.TrimEnd(':') + ':\')
-      return Test-Path -LiteralPath $root
-    }
-
-    $candidates = New-Object System.Collections.Generic.List[string]
-    [void]$candidates.Add($reqLetter)
-    if (-not $candidates.Contains('E')) { [void]$candidates.Add('E') }
-    if (-not $candidates.Contains('C')) { [void]$candidates.Add('C') }
-
-    $chosen = 'C'
-    foreach ($L in $candidates) {
-      if (Test-DriveRootExists $L) {
-        $chosen = $L.TrimEnd(':').ToUpperInvariant()
-        break
-      }
-    }
-
-    $resolved = $chosen + ':' + $suffix
-    Write-Output "EXE_DIR_RESOLVED=$resolved"
-    Write-Output "EXE_DIR_REQUESTED=$reqLetter"
-    Write-Output "EXE_DIR_CHOSEN=$chosen"
-    {% endraw %}
+  ansible.windows.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
   register: _resolve_exe_dir
   changed_when: false
 
