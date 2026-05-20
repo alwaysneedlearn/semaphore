@@ -2,7 +2,11 @@
 $startExe = [string]$env:SEMAPHORE_EXE_PATH
 if ($null -eq $startExe) { $startExe = '' }
 $startExe = $startExe.Trim()
-$workDir = Split-Path -LiteralPath $startExe -Parent
+# PS 5.1: Split-Path -LiteralPath 与 -Parent 不能同用；用 .NET API 兼容带空格路径
+$workDir = [System.IO.Path]::GetDirectoryName($startExe)
+if ([string]::IsNullOrWhiteSpace($workDir)) {
+  $workDir = Split-Path -Path $startExe -Parent
+}
 $procName = [System.IO.Path]::GetFileNameWithoutExtension($startExe)
 $envProcName = [string]$env:SEMAPHORE_EXE_NAME
 if ($null -eq $envProcName) { $envProcName = '' }
@@ -75,7 +79,7 @@ function Wait-ExeProcess {
 Write-Output "RECONFIG_START_EXE_PATH=$startExe|exists=$(Test-Path -LiteralPath $startExe)|workdir=$workDir|proc=$procName"
 Write-Output "RECONFIG_RESTART_DELAY_SECONDS=$waitSeconds"
 Write-Output "RECONFIG_PROFILE_USER=$profileUser"
-Write-Output "RECONFIG_WINRM_RUN_AS=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|note=WinRM账号仅用于下发，不用于启动EXE"
+Write-Output "RECONFIG_WINRM_RUN_AS=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|note=WinRM_for_deploy_only_not_exe_start"
 
 if (-not (Test-Path -LiteralPath $startExe)) {
   Write-Output "EXE_NOT_FOUND_AT_START|path=$startExe"
