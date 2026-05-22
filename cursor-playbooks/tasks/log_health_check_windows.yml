@@ -38,6 +38,17 @@
     }
     $now = Get-Date
     $cutoff = $now.AddMinutes(-$recentMin)
+    function Test-KeywordLine([string]$line, [string]$kw) {
+      if ([string]::IsNullOrWhiteSpace($line) -or [string]::IsNullOrWhiteSpace($kw)) { return $false }
+      if ($line.IndexOf($kw, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      $alt = $kw.Trim()
+      if ($alt.StartsWith('提示 ')) {
+        $short = $alt.Substring(3)
+        if ($line.IndexOf($short, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      } elseif ($line.IndexOf(('提示 ' + $alt), [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      return $false
+    }
+
     $found = $false
     foreach ($line in $lines) {
       if ($line -notmatch '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') { continue }
@@ -46,8 +57,7 @@
       } catch { continue }
       if ($logTime -lt $cutoff) { continue }
       if ($logTime -gt $now) { continue }
-      if ($keyword.Length -eq 0) { continue }
-      if ($line.IndexOf($keyword, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+      if (Test-KeywordLine $line $keyword) {
         $found = $true
         break
       }

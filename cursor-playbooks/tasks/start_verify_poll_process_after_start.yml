@@ -6,7 +6,13 @@
     _process_verify_poll_retries: >-
       {{
         [
-          (((restart_delay | default(30) | int) / (process_verify_poll_seconds | default(5) | int)) | int),
+          (
+            (
+              (restart_delay | default(30) | int) +
+              (process_verify_poll_seconds | default(5) | int) -
+              1
+            ) / (process_verify_poll_seconds | default(5) | int)
+          ) | int,
           1
         ] | max | int
       }}

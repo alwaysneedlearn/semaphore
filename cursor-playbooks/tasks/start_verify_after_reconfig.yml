@@ -26,12 +26,12 @@
   ansible.builtin.set_fact:
     final_start_ok: false
   when: >
-    not (
-      (_exe_start_script_ok | default(false) | bool) and
-      (process_running_after_start | default(false) | bool) and
-      not (skip_log_poll | default(false) | bool) and
-      log_poll is defined and (log_poll.rc | default(1)) == 0
-    )
+    (_exe_start_script_ok is not defined) or
+    not (_exe_start_script_ok | default(false) | bool) or
+    not (process_running_after_start | default(false) | bool) or
+    (skip_log_poll | default(false) | bool) or
+    log_poll is not defined or
+    (log_poll.rc | default(1)) != 0
 
 - name: 启动验证：输出验证结果
   ansible.builtin.debug:

@@ -1,20 +1,31 @@
 ---
 # 进程已在跑：仅据日志健康检查登记 need_reconfigure / log_status_ok（无状态 API）
 # 依赖：log_check_result（由 log_health_check_windows.yml 产生）
+# 使用 YAML 字面量 true/false，避免 set_fact: "{{ false }}" 变成字符串 "False" 在 when 里误判为真
 
-- name: 状态判断：判定重配需求（仅日志）
+- name: 状态判断：登记需要重配（是）
   ansible.builtin.set_fact:
-    log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
-    need_reconfigure: >-
-      {{
-        (log_check_result is defined and (log_check_result.unreachable | default(false)))
-        or
-        ((log_check_result.stdout | default('') | trim) != 'FOUND_KEYWORD')
-      }}
+    need_reconfigure: true
+    log_status_ok: false
+  when: >
+    log_check_result is defined and
+    (
+      (log_check_result.unreachable | default(false)) or
+      ((log_check_result.stdout | default('') | trim) != 'FOUND_KEYWORD')
+    )
+
+- name: 状态判断：登记需要重配（否）
+  ansible.builtin.set_fact:
+    need_reconfigure: false
+    log_status_ok: true
+  when: >
+    log_check_result is defined and
+    not (log_check_result.unreachable | default(false)) and
+    ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
 
 - name: 状态判断：输出综合判断结果
   ansible.builtin.debug:
     msg: >
       [综合判断] 日志_OK={{ log_status_ok | default('n/a') }} |
-      需要重配={{ need_reconfigure }}
+      需要重配={{ need_reconfigure | default('n/a') }}
       {% if log_health_use_tail | default(false) | bool %}| Tail行数={{ log_health_tail_lines | default(8000) }}{% endif %}

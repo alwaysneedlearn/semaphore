@@ -1,4 +1,4 @@
-# 按需检查 + 综合判定（API + 日志 Tail 时间窗口）；重配/启动验证与 device_restart.yml 对齐。
+# 按需检查 + 日志 Tail 时间窗判定；重配/启动验证与 device_restart.yml 对齐（无状态 HTTP API）。
 ---
 - name: 按需检查并重配重启（综合判定；日志 Tail 扫描）
   hosts: windows_hosts
@@ -28,7 +28,7 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
     merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
-    # log_path / log_poll_state_path：重配阶段解析；log_poll_baseline 在 exe 启动后、调用启动 API 前写入
+    # log_path / log_poll_state_path：重配阶段解析；log_poll_baseline 在启动程序前写入
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
@@ -600,7 +600,7 @@
             {% if host_failure_reason is defined %}unhealthy
             {% elif check_result is not defined %}unhealthy
             {% elif 'NOT_RUNNING' in (check_result_after_start.stdout | default(check_result.stdout | default(''))) and not (final_start_ok | default(false) | bool) %}unhealthy
-            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(false) | bool) %}unhealthy
             {% elif final_start_ok is defined and not final_start_ok %}unhealthy
             {% else %}healthy{% endif %}
           # api_status：启动验证 final_start_ok 或前置无需重配（日志 OK）→ online
@@ -609,14 +609,14 @@
             {% elif host_failure_reason is defined %}offline
             {% elif final_start_ok is defined and (final_start_ok | bool) %}online
             {% elif final_start_ok is defined and not (final_start_ok | bool) %}offline
-            {% elif not (need_reconfigure | default(true) | bool) %}online
+            {% elif not (need_reconfigure | default(false) | bool) %}online
             {% elif need_reconfigure | default(false) | bool %}offline
             {% else %}{% endif %}
           winrm_status: online
           abnormal_reason: >-
             {% if host_failure_reason is defined %}{{ host_failure_reason }}
             {% elif 'NOT_RUNNING' in (check_result_after_start.stdout | default(check_result.stdout | default(''))) and not (final_start_ok | default(false) | bool) %}Process not running after start or start/verify did not succeed
-            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}Reconfigure/start verification failed
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(false) | bool) %}Reconfigure/start verification failed
             {% endif %}
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"

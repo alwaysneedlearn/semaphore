@@ -8,7 +8,7 @@
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
-    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('本轮通道状态上传成功', true) }}"
+    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
     # 日志状态检查：仅统计最近 N 分钟内的日志行
     log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
@@ -55,6 +55,15 @@
     - name: 跳过不可达主机
       ansible.builtin.meta: end_host
       when: status.unreachable | default(false)
+
+    - name: 进程未运行时标记异常（需重配/关注）
+      ansible.builtin.set_fact:
+        need_reconfigure: true
+        log_status_ok: false
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' in status.stdout
 
     - name: WinRM 中途建连（日志状态检查前）
       ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
