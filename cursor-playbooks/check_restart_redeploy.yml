@@ -110,6 +110,14 @@
         check_result is defined and 'stdout' in check_result and
         'NOT_RUNNING' in check_result.stdout
 
+    - name: WinRM 中途建连（状态/日志判断前）
+      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      when: >
+        check_result is defined and 'stdout' in check_result and
+        'NOT_RUNNING' not in check_result.stdout
+      vars:
+        winrm_refresh_label: "WinRM 中途建连（状态/日志判断前）"
+
     - name: 状态判断：综合判断是否需要重配（仅进程已运行时；日志读 Tail）
       when: >
         check_result is defined and 'stdout' in check_result and
@@ -228,6 +236,12 @@
       when: check_result is defined and not (check_result.unreachable | default(false))
 
 
+
+    - name: WinRM 中途建连（重配流程前）
+      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      when: need_reconfigure | bool
+      vars:
+        winrm_refresh_label: "WinRM 中途建连（重配流程前）"
 
     - name: 重配执行：执行重配重启流程
       when: need_reconfigure | bool
@@ -630,6 +644,11 @@
             extract_result is defined and 'stdout' in extract_result and
             'EXTRACT_ERROR' in extract_result.stdout
           when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
+
+        - name: WinRM 中途建连（日志轮询前）
+          ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+          vars:
+            winrm_refresh_label: "WinRM 中途建连（日志轮询前）"
 
         - name: 重配执行：解析 Windows 当日日志路径
           ansible.builtin.include_tasks: tasks/log_poll_resolve_windows_path.yml

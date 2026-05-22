@@ -69,6 +69,15 @@
       ansible.builtin.meta: end_host
       when: status.unreachable | default(false)
 
+    - name: WinRM 中途建连（API 状态检查前）
+      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' not in status.stdout
+      vars:
+        winrm_refresh_label: "WinRM 中途建连（API 状态检查前）"
+
     - name: 状态判断：API 状态检查
       block:
         - name: 调用API查询上报状态
@@ -131,6 +140,15 @@
         status is defined and
         'stdout' in status and
         'NOT_RUNNING' not in status.stdout
+
+    - name: WinRM 中途建连（日志状态检查前）
+      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      when: >
+        status is defined and
+        'stdout' in status and
+        'NOT_RUNNING' not in status.stdout
+      vars:
+        winrm_refresh_label: "WinRM 中途建连（日志状态检查前）"
 
     - name: 状态判断：日志状态检查
       block:

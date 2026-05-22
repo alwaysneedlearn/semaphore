@@ -98,6 +98,11 @@
               [重启策略] process_running={{ process_running }}；
               {{ '有运行，先停止再执行重配重启流程' if process_running else '未运行，直接执行重配重启流程' }}
 
+    - name: WinRM 中途建连（重配流程前）
+      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      vars:
+        winrm_refresh_label: "WinRM 中途建连（重配流程前）"
+
     - name: 重配执行：执行重配重启流程
       block:
         - name: 重配执行：停止程序（仅在运行中执行）
@@ -498,6 +503,11 @@
             extract_result is defined and 'stdout' in extract_result and
             'EXTRACT_ERROR' in extract_result.stdout
           when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
+
+        - name: WinRM 中途建连（日志轮询前）
+          ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+          vars:
+            winrm_refresh_label: "WinRM 中途建连（日志轮询前）"
 
         - name: 重配执行：解析 Windows 当日日志路径
           ansible.builtin.include_tasks: tasks/log_poll_resolve_windows_path.yml

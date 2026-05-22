@@ -1,0 +1,9 @@
+---
+# 长 play 内 WinRM 可能已断开；在后续 win_* / 重配 / 日志任务前强制重新建连。
+# 可选变量 winrm_refresh_label：日志中的任务说明前缀。
+
+- name: "{{ winrm_refresh_label | default('WinRM 中途建连（长任务前）') }}"
+  ansible.builtin.include_tasks: tasks/winrm_ensure_reachable.yml
+  vars:
+    winrm_force_reconnect: true
+    winrm_connect_context: "{{ winrm_refresh_label | default('mid-play') }}"

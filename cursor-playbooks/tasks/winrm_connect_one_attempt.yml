@@ -15,4 +15,5 @@
     - name: 登记 WinRM 已连通
       ansible.builtin.set_fact:
         _winrm_session_ok: true
+        _winrm_ping_last_success: "{{ _winrm_ping }}"
       when: _winrm_ping is succeeded

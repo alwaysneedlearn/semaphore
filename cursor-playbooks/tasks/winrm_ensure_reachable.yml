@@ -1,5 +1,11 @@
 ---
 # 在每个 windows_hosts play 最前 include：WinRM 建连重试，减轻首包 UNREACHABLE 导致后续任务全部 ...ignoring
+# 中途建连：include 时传 winrm_force_reconnect: true（见 tasks/winrm_refresh_midplay.yml）
+- name: 强制刷新 WinRM 会话标记（中途建连）
+  ansible.builtin.set_fact:
+    _winrm_session_ok: false
+  when: winrm_force_reconnect | default(false) | bool
+
 - name: 登记 WinRM 建连重试参数
   ansible.builtin.set_fact:
     winrm_connect_retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('4', true)) | int }}"
@@ -16,11 +22,14 @@
 - name: DEBUG WinRM 建连结果
   ansible.builtin.debug:
     msg:
+      - "[DEBUG-WINRM] context={{ winrm_connect_context | default('play-start') }}"
       - "[DEBUG-WINRM] session_ok={{ _winrm_session_ok | default(false) }}"
       - "[DEBUG-WINRM] attempts={{ winrm_connect_retries }} delay={{ winrm_connect_retry_delay }}s"
-      - "[DEBUG-WINRM] last_ping={{ _winrm_ping | default({}) }}"
-  when: _winrm_ping is defined
+      - "[DEBUG-WINRM] last_ping={{ _winrm_ping_last_success | default({}) }}"
+  when: _winrm_ping_last_success is defined or _winrm_ping is defined
 
 - name: 建连失败后清除 unreachable 以便后续带 ignore_unreachable 的任务仍可再试
-  ansible.builtin.meta: clear_host_errors
   when: not (_winrm_session_ok | default(false) | bool)
+  block:
+    - name: 执行 clear_host_errors
+      ansible.builtin.meta: clear_host_errors
