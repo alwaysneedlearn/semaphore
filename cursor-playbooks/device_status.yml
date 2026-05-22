@@ -44,6 +44,14 @@
       changed_when: false
       ignore_unreachable: true
 
+    - name: 状态判断：输出程序状态
+      ansible.builtin.debug:
+        msg: "[程序状态] {{ status.stdout | trim }}"
+      when: >
+        not (status.unreachable | default(false)) and
+        status is defined and
+        'stdout' in status
+
     - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
       ansible.builtin.set_fact:
         semaphore_callback_row:
@@ -230,45 +238,36 @@
     - name: 生成状态报告
       when: ansible_play_hosts_all is defined
       run_once: true
-      debug:
+      ansible.builtin.debug:
         msg: |
-          ============================================
-              {{ exe_name }} 程序运行状态总览
-              检查时间: {{ lookup('pipe', 'date +"%Y-%m-%d %H:%M:%S"') }}
-          ============================================
-          {% for host in ansible_play_hosts_all %}
-          {% if hostvars[host].status is defined and hostvars[host].status.stdout is defined %}
-          {% set host_status = hostvars[host].status.stdout | trim %}
-          {% if 'NOT_RUNNING' in host_status %}
-          {{ host }} - NOT_RUNNING
-          {% elif hostvars[host].need_reconfigure is defined and hostvars[host].need_reconfigure | bool %}
-          {{ host }} - ABNORMAL  {{ host_status | regex_search('^[^|]+') }} | API_OK={{ hostvars[host].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[host].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[host].log_status_ok | default('n/a') }} | 需要重配=True
-          {% else %}
-          {{ host }} - NORMAL    {{ host_status | regex_search('^[^|]+') }} | API_OK={{ hostvars[host].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[host].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[host].log_status_ok | default('n/a') }}
-          {% endif %}
-          {% else %}
-          {{ host }} - UNREACHABLE
-          {% endif %}
-          {% endfor %}
-          ============================================
-          总计: {{ ansible_play_hosts_all | length }} 台主机
-          {% set ns = namespace(normal=0, abnormal=0, not_running=0, unreachable=0) %}
-          {% for host in ansible_play_hosts_all %}
-          {% if hostvars[host].status is not defined or 'stdout' not in hostvars[host].status %}
-          {% set ns.unreachable = ns.unreachable + 1 %}
-          {% elif 'NOT_RUNNING' in hostvars[host].status.stdout %}
-          {% set ns.not_running = ns.not_running + 1 %}
-          {% elif hostvars[host].need_reconfigure is defined and hostvars[host].need_reconfigure | bool %}
-          {% set ns.abnormal = ns.abnormal + 1 %}
-          {% else %}
-          {% set ns.normal = ns.normal + 1 %}
-          {% endif %}
-          {% endfor %}
-          正常: {{ ns.normal }} 台
-          异常(需重配): {{ ns.abnormal }} 台
-          未运行: {{ ns.not_running }} 台
-          不可达: {{ ns.unreachable }} 台
-          ============================================
+          【{{ exe_name }}】程序运行状态总览 @ {{ lookup('pipe', 'date +"%Y-%m-%d %H:%M:%S"') }}
+          {%- for host in ansible_play_hosts_all %}
+          {%- if hostvars[host].status is defined and hostvars[host].status.stdout is defined %}
+          {%- set host_status = hostvars[host].status.stdout | trim %}
+          {%- if 'NOT_RUNNING' in host_status %}
+          · {{ host }} | 未运行 | {{ host_status }}
+          {%- elif hostvars[host].need_reconfigure is defined and hostvars[host].need_reconfigure | bool %}
+          · {{ host }} | 异常(需重配) | {{ host_status }} | API_OK={{ hostvars[host].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[host].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[host].log_status_ok | default('n/a') }}
+          {%- else %}
+          · {{ host }} | 正常 | {{ host_status }} | API_OK={{ hostvars[host].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[host].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[host].log_status_ok | default('n/a') }}
+          {%- endif %}
+          {%- else %}
+          · {{ host }} | 不可达
+          {%- endif %}
+          {%- endfor %}
+          {%- set ns = namespace(normal=0, abnormal=0, not_running=0, unreachable=0) -%}
+          {%- for host in ansible_play_hosts_all -%}
+          {%- if hostvars[host].status is not defined or 'stdout' not in hostvars[host].status -%}
+          {%- set ns.unreachable = ns.unreachable + 1 -%}
+          {%- elif 'NOT_RUNNING' in hostvars[host].status.stdout -%}
+          {%- set ns.not_running = ns.not_running + 1 -%}
+          {%- elif hostvars[host].need_reconfigure is defined and hostvars[host].need_reconfigure | bool -%}
+          {%- set ns.abnormal = ns.abnormal + 1 -%}
+          {%- else -%}
+          {%- set ns.normal = ns.normal + 1 -%}
+          {%- endif -%}
+          {%- endfor -%}
+          【汇总】总计 {{ ansible_play_hosts_all | length }} 台 · 正常 {{ ns.normal }} · 异常(需重配) {{ ns.abnormal }} · 未运行 {{ ns.not_running }} · 不可达 {{ ns.unreachable }}
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost
