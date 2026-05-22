@@ -112,3 +112,7 @@ When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other sec
 | `API_START_RETRY_DELAY` | `4` | Seconds between attempts |
 
 The DEBUG line **`attempts=`** shows how many tries ran; logs will show **`FAILED - RETRYING`** between attempts when status is not 200 yet.
+
+### Start-verify log poll skip (`tasks/start_verify_skip_log_poll.yml`)
+
+**「启动验证：日志轮询」** is skipped when **`skip_log_poll=true`** (DEBUG reason **`precheck_not_running`**: playbook pre-check was **`NOT_RUNNING`** / stale; **`exe_start_not_verify_ok`**: **`reconfig_start_program_windows.ps1`** did not print **`VERIFY_OK`**). In that case only **API** (`api_final_ok`) decides **`final_start_ok`** — no baseline bookmark or **`LOG_POLL`** retries.
