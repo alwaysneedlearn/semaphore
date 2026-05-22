@@ -247,30 +247,27 @@
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
   post_tasks:
-    - name: 生成状态报告
-      when: ansible_play_hosts_all is defined
+    - name: 缓存本 play 参与主机列表（供 localhost 汇总报告，避免 ok 显示某一台 IP）
+      ansible.builtin.set_fact:
+        _status_report_hosts: "{{ ansible_play_hosts_all }}"
+        cacheable: true
       run_once: true
-      vars:
-        _status_report_time: "{{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }}"
-      ansible.builtin.debug:
-        msg: "{{ _status_report_msg_lines }}"
-      vars:
-        _status_report_time: "{{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }}"
-        _status_report_msg_lines: >-
-          {{
-            [
-              '【' ~ exe_name ~ '】程序运行状态总览 @ ' ~ _status_report_time,
-              '（每行 host=Ansible inventory_hostname，一般为设备 IP）',
-              '--- 各主机 ---'
-            ]
-            + (
-              ansible_play_hosts_all | map('regex_replace', '^', '') | list
-            )
-          }}
+      delegate_to: localhost
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost
   gather_facts: false
   tasks:
+    - name: 生成状态报告
+      when: _status_report_hosts is defined and (_status_report_hosts | length) > 0
+      block:
+        - ansible.builtin.include_tasks: tasks/build_device_status_report.yml
+          vars:
+            status_report_hosts: "{{ _status_report_hosts }}"
+            status_report_exe_name: "{{ hostvars[_status_report_hosts[0]].exe_name | default('NWReport_DBWB') }}"
+        - name: 生成状态报告
+          ansible.builtin.debug:
+            msg: "{{ _status_report_msg_lines }}"
+
     - name: 执行 bulk 回调
       ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
