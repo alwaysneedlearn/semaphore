@@ -1,18 +1,6 @@
 ---
 # 采集进程状态（排除僵尸条目：Handles/WorkingSet 过低视为未运行）
-# 输出 register: _sem_process_status；环境变量 EXE_NAME、PROCESS_ALIVE_MIN_HANDLES、PROCESS_ALIVE_MIN_WS_KB
-
-- name: 部署进程存活判定脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/process_alive_windows.ps1"
-    dest: C:\Windows\Temp\sem_process_alive_windows.ps1
-  changed_when: false
-
-- name: 部署进程状态采集脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/collect_process_status_windows.ps1"
-    dest: C:\Windows\Temp\sem_collect_process_status_windows.ps1
-  changed_when: false
+# 输出 register: _sem_process_status；前置 deploy_sem_windows_helper_scripts.yml
 
 - name: 采集进程状态信息
   environment:

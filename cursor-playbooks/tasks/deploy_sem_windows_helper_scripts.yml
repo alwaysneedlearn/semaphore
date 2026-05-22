@@ -1,0 +1,20 @@
+---
+# 每台主机每 play 仅一次：将 files/ 下全部辅助脚本复制到 C:\Windows\Temp\（一次 WinRM 传目录，替代多次 win_copy）
+# 依赖：playbook_dir；脚本文件名须为 sem_*.ps1，与 -File C:\Windows\Temp\sem_*.ps1 一致
+
+- name: 一次性部署 Semaphore Windows 辅助脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/"
+    dest: C:\Windows\Temp\
+  changed_when: false
+  when: not (sem_helper_scripts_deployed | default(false) | bool)
+
+- name: 登记辅助脚本已部署
+  ansible.builtin.set_fact:
+    sem_helper_scripts_deployed: true
+  when: not (sem_helper_scripts_deployed | default(false) | bool)
+
+- name: DEBUG 辅助脚本批量部署
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-DEPLOY] host={{ inventory_hostname }} dest=C:\\Windows\\Temp\\ sem_*.ps1 已批量下发（本 play 仅传一次目录）"

@@ -1,16 +1,6 @@
 ---
 # 重配阶段：仅以已登录桌面的 profile 用户（Interactive 计划任务）启动 EXE
-- name: 部署进程存活判定脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/process_alive_windows.ps1"
-    dest: C:\Windows\Temp\sem_process_alive_windows.ps1
-  changed_when: false
-
-- name: 部署重配启动脚本
-  ansible.builtin.win_copy:
-    src: "{{ playbook_dir }}/files/reconfig_start_program_windows.ps1"
-    dest: C:\Windows\Temp\sem_reconfig_start_program_windows.ps1
-  changed_when: false
+# 前置：deploy_sem_windows_helper_scripts.yml
 
 - name: 重配执行：启动程序
   environment:

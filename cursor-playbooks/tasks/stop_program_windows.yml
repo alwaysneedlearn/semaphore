@@ -1,24 +1,6 @@
 ---
 # 强制停止 exe_name；STOP_FAILED/STOP_ERROR 后复核。僵尸进程（Handles/WS 过低）视为未运行。
-# 期望变量: exe_name
-
-- name: 部署进程存活判定脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/process_alive_windows.ps1"
-    dest: C:\Windows\Temp\sem_process_alive_windows.ps1
-  changed_when: false
-
-- name: 部署停止程序脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/stop_program_force_windows.ps1"
-    dest: C:\Windows\Temp\sem_stop_program_force_windows.ps1
-  changed_when: false
-
-- name: 部署停止复核脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/verify_process_stopped_windows.ps1"
-    dest: C:\Windows\Temp\sem_verify_process_stopped_windows.ps1
-  changed_when: false
+# 期望变量: exe_name；前置 deploy_sem_windows_helper_scripts.yml
 
 - name: 停止程序（强制 Stop-Process / taskkill）
   environment:

@@ -1,10 +1,6 @@
 ---
 # 在目标 Windows 上解析 EXE_DIR：优先 Variable Group 指定盘符（常为 D），不存在则 E，再 C
-- name: 部署 EXE_DIR 解析脚本
-  ansible.builtin.win_copy:
-    src: "{{ playbook_dir }}/files/resolve_exe_dir_windows.ps1"
-    dest: C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
-  changed_when: false
+# 前置：tasks/deploy_sem_windows_helper_scripts.yml
 
 - name: 解析 EXE_DIR（盘符 D→E→C 回退）
   environment:
