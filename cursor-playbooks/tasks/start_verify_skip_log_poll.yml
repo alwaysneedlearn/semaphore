@@ -1,6 +1,22 @@
 ---
-# 登记 skip_log_poll：此前进程未运行，或重配启动脚本未 VERIFY_OK 时跳过日志轮询（仅 API 判定）。
-# 期望 hostvars：check_result；可选 process_running、relaunch_result
+# 启动验证前：重新采集进程状态（重配启动之后），再决定是否跳过日志轮询。
+# 期望 hostvars：relaunch_result；不再使用 play 开头的 check_result 判断轮询。
+# 产出：check_result_after_start、skip_log_poll、_exe_start_script_ok
+
+- name: 启动验证：启动后重新采集进程状态
+  block:
+    - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
+    - ansible.builtin.set_fact:
+        check_result_after_start: "{{ _sem_process_status }}"
+  ignore_unreachable: true
+
+- name: 启动验证：输出启动后程序状态
+  ansible.builtin.debug:
+    msg: "[程序状态-启动后] {{ check_result_after_start.stdout | trim }}"
+  when: >
+    check_result_after_start is defined and
+    not (check_result_after_start.unreachable | default(false)) and
+    'stdout' in check_result_after_start
 
 - name: 启动验证：登记 exe 启动脚本是否 VERIFY_OK
   ansible.builtin.set_fact:
@@ -15,33 +31,29 @@
 
 - name: 启动验证：登记是否跳过日志轮询
   ansible.builtin.set_fact:
-    _was_process_running_before: >-
+    process_running_after_start: >-
       {{
-        process_running | default(
-          check_result is defined and
-          'stdout' in check_result and
-          ('NOT_RUNNING' not in (check_result.stdout | default('')))
-        ) | bool
+        check_result_after_start is defined and
+        not (check_result_after_start.unreachable | default(false)) and
+        'stdout' in check_result_after_start and
+        ('NOT_RUNNING' not in (check_result_after_start.stdout | default('')))
       }}
     skip_log_poll: >-
       {{
-        (not (
-          process_running | default(
-            check_result is defined and
-            'stdout' in check_result and
-            ('NOT_RUNNING' not in (check_result.stdout | default('')))
-          ) | bool
-        ))
-        or (not (_exe_start_script_ok | default(false) | bool))
+        (check_result_after_start is not defined) or
+        (check_result_after_start.unreachable | default(false)) or
+        not (
+          check_result_after_start is defined and
+          'stdout' in check_result_after_start and
+          ('NOT_RUNNING' not in (check_result_after_start.stdout | default('')))
+        ) or
+        (not (_exe_start_script_ok | default(false) | bool))
       }}
     skip_log_poll_reason: >-
-      {%- if not (
-        process_running | default(
-          check_result is defined and 'stdout' in check_result and
-          ('NOT_RUNNING' not in (check_result.stdout | default('')))
-        ) | bool
-      ) -%}
-      precheck_not_running
+      {%- if check_result_after_start is not defined or (check_result_after_start.unreachable | default(false)) -%}
+      after_start_unreachable
+      {%- elif 'NOT_RUNNING' in (check_result_after_start.stdout | default('')) -%}
+      after_start_not_running
       {%- elif not (_exe_start_script_ok | default(false) | bool) -%}
       exe_start_not_verify_ok
       {%- else -%}
@@ -52,6 +64,7 @@
     msg:
       - "[DEBUG-LOG-POLL] skip_log_poll={{ skip_log_poll | default(false) }}"
       - "[DEBUG-LOG-POLL] reason={{ skip_log_poll_reason | default('') | trim }}"
-      - "[DEBUG-LOG-POLL] was_running_before={{ _was_process_running_before | default(false) }}"
+      - "[DEBUG-LOG-POLL] after_start={{ check_result_after_start.stdout | default('n/a') | trim }}"
+      - "[DEBUG-LOG-POLL] process_running_after_start={{ process_running_after_start | default(false) }}"
       - "[DEBUG-LOG-POLL] exe_start_verify_ok={{ _exe_start_script_ok | default(false) }}"
   when: skip_log_poll | default(false) | bool

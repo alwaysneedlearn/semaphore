@@ -115,4 +115,4 @@ The DEBUG line **`attempts=`** shows how many tries ran; logs will show **`FAILE
 
 ### Start-verify log poll skip (`tasks/start_verify_skip_log_poll.yml`)
 
-**「启动验证：日志轮询」** is skipped when **`skip_log_poll=true`** (DEBUG reason **`precheck_not_running`**: playbook pre-check was **`NOT_RUNNING`** / stale; **`exe_start_not_verify_ok`**: **`reconfig_start_program_windows.ps1`** did not print **`VERIFY_OK`**). In that case only **API** (`api_final_ok`) decides **`final_start_ok`** — no baseline bookmark or **`LOG_POLL`** retries.
+**「启动验证：日志轮询」** runs only after **`启动验证：启动后重新采集进程状态`** (`check_result_after_start` — not the play-opening pre-check). **`skip_log_poll=true`** when DEBUG reason **`after_start_not_running`** (still not running / stale after restart), **`after_start_unreachable`**, or **`exe_start_not_verify_ok`** (no **`VERIFY_OK`** in **`relaunch_result`**). Otherwise only **API** (`api_final_ok`) decides **`final_start_ok`** if poll is skipped — no baseline or **`LOG_POLL`** retries.
