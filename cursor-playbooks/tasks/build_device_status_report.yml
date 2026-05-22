@@ -31,9 +31,9 @@
       {%- if 'NOT_RUNNING' in host_status -%}
       · {{ _host_label }} | 未运行 | {{ host_status }}
       {%- elif hostvars[h].need_reconfigure is defined and hostvars[h].need_reconfigure | bool -%}
-      · {{ _host_label }} | 异常(需重配) | {{ host_status }} | API_OK={{ hostvars[h].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[h].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[h].log_status_ok | default('n/a') }}
+      · {{ _host_label }} | 异常(需重配) | {{ host_status }} | 日志_OK={{ hostvars[h].log_status_ok | default('n/a') }}
       {%- else -%}
-      · {{ _host_label }} | 正常 | {{ host_status }} | API_OK={{ hostvars[h].api_status_ok | default('n/a') }} | 已启动上报={{ hostvars[h].is_export_started | default('n/a') }} | 日志_OK={{ hostvars[h].log_status_ok | default('n/a') }}
+      · {{ _host_label }} | 正常 | {{ host_status }} | 日志_OK={{ hostvars[h].log_status_ok | default('n/a') }}
       {%- endif -%}
       {%- else -%}
       · {{ _host_label }} | 不可达

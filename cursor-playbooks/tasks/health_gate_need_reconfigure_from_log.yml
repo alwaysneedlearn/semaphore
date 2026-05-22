@@ -1,0 +1,20 @@
+---
+# 进程已在跑：仅据日志健康检查登记 need_reconfigure / log_status_ok（无状态 API）
+# 依赖：log_check_result（由 log_health_check_windows.yml 产生）
+
+- name: 状态判断：判定重配需求（仅日志）
+  ansible.builtin.set_fact:
+    log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
+    need_reconfigure: >-
+      {{
+        (log_check_result is defined and (log_check_result.unreachable | default(false)))
+        or
+        ((log_check_result.stdout | default('') | trim) != 'FOUND_KEYWORD')
+      }}
+
+- name: 状态判断：输出综合判断结果
+  ansible.builtin.debug:
+    msg: >
+      [综合判断] 日志_OK={{ log_status_ok | default('n/a') }} |
+      需要重配={{ need_reconfigure }}
+      {% if log_health_use_tail | default(false) | bool %}| Tail行数={{ log_health_tail_lines | default(8000) }}{% endif %}

@@ -8,15 +8,8 @@
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
-    api_host: "{{ inventory_hostname }}"
-    # 显式 if 计算端口（同 device_restart），避免 api_port 误解析为布尔
-    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int }}{% endif %}"
-    api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
-    api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
-    api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
-    api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
-    export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
-    # 日志状态检查：仅统计最近 N 分钟内的日志行（与 check_restart_redeploy 的 LOG_HEALTH_RECENT_MINUTES 一致）
+    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('本轮通道状态上传成功', true) }}"
+    # 日志状态检查：仅统计最近 N 分钟内的日志行
     log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
@@ -63,78 +56,6 @@
       ansible.builtin.meta: end_host
       when: status.unreachable | default(false)
 
-    - name: WinRM 中途建连（API 状态检查前）
-      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
-      when: >
-        status is defined and
-        'stdout' in status and
-        'NOT_RUNNING' not in status.stdout
-      vars:
-        winrm_refresh_label: "WinRM 中途建连（API 状态检查前）"
-
-    - name: 状态判断：API 状态检查
-      block:
-        - name: 调用API查询上报状态
-          ansible.builtin.uri:
-            url: "http://{{ api_host }}:{{ api_port }}"
-            method: "POST"
-            body_format: json
-            body:
-              CallType: "{{ api_status_call_type | int }}"
-            headers:
-              Content-Type: "application/json; charset=utf-8"
-            return_content: true
-            status_code: 200
-            timeout: "{{ api_timeout_seconds | int }}"
-          register: api_status_result
-          delegate_to: localhost
-          failed_when: false
-
-        - name: DEBUG 打印状态 API 响应（成功也打印）
-          ansible.builtin.debug:
-            msg:
-              - "[DEBUG-API] 状态检查 POST url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
-              - "[DEBUG-API] 状态检查 http_status={{ api_status_result.status | default('n/a') }}"
-              - "[DEBUG-API] 状态检查 response_body={{ api_status_result.content | default('') }}"
-
-        - name: 解析API响应（布尔用 YAML 字面量，避免字符串 True/False 在 when 里误判）
-          ansible.builtin.set_fact:
-            api_status_ok: >-
-              {{
-                api_status_result.status | default(0) | int == 200 and
-                ((api_status_result.content | from_json).ResponeResultCode | default(-1) | int == api_expected_response_code | int) and
-                ((api_status_result.content | from_json).ExecResultCode | default(-1) | int == api_expected_exec_success_code | int)
-              }}
-            is_export_started: >-
-              {{
-                api_status_result.status | default(0) | int == 200 and
-                ((api_status_result.content | from_json).ExecResultData | default(-1) | int) == (export_started | int)
-              }}
-
-        - name: 解析API响应 — 规范化布尔
-          ansible.builtin.set_fact:
-            api_status_ok_bool: true
-          when: api_status_ok | default(false) | bool
-
-        - name: 解析API响应 — 规范化布尔（否）
-          ansible.builtin.set_fact:
-            api_status_ok_bool: false
-          when: not (api_status_ok | default(false) | bool)
-
-        - name: 解析API响应 — 已启动上报布尔
-          ansible.builtin.set_fact:
-            is_export_started_bool: true
-          when: is_export_started | default(false) | bool
-
-        - name: 解析API响应 — 已启动上报布尔（否）
-          ansible.builtin.set_fact:
-            is_export_started_bool: false
-          when: not (is_export_started | default(false) | bool)
-      when: >
-        status is defined and
-        'stdout' in status and
-        'NOT_RUNNING' not in status.stdout
-
     - name: WinRM 中途建连（日志状态检查前）
       ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
       when: >
@@ -144,81 +65,24 @@
       vars:
         winrm_refresh_label: "WinRM 中途建连（日志状态检查前）"
 
-    - name: 状态判断：日志状态检查
-      block:
-        - name: 检查日志上报状态
-          win_shell: |
-            $logDir = "{{ exe_dir }}\{{ zip_name }}\LogData"
-            $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } | Sort-Object LastWriteTime -Descending
-            if ($logFiles -and $logFiles.Count -gt 0) {
-              $latestLog = $logFiles[0].FullName
-              $content = Get-Content $latestLog | Where-Object {
-                $logDate = ($_ -match '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') | Out-Null
-                $logTime = $matches[1]
-                $logTime = [datetime]::ParseExact($logTime, "yyyy-MM-dd HH:mm:ss", $null)
-                $currentTime = (Get-Date)
-                $timeDiff = $currentTime - $logTime
-                return $timeDiff.TotalMinutes -le {{ log_health_recent_minutes | int }}
-              }
-              $keyword = "本轮通道状态上传成功"
-              $matches = $content | Select-String -Pattern $keyword
-              if ($matches) {
-                Write-Output "FOUND_KEYWORD"
-              } else {
-                Write-Output "NO_KEYWORD"
-              }
-            } else {
-              Write-Output "NO_LOGS_FOUND"
-            }
-          register: log_check_result
-          failed_when: false
-          # 中途 WinRM 断开时默认会 fatal 并跳过后续任务，导致无 semaphore_callback_row、bulk 不写回，设备一直 checking
-          ignore_unreachable: true
-
-        - name: 输出日志检查结果
-          ansible.builtin.debug:
-            msg: "[日志检查] 结果={{ log_check_result.stdout | default('未执行') | trim }} unreachable={{ log_check_result.unreachable | default(false) }}"
-      when: >
-        status is defined and
-        'stdout' in status and
-        'NOT_RUNNING' not in status.stdout
-
-    - name: 状态判断：双保险判定与输出综合状态
+    - name: 状态判断：日志健康检查与综合判定
       when: >
         status is defined and
         'stdout' in status and
         'NOT_RUNNING' not in status.stdout
       block:
-        - name: 双保险判定综合状态
-          ansible.builtin.set_fact:
-            log_status_ok: "{{ (log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD' }}"
-            # 日志 unreachable → 异常。进程在跑时状态 POST 必须 HTTP 200，否则不能 NORMAL（不能仅靠日志绕过 API 端口不通）。
-            # 在 HTTP 200 前提下：(API 业务双条件) 或 (日志关键字) 任一通过 → 不需重配。
-            need_reconfigure: >-
-              {{
-                (log_check_result is defined and (log_check_result.unreachable | default(false)))
-                or
-                (api_status_result is not defined or (api_status_result.status | default(0) | int) != 200)
-                or
-                (
-                  not (
-                    ((api_status_ok_bool | default(false) | bool) and (is_export_started_bool | default(false) | bool)) or
-                    ((log_check_result.stdout | default('') | trim) == 'FOUND_KEYWORD')
-                  )
-                )
-              }}
+        - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
 
-        - name: 输出综合判断结果
+        - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+
+        - name: 输出综合判断结果（含程序状态）
           ansible.builtin.debug:
             msg: >
               [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
-              API_OK={{ api_status_ok | default('n/a') }} |
-              已启动上报={{ is_export_started | default('n/a') }} |
               日志_OK={{ log_status_ok | default('n/a') }} |
-              需要重配={{ need_reconfigure }}
+              异常/需关注={{ need_reconfigure }}
 
-    # 不传 rdp_status（**Probe** 维护 RDP TCP）。winrm_status：本 play 内 WinRM 成功且日志检查未中途 unreachable
-    # 则为 online。api_status：NORMAL/healthy 时必有 HTTP 200（见 need_reconfigure）；异常但 HTTP 200 → online（端口通）；其余 offline。
+    # 不传 rdp_status（**Probe** 维护 RDP TCP）。api_status：进程在跑且日志关键字命中 → online；否则 offline。
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
@@ -235,13 +99,11 @@
             {% if status is not defined or ('stdout' not in status) %}offline
             {% elif 'NOT_RUNNING' in (status.stdout | default('')) %}offline
             {% elif need_reconfigure is defined and not (need_reconfigure | bool) %}online
-            {% elif api_status_result is defined and (api_status_result.status | default(0) | int) == 200 %}online
-            {% elif api_status_result is defined %}offline
             {% else %}offline{% endif %}
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
             {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
-            {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: API or log indicates abnormal (need reconfigure)
+            {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: log keyword missing or not recent (need reconfigure)
             {% else %}{% endif %}
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"

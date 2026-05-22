@@ -1,0 +1,67 @@
+---
+# 进程在跑时：在最新 NWReport_DBWB*.log 中按时间窗查找上传成功关键字（无 HTTP API）
+# 变量：exe_dir, zip_name, log_health_recent_minutes；可选 log_health_use_tail + log_health_tail_lines
+# 可选 log_health_keyword（默认 LOG_SUCCESS_KEYWORD / 本轮通道状态上传成功）
+# 输出 register：log_check_result（FOUND_KEYWORD | NO_KEYWORD | NO_LOGS_FOUND）
+
+- name: 状态判断：检查日志上报状态
+  environment:
+    LOG_HEALTH_KEYWORD: "{{ log_health_keyword | default(log_success_keyword | default('本轮通道状态上传成功', true), true) }}"
+    SEMAPHORE_LOG_HEALTH_USE_TAIL: "{{ '1' if (log_health_use_tail | default(false) | bool) else '0' }}"
+    SEMAPHORE_LOG_HEALTH_TAIL_LINES: "{{ log_health_tail_lines | default(8000) | string }}"
+  win_shell: |
+    $logDir = "{{ exe_dir }}\\{{ zip_name }}\\LogData"
+    $recentMin = {{ log_health_recent_minutes | int }}
+    $keyword = [string]$env:LOG_HEALTH_KEYWORD
+    $useTail = ($env:SEMAPHORE_LOG_HEALTH_USE_TAIL -eq '1')
+    $tailN = [int]$env:SEMAPHORE_LOG_HEALTH_TAIL_LINES
+    $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } |
+      Sort-Object LastWriteTime -Descending
+    if (-not $logFiles -or $logFiles.Count -eq 0) {
+      Write-Output "NO_LOGS_FOUND"
+      exit 0
+    }
+    $latestLog = $logFiles[0].FullName
+    if (-not (Test-Path -LiteralPath $latestLog)) {
+      Write-Output "NO_LOGS_FOUND"
+      exit 0
+    }
+    if ($useTail) {
+      $lines = @(Get-Content -LiteralPath $latestLog -Tail $tailN -ErrorAction SilentlyContinue)
+    } else {
+      $lines = @(Get-Content -LiteralPath $latestLog -ErrorAction SilentlyContinue)
+    }
+    if ($lines.Count -eq 0) {
+      Write-Output "NO_KEYWORD"
+      exit 0
+    }
+    $now = Get-Date
+    $cutoff = $now.AddMinutes(-$recentMin)
+    $found = $false
+    foreach ($line in $lines) {
+      if ($line -notmatch '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') { continue }
+      try {
+        $logTime = [datetime]::ParseExact($matches[1], "yyyy-MM-dd HH:mm:ss", $null)
+      } catch { continue }
+      if ($logTime -lt $cutoff) { continue }
+      if ($logTime -gt $now) { continue }
+      if ($keyword.Length -eq 0) { continue }
+      if ($line.IndexOf($keyword, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        $found = $true
+        break
+      }
+    }
+    if ($found) { Write-Output "FOUND_KEYWORD" } else { Write-Output "NO_KEYWORD" }
+  register: log_check_result
+  failed_when: false
+  ignore_unreachable: true
+
+- name: 状态判断：输出日志检查结果
+  ansible.builtin.debug:
+    msg: >-
+      [日志检查] 结果={{ log_check_result.stdout | default('未执行') | trim }}
+      unreachable={{ log_check_result.unreachable | default(false) }}
+      mode={{ 'tail' if (log_health_use_tail | default(false) | bool) else 'full' }}
+      recent_min={{ log_health_recent_minutes | default(8) }}
+  when: log_check_result is defined
