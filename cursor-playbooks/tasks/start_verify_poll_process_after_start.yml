@@ -18,12 +18,8 @@
       }}
 
 - name: 启动验证：轮询启动后进程状态
-  block:
-    - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
-    - ansible.builtin.set_fact:
-        check_result_after_start: "{{ _sem_process_status }}"
-  ignore_unreachable: true
-  register: _process_poll_block
+  ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
+  register: _process_poll_round
   until: >
     _sem_process_status is defined and
     not (_sem_process_status.unreachable | default(false)) and
@@ -31,12 +27,18 @@
     ('NOT_RUNNING' not in (_sem_process_status.stdout | default('')))
   retries: "{{ _process_verify_poll_retries | int }}"
   delay: "{{ process_verify_poll_seconds | default(5) | int }}"
+  ignore_unreachable: true
+
+- name: 启动验证：登记启动后进程终态
+  ansible.builtin.set_fact:
+    check_result_after_start: "{{ _sem_process_status }}"
+  when: _sem_process_status is defined
 
 - name: 启动验证：DEBUG 启动后进程轮询汇总
   ansible.builtin.debug:
     msg:
       - "[DEBUG-PROCESS-POLL] retries_cfg={{ _process_verify_poll_retries }} interval_s={{ process_verify_poll_seconds | default(5) }}"
-      - "[DEBUG-PROCESS-POLL] block_attempts={{ _process_poll_block.attempts | default(1) }}"
+      - "[DEBUG-PROCESS-POLL] poll_attempts={{ _process_poll_round.attempts | default(1) }}"
       - "[DEBUG-PROCESS-POLL] final_stdout={{ check_result_after_start.stdout | default('n/a') | trim }}"
   when: check_result_after_start is defined
 
