@@ -16,11 +16,7 @@
     # 显式 if 计算端口，避免 (x>0|ternary) 类过滤器/比较符优先级导致 api_port 变成 True/False
     api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int }}{% endif %}"
     api_status_call_type: "{{ ((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int }}"
-    api_start_call_type: "{{ ((lookup('env', 'API_START_CALL_TYPE') | default('', true) | trim) | default('1000', true)) | int }}"
     api_timeout_seconds: "{{ ((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int }}"
-    api_start_timeout_seconds: "{{ ((lookup('env', 'API_START_TIMEOUT_SECONDS') | default('', true) | trim) | default(api_timeout_seconds | string, true)) | int }}"
-    api_start_retries: "{{ ((lookup('env', 'API_START_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
-    api_start_retry_delay: "{{ ((lookup('env', 'API_START_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int }}"
     api_expected_response_code: "{{ (lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true) }}"
     api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true) }}"
     export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
@@ -508,6 +504,10 @@
           ansible.builtin.debug:
             msg: "[DEBUG-RECONFIG] restart_delay={{ restart_delay }}s (Variable Group RESTART_DELAY 未设或为空时 playbook 默认 30)"
 
+        - name: 重配执行：记录启动程序前日志行书签
+          ansible.builtin.include_tasks: tasks/log_poll_record_baseline_before_start_api.yml
+          when: log_path is defined
+
         - name: 重配执行：启动程序
           ansible.builtin.include_tasks: tasks/reconfig_start_program_windows.yml
           when: >
@@ -528,125 +528,7 @@
     - name: 启动验证：验证数据上报启动状态
       when: host_failure_reason is not defined
       block:
-        - ansible.builtin.include_tasks: tasks/start_verify_register_exe_start_ok.yml
-
-        - name: 启动验证：记录启动 API 调用前日志行书签
-          ansible.builtin.include_tasks: tasks/log_poll_record_baseline_before_start_api.yml
-          when: _exe_start_script_ok | default(false) | bool
-
-        - name: 启动验证：调用启动API
-          ansible.builtin.uri:
-            url: "http://{{ api_host }}:{{ api_port }}"
-            method: "POST"
-            body_format: json
-            body:
-              CallType: "{{ api_start_call_type | int }}"
-            headers:
-              Content-Type: "application/json; charset=utf-8"
-            return_content: true
-            status_code: 200
-            timeout: "{{ api_start_timeout_seconds | int }}"
-          register: api_start_result
-          delegate_to: localhost
-          failed_when: false
-          until: (api_start_result.status | default(-1) | int) == 200
-          retries: "{{ api_start_retries | int }}"
-          delay: "{{ api_start_retry_delay | int }}"
-
-        - name: 启动验证：DEBUG 启动 POST API 响应（成功也打印）
-          ansible.builtin.debug:
-            msg:
-              - "[DEBUG-API] POST 启动 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_start_call_type }}"
-              - "[DEBUG-API] POST 启动 attempts={{ api_start_result.attempts | default(1) }} retries_cfg={{ api_start_retries }} delay_s={{ api_start_retry_delay }}"
-              - "[DEBUG-API] POST 启动 http_status={{ api_start_result.status | default('n/a') }}"
-              - "[DEBUG-API] POST 启动 response_body={{ api_start_result.content | default('') }}"
-
-        - name: 启动验证：调用API查询状态
-          ansible.builtin.uri:
-            url: "http://{{ api_host }}:{{ api_port }}"
-            method: "POST"
-            body_format: json
-            body:
-              CallType: "{{ api_status_call_type | int }}"
-            headers:
-              Content-Type: "application/json"
-            return_content: true
-            status_code: 200
-            timeout: 10
-          register: api_check_after
-          delegate_to: localhost
-          failed_when: false
-
-        - name: 启动验证：DEBUG 状态查询 POST API 响应（成功也打印）
-          ansible.builtin.debug:
-            msg:
-              - "[DEBUG-API] POST 状态 url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
-              - "[DEBUG-API] POST 状态 http_status={{ api_check_after.status | default('n/a') }}"
-              - "[DEBUG-API] POST 状态 response_body={{ api_check_after.content | default('') }}"
-
-        # 使用字面量 true/false 的 set_fact，避免 "{{ false }}" 变成字符串 "False" 导致 when 误判为真
-        - name: 启动验证：判断API是否成功（布尔）
-          ansible.builtin.set_fact:
-            api_final_ok: true
-          when:
-            - api_check_after.status | default(0) | int == 200
-            - (api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int
-
-        - name: 启动验证：判断API未成功（布尔）
-          ansible.builtin.set_fact:
-            api_final_ok: false
-          when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
-
-        - ansible.builtin.include_tasks: tasks/start_verify_recheck_process_before_log_poll.yml
-          when: not (api_final_ok | default(false) | bool)
-
-        - name: 启动验证：日志轮询前置检查
-          ansible.builtin.include_tasks: tasks/log_poll_assert_baseline_before_poll.yml
-          when: >
-            not (skip_log_poll | default(false) | bool) and
-            not (api_final_ok | default(false) | bool)
-
-        - name: 启动验证：日志轮询确认
-          ansible.builtin.include_tasks: tasks/log_poll_confirm.yml
-          when: >
-            not (skip_log_poll | default(false) | bool) and
-            not (api_final_ok | default(false) | bool)
-
-        - name: 启动验证：综合判断启动结果（成功）
-          ansible.builtin.set_fact:
-            final_start_ok: true
-          when: >
-            api_final_ok | bool or
-            (
-              not (skip_log_poll | default(false) | bool) and
-              log_poll is defined and (log_poll.rc | default(1)) == 0
-            )
-
-        - name: 启动验证：综合判断启动结果（失败）
-          ansible.builtin.set_fact:
-            final_start_ok: false
-          when: >
-            not (
-              api_final_ok | bool or
-              (
-                not (skip_log_poll | default(false) | bool) and
-                log_poll is defined and (log_poll.rc | default(1)) == 0
-              )
-            )
-
-        - name: 启动验证：DEBUG 验证结果汇总（成功也打印）
-          ansible.builtin.debug:
-            msg:
-              - "[DEBUG-启动验证] final_start_ok={{ final_start_ok }} api_final_ok={{ api_final_ok }}"
-              - "[DEBUG-启动验证] 原始 API 响应见上两条 DEBUG-API 任务"
-
-        - name: 启动验证：启动失败则终止
-          ansible.builtin.fail:
-            msg: |
-              [失败] 启动验证失败（双保险判定失败）
-              API结果: {{ api_final_ok }}
-              日志轮询: {{ '已跳过(' ~ (skip_log_poll_reason | default('skip') | trim) ~ ')' if (skip_log_poll | default(false) | bool) else ((log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false)) }}
-          when: not final_start_ok
+        - ansible.builtin.include_tasks: tasks/start_verify_after_reconfig.yml
 
       rescue:
         - name: 错误处理：启动验证阶段失败
@@ -672,13 +554,12 @@
             {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(true) | bool) %}unhealthy
             {% elif final_start_ok is defined and not final_start_ok %}unhealthy
             {% else %}healthy{% endif %}
-          # api_status：本 play 内任一 HTTP 200（启动/状态 POST）→ online；有请求但无 200 → offline；未请求留空（bulk 不覆盖）
+          # api_status：启动验证 final_start_ok → online；验证失败 → offline；未跑验证留空
           api_status: >-
             {% if check_result.unreachable | default(false) %}offline
             {% elif host_failure_reason is defined %}offline
             {% elif final_start_ok is defined and (final_start_ok | bool) %}online
-            {% elif ((api_check_after is defined and not (api_check_after.skipped | default(false)) and (api_check_after.status | default(0) | int) == 200) or (api_start_result is defined and not (api_start_result.skipped | default(false)) and (api_start_result.status | default(0) | int) == 200)) %}online
-            {% elif ((api_check_after is defined and not (api_check_after.skipped | default(false))) or (api_start_result is defined and not (api_start_result.skipped | default(false)))) %}offline
+            {% elif final_start_ok is defined and not (final_start_ok | bool) %}offline
             {% else %}{% endif %}
           winrm_status: online
           abnormal_reason: >-

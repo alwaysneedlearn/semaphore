@@ -1,0 +1,52 @@
+---
+# 重配启动后的验证：exe VERIFY_OK + 启动后进程轮询 + 日志轮询（无启动/状态 HTTP API）
+
+- ansible.builtin.include_tasks: tasks/start_verify_register_exe_start_ok.yml
+
+- ansible.builtin.include_tasks: tasks/start_verify_poll_process_after_start.yml
+
+- name: 启动验证：日志轮询前置检查
+  ansible.builtin.include_tasks: tasks/log_poll_assert_baseline_before_poll.yml
+  when: not (skip_log_poll | default(false) | bool)
+
+- name: 启动验证：日志轮询确认
+  ansible.builtin.include_tasks: tasks/log_poll_confirm.yml
+  when: not (skip_log_poll | default(false) | bool)
+
+- name: 启动验证：综合判断启动结果（成功）
+  ansible.builtin.set_fact:
+    final_start_ok: true
+  when: >
+    (_exe_start_script_ok | default(false) | bool) and
+    (process_running_after_start | default(false) | bool) and
+    not (skip_log_poll | default(false) | bool) and
+    log_poll is defined and (log_poll.rc | default(1)) == 0
+
+- name: 启动验证：综合判断启动结果（失败）
+  ansible.builtin.set_fact:
+    final_start_ok: false
+  when: >
+    not (
+      (_exe_start_script_ok | default(false) | bool) and
+      (process_running_after_start | default(false) | bool) and
+      not (skip_log_poll | default(false) | bool) and
+      log_poll is defined and (log_poll.rc | default(1)) == 0
+    )
+
+- name: 启动验证：输出验证结果
+  ansible.builtin.debug:
+    msg:
+      - "[启动验证] final_start_ok={{ final_start_ok | default(false) }}"
+      - "[启动验证] exe_verify_ok={{ _exe_start_script_ok | default(false) }} process_after_start={{ process_running_after_start | default(false) }}"
+      - "[启动验证] skip_log_poll={{ skip_log_poll | default(false) }} reason={{ skip_log_poll_reason | default('') | trim }}"
+      - "[启动验证] log_poll_ok={{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}"
+
+- name: 启动验证：启动失败则终止
+  ansible.builtin.fail:
+    msg: |
+      [失败] 启动验证失败（exe 启动 / 启动后进程轮询 / 日志轮询）
+      exe_start_ok={{ _exe_start_script_ok | default(false) }}
+      process_running_after_start={{ process_running_after_start | default(false) }}
+      skip_log_poll={{ skip_log_poll | default(false) }} ({{ skip_log_poll_reason | default('') }})
+      log_poll_ok={{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
+  when: not (final_start_ok | default(false) | bool)

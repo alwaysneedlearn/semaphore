@@ -1,6 +1,6 @@
 ---
-# 启动 exe 之后、调用启动 API 之前：数当前日志行数并写入 .state（轮询只匹配此后新增行）
-- name: 启动验证：记录启动 API 调用前日志行数（轮询书签）
+# 启动程序之前：数当前日志行数并写入 .state（轮询只匹配此后新增行）
+- name: 重配执行：记录启动程序前日志行数（轮询书签）
   win_shell: |
     $logPath = "{{ log_path }}"
     $statePath = "{{ log_poll_state_path }}"
@@ -57,7 +57,7 @@
   when: log_path is defined
 
 # 同一 set_fact 内不能引用本任务刚定义的 _log_baseline_line（Ansible 模板求值时尚未存在）
-- name: 启动验证：登记日志轮询基准行号
+- name: 重配执行：登记日志轮询基准行号
   ansible.builtin.set_fact:
     _log_baseline_line: "{{ (log_baseline_before_start_api.stdout_lines | default([]) | select('search', 'LOG_BASELINE=') | list | first) | default('LOG_BASELINE=0', true) }}"
   when:
@@ -65,7 +65,7 @@
     - not (log_baseline_before_start_api.skipped | default(false))
     - (log_baseline_before_start_api.rc | default(1)) == 0
 
-- name: 启动验证：登记日志轮询基准行号（数值）
+- name: 重配执行：登记日志轮询基准行号（数值）
   ansible.builtin.set_fact:
     log_poll_baseline: "{{ (_log_baseline_line | regex_replace('^LOG_BASELINE=', '') | trim) | int }}"
   when:
@@ -73,13 +73,13 @@
     - not (log_baseline_before_start_api.skipped | default(false))
     - (log_baseline_before_start_api.rc | default(1)) == 0
 
-- name: 启动验证：DEBUG 启动 API 前日志行数（exe 已启动后）
+- name: 重配执行：DEBUG 启动程序前日志行数
   ansible.builtin.debug:
     msg:
       - "[DEBUG-LOG] host={{ inventory_hostname }}"
       - "[DEBUG-LOG] log_path={{ log_path | default('n/a') }}"
       - "[DEBUG-LOG] state_path={{ log_poll_state_path | default('n/a') }}"
-      - "[DEBUG-LOG] baseline_lines={{ log_poll_baseline | default(0) }} (exe 启动后、启动 API 调用前；仅轮询此后新增行)"
+      - "[DEBUG-LOG] baseline_lines={{ log_poll_baseline | default(0) }} (启动程序前；仅轮询此后新增行)"
       - "[DEBUG-LOG] parsed_from={{ _log_baseline_line | default('n/a') }}"
       - "[DEBUG-LOG] win_shell={{ log_baseline_before_start_api.stdout_lines | default([]) }}"
   when:

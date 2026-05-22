@@ -1,0 +1,83 @@
+---
+# 启动验证：启动后按 RESTART_DELAY / PROCESS_VERIFY_POLL_SECONDS 轮询进程状态（非单次采集）
+
+- name: 启动验证：计算启动后进程轮询次数
+  ansible.builtin.set_fact:
+    _process_verify_poll_retries: >-
+      {{
+        [
+          (((restart_delay | default(30) | int) / (process_verify_poll_seconds | default(5) | int)) | int),
+          1
+        ] | max | int
+      }}
+
+- name: 启动验证：轮询启动后进程状态
+  block:
+    - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
+    - ansible.builtin.set_fact:
+        check_result_after_start: "{{ _sem_process_status }}"
+  ignore_unreachable: true
+  register: _process_poll_block
+  until: >
+    _sem_process_status is defined and
+    not (_sem_process_status.unreachable | default(false)) and
+    ('stdout' in _sem_process_status) and
+    ('NOT_RUNNING' not in (_sem_process_status.stdout | default('')))
+  retries: "{{ _process_verify_poll_retries | int }}"
+  delay: "{{ process_verify_poll_seconds | default(5) | int }}"
+
+- name: 启动验证：DEBUG 启动后进程轮询汇总
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-PROCESS-POLL] retries_cfg={{ _process_verify_poll_retries }} interval_s={{ process_verify_poll_seconds | default(5) }}"
+      - "[DEBUG-PROCESS-POLL] block_attempts={{ _process_poll_block.attempts | default(1) }}"
+      - "[DEBUG-PROCESS-POLL] final_stdout={{ check_result_after_start.stdout | default('n/a') | trim }}"
+  when: check_result_after_start is defined
+
+- name: 启动验证：输出启动后程序状态（轮询终态）
+  ansible.builtin.debug:
+    msg: "[程序状态-启动后] {{ check_result_after_start.stdout | trim }}"
+  when: >
+    check_result_after_start is defined and
+    not (check_result_after_start.unreachable | default(false)) and
+    'stdout' in check_result_after_start
+
+- name: 启动验证：登记是否跳过日志轮询
+  ansible.builtin.set_fact:
+    process_running_after_start: >-
+      {{
+        check_result_after_start is defined and
+        not (check_result_after_start.unreachable | default(false)) and
+        'stdout' in check_result_after_start and
+        ('NOT_RUNNING' not in (check_result_after_start.stdout | default('')))
+      }}
+    skip_log_poll: >-
+      {{
+        (check_result_after_start is not defined) or
+        (check_result_after_start.unreachable | default(false)) or
+        not (
+          check_result_after_start is defined and
+          'stdout' in check_result_after_start and
+          ('NOT_RUNNING' not in (check_result_after_start.stdout | default('')))
+        ) or
+        (not (_exe_start_script_ok | default(false) | bool))
+      }}
+    skip_log_poll_reason: >-
+      {%- if check_result_after_start is not defined or (check_result_after_start.unreachable | default(false)) -%}
+      after_start_unreachable
+      {%- elif 'NOT_RUNNING' in (check_result_after_start.stdout | default('')) -%}
+      after_start_not_running
+      {%- elif not (_exe_start_script_ok | default(false) | bool) -%}
+      exe_start_not_verify_ok
+      {%- else -%}
+      {%- endif -%}
+
+- name: 启动验证：DEBUG 跳过日志轮询原因
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LOG-POLL] skip_log_poll={{ skip_log_poll | default(false) }}"
+      - "[DEBUG-LOG-POLL] reason={{ skip_log_poll_reason | default('') | trim }}"
+      - "[DEBUG-LOG-POLL] after_start={{ check_result_after_start.stdout | default('n/a') | trim }}"
+      - "[DEBUG-LOG-POLL] process_running_after_start={{ process_running_after_start | default(false) }}"
+      - "[DEBUG-LOG-POLL] exe_start_verify_ok={{ _exe_start_script_ok | default(false) }}"
+  when: skip_log_poll | default(false) | bool

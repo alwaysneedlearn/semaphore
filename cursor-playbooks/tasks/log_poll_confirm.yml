@@ -1,5 +1,5 @@
 ---
-# 依赖：log_path、log_poll_state_path、log_poll_baseline（exe 启动后、启动 API 前写入）、log_success_keyword
+# 依赖：log_path、log_poll_state_path、log_poll_baseline（启动程序前写入）、log_success_keyword
 - name: 启动验证：日志轮询确认
   win_shell: |
     $ErrorActionPreference = 'Stop'
@@ -10,7 +10,7 @@
     if (-not [string]::IsNullOrWhiteSpace($env:SEM_LOG_BASELINE)) {
       $baseline = [int64]$env:SEM_LOG_BASELINE
     }
-    # Ansible 若未解析 stdout_lines，SEM_LOG_BASELINE 可能为 0；以 state 中启动 API 前写入的书签为准
+    # Ansible 若未解析 stdout_lines，SEM_LOG_BASELINE 可能为 0；以 state 中启动程序前写入的书签为准
     if ($baseline -eq 0 -and (Test-Path -LiteralPath $statePath)) {
       try {
         $rawB = (Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop).Trim()
@@ -131,13 +131,6 @@
   until: log_poll.rc == 0
   failed_when: false
 
-- name: 启动验证：DEBUG 日志轮询已跳过（API 已成功）
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-LOG-POLL] skipped: api_final_ok=true，未执行日志轮询（仅 API 判定启动成功）"
-      - "[DEBUG-LOG-POLL] log_poll_baseline={{ log_poll_baseline | default('n/a') }} path={{ log_path | default('n/a') }}"
-  when: api_final_ok | default(false) | bool
-
 - name: 启动验证：DEBUG 日志轮询每次扫描内容
   ansible.builtin.debug:
     msg:
@@ -149,15 +142,11 @@
   loop_control:
     extended: true
     label: "poll attempt {{ ansible_loop.index }}"
-  when:
-    - not (api_final_ok | default(false) | bool)
-    - log_poll is defined
+  when: log_poll is defined
 
 - name: 启动验证：DEBUG 日志轮询未注册结果
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-LOG-POLL] warning: api_final_ok=false 但 log_poll 未 register（检查 include_tasks/when）"
+      - "[DEBUG-LOG-POLL] warning: log_poll 未 register（检查 include_tasks/when）"
       - "[DEBUG-LOG-POLL] log_poll_baseline={{ log_poll_baseline | default('n/a') }}"
-  when:
-    - not (api_final_ok | default(false) | bool)
-    - log_poll is not defined
+  when: log_poll is not defined
