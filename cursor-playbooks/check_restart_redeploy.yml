@@ -233,36 +233,8 @@
       when: need_reconfigure | bool
       block:
         - name: 重配执行：停止程序（仅在运行中执行）
-          win_shell: |
-            $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-            if ($proc) {
-              try {
-                Stop-Process -Name "{{ exe_name }}" -Force -ErrorAction Stop
-                Start-Sleep -Seconds 2
-                $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-                if (-not $verify) {
-                  Write-Output "STOPPED"
-                } else {
-                  taskkill /F /T /IM "{{ exe_name }}.exe" 2>$null
-                  Start-Sleep -Seconds 2
-                  $verify2 = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-                  if (-not $verify2) {
-                    Write-Output "STOPPED_BY_TASKKILL"
-                  } else {
-                    Write-Output "STOP_FAILED"
-                  }
-                }
-              } catch {
-                Write-Output "STOP_ERROR:$($_.Exception.Message)"
-              }
-            } else {
-              Write-Output "NOT_RUNNING"
-            }
-          register: stop_result
+          ansible.builtin.include_tasks: tasks/stop_program_windows.yml
           when: process_running | bool
-          failed_when: >
-            stop_result is defined and 'stdout' in stop_result and
-            ('STOP_FAILED' in stop_result.stdout or 'STOP_ERROR' in stop_result.stdout)
 
         - name: 重配执行：获取当前用户名
           win_shell: |

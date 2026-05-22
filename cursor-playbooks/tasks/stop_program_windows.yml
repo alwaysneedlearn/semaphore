@@ -1,0 +1,80 @@
+---
+# 强制停止 exe_name 进程；若初次返回 STOP_FAILED/STOP_ERROR，再复核进程是否已退出。
+# 复核为 NOT_RUNNING 时不 fail，供重配/重启流程继续。
+# 期望变量: exe_name
+
+- name: 停止程序（强制 Stop-Process / taskkill）
+  ansible.windows.win_shell: |
+    $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+    if ($proc) {
+      try {
+        Stop-Process -Name "{{ exe_name }}" -Force -ErrorAction Stop
+        Start-Sleep -Seconds 2
+        $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+        if (-not $verify) {
+          Write-Output "STOPPED"
+        } else {
+          taskkill /F /T /IM "{{ exe_name }}.exe" 2>$null
+          Start-Sleep -Seconds 2
+          $verify2 = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+          if (-not $verify2) {
+            Write-Output "STOPPED_BY_TASKKILL"
+          } else {
+            Write-Output "STOP_FAILED"
+          }
+        }
+      } catch {
+        Write-Output "STOP_ERROR:$($_.Exception.Message)"
+      }
+    } else {
+      Write-Output "NOT_RUNNING"
+    }
+  register: stop_result
+  failed_when: false
+  changed_when: >-
+    'STOPPED' in (stop_result.stdout | default('')) or
+    'STOPPED_BY_TASKKILL' in (stop_result.stdout | default('')) or
+    'NOT_RUNNING' in (stop_result.stdout | default(''))
+
+- name: 停止程序：复核进程是否仍在运行
+  ansible.windows.win_shell: |
+    Start-Sleep -Seconds 1
+    $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
+    if ($proc) {
+      Write-Output "STILL_RUNNING|PID:$($proc.Id)"
+    } else {
+      Write-Output "NOT_RUNNING"
+    }
+  register: stop_verify_result
+  changed_when: false
+  failed_when: false
+  when: >
+    stop_result is defined and
+    not (stop_result.unreachable | default(false)) and
+    'stdout' in stop_result and
+    (
+      'STOP_FAILED' in stop_result.stdout or
+      'STOP_ERROR' in stop_result.stdout
+    )
+
+- name: 停止程序：初次失败但复核已退出，继续后续流程
+  ansible.builtin.debug:
+    msg: >-
+      [停止] {{ inventory_hostname }} 初次={{ stop_result.stdout | trim }}，
+      复核={{ stop_verify_result.stdout | trim }} → 进程已不在运行，继续重配/重启
+  when: >
+    stop_verify_result is defined and
+    not (stop_verify_result.unreachable | default(false)) and
+    'NOT_RUNNING' in (stop_verify_result.stdout | default(''))
+
+- name: 停止程序：失败（复核进程仍在运行）
+  ansible.builtin.fail:
+    msg: >-
+      [停止] {{ inventory_hostname }} 无法终止 {{ exe_name }}：
+      初次={{ stop_result.stdout | default('') | trim }}，
+      复核={{ stop_verify_result.stdout | default('') | trim }}
+  when: >
+    stop_verify_result is defined and
+    not (stop_verify_result.unreachable | default(false)) and
+    'stdout' in stop_verify_result and
+    'STILL_RUNNING' in stop_verify_result.stdout

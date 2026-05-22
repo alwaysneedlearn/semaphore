@@ -21,43 +21,7 @@
     - name: 停止程序（仅执行 stop）
       block:
         - name: WinRM 执行 stop
-          win_shell: |
-            $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-            if ($proc) {
-              try {
-                Stop-Process -Name "{{ exe_name }}" -Force -ErrorAction Stop
-                Start-Sleep -Seconds 2
-                $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-                if (-not $verify) {
-                  Write-Output "STOPPED"
-                } else {
-                  taskkill /F /T /IM "{{ exe_name }}.exe" 2>$null
-                  Start-Sleep -Seconds 2
-                  $verify2 = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-                  if (-not $verify2) {
-                    Write-Output "STOPPED_BY_TASKKILL"
-                  } else {
-                    Write-Output "STOP_FAILED"
-                    exit 1
-                  }
-                }
-              } catch {
-                Write-Output "STOP_ERROR:$($_.Exception.Message)"
-                exit 1
-              }
-            } else {
-              Write-Output "NOT_RUNNING"
-            }
-          register: stop_result
-          changed_when: >-
-            'STOPPED' in (stop_result.stdout | default('')) or
-            'STOPPED_BY_TASKKILL' in (stop_result.stdout | default('')) or
-            'NOT_RUNNING' in (stop_result.stdout | default(''))
-          failed_when: >
-            stop_result is defined and not (stop_result.unreachable | default(false)) and
-            'stdout' in stop_result and
-            ('STOP_FAILED' in stop_result.stdout or 'STOP_ERROR' in stop_result.stdout)
-          ignore_unreachable: true
+          ansible.builtin.include_tasks: tasks/stop_program_windows.yml
 
         - name: 输出停止结果
           ansible.builtin.debug:
@@ -65,6 +29,8 @@
               [STOP] {{ inventory_hostname }} ->
               {{ stop_result.stdout | default(stop_result.msg | default('NO_OUTPUT')) | trim }}
           when: stop_result is defined and not (stop_result.unreachable | default(false))
+
+      ignore_unreachable: true
 
       always:
         - name: Stop 后 API 状态探测（仅排障日志；bulk 仍强制 api_status=offline）
@@ -107,6 +73,7 @@
                 {% if stop_result is not defined %}No task result
                 {% elif stop_result.unreachable | default(false) %}{{ 'WinRM unreachable: ' ~ (stop_result.msg | default('') | trim) }}
                 {% elif stop_result is failed %}{{ (stop_result.stdout | default('') | trim) or (stop_result.msg | default('stop failed')) }}
+                {% elif stop_verify_result is defined and 'NOT_RUNNING' in (stop_verify_result.stdout | default('')) and ('STOP_FAILED' in stop_result.stdout | default('') or 'STOP_ERROR' in stop_result.stdout | default('')) %}Stop failed initially but process verified not running
                 {% elif 'STOP_ERROR' in stop_result.stdout | default('') %}{{ stop_result.stdout | trim }}
                 {% elif 'STOP_FAILED' in stop_result.stdout | default('') %}{{ stop_result.stdout | trim }}
                 {% elif 'NOT_RUNNING' in stop_result.stdout | default('') %}Process was not running (already stopped)
