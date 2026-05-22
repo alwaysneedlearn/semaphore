@@ -1,0 +1,57 @@
+---
+# 登记 skip_log_poll：此前进程未运行，或重配启动脚本未 VERIFY_OK 时跳过日志轮询（仅 API 判定）。
+# 期望 hostvars：check_result；可选 process_running、relaunch_result
+
+- name: 启动验证：登记 exe 启动脚本是否 VERIFY_OK
+  ansible.builtin.set_fact:
+    _exe_start_script_ok: >-
+      {{
+        relaunch_result is defined and
+        not (relaunch_result.unreachable | default(false)) and
+        not (relaunch_result.skipped | default(false)) and
+        not (relaunch_result.failed | default(false)) and
+        ('VERIFY_OK' in (relaunch_result.stdout | default('')))
+      }}
+
+- name: 启动验证：登记是否跳过日志轮询
+  ansible.builtin.set_fact:
+    _was_process_running_before: >-
+      {{
+        process_running | default(
+          check_result is defined and
+          'stdout' in check_result and
+          ('NOT_RUNNING' not in (check_result.stdout | default('')))
+        ) | bool
+      }}
+    skip_log_poll: >-
+      {{
+        (not (
+          process_running | default(
+            check_result is defined and
+            'stdout' in check_result and
+            ('NOT_RUNNING' not in (check_result.stdout | default('')))
+          ) | bool
+        ))
+        or (not (_exe_start_script_ok | default(false) | bool))
+      }}
+    skip_log_poll_reason: >-
+      {%- if not (
+        process_running | default(
+          check_result is defined and 'stdout' in check_result and
+          ('NOT_RUNNING' not in (check_result.stdout | default('')))
+        ) | bool
+      ) -%}
+      precheck_not_running
+      {%- elif not (_exe_start_script_ok | default(false) | bool) -%}
+      exe_start_not_verify_ok
+      {%- else -%}
+      {%- endif -%}
+
+- name: 启动验证：DEBUG 跳过日志轮询原因
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LOG-POLL] skip_log_poll={{ skip_log_poll | default(false) }}"
+      - "[DEBUG-LOG-POLL] reason={{ skip_log_poll_reason | default('') | trim }}"
+      - "[DEBUG-LOG-POLL] was_running_before={{ _was_process_running_before | default(false) }}"
+      - "[DEBUG-LOG-POLL] exe_start_verify_ok={{ _exe_start_script_ok | default(false) }}"
+  when: skip_log_poll | default(false) | bool

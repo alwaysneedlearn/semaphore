@@ -684,8 +684,11 @@
         - need_reconfigure | bool
         - host_failure_reason is not defined
       block:
+        - ansible.builtin.include_tasks: tasks/start_verify_skip_log_poll.yml
+
         - name: 启动验证：记录启动 API 调用前日志行书签
           ansible.builtin.include_tasks: tasks/log_poll_record_baseline_before_start_api.yml
+          when: not (skip_log_poll | default(false) | bool)
 
         - name: 启动验证：调用启动API
           ansible.builtin.uri:
@@ -764,21 +767,37 @@
 
             - name: 启动验证：日志轮询前置检查
               ansible.builtin.include_tasks: tasks/log_poll_assert_baseline_before_poll.yml
-              when: not (api_final_ok | default(false) | bool)
+              when: >
+                not (skip_log_poll | default(false) | bool) and
+                not (api_final_ok | default(false) | bool)
 
             - name: 启动验证：日志轮询确认
               ansible.builtin.include_tasks: tasks/log_poll_confirm.yml
-              when: not (api_final_ok | default(false) | bool)
+              when: >
+                not (skip_log_poll | default(false) | bool) and
+                not (api_final_ok | default(false) | bool)
 
             - name: 启动验证：综合判断启动结果（成功）
               ansible.builtin.set_fact:
                 final_start_ok: true
-              when: api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0)
+              when: >
+                api_final_ok | bool or
+                (
+                  not (skip_log_poll | default(false) | bool) and
+                  log_poll is defined and (log_poll.rc | default(1)) == 0
+                )
 
             - name: 启动验证：综合判断启动结果（失败）
               ansible.builtin.set_fact:
                 final_start_ok: false
-              when: not (api_final_ok | bool or (log_poll is defined and (log_poll.rc | default(1)) == 0))
+              when: >
+                not (
+                  api_final_ok | bool or
+                  (
+                    not (skip_log_poll | default(false) | bool) and
+                    log_poll is defined and (log_poll.rc | default(1)) == 0
+                  )
+                )
 
             - name: 启动验证：输出验证结果
               ansible.builtin.debug:
@@ -791,7 +810,7 @@
                 msg: |
                   [失败] 启动验证失败（双保险判定失败）
                   API结果: {{ api_final_ok }}
-                  日志结果: {{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
+                  日志轮询: {{ '已跳过(' ~ (skip_log_poll_reason | default('skip') | trim) ~ ')' if (skip_log_poll | default(false) | bool) else ((log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false)) }}
               when: not final_start_ok
 
       rescue:
