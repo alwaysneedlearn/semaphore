@@ -5,13 +5,13 @@
     winrm_connect_retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('4', true)) | int }}"
     winrm_connect_retry_delay: "{{ ((lookup('env', 'WINRM_CONNECT_RETRY_DELAY') | default('', true) | trim) | default('5', true)) | int }}"
 
+# loop 的 when 写在 include 上不会在迭代间重新求值；改在 winrm_connect_one_attempt 的 block 上 skip
 - name: WinRM 建连重试序列
   ansible.builtin.include_tasks: tasks/winrm_connect_one_attempt.yml
   loop: "{{ range(1, (winrm_connect_retries | int) + 1) | list }}"
   loop_control:
     loop_var: _winrm_connect_attempt
     label: "attempt={{ _winrm_connect_attempt }}/{{ winrm_connect_retries }}"
-  when: not (_winrm_session_ok | default(false) | bool)
 
 - name: DEBUG WinRM 建连结果
   ansible.builtin.debug:
