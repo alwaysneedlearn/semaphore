@@ -1,5 +1,6 @@
 ---
-# 启动验证：启动后按 RESTART_DELAY / PROCESS_VERIFY_POLL_SECONDS 轮询进程状态（非单次采集）
+# 启动验证：启动后按 RESTART_DELAY / PROCESS_VERIFY_POLL_SECONDS 轮询进程状态
+# until/retries 必须挂在 win_shell 等模块任务上（旧版 Ansible 不支持 block/include_tasks 上使用）
 
 - name: 启动验证：计算启动后进程轮询次数
   ansible.builtin.set_fact:
@@ -18,8 +19,16 @@
       }}
 
 - name: 启动验证：轮询启动后进程状态
-  ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
-  register: _process_poll_round
+  environment:
+    EXE_NAME: "{{ exe_name }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_collect_process_status_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: _sem_process_status
   until: >
     _sem_process_status is defined and
     not (_sem_process_status.unreachable | default(false)) and
@@ -27,18 +36,19 @@
     ('NOT_RUNNING' not in (_sem_process_status.stdout | default('')))
   retries: "{{ _process_verify_poll_retries | int }}"
   delay: "{{ process_verify_poll_seconds | default(5) | int }}"
+  changed_when: false
+  failed_when: false
   ignore_unreachable: true
 
 - name: 启动验证：登记启动后进程终态
   ansible.builtin.set_fact:
     check_result_after_start: "{{ _sem_process_status }}"
-  when: _sem_process_status is defined
 
 - name: 启动验证：DEBUG 启动后进程轮询汇总
   ansible.builtin.debug:
     msg:
       - "[DEBUG-PROCESS-POLL] retries_cfg={{ _process_verify_poll_retries }} interval_s={{ process_verify_poll_seconds | default(5) }}"
-      - "[DEBUG-PROCESS-POLL] poll_attempts={{ _process_poll_round.attempts | default(1) }}"
+      - "[DEBUG-PROCESS-POLL] poll_attempts={{ _sem_process_status.attempts | default(1) }}"
       - "[DEBUG-PROCESS-POLL] final_stdout={{ check_result_after_start.stdout | default('n/a') | trim }}"
   when: check_result_after_start is defined
 
