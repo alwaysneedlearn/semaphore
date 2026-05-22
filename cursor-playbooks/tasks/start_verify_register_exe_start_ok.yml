@@ -1,0 +1,13 @@
+---
+# 启动验证块开头：仅登记重配启动脚本是否 VERIFY_OK（供日志书签等 when 使用）
+
+- name: 启动验证：登记 exe 启动脚本是否 VERIFY_OK
+  ansible.builtin.set_fact:
+    _exe_start_script_ok: >-
+      {{
+        relaunch_result is defined and
+        not (relaunch_result.unreachable | default(false)) and
+        not (relaunch_result.skipped | default(false)) and
+        not (relaunch_result.failed | default(false)) and
+        ('VERIFY_OK' in (relaunch_result.stdout | default('')))
+      }}

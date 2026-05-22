@@ -113,6 +113,6 @@ When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other sec
 
 The DEBUG line **`attempts=`** shows how many tries ran; logs will show **`FAILED - RETRYING`** between attempts when status is not 200 yet.
 
-### Start-verify log poll skip (`tasks/start_verify_skip_log_poll.yml`)
+### Start-verify log poll skip
 
-**「启动验证：日志轮询」** runs only after **`启动验证：启动后重新采集进程状态`** (`check_result_after_start` — not the play-opening pre-check). **`skip_log_poll=true`** when DEBUG reason **`after_start_not_running`** (still not running / stale after restart), **`after_start_unreachable`**, or **`exe_start_not_verify_ok`** (no **`VERIFY_OK`** in **`relaunch_result`**). Otherwise only **API** (`api_final_ok`) decides **`final_start_ok`** if poll is skipped — no baseline or **`LOG_POLL`** retries.
+At block start, **`tasks/start_verify_register_exe_start_ok.yml`** sets **`_exe_start_script_ok`** from **`relaunch_result`**. Immediately before **`启动验证：日志轮询前置检查`**, **`tasks/start_verify_recheck_process_before_log_poll.yml`** runs **`启动验证：启动后重新采集进程状态`** → **`check_result_after_start`** (not the play-opening pre-check), then sets **`skip_log_poll`**. Skip when **`after_start_not_running`**, **`after_start_unreachable`**, or **`exe_start_not_verify_ok`**. If poll is skipped, only **API** (`api_final_ok`) decides **`final_start_ok`**.

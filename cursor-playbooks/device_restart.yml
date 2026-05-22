@@ -528,11 +528,11 @@
     - name: 启动验证：验证数据上报启动状态
       when: host_failure_reason is not defined
       block:
-        - ansible.builtin.include_tasks: tasks/start_verify_skip_log_poll.yml
+        - ansible.builtin.include_tasks: tasks/start_verify_register_exe_start_ok.yml
 
         - name: 启动验证：记录启动 API 调用前日志行书签
           ansible.builtin.include_tasks: tasks/log_poll_record_baseline_before_start_api.yml
-          when: not (skip_log_poll | default(false) | bool)
+          when: _exe_start_script_ok | default(false) | bool
 
         - name: 启动验证：调用启动API
           ansible.builtin.uri:
@@ -596,6 +596,9 @@
           ansible.builtin.set_fact:
             api_final_ok: false
           when: not ((api_check_after.status | default(0) | int == 200) and ((api_check_after.content | default('{}') | from_json).ExecResultData | default(-1) | int == export_started | int))
+
+        - ansible.builtin.include_tasks: tasks/start_verify_recheck_process_before_log_poll.yml
+          when: not (api_final_ok | default(false) | bool)
 
         - name: 启动验证：日志轮询前置检查
           ansible.builtin.include_tasks: tasks/log_poll_assert_baseline_before_poll.yml
