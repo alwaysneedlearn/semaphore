@@ -43,11 +43,23 @@ function Test-ProfileUserInteractiveSession {
 
 function Test-ExeProcessRunning {
   param([string]$Name, [string]$LiteralPath)
-  $p = Get-Process -Name $Name -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($p) { return $p }
-  if ($envProcName.Length -gt 0 -and $envProcName -ne $Name) {
-    $p2 = Get-Process -Name $envProcName -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($p2) { return $p2 }
+  $helper = 'C:\Windows\Temp\sem_process_alive_windows.ps1'
+  if (Test-Path -LiteralPath $helper) {
+    . $helper
+    $t = Get-SemaphoreProcessAliveThresholds
+    $p = Get-SemaphoreAliveProcess -ProcessName $Name -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes
+    if ($p) { return $p }
+    if ($envProcName.Length -gt 0 -and $envProcName -ne $Name) {
+      $p2 = Get-SemaphoreAliveProcess -ProcessName $envProcName -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes
+      if ($p2) { return $p2 }
+    }
+  } else {
+    $p = Get-Process -Name $Name -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($p) { return $p }
+    if ($envProcName.Length -gt 0 -and $envProcName -ne $Name) {
+      $p2 = Get-Process -Name $envProcName -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($p2) { return $p2 }
+    }
   }
   $cim = Get-CimInstance Win32_Process -Filter "Name='$Name.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -eq $LiteralPath) } |

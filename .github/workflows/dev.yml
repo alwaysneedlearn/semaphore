@@ -5,9 +5,25 @@ name: Dev
     branches:
       - develop
       - 2-*-stable
+    paths-ignore:
+      - 'cursor-playbooks/**'
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/FUNDING.yml'
+      - '.github/copilot-instructions.md'
+      - 'test/mcp/**'
   pull_request:
     branches:
       - develop
+    paths-ignore:
+      - 'cursor-playbooks/**'
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/FUNDING.yml'
+      - '.github/copilot-instructions.md'
+      - 'test/mcp/**'
 
 jobs:
   build-local:

@@ -61,18 +61,10 @@
       ignore_unreachable: true
 
     - name: 前置检查：检查程序运行状态
-      win_shell: |
-        $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-        if ($proc) {
-          $info = $proc | Select-Object Id, @{N='Memory_MB';E={[math]::Round($_.WorkingSet64/1MB,2)}}, StartTime
-          $info | ForEach-Object {
-            Write-Output "RUNNING|PID:$($_.Id)|Memory:$($_.Memory_MB)MB|Started:$($_.StartTime)"
-          }
-        } else {
-          Write-Output "NOT_RUNNING"
-        }
-      register: check_result
-      changed_when: false
+      block:
+        - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
+        - ansible.builtin.set_fact:
+            check_result: "{{ _sem_process_status }}"
       ignore_unreachable: true
 
     - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）

@@ -1,0 +1,28 @@
+---
+# 采集进程状态（排除僵尸条目：Handles/WorkingSet 过低视为未运行）
+# 输出 register: _sem_process_status；环境变量 EXE_NAME、PROCESS_ALIVE_MIN_HANDLES、PROCESS_ALIVE_MIN_WS_KB
+
+- name: 部署进程存活判定脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/process_alive_windows.ps1"
+    dest: C:\Windows\Temp\sem_process_alive_windows.ps1
+  changed_when: false
+
+- name: 部署进程状态采集脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/collect_process_status_windows.ps1"
+    dest: C:\Windows\Temp\sem_collect_process_status_windows.ps1
+  changed_when: false
+
+- name: 采集进程状态信息
+  environment:
+    EXE_NAME: "{{ exe_name }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_collect_process_status_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: _sem_process_status
+  changed_when: false

@@ -32,6 +32,7 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 - **`device_discovery.yml`** — **No** bulk callback: only prints a JSON array for the UI to parse; persistence is **Import selected** → API `discovery/import`.
 - **`device_status.yml`**, **`device_start.yml`**, **`device_restart.yml`**, **`device_stop.yml`**, **`check_restart_redeploy.yml`** — Second play on `localhost` runs `tasks/semaphore_bulk_put_from_hostvars.yml` using per-host `semaphore_callback_row`.
 - **Stop before reconfigure** (`tasks/stop_program_windows.yml`): if the stop script prints **`STOP_FAILED`** / **`STOP_ERROR`**, a follow-up **`Get-Process`** recheck runs; when the process is **not** running, the play **continues** (reconfigure/restart); only **`STILL_RUNNING`** on recheck fails the play.
+- **Process “running” vs zombie**: `Get-Process` rows with **`Handles <= PROCESS_ALIVE_MIN_HANDLES`** (default **1**) or **`WorkingSet < PROCESS_ALIVE_MIN_WS_KB`** (default **512** KB) count as **not running** (`NOT_RUNNING` or `NOT_RUNNING|STALE_PID:...`). Used by `collect_process_status_windows.ps1`, stop/verify scripts, and reconfig start verify. Variable Group env: **`PROCESS_ALIVE_MIN_HANDLES`**, **`PROCESS_ALIVE_MIN_WS_KB`**.
 
 Patrol all sets devices to `checking` first; the status template should run a playbook like **`device_status.yml`** so the callback clears `checking` to healthy/unhealthy.
 

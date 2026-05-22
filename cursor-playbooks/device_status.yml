@@ -32,16 +32,10 @@
       ignore_unreachable: true
 
     - name: 采集进程状态信息
-      win_shell: |
-        $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-        if ($proc) {
-            $p = $proc | Select-Object -First 1
-            Write-Output "RUNNING|PID:$($p.Id)|Memory:$([math]::Round($p.WorkingSet64/1MB,2))MB|Started:$($p.StartTime)|Uptime:$(([datetime]::Now - $p.StartTime).ToString('d\d\ h\h\ m\m'))"
-        } else {
-            Write-Output "NOT_RUNNING"
-        }
-      register: status
-      changed_when: false
+      block:
+        - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
+        - ansible.builtin.set_fact:
+            status: "{{ _sem_process_status }}"
       ignore_unreachable: true
 
     - name: 状态判断：输出程序状态

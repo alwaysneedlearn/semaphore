@@ -1,5 +1,11 @@
 ---
 # 重配阶段：仅以已登录桌面的 profile 用户（Interactive 计划任务）启动 EXE
+- name: 部署进程存活判定脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/process_alive_windows.ps1"
+    dest: C:\Windows\Temp\sem_process_alive_windows.ps1
+  changed_when: false
+
 - name: 部署重配启动脚本
   ansible.builtin.win_copy:
     src: "{{ playbook_dir }}/files/reconfig_start_program_windows.ps1"
@@ -10,6 +16,8 @@
   environment:
     SEMAPHORE_EXE_PATH: "{{ exe_path }}"
     SEMAPHORE_EXE_NAME: "{{ exe_name }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
     SEMAPHORE_EXE_ARGS: "{{ exe_args | default('', true) }}"
     SEMAPHORE_PROFILE_USER: "{{ _reconfig_profile_user }}"
     SEMAPHORE_RESTART_DELAY: "{{ restart_delay | string }}"

@@ -1,34 +1,35 @@
 ---
-# 强制停止 exe_name 进程；若初次返回 STOP_FAILED/STOP_ERROR，再复核进程是否已退出。
-# 复核为 NOT_RUNNING 时不 fail，供重配/重启流程继续。
+# 强制停止 exe_name；STOP_FAILED/STOP_ERROR 后复核。僵尸进程（Handles/WS 过低）视为未运行。
 # 期望变量: exe_name
 
+- name: 部署进程存活判定脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/process_alive_windows.ps1"
+    dest: C:\Windows\Temp\sem_process_alive_windows.ps1
+  changed_when: false
+
+- name: 部署停止程序脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/stop_program_force_windows.ps1"
+    dest: C:\Windows\Temp\sem_stop_program_force_windows.ps1
+  changed_when: false
+
+- name: 部署停止复核脚本
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/files/verify_process_stopped_windows.ps1"
+    dest: C:\Windows\Temp\sem_verify_process_stopped_windows.ps1
+  changed_when: false
+
 - name: 停止程序（强制 Stop-Process / taskkill）
-  ansible.windows.win_shell: |
-    $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-    if ($proc) {
-      try {
-        Stop-Process -Name "{{ exe_name }}" -Force -ErrorAction Stop
-        Start-Sleep -Seconds 2
-        $verify = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-        if (-not $verify) {
-          Write-Output "STOPPED"
-        } else {
-          taskkill /F /T /IM "{{ exe_name }}.exe" 2>$null
-          Start-Sleep -Seconds 2
-          $verify2 = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-          if (-not $verify2) {
-            Write-Output "STOPPED_BY_TASKKILL"
-          } else {
-            Write-Output "STOP_FAILED"
-          }
-        }
-      } catch {
-        Write-Output "STOP_ERROR:$($_.Exception.Message)"
-      }
-    } else {
-      Write-Output "NOT_RUNNING"
-    }
+  environment:
+    EXE_NAME: "{{ exe_name }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_stop_program_force_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
   register: stop_result
   failed_when: false
   changed_when: >-
@@ -37,14 +38,15 @@
     'NOT_RUNNING' in (stop_result.stdout | default(''))
 
 - name: 停止程序：复核进程是否仍在运行
-  ansible.windows.win_shell: |
-    Start-Sleep -Seconds 1
-    $proc = Get-Process -Name "{{ exe_name }}" -ErrorAction SilentlyContinue
-    if ($proc) {
-      Write-Output "STILL_RUNNING|PID:$($proc.Id)"
-    } else {
-      Write-Output "NOT_RUNNING"
-    }
+  environment:
+    EXE_NAME: "{{ exe_name }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_verify_process_stopped_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
   register: stop_verify_result
   changed_when: false
   failed_when: false
