@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'process_alive_windows.ps1')
+. (Join-Path $PSScriptRoot 'sem_process_alive_windows.ps1')
 
 $name = [string]$env:EXE_NAME
 if ([string]::IsNullOrWhiteSpace($name)) { $name = 'uu' }
