@@ -1,0 +1,6 @@
+---
+# WinRM 超时与重试（可被 inventory / Variable Group 覆盖）
+ansible_winrm_connection_timeout: 60
+ansible_winrm_read_timeout: 120
+ansible_winrm_operation_timeout: 90
+ansible_winrm_server_cert_validation: ignore

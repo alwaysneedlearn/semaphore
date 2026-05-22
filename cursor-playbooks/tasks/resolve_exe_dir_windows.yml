@@ -9,7 +9,7 @@
 - name: 解析 EXE_DIR（盘符 D→E→C 回退）
   environment:
     SEMAPHORE_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
-  ansible.windows.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
+  ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
   register: _resolve_exe_dir
   changed_when: false
 

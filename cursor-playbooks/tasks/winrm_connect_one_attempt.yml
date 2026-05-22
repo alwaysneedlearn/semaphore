@@ -1,0 +1,19 @@
+---
+- name: 重置 WinRM 连接（重试前）
+  ansible.builtin.meta: reset_connection
+  when: (_winrm_connect_attempt | int) > 1
+
+- name: 等待重试间隔
+  ansible.builtin.pause:
+    seconds: "{{ winrm_connect_retry_delay | int }}"
+  when: (_winrm_connect_attempt | int) > 1
+
+- name: WinRM ping 探测
+  ansible.windows.win_ping:
+  register: _winrm_ping
+  failed_when: false
+
+- name: 登记 WinRM 已连通
+  ansible.builtin.set_fact:
+    _winrm_session_ok: true
+  when: _winrm_ping is succeeded

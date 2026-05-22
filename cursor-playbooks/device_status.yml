@@ -23,6 +23,9 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
+    - name: WinRM 建连（含重试，须在其它 win_* 任务之前）
+      ansible.builtin.include_tasks: tasks/winrm_ensure_reachable.yml
+
     - name: 解析 EXE_DIR（目标盘符 D→E→C）
       block:
         - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml

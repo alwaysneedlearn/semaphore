@@ -15,6 +15,9 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
+    - name: WinRM 建连（含重试，须在其它 win_* 任务之前）
+      ansible.builtin.include_tasks: tasks/winrm_ensure_reachable.yml
+
     - name: 停止程序（仅执行 stop）
       block:
         - name: WinRM 执行 stop
