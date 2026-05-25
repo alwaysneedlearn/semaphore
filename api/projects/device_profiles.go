@@ -52,15 +52,60 @@ func CreateDeviceProfile(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusCreated, created)
 }
 
-func ListDeviceProfiles(w http.ResponseWriter, r *http.Request) {
+func DeleteDeviceProfile(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
-	_, _ = server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
-	profiles, err := helpers.Store(r).GetDeviceProfiles(project.ID)
+	profileID, err := helpers.GetIntParam("profile_id", w, r)
+	if err != nil {
+		return
+	}
+	store := helpers.Store(r)
+	if _, err := store.GetDeviceProfile(project.ID, profileID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	filter := &db.DeviceListFilter{DeviceProfileID: profileID}
+	count, err := store.CountDevices(project.ID, filter)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-	helpers.WriteJSON(w, http.StatusOK, profiles)
+	if count > 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Cannot delete device profile: devices are still assigned to this type",
+		})
+		return
+	}
+	if err := store.DeleteDeviceProfile(project.ID, profileID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type deviceProfileListItem struct {
+	db.DeviceProfile
+	DeviceCount int `json:"device_count"`
+}
+
+func ListDeviceProfiles(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	store := helpers.Store(r)
+	_, _ = server.EnsureDefaultDeviceProfile(store, project.ID)
+	profiles, err := store.GetDeviceProfiles(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	out := make([]deviceProfileListItem, 0, len(profiles))
+	for _, p := range profiles {
+		n, err := store.CountDevices(project.ID, &db.DeviceListFilter{DeviceProfileID: p.ID})
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		out = append(out, deviceProfileListItem{DeviceProfile: p, DeviceCount: n})
+	}
+	helpers.WriteJSON(w, http.StatusOK, out)
 }
 
 func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {

@@ -31,6 +31,17 @@ func (d *BoltDb) GetDeviceProfileByKey(projectID int, key string) (db.DeviceProf
 	return db.DeviceProfile{}, db.ErrNotFound
 }
 
+func (d *BoltDb) DeleteDeviceProfile(projectID, profileID int) error {
+	devices, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, &db.DeviceListFilter{DeviceProfileID: profileID})
+	if err != nil {
+		return err
+	}
+	if len(devices) > 0 {
+		return &db.ValidationError{Message: "Cannot delete device profile while devices are assigned to it"}
+	}
+	return d.deleteObject(projectID, db.DeviceProfileProps, intObjectID(profileID), nil)
+}
+
 func (d *BoltDb) CreateDeviceProfile(p db.DeviceProfile) (db.DeviceProfile, error) {
 	res, err := d.createObject(p.ProjectID, db.DeviceProfileProps, p)
 	if err != nil {

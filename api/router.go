@@ -428,6 +428,7 @@ func Route(
 	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.UpdateDeviceSettings).Methods("PUT")
 	projectUserAPI.Path("/devices/profiles").HandlerFunc(projects.ListDeviceProfiles).Methods("GET", "HEAD")
 	projectUserAPI.Path("/devices/profiles").HandlerFunc(projects.CreateDeviceProfile).Methods("POST")
+	projectUserAPI.Path("/devices/profiles/{profile_id}").HandlerFunc(projects.DeleteDeviceProfile).Methods("DELETE")
 	projectUserAPI.Path("/devices/profiles/{profile_id}/settings").HandlerFunc(projects.GetDeviceProfileSettings).Methods("GET", "HEAD")
 	projectUserAPI.Path("/devices/profiles/{profile_id}/settings").HandlerFunc(projects.UpdateDeviceProfileSettings).Methods("PUT")
 

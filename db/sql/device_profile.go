@@ -35,6 +35,17 @@ func (d *SqlDb) GetDeviceProfileByKey(projectID int, key string) (db.DeviceProfi
 	return p, err
 }
 
+func (d *SqlDb) DeleteDeviceProfile(projectID, profileID int) error {
+	_, err := d.exec(
+		"delete from project__device_profile_settings where project_id=? and profile_id=?",
+		projectID, profileID,
+	)
+	if err != nil {
+		return err
+	}
+	return d.deleteObject(projectID, db.DeviceProfileProps, profileID)
+}
+
 func (d *SqlDb) CreateDeviceProfile(p db.DeviceProfile) (db.DeviceProfile, error) {
 	p.Created = tz.Now()
 	id, err := d.insert("id",

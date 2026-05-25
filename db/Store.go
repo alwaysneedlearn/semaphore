@@ -337,6 +337,7 @@ type DeviceManager interface {
 	GetDeviceProfile(projectID, profileID int) (DeviceProfile, error)
 	GetDeviceProfileByKey(projectID int, key string) (DeviceProfile, error)
 	CreateDeviceProfile(p DeviceProfile) (DeviceProfile, error)
+	DeleteDeviceProfile(projectID, profileID int) error
 	GetProjectDeviceProfileSettings(projectID, profileID int) (ProjectDeviceProfileSettings, error)
 	UpdateProjectDeviceProfileSettings(s ProjectDeviceProfileSettings) error
 	AssignDevicesWithoutProfile(projectID, profileID int) error
