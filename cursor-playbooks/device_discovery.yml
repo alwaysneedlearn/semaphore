@@ -183,8 +183,5 @@
           path: /tmp/scan_ports.py
           state: absent
 
-      # 发现流程仅输出 JSON 供前端解析；不在此写回 Semaphore。
-      - name: 输出前端可解析的 JSON 数组（最后输出，固定前缀，单行）
-        ansible.builtin.debug:
-          msg: "SEMAPHORE_DISCOVERY_JSON={{ discovered_devices | default([]) | to_json }}"
-        changed_when: false
+      - name: 回调发现结果到 Semaphore API
+        ansible.builtin.include_tasks: tasks/semaphore_discovery_put_results.yml

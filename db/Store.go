@@ -343,6 +343,9 @@ type DeviceManager interface {
 	AssignDevicesWithoutProfile(projectID, profileID int) error
 	GetDeviceProfileSettingsDueForRefresh(now time.Time) ([]ProjectDeviceProfileSettings, error)
 	MarkDeviceProfileStatusRefreshed(projectID, profileID int, refreshed time.Time) error
+
+	UpsertDeviceDiscoveryRun(run DeviceDiscoveryRun) error
+	GetDeviceDiscoveryRun(projectID, taskID int) (DeviceDiscoveryRun, error)
 }
 
 // RepositoryManager handles repository-related operations

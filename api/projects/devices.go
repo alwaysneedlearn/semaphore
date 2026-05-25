@@ -3,6 +3,7 @@ package projects
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -652,6 +653,155 @@ func UpdateDeviceDiscoverySettings(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func patchTaskEnvironmentJSON(store db.Store, task *db.Task, patch map[string]any) error {
+	merged := map[string]any{}
+	if strings.TrimSpace(task.Environment) != "" {
+		if err := json.Unmarshal([]byte(task.Environment), &merged); err != nil {
+			return err
+		}
+	}
+	for k, v := range patch {
+		merged[k] = v
+	}
+	b, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+	task.Environment = string(b)
+	return store.UpdateTask(*task)
+}
+
+func normalizeDiscoveredDeviceRows(rows []db.DiscoveredDeviceRow) []db.DiscoveredDeviceRow {
+	out := make([]db.DiscoveredDeviceRow, 0, len(rows))
+	for _, row := range rows {
+		ip := strings.TrimSpace(row.IPAddress)
+		if ip == "" {
+			ip = strings.TrimSpace(row.IP)
+		}
+		if ip == "" {
+			continue
+		}
+		host := strings.TrimSpace(row.Hostname)
+		if host == "" {
+			host = ip
+		}
+		rdp := strings.TrimSpace(row.RDPStatus)
+		if rdp == "" {
+			rdp = string(db.DeviceStatusOffline)
+		}
+		winrm := strings.TrimSpace(row.WinRMStatus)
+		if winrm == "" {
+			winrm = string(db.DeviceStatusOffline)
+		}
+		api := strings.TrimSpace(row.APIStatus)
+		if api == "" {
+			api = string(db.DeviceStatusOffline)
+		}
+		devStatus := strings.TrimSpace(row.DeviceStatus)
+		if devStatus == "" {
+			devStatus = strings.TrimSpace(row.Status)
+		}
+		if devStatus == "" {
+			devStatus = string(db.DeviceStatusFromChannelProbes(
+				db.DeviceStatus(rdp),
+				db.DeviceStatus(winrm),
+				db.DeviceStatus(api),
+			))
+		}
+		out = append(out, db.DiscoveredDeviceRow{
+			Hostname:       host,
+			IPAddress:      ip,
+			DeviceStatus:   devStatus,
+			RDPStatus:      rdp,
+			WinRMStatus:    winrm,
+			APIStatus:      api,
+			APIPort:        row.APIPort,
+			AbnormalReason: strings.TrimSpace(row.AbnormalReason),
+		})
+	}
+	return out
+}
+
+// GetDeviceDiscoveryResults returns devices reported by the discovery playbook callback.
+func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	taskID, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("task_id")))
+	if taskID <= 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "task_id query parameter is required",
+		})
+		return
+	}
+	run, err := helpers.Store(r).GetDeviceDiscoveryRun(project.ID, taskID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	devices := []db.DiscoveredDeviceRow{}
+	if strings.TrimSpace(run.DevicesJSON) != "" {
+		_ = json.Unmarshal([]byte(run.DevicesJSON), &devices)
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{
+		"task_id": run.TaskID,
+		"subnet":  run.Subnet,
+		"status":  run.Status,
+		"devices": devices,
+	})
+}
+
+// PutDeviceDiscoveryResults is the playbook callback that stores discovery scan rows.
+func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body struct {
+		TaskID  int                     `json:"task_id"`
+		Devices []db.DiscoveredDeviceRow `json:"devices"`
+	}
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	if body.TaskID <= 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "task_id is required",
+		})
+		return
+	}
+	store := helpers.Store(r)
+	if _, err := store.GetTask(project.ID, body.TaskID); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	normalized := normalizeDiscoveredDeviceRows(body.Devices)
+	devJSON, err := json.Marshal(normalized)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	existing, err := store.GetDeviceDiscoveryRun(project.ID, body.TaskID)
+	subnet := ""
+	if err == nil {
+		subnet = existing.Subnet
+	} else if !errors.Is(err, db.ErrNotFound) {
+		helpers.WriteError(w, err)
+		return
+	}
+	run := db.DeviceDiscoveryRun{
+		TaskID:      body.TaskID,
+		ProjectID:   project.ID,
+		Subnet:      subnet,
+		Status:      db.DeviceDiscoveryRunReady,
+		DevicesJSON: string(devJSON),
+		Updated:     time.Now(),
+	}
+	if err := store.UpsertDeviceDiscoveryRun(run); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{
+		"task_id": body.TaskID,
+		"count":   len(normalized),
+	})
+}
+
 // runDeviceTemplate enqueues the template configured for the given action (project-level fallback).
 func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
@@ -763,6 +913,24 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 
 	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
 	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	store := helpers.Store(r)
+	if err := patchTaskEnvironmentJSON(store, &task, map[string]any{
+		"semaphore_task_id": task.ID,
+	}); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if err := store.UpsertDeviceDiscoveryRun(db.DeviceDiscoveryRun{
+		TaskID:      task.ID,
+		ProjectID:   project.ID,
+		Subnet:      subnet,
+		Status:      db.DeviceDiscoveryRunPending,
+		DevicesJSON: "[]",
+		Updated:     time.Now(),
+	}); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}

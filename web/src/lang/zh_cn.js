@@ -388,7 +388,9 @@ export default {
   deviceDiscoveryImportProfile: '导入时的设备类型',
   deviceDiscoveryImportProfileHint: '必选。仅将选中的发现结果以该类型加入设备列表。',
   deviceDiscoveryImportProfileRequired: '导入前请选择设备类型。',
-  deviceDiscoveryHelp: '输入网段并执行发现模板，结果会出现在下表；选择设备类型后导入选中行。',
+  deviceDiscoveryHelp: '输入网段并执行发现模板；playbook 通过 API 回调写入发现列表，收到结果后显示在下表。选择设备类型后导入选中行。',
+  deviceDiscoveryCallbackMissing:
+    '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/device_discovery.yml 且已配置 SEMAPHORE_API_TOKEN。',
   deviceDiscoverySubnet: '网段（模板变量）',
   deviceDiscoverySubnetHint: '必填。会以 subnet 与 network_cidr 传给发现模板。支持 CIDR（如 192.168.1.0/24）或单主机 IP。',
   deviceDiscoverySubnetRequired: '请先填写网段（CIDR 或单个 IP）再执行发现。',

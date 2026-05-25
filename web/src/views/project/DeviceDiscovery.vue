@@ -136,7 +136,6 @@ import EventBus from '@/event-bus';
 import PermissionsCheck from '@/components/PermissionsCheck';
 import ProjectMixin from '@/components/ProjectMixin';
 import { getErrorMessage } from '@/lib/error';
-import { extractJsonArrayFromText, normalizeDiscoveredRows } from '@/lib/deviceDiscoveryParse';
 
 export default {
   mixins: [PermissionsCheck, ProjectMixin],
@@ -287,55 +286,74 @@ export default {
       }
     },
 
+    applyDiscoveredDevicesFromApi(devices) {
+      this.discoveredDevices = (devices || [])
+        .map((x) => ({
+          hostname: (x.hostname || '').trim(),
+          ip_address: (x.ip_address || x.ip || '').trim(),
+          device_status: x.device_status || x.status || 'unhealthy',
+          rdp_status: x.rdp_status || 'offline',
+          winrm_status: x.winrm_status || 'offline',
+          api_status: x.api_status || 'offline',
+          abnormal_reason: x.abnormal_reason || null,
+        }))
+        .filter((x) => x.ip_address || x.hostname);
+      this.selectedDiscovered = [...this.discoveredDevices];
+    },
+
+    async fetchDiscoveryResults(taskId) {
+      const { data } = await axios.get(`${this.devicesApiBase}/discovery/results`, {
+        params: { task_id: taskId },
+      });
+      return data || {};
+    },
+
     async waitAndLoadDiscoveryResult(taskId, attemptsLeft = 60) {
-      const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
-      const status = (taskRes.data && taskRes.data.status) || '';
-      if (status === 'success') {
-        await this.loadDiscoveryResultFromTask(taskId);
+      let taskStatus = '';
+      try {
+        const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
+        taskStatus = (taskRes.data && taskRes.data.status) || '';
+      } catch (e) {
+        this.discoveryError = getErrorMessage(e);
         return;
       }
-      if (status === 'error' || status === 'stopped') {
+
+      if (taskStatus === 'error' || taskStatus === 'stopped') {
         this.discoveryError = this.$i18n.t('deviceDiscoveryTaskFailed');
         return;
       }
+
+      try {
+        const results = await this.fetchDiscoveryResults(taskId);
+        if (results.status === 'ready' && (results.devices || []).length > 0) {
+          this.applyDiscoveredDevicesFromApi(results.devices);
+          EventBus.$emit('i-snackbar', {
+            color: 'success',
+            text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+          });
+          return;
+        }
+      } catch (e) {
+        // keep polling until timeout unless hard error
+        if (attemptsLeft <= 1) {
+          this.discoveryError = getErrorMessage(e);
+          return;
+        }
+      }
+
       if (attemptsLeft <= 1) {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
+        if (taskStatus === 'success') {
+          this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackMissing');
+        } else {
+          this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
+        }
         return;
       }
+
       await new Promise((resolve) => {
         setTimeout(resolve, 2000);
       });
       await this.waitAndLoadDiscoveryResult(taskId, attemptsLeft - 1);
-    },
-
-    async loadDiscoveryResultFromTask(taskId) {
-      const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
-      const lines = outputRes.data || [];
-      const merged = lines.map((line) => line.output || '').join('\n');
-      let parsed = extractJsonArrayFromText(merged);
-
-      if (!parsed) {
-        try {
-          const rawRes = await axios.get(
-            `/api/project/${this.projectId}/tasks/${taskId}/raw_output`,
-            { responseType: 'text' },
-          );
-          parsed = extractJsonArrayFromText(rawRes.data || '');
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      if (!parsed) {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryResultNotFound');
-        return;
-      }
-      this.discoveredDevices = normalizeDiscoveredRows(parsed);
-      this.selectedDiscovered = [...this.discoveredDevices];
-      EventBus.$emit('i-snackbar', {
-        color: 'success',
-        text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
-      });
     },
 
     async runDiscoverTemplate() {
