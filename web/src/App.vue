@@ -560,6 +560,16 @@
                 </v-list-item-content>
               </v-list-item>
 
+              <v-list-item key="tdengine" to="/admin/tdengine" v-if="user.admin">
+                <v-list-item-icon>
+                  <v-icon>mdi-database</v-icon>
+                </v-list-item-icon>
+
+                <v-list-item-content>
+                  TDengine
+                </v-list-item-content>
+              </v-list-item>
+
               <v-list-item key="roles" to="/roles" v-if="isPro && user.admin">
                 <v-list-item-icon>
                   <v-icon>mdi-account-cog</v-icon>

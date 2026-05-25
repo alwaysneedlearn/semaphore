@@ -332,6 +332,16 @@ type DeviceManager interface {
 	UpdateProjectDeviceSettings(settings ProjectDeviceSettings) error
 	MarkProjectStatusRefreshed(projectID int, refreshed time.Time) error
 	GetProjectsDueForStatusRefresh(now time.Time) ([]ProjectDeviceSettings, error)
+
+	GetDeviceProfiles(projectID int) ([]DeviceProfile, error)
+	GetDeviceProfile(projectID, profileID int) (DeviceProfile, error)
+	GetDeviceProfileByKey(projectID int, key string) (DeviceProfile, error)
+	CreateDeviceProfile(p DeviceProfile) (DeviceProfile, error)
+	GetProjectDeviceProfileSettings(projectID, profileID int) (ProjectDeviceProfileSettings, error)
+	UpdateProjectDeviceProfileSettings(s ProjectDeviceProfileSettings) error
+	AssignDevicesWithoutProfile(projectID, profileID int) error
+	GetDeviceProfileSettingsDueForRefresh(now time.Time) ([]ProjectDeviceProfileSettings, error)
+	MarkDeviceProfileStatusRefreshed(projectID, profileID int, refreshed time.Time) error
 }
 
 // RepositoryManager handles repository-related operations
@@ -639,6 +649,14 @@ var DeviceProps = ObjectProps{
 	ReferringColumnSuffix: "device_id",
 	SortableColumns:       []string{"name", "ip_address", "hostname", "device_status", "rdp_status", "winrm_status", "api_status", "last_updated"},
 	DefaultSortingColumn:  "name",
+}
+
+var DeviceProfileProps = ObjectProps{
+	TableName:            "project__device_profile",
+	Type:                 reflect.TypeOf(DeviceProfile{}),
+	PrimaryColumnName:    "id",
+	SortableColumns:      []string{"profile_key", "name"},
+	DefaultSortingColumn: "profile_key",
 }
 
 var DeviceConfigItemProps = ObjectProps{

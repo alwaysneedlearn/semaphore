@@ -1,6 +1,6 @@
 # 实施计划：TDengine 状态同步 + 多设备类型（Profile）
 
-本文档是**待执行**的技术计划（非已实现功能说明）。当前代码库中 **尚无** TDengine 与 `device_profile` 实现；设备动作仍使用 **项目级** `ProjectDeviceSettings` 的 6 个模板 ID。
+本文档为技术计划与实现对照。**已实现（develop）**：TDengine 管理端配置、按 Profile 的模板/TDengine 表设置、`device_profile_id` 迁移 v2.18.15、默认 NEWARE、按类型拆分 Patrol/批量任务、bulk 回调后 TDengine 全量快照。**未实现**：调度器按 Profile 刷新、AnsibleHook.End 写入、Bolt 完整持久化、设备表单选择 Profile。
 
 ---
 

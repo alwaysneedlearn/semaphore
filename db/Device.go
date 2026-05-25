@@ -67,6 +67,7 @@ type Device struct {
 	RDPPassword                      string       `db:"rdp_password" json:"rdp_password"`
 	RDPPort                          int          `db:"rdp_port" json:"rdp_port"`
 	APIPort                          int          `db:"api_port" json:"api_port"`
+	DeviceProfileID                  int          `db:"device_profile_id" json:"device_profile_id"`
 	DeviceStatus                     DeviceStatus `db:"device_status" json:"device_status"`
 	RDPStatus                        DeviceStatus `db:"rdp_status" json:"rdp_status"`
 	WinRMStatus                      DeviceStatus `db:"winrm_status" json:"winrm_status"`
@@ -116,6 +117,9 @@ func (d Device) Validate() error {
 	}
 	if d.APIPort != 0 && (d.APIPort < 1 || d.APIPort > 65535) {
 		return &ValidationError{"Device api_port must be between 1 and 65535"}
+	}
+	if d.DeviceProfileID <= 0 {
+		return &ValidationError{"Device profile is required"}
 	}
 	return nil
 }

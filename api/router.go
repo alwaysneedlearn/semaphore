@@ -210,6 +210,9 @@ func Route(
 	adminAPI.Path("/options").HandlerFunc(getOptions).Methods("GET", "HEAD")
 	adminAPI.Path("/options").HandlerFunc(setOption).Methods("POST")
 	adminAPI.Path("/admin/info").HandlerFunc(getAdminInfo).Methods("GET", "HEAD")
+	adminAPI.Path("/admin/tdengine").HandlerFunc(GetAdminTDengineConfig).Methods("GET", "HEAD")
+	adminAPI.Path("/admin/tdengine").HandlerFunc(PutAdminTDengineConfig).Methods("PUT")
+	adminAPI.Path("/admin/tdengine/test").HandlerFunc(PostAdminTDengineTest).Methods("POST")
 
 	adminAPI.Path("/runners").HandlerFunc(getAllRunners).Methods("GET", "HEAD")
 	adminAPI.Path("/runners").HandlerFunc(addGlobalRunner).Methods("POST", "HEAD")
@@ -423,6 +426,9 @@ func Route(
 	projectUserAPI.Path("/devices/status/bulk").HandlerFunc(projects.BulkUpdateDeviceStatus).Methods("PUT")
 	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.GetDeviceSettings).Methods("GET", "HEAD")
 	projectUserAPI.Path("/devices/settings").HandlerFunc(projects.UpdateDeviceSettings).Methods("PUT")
+	projectUserAPI.Path("/devices/profiles").HandlerFunc(projects.ListDeviceProfiles).Methods("GET", "HEAD")
+	projectUserAPI.Path("/devices/profiles/{profile_id}/settings").HandlerFunc(projects.GetDeviceProfileSettings).Methods("GET", "HEAD")
+	projectUserAPI.Path("/devices/profiles/{profile_id}/settings").HandlerFunc(projects.UpdateDeviceProfileSettings).Methods("PUT")
 
 	projectDeviceManagement := projectUserAPI.PathPrefix("/devices").Subrouter()
 	projectDeviceManagement.Use(projects.DeviceMiddleware)

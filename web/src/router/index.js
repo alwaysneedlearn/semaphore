@@ -8,6 +8,7 @@ import TemplateTerraformState from '@/views/project/template/TemplateTerraformSt
 import Invites from '@/views/project/Invites.vue';
 import TemplatePerms from '@/views/project/template/TemplatePerms.vue';
 import Roles from '@/views/Roles.vue';
+import TDengineSettings from '@/views/admin/TDengineSettings.vue';
 import Schedule from '../views/project/Schedule.vue';
 import History from '../views/project/History.vue';
 import Activity from '../views/project/Activity.vue';
@@ -166,6 +167,10 @@ const routes = [
   {
     path: '/users',
     component: Users,
+  },
+  {
+    path: '/admin/tdengine',
+    component: TDengineSettings,
   },
   {
     path: '/roles',

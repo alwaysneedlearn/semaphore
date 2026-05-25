@@ -311,6 +311,7 @@ func deviceListRetrieveParams(r *http.Request) (db.RetrieveQueryParams, error) {
 // Response is always JSON object { "devices": [...], "total": N }.
 func GetDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
+	_, _ = server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
 	params, err := deviceListRetrieveParams(r)
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -404,6 +405,15 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 	device.RDPPassword = strings.TrimSpace(device.RDPPassword)
 	normalizeDeviceStatuses(&device)
 	normalizeDeviceConnection(&device, settings)
+
+	defaultProf, err := server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if device.DeviceProfileID <= 0 {
+		device.DeviceProfileID = defaultProf.ID
+	}
 
 	if err := device.Validate(); err != nil {
 		helpers.WriteError(w, err)
@@ -644,19 +654,37 @@ func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// runDeviceTemplate enqueues the template configured for the given action.
-// extraVars is merged into the task's environment override (extra-vars JSON).
+// runDeviceTemplate enqueues the template configured for the given action (project-level fallback).
 func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		return db.Task{}, err
 	}
+	ps := db.ProjectDeviceProfileSettings{
+		ProjectID:            project.ID,
+		DiscoverTemplateID:   settings.DiscoverTemplateID,
+		StartTemplateID:      settings.StartTemplateID,
+		StopTemplateID:       settings.StopTemplateID,
+		RestartTemplateID:    settings.RestartTemplateID,
+		StatusTemplateID:     settings.StatusTemplateID,
+		ConfigTemplateID:     settings.ConfigTemplateID,
+		DefaultInventoryID:   settings.DefaultInventoryID,
+		DefaultConfigJSON:    settings.DefaultConfigJSON,
+		StatusRefreshIntervalMin: settings.StatusRefreshIntervalMin,
+	}
+	return runDeviceTemplateWithProfileSettings(r, project, ps, action, extraVars, inventoryID)
+}
 
-	tplID := settings.TemplateIDForAction(action)
+// runDeviceTemplateWithProfileSettings uses per-profile template bindings.
+func runDeviceTemplateWithProfileSettings(r *http.Request, project db.Project, ps db.ProjectDeviceProfileSettings, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
+	tplID := ps.TemplateIDForAction(action)
 	if tplID == nil || *tplID == 0 {
 		return db.Task{}, &db.ValidationError{
-			Message: fmt.Sprintf("No template configured for action %q", action),
+			Message: fmt.Sprintf("No template configured for action %q on this device profile", action),
 		}
+	}
+	if inventoryID == nil || *inventoryID == 0 {
+		inventoryID = ps.DefaultInventoryID
 	}
 
 	tpl, err := helpers.Store(r).GetTemplate(project.ID, *tplID)
@@ -802,8 +830,16 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		}
 		byIP[dev.IPAddress] = dev
 	}
+	defaultProf, err := server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 	toUpsert := make([]db.Device, 0, len(byIP))
 	for _, dev := range byIP {
+		if dev.DeviceProfileID <= 0 {
+			dev.DeviceProfileID = defaultProf.ID
+		}
 		toUpsert = append(toUpsert, dev)
 	}
 	saved, err := helpers.Store(r).UpsertDevicesByIPAddress(project.ID, toUpsert)
@@ -914,6 +950,8 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		updated++
 	}
+	store := helpers.Store(r)
+	go server.PublishProjectStatusSnapshots(store, project.ID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
 }
 
@@ -1068,6 +1106,7 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
+	_, _ = server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -1078,29 +1117,54 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	payload := make([]map[string]any, 0, len(devices))
-	for _, d := range devices {
-		payload = append(payload, map[string]any{
-			"id":           d.ID,
-			"hostname":     d.Hostname,
-			"ip":           d.IPAddress,
-			"rdp_user":     d.RDPUser,
-			"rdp_password": d.RDPPassword,
-			"rdp_port":     db.EffectiveDeviceRDPPort(d),
-			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
-			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
-		})
+	store := helpers.Store(r)
+	now := time.Now()
+	tasks := make([]db.Task, 0)
+	for profileID, devs := range server.GroupDevicesByProfile(devices) {
+		if profileID <= 0 {
+			continue
+		}
+		_, ps, err := server.ResolveDeviceProfileSettings(store, project.ID, devs[0])
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		payload := make([]map[string]any, 0, len(devs))
+		for _, d := range devs {
+			payload = append(payload, map[string]any{
+				"id":           d.ID,
+				"hostname":     d.Hostname,
+				"ip":           d.IPAddress,
+				"rdp_user":     d.RDPUser,
+				"rdp_password": d.RDPPassword,
+				"rdp_port":     db.EffectiveDeviceRDPPort(d),
+				"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+				"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
+			})
+			_ = store.UpdateDeviceStatusByHostname(project.ID, d.Hostname, db.DeviceStatusChecking, now)
+		}
+		invID := ps.DefaultInventoryID
+		if invID == nil {
+			invID = settings.DefaultInventoryID
+		}
+		task, err := runDeviceTemplateWithProfileSettings(r, project, ps, db.DeviceActionStatus, map[string]any{"devices": payload}, invID)
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		tasks = append(tasks, task)
 	}
-	task, err := runDeviceTemplate(r, project, db.DeviceActionStatus, map[string]any{"devices": payload}, settings.DefaultInventoryID)
-	if err != nil {
-		helpers.WriteError(w, err)
+	if len(tasks) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "No status template configured for any device profile",
+		})
 		return
 	}
-	now := time.Now()
-	for _, d := range devices {
-		_ = helpers.Store(r).UpdateDeviceStatusByHostname(project.ID, d.Hostname, db.DeviceStatusChecking, now)
+	if len(tasks) == 1 {
+		helpers.WriteJSON(w, http.StatusCreated, tasks[0])
+		return
 	}
-	helpers.WriteJSON(w, http.StatusCreated, task)
+	helpers.WriteJSON(w, http.StatusCreated, map[string]any{"tasks": tasks})
 }
 
 func createTemporaryInventoryForDevices(r *http.Request, projectID int, devices []db.Device) (*int, error) {
@@ -1181,6 +1245,15 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := server.ValidateDeviceHasProfile(device); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	_, ps, err := server.ResolveDeviceProfileSettings(helpers.Store(r), project.ID, device)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
 		helpers.WriteError(w, err)
@@ -1223,7 +1296,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		effectiveAction = db.DeviceActionRestart
 		extraVars["triggered_by"] = "config"
 	}
-	task, err := enqueueDeviceActionTask(r, project, effectiveAction, extraVars, tmpInventoryID)
+	task, err := runDeviceTemplateWithProfileSettings(r, project, ps, effectiveAction, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -1271,22 +1344,11 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	selected := make([]db.Device, 0, len(body.DeviceIDs))
-	payload := make([]map[string]any, 0, len(body.DeviceIDs))
 	for _, d := range allDevices {
 		if !idSet[d.ID] {
 			continue
 		}
 		selected = append(selected, d)
-		payload = append(payload, map[string]any{
-			"id":           d.ID,
-			"hostname":     d.Hostname,
-			"ip":           d.IPAddress,
-			"rdp_user":     d.RDPUser,
-			"rdp_password": d.RDPPassword,
-			"rdp_port":     db.EffectiveDeviceRDPPort(d),
-			"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
-			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
-		})
 	}
 	if len(selected) == 0 {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
@@ -1294,48 +1356,100 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
-	tmpInventoryID, err := createTemporaryInventoryForDevices(r, project.ID, selected)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	extraVars := map[string]any{"devices": payload}
-	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
-		extraVars["default_config"] = defaultConfig
-	}
-	if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
-		configByHostname := map[string]map[string]map[string]string{}
-		configsByHost := map[string]map[string]map[string]string{}
-		for _, d := range selected {
-			items, itemErr := helpers.Store(r).GetDeviceConfigItems(project.ID, d.ID)
-			if itemErr != nil {
-				helpers.WriteError(w, itemErr)
-				return
-			}
-			cfg := buildCategorizedDeviceConfig(items)
-			configByHostname[d.Hostname] = cfg
-			if ip := strings.TrimSpace(d.IPAddress); ip != "" {
-				configsByHost[ip] = cfg
-			}
-			if h := strings.TrimSpace(d.Hostname); h != "" {
-				configsByHost[h] = cfg
-			}
+	for _, d := range selected {
+		if err := server.ValidateDeviceHasProfile(d); err != nil {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+			return
 		}
-		extraVars["configs_by_hostname"] = configByHostname
-		extraVars["configs_by_host"] = configsByHost
 	}
+
 	effectiveAction := body.Action
 	if body.Action == db.DeviceActionConfig {
 		effectiveAction = db.DeviceActionRestart
-		extraVars["triggered_by"] = "config"
 	}
-	task, err := enqueueDeviceActionTask(r, project, effectiveAction, extraVars, tmpInventoryID)
-	if err != nil {
-		helpers.WriteError(w, err)
+
+	store := helpers.Store(r)
+	tasks := make([]db.Task, 0)
+	byProfile := server.GroupDevicesByProfile(selected)
+	for profileID, devs := range byProfile {
+		if profileID <= 0 {
+			prof, err := server.EnsureDefaultDeviceProfile(store, project.ID)
+			if err != nil {
+				helpers.WriteError(w, err)
+				return
+			}
+			for i := range devs {
+				devs[i].DeviceProfileID = prof.ID
+			}
+			profileID = prof.ID
+		}
+		_, ps, err := server.ResolveDeviceProfileSettings(store, project.ID, devs[0])
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		profilePayload := make([]map[string]any, 0, len(devs))
+		for _, d := range devs {
+			profilePayload = append(profilePayload, map[string]any{
+				"id":           d.ID,
+				"hostname":     d.Hostname,
+				"ip":           d.IPAddress,
+				"rdp_user":     d.RDPUser,
+				"rdp_password": d.RDPPassword,
+				"rdp_port":     db.EffectiveDeviceRDPPort(d),
+				"ansible_port": db.EffectiveDeviceAnsiblePort(d, settings),
+				"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
+			})
+		}
+		tmpInventoryID, err := createTemporaryInventoryForDevices(r, project.ID, devs)
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		extraVars := map[string]any{"devices": profilePayload}
+		if defaultConfig := parseDefaultDeviceConfigJSON(ps.DefaultConfigJSON); defaultConfig != nil {
+			extraVars["default_config"] = defaultConfig
+		} else if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
+			extraVars["default_config"] = defaultConfig
+		}
+		if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
+			configByHostname := map[string]map[string]map[string]string{}
+			configsByHost := map[string]map[string]map[string]string{}
+			for _, d := range devs {
+				items, itemErr := store.GetDeviceConfigItems(project.ID, d.ID)
+				if itemErr != nil {
+					helpers.WriteError(w, itemErr)
+					return
+				}
+				cfg := buildCategorizedDeviceConfig(items)
+				configByHostname[d.Hostname] = cfg
+				if ip := strings.TrimSpace(d.IPAddress); ip != "" {
+					configsByHost[ip] = cfg
+				}
+				if h := strings.TrimSpace(d.Hostname); h != "" {
+					configsByHost[h] = cfg
+				}
+			}
+			extraVars["configs_by_hostname"] = configByHostname
+			extraVars["configs_by_host"] = configsByHost
+		}
+		if body.Action == db.DeviceActionConfig {
+			extraVars["triggered_by"] = "config"
+		}
+		task, err := runDeviceTemplateWithProfileSettings(r, project, ps, effectiveAction, extraVars, tmpInventoryID)
+		if err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		tasks = append(tasks, task)
+	}
+	if len(tasks) == 1 {
+		helpers.WriteJSON(w, http.StatusCreated, tasks[0])
 		return
 	}
-	helpers.WriteJSON(w, http.StatusCreated, task)
+	helpers.WriteJSON(w, http.StatusCreated, map[string]any{"tasks": tasks})
 }
 
 // ProbeDevice runs an immediate server-side TCP port probe of RDP, WinRM,
