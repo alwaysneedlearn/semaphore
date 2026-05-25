@@ -29,9 +29,48 @@
 
 ## 一、TDengine
 
-### 1.1 配置（全局 + 可扩展多表）
+### 1.1 配置（全局 + 可扩展多表）— **支持页面填写**
 
-在 `util/config.go`（或 `config.json`）增加 **`TDengineConfig`**（全局一份连接/认证）：
+**可以，而且建议以管理端页面为主**；`config.json` 仅作首次部署/无 UI 时的兜底（与 LDAP、邮件告警等类似，Semaphore 很多全局项仍在文件里，TDengine 可做成第一批「可在线改」的集成项）。
+
+#### 配置来源优先级（运行时合并）
+
+| 优先级 | 来源 | 用途 |
+|--------|------|------|
+| 1（最高） | **DB `options` 或专用表**（Admin API 保存） | 运维在页面改 URL、库名、开关、密码 |
+| 2 | `config.json` → `tdengine` | 安装脚本/容器首次启动默认值 |
+| 3 | 环境变量 | `SEMAPHORE_TDENGINE_*` 覆盖（可选，适合 K8s Secret） |
+
+页面保存后 **立即生效**（进程内 `util.Config.TDengine` 重载或从 store 每次读取）；改密码不必重启整站（若实现热加载）。
+
+#### 管理端 UI（建议）
+
+- **入口**：Admin → **系统设置** → 选项卡 **「TDengine / 时序库」**（或挂在现有 Admin 区域，需 `user.admin`）。
+- **表单字段**：
+  - 启用开关 `enabled`
+  - REST/SQL 地址 `url`
+  - 用户 `user`
+  - 密码 `password`（保存后 API **不回显**，仅「已设置」占位）
+  - 数据库 `database`
+  - **测试连接** 按钮（调用 `POST /api/admin/tdengine/test`）
+- **按设备类型分表**（与 Profile 联动后）：
+  - 在 **项目 → 设备类型（Profile）** 编辑页增加：`TDengine 状态表名`（默认 NEWARE → `status`）
+  - 全局页只显示「默认表名规则」说明；**每类型表名跟 Profile 走**，不在全局页堆一张大表
+
+#### API（Admin）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/admin/tdengine` | 返回配置（密码脱敏） |
+| PUT | `/api/admin/tdengine` | 保存到 DB options / `system__tdengine_config` JSON |
+| POST | `/api/admin/tdengine/test` | 探活 + 可选 `SHOW STABLES` |
+
+实现可复用现有 **`GET/POST /api/options`**（`db.Option` key-value），例如：
+
+- `tdengine.enabled`, `tdengine.url`, …  
+或单 key `tdengine.config` 存 JSON（便于 `profiles` 子对象扩展）。
+
+#### `config.json` 结构（兜底，与页面字段一致）
 
 ```json
 {
@@ -40,21 +79,18 @@
     "url": "http://127.0.0.1:6041",
     "user": "root",
     "password": "",
-    "database": "semaphore_devices",
-    "profiles": {
-      "NEWARE": { "status_table": "status_neware" },
-      "OTHER":  { "status_table": "status_other" }
-    }
+    "database": "semaphore_devices"
   }
 }
 ```
 
+**按设备类型的 `status_table`** 建议放在 **Profile 设置**（`project__device_profile_settings.tdengine_status_table`），不要写死在全局 JSON，方便「多类型多表」。
+
 设计要点：
 
-- **连接/认证**：全局 `url` / `user` / `password` / `database`。
-- **按设备类型分表**：`profiles[<profile_key>].status_table`；未配置 profile 时用默认表名规则，例如 `status_<profile_key_lower>`。
-- **首期实现**：NEWARE 映射到用户要求的表名 **`status`**（配置里写 `"NEWARE": { "status_table": "status" }`）。
-- 环境变量可选：`SEMAPHORE_TDENGINE_URL` 等覆盖 config（与现有 `env_vars` 风格一致）。
+- **连接/认证**：全局一份（页面或 config）。
+- **按设备类型分表**：Profile 级 `tdengine_status_table`；NEWARE 默认 **`status`**。
+- 无页面时仍可用 config/env 启动；**有页面后运维不必 SSH 改 json**。
 
 ### 1.2 数据模型（TDengine）
 
@@ -100,7 +136,8 @@ device_status == healthy  → status = online
 | 步骤 | 路径 | 说明 |
 |------|------|------|
 | P0 | `pkg/tdengine/client.go` | REST/SQL 客户端、`Exec`、`InsertStatusRows` |
-| P0 | `util/config.go` | `TDengineConfig` + 校验 |
+| P0 | `util/config.go` | `TDengineConfig` + 校验 + 从 DB options 合并加载 |
+| P0 | `api/admin_tdengine.go` + `web` Admin 表单 | **页面填写**、测试连接、密码脱敏 |
 | P1 | `services/server/tdengine_publish.go` | `MapDeviceStatusToTD(healthy→online)`、`PublishProjectStatusSnapshot` |
 | P1 | `api/projects/devices.go` | `BulkUpdateDeviceStatus` 末尾 `go publish...`（enabled 时） |
 | P2 | `services/tasks/hooks/ansible.go` | `End()`：若模板为 device status 类（见 1.5）且 bulk 已在 API 完成，可 **去重** 仅 hook 补写（或 hook 只打日志，以 API 为准） |
@@ -138,7 +175,8 @@ id, project_id, key (unique per project), name, playbook_dir?, enabled, created
 project_id, profile_id,
 discover_template_id, start_template_id, stop_template_id,
 restart_template_id, status_template_id, config_template_id,
-default_inventory_id, default_config_json, status_refresh_interval_min
+default_inventory_id, default_config_json, status_refresh_interval_min,
+tdengine_status_table   -- 默认 NEWARE → 'status'，可在 Profile 编辑页填写
 
 -- project__device
 + device_profile_id NOT NULL  -- 迁移：现有行 → NEWARE profile id
@@ -256,7 +294,7 @@ TDengine **不替代** bulk API；仅只读副本/报表/大屏。
 4. **api**: `RunPatrolForAllDevices` / `RunBulkDeviceAction` 按 profile 分组 enqueue  
 5. **scheduler**: per-profile status template + interval  
 6. **pkg/tdengine**: client + config  
-7. **web**: Profile 管理 UI + 设备必选类型 + 批量任务提示  
+7. **web**: **Admin TDengine 设置页** + Profile 管理 UI + 设备必选类型 + 批量任务提示  
 8. **docs**: 运维文档 TDengine 建表 SQL 示例（`status` 超级表）  
 9. **playbooks**（后期）: `profiles/<key>/` 目录规范  
 
