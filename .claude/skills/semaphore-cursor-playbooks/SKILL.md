@@ -68,6 +68,40 @@ post_tasks:
   run_once: true
 ```
 
+**Immediate bulk (`tasks/semaphore_bulk_put_immediate.yml`) — same rule**
+
+This file is included from **`semaphore_callback_winrm_connect_failed.yml`** and other paths **before `end_host`**. Any localhost work that uses **`include_tasks`** must use a **block** (credentials resolve) or a **module** (`uri`, `debug`) with `delegate_to` on that task — never on the `include_tasks` line.
+
+```yaml
+# Valid (current pattern in repo)
+- name: 解析 bulk PUT 凭据（localhost）
+  run_once: true
+  delegate_to: localhost
+  block:
+    - ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
+
+- name: 立即 PUT 本主机设备状态（单条 bulk）
+  ansible.builtin.uri:
+    ...
+  delegate_to: localhost
+```
+
+```yaml
+# Invalid — caused production ERROR! (fixed in 629708b5)
+- ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
+  delegate_to: localhost
+  run_once: true
+```
+
+**Before committing any new/edited `cursor-playbooks/tasks/*.yml`**, run:
+
+```bash
+rg -n 'include_tasks:.*\n\s+delegate_to:' cursor-playbooks/ || true
+rg 'delegate_to:|run_once:' cursor-playbooks/tasks/*.yml | rg -B2 'include_tasks'
+```
+
+If the second command shows `include_tasks` immediately followed by `delegate_to` / `run_once` on the **same task** (not inside a parent `block:`), fix it before push.
+
 ---
 
 ## WinRM UNREACHABLE (most common production bug)
@@ -132,7 +166,7 @@ _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length
 ### Bulk PUT execution
 
 - **Do not** rely only on **`post_tasks`** or a second play — when all hosts `end_host` early, Semaphore logs often jump straight to **PLAY RECAP** with no bulk PUT. Always **`include_tasks: tasks/semaphore_bulk_put_immediate.yml`** right after setting **`semaphore_callback_row`** (before `end_host`). Keep **`post_tasks`** / **`hosts: localhost`** play for hosts that finish the full play.
-- That file **starts with** `semaphore_callback_winrm_fallback_missing_rows.yml` (delegate_facts for hosts missing rows).
+- **`semaphore_bulk_put_immediate.yml`**: resolves credentials in a **localhost block** → single-host **`uri` PUT** → DEBUG. **`semaphore_callback_winrm_fallback_missing_rows.yml`** runs only in **`semaphore_bulk_put_from_hostvars.yml`** (batch post_tasks), not inside the immediate file.
 - **Requires** env **`SEMAPHORE_API_TOKEN`**; optional `SEMAPHORE_URL` (default `http://127.0.0.1:3000`); **`semaphore_project_id`** from Semaphore extra-vars.
 
 ### Callback before `end_host`
@@ -190,11 +224,13 @@ cursor-playbooks/
 
 ## Review checklist (use before commit)
 
+- [ ] Ran grep for **`delegate_to`/`run_once` on `include_tasks`** (see command under “Immediate bulk” above).
 - [ ] No `delegate_to` / `run_once` / `until` / `register` on illegal targets (see table above).
 - [ ] New `win_*` task: is `winrm_ensure_reachable` still first? Mid-play reconnect if long chain?
 - [ ] Any new unreachable path: **`semaphore_callback_row`** + bulk/fallback still reached?
 - [ ] Ping failure: `ignore_unreachable` + `always` clear + shared failed callback task?
 - [ ] Bulk PUT in **`post_tasks`** block on localhost, not bare `include_tasks`?
+- [ ] **`semaphore_bulk_put_immediate.yml`** (if touched): credentials **`include_tasks` inside block**; PUT is **`uri`**, not include with `delegate_to`?
 - [ ] Booleans and `final_start_ok` defaults sane?
 - [ ] README / AGENTS.md updated if behavior or env vars changed?
 
@@ -205,7 +241,7 @@ cursor-playbooks/
 1. **Ping failed → only `clear_host_errors`**, no callback → UI **checking**.
 2. **`clear_host_errors` after ping in same block** without `ignore_unreachable` → clear **never ran**.
 3. **Removed `clear_host_errors`** when adding callback → callback task **skipped** on UNREACHABLE.
-4. **`delegate_to: localhost` on `include_tasks`** → `TaskInclude` parse error.
+4. **`delegate_to: localhost` on `include_tasks`** → `TaskInclude` parse error (including first draft of **`semaphore_bulk_put_immediate.yml`** — skill already forbade it; fix is block-wrap per **`629708b5`**).
 5. **Second play localhost only** for bulk → Semaphore **exit 4** skipped PUT; recap had no localhost.
 6. **`device_status: unknown`** on WinRM down → inconsistent; use **`unhealthy`**.
 7. **`until` on `include_tasks`** for process poll → old Ansible error.
@@ -214,6 +250,10 @@ cursor-playbooks/
 10. **`final_start_ok | default(true)`** → false **healthy** in API row.
 11. **`_winrm_ping is succeeded` after `ignore_unreachable`** → false **已连通** / `winrm_status: online` — use **`_winrm_ping_ok`** (`ping: pong`).
 12. **Ping fail then `重试前重置与等待` + ping again** — usually **`WINRM_CONNECT_RETRIES` loop** (label `第 N/M 次`), not business steps; do not confuse with **`winrm_refresh_midplay`** (second ensure) which must be gated on **`_winrm_session_ok`**.
+
+### Why “skill said no” but it still shipped once
+
+The **Ansible limits table** and mistake **#4** were already in this skill when **`semaphore_bulk_put_immediate.yml`** was added. The failure mode was **process**, not missing documentation: a new file was written by copying the **post_tasks** *idea* but putting `delegate_to` on the **`include_tasks`** line for credentials (invalid), without running the checklist grep or opening the **valid block example** above. **Skills do not run automatically on every edit** — treat the checklist + `rg` as mandatory when adding localhost `include_tasks`.
 
 ---
 
