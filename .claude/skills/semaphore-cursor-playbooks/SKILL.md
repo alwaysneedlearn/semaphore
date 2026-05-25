@@ -68,31 +68,6 @@ post_tasks:
   run_once: true
 ```
 
-**Immediate bulk (`tasks/semaphore_bulk_put_immediate.yml`) — same rule**
-
-This file is included from **`semaphore_callback_winrm_connect_failed.yml`** and other paths **before `end_host`**. Any localhost work that uses **`include_tasks`** must use a **block** (credentials resolve) or a **module** (`uri`, `debug`) with `delegate_to` on that task — never on the `include_tasks` line.
-
-```yaml
-# Valid (current pattern in repo)
-- name: 解析 bulk PUT 凭据（localhost）
-  run_once: true
-  delegate_to: localhost
-  block:
-    - ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
-
-- name: 立即 PUT 本主机设备状态（单条 bulk）
-  ansible.builtin.uri:
-    ...
-  delegate_to: localhost
-```
-
-```yaml
-# Invalid — caused production ERROR! (fixed in 629708b5)
-- ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
-  delegate_to: localhost
-  run_once: true
-```
-
 **Before committing any new/edited `cursor-playbooks/tasks/*.yml`**, run:
 
 ```bash
@@ -165,9 +140,9 @@ _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length
 
 ### Bulk PUT execution
 
-- **Bulk PUT** must run in a **`hosts: localhost` second play** after every `windows_hosts` host has run post_tasks **`登记 Semaphore 回调行`**. **Do not** put `run_once` bulk in the same play’s post_tasks — the first host to finish post_tasks triggers bulk while others still lack **`semaphore_callback_row`** (batch restart: 3× `final_start_ok=True` but UI stays unhealthy). **`device_stop`** may keep post_tasks-only bulk (short play).
-- When all hosts `end_host` early, play1 may skip post_tasks; use second play + optional **`semaphore_bulk_put_immediate.yml`** before `end_host` on failure paths.
-- **`semaphore_bulk_put_immediate.yml`**: resolves credentials in a **localhost block** → single-host **`uri` PUT** → DEBUG. **`semaphore_callback_winrm_fallback_missing_rows.yml`** runs only in **`semaphore_bulk_put_from_hostvars.yml`** (batch post_tasks), not inside the immediate file.
+- **Bulk PUT** only in a **`hosts: localhost` second play** after all `windows_hosts` hosts have **`semaphore_callback_row`** (play1 **`post_tasks` 登记** or failure-path **`set_fact`** before `end_host`). **Do not** use `run_once` bulk in play1 post_tasks (batch race). **Do not** include **`semaphore_bulk_put_immediate.yml`** (removed; file kept for reference only).
+- When all hosts `end_host` early, play1 post_tasks may skip; **second play** still bulk PUTs from **`hostvars`** (and **`semaphore_callback_winrm_fallback_missing_rows.yml`** for missing rows).
+- **`semaphore_callback_winrm_fallback_missing_rows.yml`** runs in **`semaphore_bulk_put_from_hostvars.yml`** only.
 - **Requires** env **`SEMAPHORE_API_TOKEN`**; optional `SEMAPHORE_URL` (default `http://127.0.0.1:3000`); **`semaphore_project_id`** from Semaphore extra-vars.
 
 ### Callback before `end_host`
@@ -231,7 +206,6 @@ cursor-playbooks/
 - [ ] Any new unreachable path: **`semaphore_callback_row`** + bulk/fallback still reached?
 - [ ] Ping failure: `ignore_unreachable` + `always` clear + shared failed callback task?
 - [ ] Bulk PUT in **`post_tasks`** block on localhost, not bare `include_tasks`?
-- [ ] **`semaphore_bulk_put_immediate.yml`** (if touched): credentials **`include_tasks` inside block**; PUT is **`uri`**, not include with `delegate_to`?
 - [ ] Booleans and `final_start_ok` defaults sane?
 - [ ] README / AGENTS.md updated if behavior or env vars changed?
 

@@ -1,6 +1,6 @@
 ---
-# 当前 windows_hosts 已写入 hostvars[inventory_hostname].semaphore_callback_row 后 include。
-# Semaphore/Ansible 在全员 end_host 时常不执行 post_tasks，故在 end_host 前立即 PUT 单条 bulk。
+# 已弃用：回调统一为 play1 登记 semaphore_callback_row + 独立 hosts:localhost 第二 play bulk。
+# 本文件保留作参考，playbook 不再 include。
 # 勿在 include_tasks 上使用 delegate_to / run_once（须包在 block 上）。
 
 - name: 解析 bulk PUT 凭据（localhost）
