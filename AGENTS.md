@@ -18,6 +18,7 @@ All commands use `task` (go-task). See `Taskfile.yml` for the full list.
 
 | Action | Command |
 |--------|---------|
+| Device action templates | **Devices → Device types** only (project-level device settings UI removed; use profile settings API) |
 | Install all deps | `task deps` |
 | Build frontend + backend | `task build` |
 | Build frontend only | `task build:fe` |

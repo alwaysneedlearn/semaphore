@@ -602,64 +602,11 @@ func GetDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, s)
 }
 
-// UpdateDeviceSettings persists per-project device action template bindings.
+// UpdateDeviceSettings is deprecated; use per-profile settings under /devices/profiles/{id}/settings.
 func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
-	project := helpers.GetFromContext(r, "project").(db.Project)
-
-	var s db.ProjectDeviceSettings
-	if !helpers.Bind(w, r, &s) {
-		return
-	}
-	s.ProjectID = project.ID
-	if s.DefaultAnsibleConnection == "" {
-		s.DefaultAnsibleConnection = "winrm"
-	}
-	if s.DefaultAnsibleWinRMTransport == "" {
-		s.DefaultAnsibleWinRMTransport = "basic"
-	}
-	if s.DefaultAnsibleWinRMScheme == "" {
-		s.DefaultAnsibleWinRMScheme = "http"
-	}
-	if s.DefaultAnsiblePort == 0 {
-		s.DefaultAnsiblePort = 5985
-	}
-	if s.DefaultAnsibleWinRMServerCertValidation == "" {
-		s.DefaultAnsibleWinRMServerCertValidation = "ignore"
-	}
-	if strings.TrimSpace(s.DefaultConfigJSON) == "" {
-		s.DefaultConfigJSON = ""
-	} else {
-		var parsed map[string]any
-		if err := json.Unmarshal([]byte(s.DefaultConfigJSON), &parsed); err != nil {
-			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "default_config_json must be valid JSON object",
-			})
-			return
-		}
-	}
-
-	if s.StatusRefreshIntervalMin < 0 {
-		s.StatusRefreshIntervalMin = 0
-	}
-
-	if err := helpers.Store(r).UpdateProjectDeviceSettings(s); err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	if err := syncProjectAutoInventory(r, project.ID); err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-
-	helpers.EventLog(r, helpers.EventLogUpdate, helpers.EventLogItem{
-		UserID:      helpers.UserFromContext(r).ID,
-		ProjectID:   project.ID,
-		ObjectType:  db.EventProject,
-		ObjectID:    project.ID,
-		Description: "Device settings updated",
+	helpers.WriteJSON(w, http.StatusGone, map[string]string{
+		"error": "Project-level device settings are removed. Configure Devices → Device types instead.",
 	})
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // runDeviceTemplate enqueues the template configured for the given action (project-level fallback).

@@ -213,7 +213,7 @@ tdengine_status_table   -- 默认 NEWARE → 'status'，可在 Profile 编辑页
 
 - 设备列表：列 **类型（Profile）**；筛选按 profile。
 - 设备表单：必选 Profile（默认 NEWARE）。
-- 项目设置：**「设备类型」** Tab — 列表 Profile + 每类型 6 模板下拉；保留「项目默认」作迁移期兼容（只读提示：请改用 NEWARE 类型设置）。
+- **Devices → Device types**：列表 Profile + 每类型模板、连接默认值、TDengine 表（已移除项目级「设备操作模板」表单）。
 - 批量操作：前端按选中设备 profile 分组提示「将创建 N 个任务」。
 
 ### 2.6 TDengine 与 Profile 联动

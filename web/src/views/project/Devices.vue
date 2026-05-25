@@ -13,31 +13,6 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="deviceSettingsDialog" :max-width="900">
-      <v-card>
-        <v-card-title>{{ $t('deviceSettingsTitle') }}</v-card-title>
-        <v-card-text>
-          <DeviceSettingsForm
-            ref="deviceSettingsForm"
-            :project-id="projectId"
-            :hide-actions="true"
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="deviceSettingsDialog = false">{{ $t('close') }}</v-btn>
-          <v-btn
-            color="primary"
-            depressed
-            :loading="deviceSettingsSaving"
-            @click="saveDeviceSettings"
-          >
-            {{ $t('save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-dialog v-model="discoveryDialog" :max-width="900">
       <v-card>
         <v-card-title>{{ $t('deviceDiscoveryTitle') }}</v-card-title>
@@ -180,15 +155,6 @@
       >
         <v-icon left>mdi-shape-outline</v-icon>
         Device types
-      </v-btn>
-      <v-btn
-        v-if="can(USER_PERMISSIONS.manageProjectResources)"
-        text
-        class="mr-2"
-        @click="deviceSettingsDialog = true"
-      >
-        <v-icon left>mdi-cog</v-icon>
-        {{ $t('deviceSettingsTitle') }}
       </v-btn>
       <v-btn
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
@@ -529,7 +495,6 @@ import EventBus from '@/event-bus';
 import ItemListPageBase from '@/components/ItemListPageBase';
 import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
-import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
 import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 import { getErrorMessage } from '@/lib/error';
 
@@ -538,7 +503,6 @@ export default {
   components: {
     DeviceForm,
     DeviceConfigDialog,
-    DeviceSettingsForm,
     DeviceProfilesForm,
   },
 
@@ -549,9 +513,7 @@ export default {
       },
       discovering: false,
       patrolling: false,
-      deviceSettingsDialog: false,
       deviceProfilesDialog: false,
-      deviceSettingsSaving: false,
       busyId: null,
       configDialog: false,
       configDeviceId: null,
@@ -756,22 +718,6 @@ export default {
     async askDeleteItem(itemId) {
       this.itemId = itemId;
       this.deleteItemDialog = true;
-    },
-
-    async saveDeviceSettings() {
-      if (!this.$refs.deviceSettingsForm || this.deviceSettingsSaving) {
-        return;
-      }
-
-      this.deviceSettingsSaving = true;
-      try {
-        const ok = await this.$refs.deviceSettingsForm.save();
-        if (ok) {
-          this.deviceSettingsDialog = false;
-        }
-      } finally {
-        this.deviceSettingsSaving = false;
-      }
     },
 
     statusColor(s) {

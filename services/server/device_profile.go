@@ -13,6 +13,7 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 	p, err := store.GetDeviceProfileByKey(projectID, db.DefaultDeviceProfileKey)
 	if err == nil && p.ID > 0 {
 		_ = store.AssignDevicesWithoutProfile(projectID, p.ID)
+		_ = syncProfileSettingsFromProjectIfNeeded(store, projectID, p.ID)
 		return p, nil
 	}
 
@@ -59,6 +60,35 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 	return p, nil
 }
 
+// syncProfileSettingsFromProjectIfNeeded copies project__device_settings into NEWARE profile when templates are unset.
+func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID int) error {
+	ps, err := store.GetProjectDeviceProfileSettings(projectID, profileID)
+	if err != nil {
+		return err
+	}
+	needsTemplates := ps.DiscoverTemplateID == nil && ps.StartTemplateID == nil &&
+		ps.StopTemplateID == nil && ps.RestartTemplateID == nil &&
+		ps.StatusTemplateID == nil && ps.ConfigTemplateID == nil
+	if !needsTemplates {
+		return nil
+	}
+	projectSettings, err := store.GetProjectDeviceSettings(projectID)
+	if err != nil {
+		return err
+	}
+	ps.DiscoverTemplateID = projectSettings.DiscoverTemplateID
+	ps.StartTemplateID = projectSettings.StartTemplateID
+	ps.StopTemplateID = projectSettings.StopTemplateID
+	ps.RestartTemplateID = projectSettings.RestartTemplateID
+	ps.StatusTemplateID = projectSettings.StatusTemplateID
+	ps.ConfigTemplateID = projectSettings.ConfigTemplateID
+	MergeProfileSettingsFromProject(&ps, projectSettings)
+	if ps.TDengineStatusTable == "" {
+		ps.TDengineStatusTable = "status"
+	}
+	return store.UpdateProjectDeviceProfileSettings(ps)
+}
+
 // ResolveDeviceProfileSettings returns profile settings, falling back to project-level templates.
 func ResolveDeviceProfileSettings(store db.Store, projectID int, device db.Device) (db.DeviceProfile, db.ProjectDeviceProfileSettings, error) {
 	if device.DeviceProfileID <= 0 {
@@ -82,34 +112,34 @@ func ResolveDeviceProfileSettings(store db.Store, projectID int, device db.Devic
 	return prof, ps, nil
 }
 
-// MergeProfileSettingsFromProject fills empty profile template IDs from project-level settings.
+// MergeProfileSettingsFromProject fills empty profile connection defaults from project-level row (legacy DB only).
 func MergeProfileSettingsFromProject(ps *db.ProjectDeviceProfileSettings, project db.ProjectDeviceSettings) {
-	if ps.DiscoverTemplateID == nil || *ps.DiscoverTemplateID == 0 {
-		ps.DiscoverTemplateID = project.DiscoverTemplateID
-	}
-	if ps.StartTemplateID == nil || *ps.StartTemplateID == 0 {
-		ps.StartTemplateID = project.StartTemplateID
-	}
-	if ps.StopTemplateID == nil || *ps.StopTemplateID == 0 {
-		ps.StopTemplateID = project.StopTemplateID
-	}
-	if ps.RestartTemplateID == nil || *ps.RestartTemplateID == 0 {
-		ps.RestartTemplateID = project.RestartTemplateID
-	}
-	if ps.StatusTemplateID == nil || *ps.StatusTemplateID == 0 {
-		ps.StatusTemplateID = project.StatusTemplateID
-	}
-	if ps.ConfigTemplateID == nil || *ps.ConfigTemplateID == 0 {
-		ps.ConfigTemplateID = project.ConfigTemplateID
-	}
 	if ps.DefaultInventoryID == nil {
 		ps.DefaultInventoryID = project.DefaultInventoryID
 	}
+	if strings.TrimSpace(ps.DefaultAnsibleUser) == "" {
+		ps.DefaultAnsibleUser = project.DefaultAnsibleUser
+	}
+	if strings.TrimSpace(ps.DefaultAnsiblePassword) == "" {
+		ps.DefaultAnsiblePassword = project.DefaultAnsiblePassword
+	}
+	if strings.TrimSpace(ps.DefaultAnsibleConnection) == "" {
+		ps.DefaultAnsibleConnection = project.DefaultAnsibleConnection
+	}
+	if strings.TrimSpace(ps.DefaultAnsibleWinRMTransport) == "" {
+		ps.DefaultAnsibleWinRMTransport = project.DefaultAnsibleWinRMTransport
+	}
+	if strings.TrimSpace(ps.DefaultAnsibleWinRMScheme) == "" {
+		ps.DefaultAnsibleWinRMScheme = project.DefaultAnsibleWinRMScheme
+	}
+	if ps.DefaultAnsiblePort == 0 {
+		ps.DefaultAnsiblePort = project.DefaultAnsiblePort
+	}
+	if strings.TrimSpace(ps.DefaultAnsibleWinRMServerCertValidation) == "" {
+		ps.DefaultAnsibleWinRMServerCertValidation = project.DefaultAnsibleWinRMServerCertValidation
+	}
 	if strings.TrimSpace(ps.DefaultConfigJSON) == "" {
 		ps.DefaultConfigJSON = project.DefaultConfigJSON
-	}
-	if ps.StatusRefreshIntervalMin <= 0 {
-		ps.StatusRefreshIntervalMin = project.StatusRefreshIntervalMin
 	}
 }
 

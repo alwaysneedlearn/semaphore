@@ -74,8 +74,6 @@ func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	projectSettings, _ := helpers.Store(r).GetProjectDeviceSettings(project.ID)
-	server.MergeProfileSettingsFromProject(&ps, projectSettings)
 	helpers.WriteJSON(w, http.StatusOK, ps)
 }
 

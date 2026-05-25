@@ -15,6 +15,18 @@
         />
       </v-col>
     </v-row>
+    <v-autocomplete
+      v-model="settings.default_inventory_id"
+      :items="inventories"
+      item-value="id"
+      item-text="name"
+      label="Default inventory"
+      clearable
+      outlined
+      dense
+      class="mb-2"
+      :disabled="saving"
+    />
     <v-text-field
       v-model="settings.tdengine_status_table"
       label="TDengine status table"
@@ -26,14 +38,121 @@
     />
     <v-text-field
       v-model.number="settings.status_refresh_interval_min"
-      label="Status refresh interval (minutes)"
+      :label="$t('deviceRefreshIntervalMinutes')"
+      :hint="$t('deviceRefreshIntervalHelp')"
+      persistent-hint
       type="number"
       min="0"
       outlined
       dense
       :disabled="saving"
     />
-    <v-btn color="primary" small :loading="saving" @click="save">Save profile settings</v-btn>
+
+    <v-divider class="my-4" />
+    <p class="text--secondary mb-2">{{ $t('deviceConnectionDefaultsHelp') }}</p>
+    <v-row dense>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_user"
+          :label="$t('deviceAnsibleUser')"
+          outlined
+          dense
+          :disabled="saving"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_password"
+          :label="$t('deviceAnsiblePassword')"
+          outlined
+          dense
+          :type="showPassword ? 'text' : 'password'"
+          autocomplete="new-password"
+          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+          @click:append="showPassword = !showPassword"
+          :disabled="saving"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_connection"
+          :label="$t('deviceAnsibleConnection')"
+          outlined
+          dense
+          :disabled="saving"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_winrm_transport"
+          :label="$t('deviceAnsibleWinrmTransport')"
+          outlined
+          dense
+          :disabled="saving"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model="settings.default_ansible_winrm_scheme"
+          :label="$t('deviceAnsibleWinrmScheme')"
+          outlined
+          dense
+          :disabled="saving"
+        />
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-text-field
+          v-model.number="settings.default_ansible_port"
+          :label="$t('deviceAnsiblePort')"
+          type="number"
+          outlined
+          dense
+          :disabled="saving"
+        />
+      </v-col>
+      <v-col cols="12">
+        <v-text-field
+          v-model="settings.default_ansible_winrm_server_cert_validation"
+          :label="$t('deviceAnsibleWinrmCertValidation')"
+          outlined
+          dense
+          :disabled="saving"
+        />
+      </v-col>
+    </v-row>
+
+    <v-divider class="my-4" />
+    <p class="text--secondary mb-2">默认配置（该类型下设备）</p>
+    <v-data-table
+      :headers="defaultConfigHeaders"
+      :items="defaultConfigItems"
+      dense
+      hide-default-footer
+      :items-per-page="-1"
+    >
+      <template v-slot:item.category="{ item }">
+        <v-text-field v-model="item.category" hide-details dense outlined :disabled="saving" />
+      </template>
+      <template v-slot:item.key="{ item }">
+        <v-text-field v-model="item.key" hide-details dense outlined :disabled="saving" />
+      </template>
+      <template v-slot:item.value="{ item }">
+        <v-text-field v-model="item.value" hide-details dense outlined :disabled="saving" />
+      </template>
+      <template v-slot:item.actions="{ index }">
+        <v-btn icon small @click="removeDefaultConfigRow(index)" :disabled="saving">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </template>
+    </v-data-table>
+    <v-btn small text class="mt-2" @click="addDefaultConfigRow" :disabled="saving">
+      <v-icon left>mdi-plus</v-icon>
+      {{ $t('deviceConfigAddRow') }}
+    </v-btn>
+
+    <v-btn color="primary" small class="mt-4" :loading="saving" @click="save">
+      {{ $t('save') }}
+    </v-btn>
   </div>
 </template>
 
@@ -49,7 +168,16 @@ export default {
     return {
       settings: {},
       templates: [],
+      inventories: [],
       saving: false,
+      showPassword: false,
+      defaultConfigItems: [],
+      defaultConfigHeaders: [
+        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
+        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '30%' },
+        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '40%' },
+        { value: 'actions', sortable: false, width: '5%' },
+      ],
       actions: [
         { field: 'discover_template_id', label: 'Discover template' },
         { field: 'start_template_id', label: 'Start template' },
@@ -61,25 +189,82 @@ export default {
     };
   },
   async created() {
-    await Promise.all([this.loadSettings(), this.loadTemplates()]);
+    await Promise.all([
+      this.loadSettings(),
+      this.loadTemplates(),
+      this.loadInventories(),
+    ]);
   },
   methods: {
     async loadTemplates() {
       const { data } = await axios.get(`/api/project/${this.projectId}/templates`);
       this.templates = data || [];
     },
+    async loadInventories() {
+      const { data } = await axios.get(`/api/project/${this.projectId}/inventory`);
+      this.inventories = data || [];
+    },
     async loadSettings() {
       const { data } = await axios.get(
         `/api/project/${this.projectId}/devices/profiles/${this.profileId}/settings`,
       );
       this.settings = { ...data };
+      this.defaultConfigItems = this.parseDefaultConfigJson(this.settings.default_config_json);
+      this.showPassword = false;
+    },
+    parseDefaultConfigJson(raw) {
+      if (!raw || String(raw).trim() === '') {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        const rows = [];
+        Object.keys(parsed || {}).forEach((category) => {
+          const group = parsed[category] || {};
+          Object.keys(group).forEach((key) => {
+            rows.push({
+              category,
+              key,
+              value: String(group[key] == null ? '' : group[key]),
+            });
+          });
+        });
+        return rows;
+      } catch (e) {
+        return [];
+      }
+    },
+    buildDefaultConfigJson() {
+      const categorized = {};
+      this.defaultConfigItems.forEach((item) => {
+        const category = (item.category || '').trim();
+        const key = (item.key || '').trim();
+        if (!category || !key) {
+          return;
+        }
+        if (!categorized[category]) {
+          categorized[category] = {};
+        }
+        categorized[category][key] = item.value == null ? '' : String(item.value);
+      });
+      return JSON.stringify(categorized);
+    },
+    addDefaultConfigRow() {
+      this.defaultConfigItems.push({ category: 'SystemConfig', key: '', value: '' });
+    },
+    removeDefaultConfigRow(index) {
+      this.defaultConfigItems.splice(index, 1);
     },
     async save() {
       this.saving = true;
       try {
+        const payload = { ...this.settings };
+        payload.default_config_json = this.buildDefaultConfigJson();
+        payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
+        payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
         await axios.put(
           `/api/project/${this.projectId}/devices/profiles/${this.profileId}/settings`,
-          this.settings,
+          payload,
         );
         this.$emit('saved');
       } finally {

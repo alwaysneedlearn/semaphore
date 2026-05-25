@@ -1,8 +1,8 @@
 <template>
   <div>
     <p class="text--secondary mb-2">
-      Each device type has its own six action templates and TDengine status table.
-      <strong>NEWARE</strong> is created automatically for migration; add more types below.
+      Configure templates, connection defaults, and TDengine table per device type.
+      <strong>NEWARE</strong> is the default type for existing devices.
     </p>
     <v-btn
       color="primary"
