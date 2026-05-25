@@ -1,7 +1,9 @@
 ---
-# 单次建连；外层 loop 在 session 已 ok 时整块 skip（when 写在 block 上）
+# 单次建连；外层 loop 在 session 已 ok 或已决定停止重试时 skip
 - name: 单次 WinRM 建连尝试
-  when: not (_winrm_session_ok | default(false) | bool)
+  when:
+    - not (_winrm_session_ok | default(false) | bool)
+    - not (_winrm_abort_connect_retries | default(false) | bool)
   block:
     - name: 重试前重置与等待
       ansible.builtin.include_tasks: tasks/winrm_connect_retry_pause.yml
@@ -13,19 +15,25 @@
       failed_when: false
       ignore_unreachable: true
 
+    - ansible.builtin.include_tasks: tasks/winrm_eval_ping_result.yml
+
     - name: 登记 WinRM 已连通
       ansible.builtin.set_fact:
         _winrm_session_ok: true
         _winrm_ping_last_success: "{{ _winrm_ping }}"
-      when: _winrm_ping is succeeded
+      when: _winrm_ping_ok | default(false) | bool
 
   always:
-    # 无 ignore_unreachable 时 UNREACHABLE 会跳过 block 内后续任务；always 内再 clear 以便重试与登记回调
-    - name: ping 未成功则标记并清除 unreachable
-      when: _winrm_ping is defined and (_winrm_ping is not succeeded)
+    - ansible.builtin.include_tasks: tasks/winrm_eval_ping_result.yml
+      when: _winrm_ping is defined
+
+    # 无 ignore_unreachable 时 UNREACHABLE 会跳过 block 内后续任务；always 内再 clear 以便登记回调
+    - name: ping 未成功则停止重试、标记并清除 unreachable
+      when: _winrm_ping is defined and not (_winrm_ping_ok | default(false) | bool)
       block:
         - name: 标记 WinRM 建连未成功
           ansible.builtin.set_fact:
             _winrm_connect_failed: true
+            _winrm_abort_connect_retries: true
         - name: 执行 clear_host_errors
           ansible.builtin.meta: clear_host_errors

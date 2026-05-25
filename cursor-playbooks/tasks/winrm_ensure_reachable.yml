@@ -4,7 +4,13 @@
 - name: 强制刷新 WinRM 会话标记（中途建连）
   ansible.builtin.set_fact:
     _winrm_session_ok: false
+    _winrm_abort_connect_retries: false
   when: winrm_force_reconnect | default(false) | bool
+
+- name: 初始化 WinRM 重试控制（play 开始）
+  ansible.builtin.set_fact:
+    _winrm_abort_connect_retries: false
+  when: not (winrm_force_reconnect | default(false) | bool)
 
 - name: 登记 WinRM 建连重试参数
   ansible.builtin.set_fact:
@@ -24,6 +30,8 @@
     msg:
       - "[DEBUG-WINRM] context={{ winrm_connect_context | default('play-start') }}"
       - "[DEBUG-WINRM] session_ok={{ _winrm_session_ok | default(false) }}"
+      - "[DEBUG-WINRM] ping_ok={{ _winrm_ping_ok | default('n/a') }}"
+      - "[DEBUG-WINRM] abort_retries={{ _winrm_abort_connect_retries | default(false) }}"
       - "[DEBUG-WINRM] attempts={{ winrm_connect_retries }} delay={{ winrm_connect_retry_delay }}s"
       - "[DEBUG-WINRM] last_ping={{ _winrm_ping_last_success | default({}) }}"
   when: _winrm_ping_last_success is defined or _winrm_ping is defined

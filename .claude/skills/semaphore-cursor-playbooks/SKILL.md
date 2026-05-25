@@ -85,6 +85,8 @@ post_tasks:
 2. **`win_ping`** in `tasks/winrm_connect_one_attempt.yml`:
    - `failed_when: false`
    - **`ignore_unreachable: true`** (mandatory)
+   - **Never use `_winrm_ping is succeeded` alone** — with `ignore_unreachable`, unreachable still shows task **ok**. Use **`tasks/winrm_eval_ping_result.yml`**: `_winrm_ping_ok` = `ping == 'pong'` and not `unreachable`.
+   - First failed ping sets **`_winrm_abort_connect_retries: true`** (skip remaining attempts; fast fail + callback).
 3. In the same attempt, use **`block` + `always:`** when ping is not succeeded:
    - `meta: clear_host_errors`
    - optional `set_fact: _winrm_connect_failed: true`
@@ -210,6 +212,7 @@ cursor-playbooks/
 8. **`register` on `block`** for poll → old Ansible error.
 9. **Log check without `ignore_unreachable`** → fatal, no final patrol callback.
 10. **`final_start_ok | default(true)`** → false **healthy** in API row.
+11. **`_winrm_ping is succeeded` after `ignore_unreachable`** → false **已连通** / `winrm_status: online` — use **`_winrm_ping_ok`** (`ping: pong`).
 
 ---
 

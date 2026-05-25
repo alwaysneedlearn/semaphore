@@ -1,0 +1,8 @@
+---
+# 在 win_ping register 为 _winrm_ping 之后 include。
+# ignore_unreachable + failed_when:false 时 Ansible 任务状态仍可能为 ok/succeeded，须看 ping=pong。
+
+- name: 计算 WinRM ping 是否真正成功
+  ansible.builtin.set_fact:
+    _winrm_ping_ok: "{{ (not (_winrm_ping.unreachable | default(false) | bool)) and ((_winrm_ping.ping | default('')) == 'pong') }}"
+  when: _winrm_ping is defined
