@@ -135,13 +135,21 @@ import axios from 'axios';
 import EventBus from '@/event-bus';
 import PermissionsCheck from '@/components/PermissionsCheck';
 import ProjectMixin from '@/components/ProjectMixin';
+import { USER_PERMISSIONS } from '@/lib/constants';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
   mixins: [PermissionsCheck, ProjectMixin],
 
+  props: {
+    projectId: Number,
+    userPermissions: Number,
+    isAdmin: Boolean,
+  },
+
   data() {
     return {
+      USER_PERMISSIONS,
       settings: {
         discover_template_id: null,
         default_inventory_id: null,
