@@ -179,7 +179,6 @@ export default {
         { value: 'actions', sortable: false, width: '5%' },
       ],
       actions: [
-        { field: 'discover_template_id', label: 'Discover template' },
         { field: 'start_template_id', label: 'Start template' },
         { field: 'stop_template_id', label: 'Stop template' },
         { field: 'restart_template_id', label: 'Restart template' },

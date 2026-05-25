@@ -609,6 +609,49 @@ func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// deviceDiscoverySettingsResponse is the project-level discovery template binding (no device type).
+type deviceDiscoverySettingsResponse struct {
+	DiscoverTemplateID *int `json:"discover_template_id,omitempty"`
+	DefaultInventoryID *int `json:"default_inventory_id,omitempty"`
+}
+
+// GetDeviceDiscoverySettings returns the generic discovery template for the project.
+func GetDeviceDiscoverySettings(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	s, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, deviceDiscoverySettingsResponse{
+		DiscoverTemplateID: s.DiscoverTemplateID,
+		DefaultInventoryID: s.DefaultInventoryID,
+	})
+}
+
+// UpdateDeviceDiscoverySettings updates only discovery template bindings on project__device_settings.
+func UpdateDeviceDiscoverySettings(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body deviceDiscoverySettingsResponse
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	store := helpers.Store(r)
+	s, err := store.GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	s.ProjectID = project.ID
+	s.DiscoverTemplateID = body.DiscoverTemplateID
+	s.DefaultInventoryID = body.DefaultInventoryID
+	if err := store.UpdateProjectDeviceSettings(s); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // runDeviceTemplate enqueues the template configured for the given action (project-level fallback).
 func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
@@ -718,19 +761,7 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	extraVars["subnet"] = subnet
 	extraVars["network_cidr"] = subnet
 
-	store := helpers.Store(r)
-	defaultProf, err := server.EnsureDefaultDeviceProfile(store, project.ID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	probeDevice := db.Device{ProjectID: project.ID, DeviceProfileID: defaultProf.ID}
-	_, ps, err := server.ResolveDeviceProfileSettings(store, project.ID, probeDevice)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	task, err := runDeviceTemplateWithProfileSettings(r, project, ps, db.DeviceActionDiscover, extraVars, ps.DefaultInventoryID)
+	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -749,8 +780,20 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		Devices           []db.Device `json:"devices"`
 		SelectedIPs       []string    `json:"selected_ips"`
 		SelectedHostnames []string    `json:"selected_hostnames"` // legacy: used only if selected_ips is empty
+		DeviceProfileID   int         `json:"device_profile_id"`
 	}
 	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	if body.DeviceProfileID <= 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "device_profile_id is required to import discovered devices",
+		})
+		return
+	}
+	store := helpers.Store(r)
+	if _, err := store.GetDeviceProfile(project.ID, body.DeviceProfileID); err != nil {
+		helpers.WriteError(w, err)
 		return
 	}
 	selectedByIP := map[string]bool{}
@@ -797,16 +840,9 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		}
 		byIP[dev.IPAddress] = dev
 	}
-	defaultProf, err := server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
 	toUpsert := make([]db.Device, 0, len(byIP))
 	for _, dev := range byIP {
-		if dev.DeviceProfileID <= 0 {
-			dev.DeviceProfileID = defaultProf.ID
-		}
+		dev.DeviceProfileID = body.DeviceProfileID
 		toUpsert = append(toUpsert, dev)
 	}
 	saved, err := helpers.Store(r).UpsertDevicesByIPAddress(project.ID, toUpsert)

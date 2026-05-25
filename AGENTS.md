@@ -28,6 +28,12 @@ All commands use `task` (go-task). See `Taskfile.yml` for the full list.
 | Run backend tests | `task test:be` or `go test ./...` |
 | Run frontend tests | `task test:fe` |
 
+### Devices UI routes
+
+- **Device list**: `/project/{id}/devices/list` (sidebar **Devices** redirects here)
+- **Discovery** (project-level discover template + import with device type): `/project/{id}/devices/discovery`
+- **Device types**: dialog from list toolbar (**Device types**)
+
 ### Running the server
 
 1. Ensure a `config.json` exists in the workspace root (see `.devcontainer/config.json` for an example). For local dev with SQLite:

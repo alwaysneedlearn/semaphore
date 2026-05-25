@@ -13,72 +13,6 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="discoveryDialog" :max-width="900">
-      <v-card>
-        <v-card-title>{{ $t('deviceDiscoveryTitle') }}</v-card-title>
-        <v-card-text>
-          <p class="text--secondary">
-            {{ $t('deviceDiscoveryHelp') }}
-          </p>
-          <v-text-field
-            v-model="discoverySubnet"
-            :label="$t('deviceDiscoverySubnet')"
-            :hint="$t('deviceDiscoverySubnetHint')"
-            persistent-hint
-            outlined
-            dense
-            class="mb-2"
-            placeholder="192.168.1.0/24"
-          />
-          <v-btn
-            color="primary"
-            class="mb-3"
-            :loading="discovering"
-            @click="runDiscoverTemplate"
-          >
-            {{ $t('deviceDiscoverRunTemplate') }}
-          </v-btn>
-          <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
-          <v-data-table
-            :headers="discoveryHeaders"
-            :items="discoveredDevices"
-            item-key="ip_address"
-            show-select
-            v-model="selectedDiscovered"
-            dense
-          >
-            <template v-slot:item.device_status="{ item }">
-              <v-chip x-small :color="statusColor(item.device_status)" dark>
-                {{ item.device_status }}
-              </v-chip>
-            </template>
-            <template v-slot:item.rdp_status="{ item }">
-              <v-chip x-small :color="statusColor(item.rdp_status)" dark>
-                {{ item.rdp_status }}
-              </v-chip>
-            </template>
-            <template v-slot:item.winrm_status="{ item }">
-              <v-chip x-small :color="statusColor(item.winrm_status)" dark>
-                {{ item.winrm_status }}
-              </v-chip>
-            </template>
-            <template v-slot:item.api_status="{ item }">
-              <v-chip x-small :color="statusColor(item.api_status)" dark>
-                {{ item.api_status }}
-              </v-chip>
-            </template>
-          </v-data-table>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="discoveryDialog = false">{{ $t('cancel') }}</v-btn>
-          <v-btn color="primary" :loading="importingDiscovery" @click="importSelectedDiscovery">
-            {{ $t('deviceImportSelected') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <EditDialog
       v-model="editDialog"
       :save-button-text="itemId === 'new' ? $t('create') : $t('save')"
@@ -155,15 +89,6 @@
       >
         <v-icon left>mdi-shape-outline</v-icon>
         Device types
-      </v-btn>
-      <v-btn
-        v-if="can(USER_PERMISSIONS.manageProjectResources)"
-        text
-        class="mr-2"
-        @click="discoveryDialog = true"
-      >
-        <v-icon left>mdi-radar</v-icon>
-        {{ $t('deviceDiscover') }}
       </v-btn>
       <v-btn
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
@@ -511,7 +436,6 @@ export default {
       stats: {
         total: 0, healthy: 0, unhealthy: 0, checking: 0, unknown: 0,
       },
-      discovering: false,
       patrolling: false,
       deviceProfilesDialog: false,
       busyId: null,
@@ -530,11 +454,6 @@ export default {
         { text: this.$i18n.t('deviceApiStatus'), value: 'api_status' },
         { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
       ],
-      discoveryDialog: false,
-      discoverySubnet: '',
-      discoveryError: '',
-      discoveredDevices: [],
-      selectedDiscovered: [],
       selectedDeviceIds: [],
       totalDevices: 0,
       devicesLoading: false,
@@ -549,7 +468,6 @@ export default {
         mustSort: false,
       },
       filterDebounceTimer: null,
-      importingDiscovery: false,
       bulkLoading: false,
       bulkDeleteDialog: false,
       bulkActionConfirmDialog: false,
@@ -566,14 +484,6 @@ export default {
         winrmStatus: null,
         apiStatus: null,
       },
-      discoveryHeaders: [
-        { text: 'IP', value: 'ip_address' },
-        { text: 'Hostname', value: 'hostname' },
-        { text: 'Status', value: 'device_status' },
-        { text: 'RDP', value: 'rdp_status' },
-        { text: 'WinRM', value: 'winrm_status' },
-        { text: 'API', value: 'api_status' },
-      ],
     };
   },
   computed: {
@@ -910,267 +820,6 @@ export default {
       }
     },
 
-    async discoverDevices() {
-      const sub = String(this.discoverySubnet || '').trim();
-      if (!sub) {
-        EventBus.$emit('i-snackbar', {
-          color: 'error',
-          text: this.$i18n.t('deviceDiscoverySubnetRequired'),
-        });
-        return;
-      }
-      this.discovering = true;
-      try {
-        const payload = {
-          subnet: sub,
-        };
-        const res = await axios.post(`${this.getItemsUrl()}/discover`, payload);
-        const taskId = res.data && res.data.id;
-        if (taskId) {
-          this.notifyDeviceTaskQueued(taskId);
-          await this.waitAndLoadDiscoveryResult(taskId);
-        }
-      } catch (e) {
-        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
-      } finally {
-        this.discovering = false;
-      }
-    },
-    async waitAndLoadDiscoveryResult(taskId, attemptsLeft = 60) {
-      const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
-      const status = (taskRes.data && taskRes.data.status) || '';
-      if (status === 'success') {
-        await this.loadDiscoveryResultFromTask(taskId);
-        return;
-      }
-      if (status === 'error' || status === 'stopped') {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskFailed');
-        return;
-      }
-      if (attemptsLeft <= 1) {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
-        return;
-      }
-      await new Promise((resolve) => {
-        setTimeout(resolve, 2000);
-      });
-      await this.waitAndLoadDiscoveryResult(taskId, attemptsLeft - 1);
-    },
-    tryParseJsonArray(candidate) {
-      if (!candidate) {
-        return null;
-      }
-      try {
-        const parsed = JSON.parse(candidate.trim());
-        return Array.isArray(parsed) ? parsed : null;
-      } catch (e) {
-        return null;
-      }
-    },
-    stripAnsiCodes(input) {
-      if (!input) {
-        return '';
-      }
-      const ESC = '\u001b';
-      let i = 0;
-      let out = '';
-      while (i < input.length) {
-        if (input[i] === ESC && input[i + 1] === '[') {
-          i += 2;
-          while (i < input.length) {
-            const ch = input[i];
-            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
-              i += 1;
-              break;
-            }
-            i += 1;
-          }
-        } else {
-          out += input[i];
-          i += 1;
-        }
-      }
-      return out;
-    },
-    extractJsonArrayFromText(text) {
-      if (!text) {
-        return null;
-      }
-
-      const clean = this.stripAnsiCodes(text);
-
-      const prefixed = this.extractPrefixedDiscoveryJson(clean);
-      if (prefixed) {
-        return prefixed;
-      }
-
-      const direct = this.tryParseJsonArray(clean);
-      if (direct) {
-        return direct;
-      }
-
-      const escapedFieldRegex = /"(stdout|msg)"\s*:\s*"((?:\\.|[^"\\])*)"/g;
-      let escapedFieldMatch = escapedFieldRegex.exec(clean);
-      while (escapedFieldMatch !== null) {
-        try {
-          const unescaped = JSON.parse(`"${escapedFieldMatch[2]}"`);
-          const prefixedField = this.extractPrefixedDiscoveryJson(unescaped);
-          if (prefixedField) {
-            return prefixedField;
-          }
-          const fromField = this.tryParseJsonArray(unescaped);
-          if (fromField) {
-            return fromField;
-          }
-        } catch (e) {
-          // continue
-        }
-        escapedFieldMatch = escapedFieldRegex.exec(clean);
-      }
-
-      const arrayLikeMatches = clean.match(/\[\s*\{[\s\S]*?\}\s*\]/g) || [];
-      for (let i = arrayLikeMatches.length - 1; i >= 0; i -= 1) {
-        const parsed = this.tryParseJsonArray(arrayLikeMatches[i]);
-        if (parsed) {
-          return parsed;
-        }
-      }
-
-      const yamlLike = this.tryParseYamlLikeDiscoveryList(clean);
-      if (yamlLike) {
-        return yamlLike;
-      }
-
-      return null;
-    },
-    extractPrefixedDiscoveryJson(text) {
-      if (!text) {
-        return null;
-      }
-      const marker = 'SEMAPHORE_DISCOVERY_JSON=';
-      const idx = text.lastIndexOf(marker);
-      if (idx < 0) {
-        return null;
-      }
-      const after = text.slice(idx + marker.length).trim();
-      const endLine = after.indexOf('\n');
-      const candidate = (endLine >= 0 ? after.slice(0, endLine) : after).trim();
-      return this.tryParseJsonArray(candidate);
-    },
-    tryParseYamlLikeDiscoveryList(text) {
-      if (!text || !text.includes('device_status:')) {
-        return null;
-      }
-
-      const lines = text.split('\n');
-      const items = [];
-      let current = null;
-
-      const parseValue = (v) => {
-        const raw = (v || '').trim();
-        if (!raw) {
-          return '';
-        }
-        if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith('\'') && raw.endsWith('\''))) {
-          return raw.slice(1, -1);
-        }
-        return raw;
-      };
-
-      for (let i = 0; i < lines.length; i += 1) {
-        const line = this.stripAnsiCodes(lines[i] || '');
-        const itemStart = line.match(/^\s*-\s+([a-z_]+)\s*:\s*(.*)$/i);
-        if (itemStart) {
-          if (current) {
-            items.push(current);
-          }
-          current = { [itemStart[1]]: parseValue(itemStart[2]) };
-        } else {
-          const kv = line.match(/^\s{2,}([a-z_]+)\s*:\s*(.*)$/i);
-          if (kv && current) {
-            current[kv[1]] = parseValue(kv[2]);
-          }
-        }
-      }
-
-      if (current) {
-        items.push(current);
-      }
-
-      if (items.length === 0 || !items.some((x) => x.ip_address || x.hostname)) {
-        return null;
-      }
-
-      return items;
-    },
-    async loadDiscoveryResultFromTask(taskId) {
-      const outputRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}/output`);
-      const lines = outputRes.data || [];
-      const merged = lines.map((line) => line.output || '').join('\n');
-      let parsed = this.extractJsonArrayFromText(merged);
-
-      if (!parsed) {
-        try {
-          const rawRes = await axios.get(
-            `/api/project/${this.projectId}/tasks/${taskId}/raw_output`,
-            { responseType: 'text' },
-          );
-          parsed = this.extractJsonArrayFromText(rawRes.data || '');
-        } catch (e) {
-          // ignore raw output fallback errors and keep original message below
-        }
-      }
-
-      if (!parsed) {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryResultNotFound');
-        return;
-      }
-      this.applyDiscoveredDevices(parsed);
-      EventBus.$emit('i-snackbar', {
-        color: 'success',
-        text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
-      });
-    },
-    applyDiscoveredDevices(parsed) {
-      this.discoveredDevices = (parsed || [])
-        .map((x) => ({
-          hostname: (x.hostname || '').trim(),
-          ip_address: (x.ip_address || x.ip || '').trim(),
-          device_status: x.device_status || x.status || 'unhealthy',
-          rdp_status: x.rdp_status || 'offline',
-          winrm_status: x.winrm_status || 'offline',
-          api_status: x.api_status || 'offline',
-          abnormal_reason: x.abnormal_reason || null,
-        }))
-        .filter((x) => x.ip_address || x.hostname);
-      this.selectedDiscovered = [...this.discoveredDevices];
-    },
-    async runDiscoverTemplate() {
-      await this.discoverDevices();
-    },
-    async importSelectedDiscovery() {
-      this.importingDiscovery = true;
-      this.discoveryError = '';
-      try {
-        const payload = {
-          devices: this.discoveredDevices,
-          selected_ips: this.selectedDiscovered
-            .map((x) => String(x.ip_address || x.ip || '').trim())
-            .filter((ip) => ip),
-        };
-        const res = await axios.post(`${this.getItemsUrl()}/discovery/import`, payload);
-        EventBus.$emit('i-snackbar', {
-          color: 'success',
-          text: this.$i18n.t('deviceImportSaved', { count: res.data.saved_count || 0 }),
-        });
-        this.discoveryDialog = false;
-        await this.loadItems();
-      } catch (e) {
-        this.discoveryError = getErrorMessage(e);
-      } finally {
-        this.importingDiscovery = false;
-      }
-    },
     async runPatrol() {
       this.patrolling = true;
       try {

@@ -17,7 +17,9 @@ import Templates from '../views/project/Templates.vue';
 import TemplateView from '../views/project/TemplateView.vue';
 import Environment from '../views/project/Environment.vue';
 import Inventory from '../views/project/Inventory.vue';
+import DevicesShell from '../views/project/DevicesShell.vue';
 import Devices from '../views/project/Devices.vue';
+import DeviceDiscovery from '../views/project/DeviceDiscovery.vue';
 import Keys from '../views/project/Keys.vue';
 import Repositories from '../views/project/Repositories.vue';
 import Team from '../views/project/Team.vue';
@@ -130,7 +132,12 @@ const routes = [
   },
   {
     path: '/project/:projectId/devices',
-    component: Devices,
+    component: DevicesShell,
+    redirect: (to) => `/project/${to.params.projectId}/devices/list`,
+    children: [
+      { path: 'list', component: Devices },
+      { path: 'discovery', component: DeviceDiscovery },
+    ],
   },
   {
     path: '/project/:projectId/integrations',
