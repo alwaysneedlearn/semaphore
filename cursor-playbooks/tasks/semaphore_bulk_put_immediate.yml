@@ -1,19 +1,21 @@
 ---
 # 当前 windows_hosts 已写入 hostvars[inventory_hostname].semaphore_callback_row 后 include。
 # Semaphore/Ansible 在全员 end_host 时常不执行 post_tasks，故在 end_host 前立即 PUT 单条 bulk。
+# 勿在 include_tasks 上使用 delegate_to / run_once（须包在 block 上）。
 
 - name: 解析 bulk PUT 凭据（localhost）
-  ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
   run_once: true
   delegate_to: localhost
+  block:
+    - ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
 
 - name: 立即 PUT 本主机设备状态（单条 bulk）
   ansible.builtin.uri:
-    url: "{{ hostvars['localhost']._sem_bulk_url | default(_sem_bulk_url | default('http://127.0.0.1:3000', true)) | regex_replace('/$', '') }}/api/project/{{ hostvars['localhost']._sem_bulk_pid | default(_sem_bulk_pid | default('', true)) }}/devices/status/bulk"
+    url: "{{ hostvars['localhost']._sem_bulk_url | default('http://127.0.0.1:3000', true) | regex_replace('/$', '') }}/api/project/{{ hostvars['localhost']._sem_bulk_pid | default('') }}/devices/status/bulk"
     method: PUT
     headers:
       Content-Type: application/json
-      Authorization: "Bearer {{ hostvars['localhost']._sem_bulk_token | default(_sem_bulk_token | default('', true)) | trim }}"
+      Authorization: "Bearer {{ hostvars['localhost']._sem_bulk_token | default('') | trim }}"
     body_format: json
     body:
       updates: "{{ [_sem_immediate_row] }}"
@@ -24,13 +26,10 @@
   vars:
     _sem_src_row: "{{ hostvars[inventory_hostname].semaphore_callback_row }}"
     _sem_immediate_row: "{{ _sem_src_row | combine({'status': _sem_src_row.device_status | default(_sem_src_row.status | default('unhealthy'))}, recursive=True) }}"
-    _sem_bulk_url: "{{ hostvars['localhost']._sem_bulk_url | default('http://127.0.0.1:3000', true) }}"
-    _sem_bulk_pid: "{{ hostvars['localhost']._sem_bulk_pid | default('', true) }}"
-    _sem_bulk_token: "{{ hostvars['localhost']._sem_bulk_token | default('', true) }}"
   when:
     - hostvars[inventory_hostname].semaphore_callback_row is defined
-    - (hostvars['localhost']._sem_bulk_pid | default(_sem_bulk_pid | default('', true)) | trim | length) > 0
-    - (hostvars['localhost']._sem_bulk_token | default(_sem_bulk_token | default('', true)) | trim | length) > 0
+    - (hostvars['localhost']._sem_bulk_pid | default('') | trim | length) > 0
+    - (hostvars['localhost']._sem_bulk_token | default('') | trim | length) > 0
 
 - name: DEBUG 立即 bulk PUT 本主机
   ansible.builtin.debug:
@@ -39,4 +38,5 @@
       - "[DEBUG-API] immediate PUT http_status={{ _sem_immediate_put.status | default('n/a') }}"
       - "[DEBUG-API] immediate PUT body={{ _sem_immediate_put.content | default('') | truncate(800, True) }}"
       - "[DEBUG-API] immediate PUT json.updated={{ (_sem_immediate_put.json.updated | default('n/a')) if (_sem_immediate_put.json is defined) else 'n/a' }}"
+  delegate_to: localhost
   when: _sem_immediate_put is defined and not (_sem_immediate_put.skipped | default(false))
