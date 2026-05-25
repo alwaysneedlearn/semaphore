@@ -23,6 +23,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-WINRM] context={{ winrm_connect_context | default('play-start') }}"
+      - "[DEBUG-WINRM] WINRM_CONNECT_RETRIES_env={{ (lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('(unset→default 2)', true) }}"
       - "[DEBUG-WINRM] session_ok={{ _winrm_session_ok | default(false) }}"
       - "[DEBUG-WINRM] ping_ok={{ _winrm_ping_ok | default('n/a') }}"
       - "[DEBUG-WINRM] attempts={{ winrm_connect_retries }} delay={{ winrm_connect_retry_delay }}s"

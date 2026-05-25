@@ -249,7 +249,7 @@ cursor-playbooks/
 9. **Log check without `ignore_unreachable`** → fatal, no final patrol callback.
 10. **`final_start_ok | default(true)`** → false **healthy** in API row.
 11. **`_winrm_ping is succeeded` after `ignore_unreachable`** → false **已连通** / `winrm_status: online` — use **`_winrm_ping_ok`** (`ping: pong`).
-12. **Ping fail then `重试前重置与等待` + ping again** — usually **`WINRM_CONNECT_RETRIES` loop** (label `第 N/M 次`), not business steps; do not confuse with **`winrm_refresh_midplay`** (second ensure) which must be gated on **`_winrm_session_ok`**.
+12. **Ping fail then `重试前重置与等待` + ping again** — usually **`WINRM_CONNECT_RETRIES` loop** (label `第 N/M 次`, default **2** per ensure), not business steps. **Four ping lines without VG env** often means **two** `winrm_ensure_reachable` runs (`play-start` + **`winrm_refresh_midplay`**), not `WINRM_CONNECT_RETRIES=4`. Playbook reads **`lookup('env', …)` only** — Variable Group **JSON** extra-vars do **not** set this; use VG **ENV** or server `env_vars`. Check **`[DEBUG-WINRM] attempts=`** and **`WINRM_CONNECT_RETRIES_env=`**.
 
 ### Why “skill said no” but it still shipped once
 
