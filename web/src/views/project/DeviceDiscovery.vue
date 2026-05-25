@@ -200,6 +200,7 @@ export default {
       this.loadTemplates(),
       this.loadInventories(),
       this.loadProfiles(),
+      this.loadPersistedDiscovery(),
     ]);
   },
 
@@ -309,10 +310,23 @@ export default {
       this.selectedDiscovered = [...this.discoveredDevices];
     },
 
+    async loadPersistedDiscovery() {
+      try {
+        const data = await this.fetchDiscoveryResults();
+        if ((data.devices || []).length > 0) {
+          this.applyDiscoveredDevicesFromApi(data.devices);
+        }
+      } catch (e) {
+        // ignore — empty table until first scan
+      }
+    },
+
     async fetchDiscoveryResults(taskId) {
-      const { data } = await axios.get(`${this.devicesApiBase}/discovery/results`, {
-        params: { task_id: taskId },
-      });
+      const params = {};
+      if (taskId) {
+        params.task_id = taskId;
+      }
+      const { data } = await axios.get(`${this.devicesApiBase}/discovery/results`, { params });
       return data || {};
     },
 
@@ -333,13 +347,19 @@ export default {
 
       try {
         const results = await this.fetchDiscoveryResults(taskId);
-        if (results.status === 'ready' && (results.devices || []).length > 0) {
-          this.applyDiscoveredDevicesFromApi(results.devices);
-          EventBus.$emit('i-snackbar', {
-            color: 'success',
-            text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
-          });
-          return;
+        if (results.status === 'ready' || (results.devices || []).length > 0) {
+          if ((results.devices || []).length > 0) {
+            this.applyDiscoveredDevicesFromApi(results.devices);
+            EventBus.$emit('i-snackbar', {
+              color: 'success',
+              text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+            });
+            return;
+          }
+          if (results.status === 'ready') {
+            this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackEmpty');
+            return;
+          }
         }
       } catch (e) {
         // keep polling until timeout unless hard error

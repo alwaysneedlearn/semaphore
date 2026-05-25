@@ -31,7 +31,7 @@ All commands use `task` (go-task). See `Taskfile.yml` for the full list.
 ### Devices UI routes
 
 - **Device list**: `/project/{id}/devices/list` (sidebar **Devices** redirects here)
-- **Discovery** (project-level discover template + import with device type): `/project/{id}/devices/discovery`. Scan results: playbook **`PUT /api/project/{id}/devices/discovery/results`** (`task_id`, `devices`); UI polls **`GET .../discovery/results?task_id=`**. Requires **`SEMAPHORE_API_TOKEN`** (and **`semaphore_task_id`** in task extra-vars, injected when discover starts). See `cursor-playbooks/device_discovery.yml`.
+- **Discovery** (project-level discover template + import with device type): `/project/{id}/devices/discovery`. Scan results persist in **`project__device_discovery_host`** (upsert by **`project_id` + `ip_address`**). Playbook **`PUT .../devices/discovery/results`**; UI loads **`GET .../discovery/results`** (all hosts) or **`?task_id=`** (hosts from that run). Requires **`SEMAPHORE_API_TOKEN`** and **`semaphore_task_id`** in task extra-vars. See `cursor-playbooks/device_discovery.yml`.
 - **Device types**: dialog from list toolbar (**Device types**)
 
 ### Running the server

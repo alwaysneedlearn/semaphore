@@ -722,31 +722,32 @@ func normalizeDiscoveredDeviceRows(rows []db.DiscoveredDeviceRow) []db.Discovere
 	return out
 }
 
-// GetDeviceDiscoveryResults returns devices reported by the discovery playbook callback.
+// GetDeviceDiscoveryResults returns persisted discovery hosts (by project; optional task_id filter).
 func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	taskID, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("task_id")))
-	if taskID <= 0 {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "task_id query parameter is required",
-		})
-		return
-	}
-	run, err := helpers.Store(r).GetDeviceDiscoveryRun(project.ID, taskID)
+	store := helpers.Store(r)
+	hosts, err := store.ListDiscoveredHosts(project.ID, taskID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-	devices := []db.DiscoveredDeviceRow{}
-	if strings.TrimSpace(run.DevicesJSON) != "" {
-		_ = json.Unmarshal([]byte(run.DevicesJSON), &devices)
+	devices := make([]db.DiscoveredDeviceRow, 0, len(hosts))
+	for _, h := range hosts {
+		devices = append(devices, h.ToDiscoveredDeviceRow())
 	}
-	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"task_id": run.TaskID,
-		"subnet":  run.Subnet,
-		"status":  run.Status,
+	out := map[string]any{
 		"devices": devices,
-	})
+		"total":   len(devices),
+	}
+	if taskID > 0 {
+		if run, runErr := store.GetDeviceDiscoveryRun(project.ID, taskID); runErr == nil {
+			out["task_id"] = run.TaskID
+			out["subnet"] = run.Subnet
+			out["status"] = run.Status
+		}
+	}
+	helpers.WriteJSON(w, http.StatusOK, out)
 }
 
 // PutDeviceDiscoveryResults is the playbook callback that stores discovery scan rows.
@@ -771,7 +772,7 @@ func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	normalized := normalizeDiscoveredDeviceRows(body.Devices)
-	devJSON, err := json.Marshal(normalized)
+	upserted, err := store.UpsertDiscoveredHostsByIP(project.ID, body.TaskID, normalized)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -789,7 +790,7 @@ func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 		ProjectID:   project.ID,
 		Subnet:      subnet,
 		Status:      db.DeviceDiscoveryRunReady,
-		DevicesJSON: string(devJSON),
+		DevicesJSON: "[]",
 		Updated:     time.Now(),
 	}
 	if err := store.UpsertDeviceDiscoveryRun(run); err != nil {
@@ -797,8 +798,9 @@ func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"task_id": body.TaskID,
-		"count":   len(normalized),
+		"task_id":  body.TaskID,
+		"count":    upserted,
+		"received": len(normalized),
 	})
 }
 
