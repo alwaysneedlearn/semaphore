@@ -86,9 +86,8 @@
           vars:
             _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
-- name: 写回 Semaphore 设备状态
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: 执行 bulk 回调
+  post_tasks:
+    - name: 写回 Semaphore 设备状态（post_tasks）
       ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
+      run_once: true
+      delegate_to: localhost

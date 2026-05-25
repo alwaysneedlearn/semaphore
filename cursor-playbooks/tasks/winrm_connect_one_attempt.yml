@@ -11,6 +11,7 @@
       ansible.windows.win_ping:
       register: _winrm_ping
       failed_when: false
+      ignore_unreachable: true
 
     - name: 登记 WinRM 已连通
       ansible.builtin.set_fact:
@@ -18,9 +19,13 @@
         _winrm_ping_last_success: "{{ _winrm_ping }}"
       when: _winrm_ping is succeeded
 
-    # win_ping UNREACHABLE 会把主机移出活跃列表，后续重试与 semaphore_callback 都会被跳过
-    - name: ping 未成功则清除 unreachable（便于重试与登记回调）
-      when: _winrm_ping is not succeeded
+  always:
+    # 无 ignore_unreachable 时 UNREACHABLE 会跳过 block 内后续任务；always 内再 clear 以便重试与登记回调
+    - name: ping 未成功则标记并清除 unreachable
+      when: _winrm_ping is defined and (_winrm_ping is not succeeded)
       block:
+        - name: 标记 WinRM 建连未成功
+          ansible.builtin.set_fact:
+            _winrm_connect_failed: true
         - name: 执行 clear_host_errors
           ansible.builtin.meta: clear_host_errors

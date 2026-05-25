@@ -1,0 +1,29 @@
+---
+# 在 localhost 上执行：win_ping UNREACHABLE 导致 play 内未写入 semaphore_callback_row 时补登记。
+# 依赖 windows_hosts play 已设置 _semaphore_device_rows；可选 hostvars._winrm_ping。
+
+- name: 补登记 WinRM 未连通且尚无回调的主机（delegate_facts）
+  ansible.builtin.set_fact:
+    semaphore_callback_row:
+      hostname: "{{ (_sem_fb_dev | default({})).hostname | default(item, true) }}"
+      ip: "{{ (_sem_fb_dev | default({})).ip | default(item, true) }}"
+      device_status: unhealthy
+      winrm_status: offline
+      api_status: offline
+      abnormal_reason: "{{ _sem_fb_reason }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['windows_hosts'] | default([]) }}"
+  when:
+    - hostvars[item].semaphore_callback_row is not defined
+    - not (hostvars[item]._winrm_session_ok | default(false) | bool)
+    - hostvars[item]._semaphore_device_rows is defined
+  vars:
+    _sem_fb_dev: "{{ hostvars[item]._semaphore_device_rows | selectattr('ip', 'equalto', item) | list | first | default(hostvars[item]._semaphore_device_rows | selectattr('hostname', 'equalto', item) | list | first, true) }}"
+    _sem_fb_ping_msg: "{{ (hostvars[item]._winrm_ping.msg | default('') | string) | trim }}"
+    _sem_fb_reason: >-
+      {% if _sem_fb_ping_msg | length > 0 %}
+      {{ 'WinRM ping failed after ' ~ (hostvars[item].winrm_connect_retries | default(4) | string) ~ ' attempt(s): ' ~ _sem_fb_ping_msg }}
+      {% else %}
+      {{ 'WinRM ping failed after ' ~ (hostvars[item].winrm_connect_retries | default(4) | string) ~ ' attempt(s)' }}
+      {% endif %}

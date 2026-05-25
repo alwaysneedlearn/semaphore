@@ -3,6 +3,10 @@
 # hostvar semaphore_callback_row per host (device_status + winrm_status + api_status
 # as applicable; rdp_status is usually omitted — use Probe for RDP TCP).
 # Env: SEMAPHORE_URL (optional), SEMAPHORE_PROJECT_ID, SEMAPHORE_API_TOKEN
+# 调用方宜在 windows_hosts play 的 post_tasks 中 run_once + delegate_to localhost（避免 play exit 4 跳过原 localhost play）。
+
+- name: 补登记 WinRM ping 失败但未写回调的主机
+  ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_fallback_missing_rows.yml
 
 - name: 汇总各主机 semaphore_callback_row
   ansible.builtin.set_fact:
