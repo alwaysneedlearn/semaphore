@@ -165,7 +165,8 @@ _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length
 
 ### Bulk PUT execution
 
-- **Do not** rely only on **`post_tasks`** or a second play — when all hosts `end_host` early, Semaphore logs often jump straight to **PLAY RECAP** with no bulk PUT. Always **`include_tasks: tasks/semaphore_bulk_put_immediate.yml`** right after setting **`semaphore_callback_row`** (before `end_host`). Keep **`post_tasks`** / **`hosts: localhost`** play for hosts that finish the full play.
+- **Bulk PUT** must run in a **`hosts: localhost` second play** after every `windows_hosts` host has run post_tasks **`登记 Semaphore 回调行`**. **Do not** put `run_once` bulk in the same play’s post_tasks — the first host to finish post_tasks triggers bulk while others still lack **`semaphore_callback_row`** (batch restart: 3× `final_start_ok=True` but UI stays unhealthy). **`device_stop`** may keep post_tasks-only bulk (short play).
+- When all hosts `end_host` early, play1 may skip post_tasks; use second play + optional **`semaphore_bulk_put_immediate.yml`** before `end_host` on failure paths.
 - **`semaphore_bulk_put_immediate.yml`**: resolves credentials in a **localhost block** → single-host **`uri` PUT** → DEBUG. **`semaphore_callback_winrm_fallback_missing_rows.yml`** runs only in **`semaphore_bulk_put_from_hostvars.yml`** (batch post_tasks), not inside the immediate file.
 - **Requires** env **`SEMAPHORE_API_TOKEN`**; optional `SEMAPHORE_URL` (default `http://127.0.0.1:3000`); **`semaphore_project_id`** from Semaphore extra-vars.
 

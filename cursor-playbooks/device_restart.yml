@@ -2,6 +2,7 @@
 - name: 重启程序（基于启动流程）
   hosts: windows_hosts
   gather_facts: no
+  max_fail_percentage: 100
   vars:
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
@@ -576,9 +577,9 @@
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
-  post_tasks:
-    - name: 写回 Semaphore 设备状态（post_tasks）
-      run_once: true
-      delegate_to: localhost
-      block:
-        - ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
+- name: 写回 Semaphore 设备状态（独立 play，等 windows_hosts 全部登记回调行后再 bulk）
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 执行 bulk 回调
+      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
