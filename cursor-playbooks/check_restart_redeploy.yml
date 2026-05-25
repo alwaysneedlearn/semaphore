@@ -626,6 +626,7 @@
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）
-      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
       run_once: true
       delegate_to: localhost
+      block:
+        - ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
