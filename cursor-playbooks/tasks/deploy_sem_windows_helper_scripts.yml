@@ -7,12 +7,16 @@
     src: "{{ playbook_dir }}/files/"
     dest: C:\Windows\Temp\
   changed_when: false
-  when: not (sem_helper_scripts_deployed | default(false) | bool)
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (sem_helper_scripts_deployed | default(false) | bool)
 
 - name: 登记辅助脚本已部署
   ansible.builtin.set_fact:
     sem_helper_scripts_deployed: true
-  when: not (sem_helper_scripts_deployed | default(false) | bool)
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (sem_helper_scripts_deployed | default(false) | bool)
 
 - name: DEBUG 辅助脚本批量部署
   ansible.builtin.debug:

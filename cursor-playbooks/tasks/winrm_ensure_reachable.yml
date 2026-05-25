@@ -28,8 +28,16 @@
       - "[DEBUG-WINRM] last_ping={{ _winrm_ping_last_success | default({}) }}"
   when: _winrm_ping_last_success is defined or _winrm_ping is defined
 
-- name: 建连失败后清除 unreachable 以便后续带 ignore_unreachable 的任务仍可再试
-  when: not (_winrm_session_ok | default(false) | bool)
+- name: WinRM 建连失败则登记 unhealthy 并结束本主机（bulk 回调 play）
+  ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_connect_failed.yml
+  when:
+    - not (_winrm_session_ok | default(false) | bool)
+    - _semaphore_device_rows is defined
+
+- name: 建连失败后清除 unreachable（无 bulk 回调变量的 play）
+  when:
+    - not (_winrm_session_ok | default(false) | bool)
+    - _semaphore_device_rows is not defined
   block:
     - name: 执行 clear_host_errors
       ansible.builtin.meta: clear_host_errors
