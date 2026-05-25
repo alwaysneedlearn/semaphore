@@ -29,10 +29,14 @@
   when: _winrm_ping_last_success is defined or _winrm_ping is defined
 
 - name: WinRM 建连失败则登记 unhealthy 并结束本主机（bulk 回调 play）
-  ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_connect_failed.yml
   when:
     - not (_winrm_session_ok | default(false) | bool)
     - _semaphore_device_rows is defined
+  block:
+    - name: 登记回调前清除 unreachable（ping 失败时否则跳过后续任务）
+      ansible.builtin.meta: clear_host_errors
+    - name: 执行 WinRM 建连失败回调
+      ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_connect_failed.yml
 
 - name: 建连失败后清除 unreachable（无 bulk 回调变量的 play）
   when:

@@ -17,3 +17,10 @@
         _winrm_session_ok: true
         _winrm_ping_last_success: "{{ _winrm_ping }}"
       when: _winrm_ping is succeeded
+
+    # win_ping UNREACHABLE 会把主机移出活跃列表，后续重试与 semaphore_callback 都会被跳过
+    - name: ping 未成功则清除 unreachable（便于重试与登记回调）
+      when: _winrm_ping is not succeeded
+      block:
+        - name: 执行 clear_host_errors
+          ansible.builtin.meta: clear_host_errors
