@@ -23,7 +23,7 @@
     _sem_fb_ping_msg: "{{ (hostvars[item]._winrm_ping.msg | default('') | string) | trim }}"
     _sem_fb_reason: >-
       {% if _sem_fb_ping_msg | length > 0 %}
-      {{ 'WinRM ping failed after ' ~ (hostvars[item].winrm_connect_retries | default(4) | string) ~ ' attempt(s): ' ~ _sem_fb_ping_msg }}
+      {{ 'WinRM ping failed after ' ~ (hostvars[item].winrm_connect_retries | default(2) | string) ~ ' attempt(s): ' ~ _sem_fb_ping_msg }}
       {% else %}
-      {{ 'WinRM ping failed after ' ~ (hostvars[item].winrm_connect_retries | default(4) | string) ~ ' attempt(s)' }}
+      {{ 'WinRM ping failed after ' ~ (hostvars[item].winrm_connect_retries | default(2) | string) ~ ' attempt(s)' }}
       {% endif %}

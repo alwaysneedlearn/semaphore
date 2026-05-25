@@ -132,7 +132,7 @@
           label: "{{ item }}"
         when: open_winrm_ips | length > 0
         until: hostname_result is succeeded
-        retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('4', true)) | int }}"
+        retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('2', true)) | int }}"
         delay: "{{ ((lookup('env', 'WINRM_CONNECT_RETRY_DELAY') | default('', true) | trim) | default('5', true)) | int }}"
         ignore_errors: true
         ignore_unreachable: true

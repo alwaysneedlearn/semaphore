@@ -8,7 +8,7 @@
 
 - name: 登记 WinRM 建连重试参数
   ansible.builtin.set_fact:
-    winrm_connect_retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('4', true)) | int }}"
+    winrm_connect_retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('2', true)) | int }}"
     winrm_connect_retry_delay: "{{ ((lookup('env', 'WINRM_CONNECT_RETRY_DELAY') | default('', true) | trim) | default('5', true)) | int }}"
 
 # loop 的 when 写在 include 上不会在迭代间重新求值；改在 winrm_connect_one_attempt 的 block 上 skip
