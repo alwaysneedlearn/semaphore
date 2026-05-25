@@ -1,6 +1,6 @@
 # 实施计划：TDengine 状态同步 + 多设备类型（Profile）
 
-本文档为技术计划与实现对照。**已实现（develop）**：TDengine 管理端配置、按 Profile 的模板/TDengine 表设置、`device_profile_id` 迁移 v2.18.15、默认 NEWARE、按类型拆分 Patrol/批量任务、bulk 回调后 TDengine 全量快照。**未实现**：调度器按 Profile 刷新、AnsibleHook.End 写入、Bolt 完整持久化、设备表单选择 Profile。
+本文档为技术计划与实现对照。**已实现（develop）**：TDengine Admin、Profile CRUD/UI（Devices → Device types）、`v2.18.15`、NEWARE 默认、Patrol/批量/调度按 Profile、bulk 后 TDengine 分表快照、列表按类型筛选、多任务前端提示、Discover 用 NEWARE 发现模板。运维说明见 [tdengine-setup.md](./tdengine-setup.md)。**可选未做**：AnsibleHook.End 写 TD、Bolt profile 持久化、DELETE profile、playbooks `profiles/<key>/` 目录。
 
 ---
 
@@ -223,11 +223,11 @@ tdengine_status_table   -- 默认 NEWARE → 'status'，可在 Profile 编辑页
 
 ### 2.7 验收（多设备类型）
 
-- [ ] 存量设备均为 NEWARE，操作正常
-- [ ] `device_profile_id` 为空设备：API 拒绝 start/stop/patrol
-- [ ] 批量启动含 NEWARE+A 两台 → 2 个 task
-- [ ] 每类型独立 status 模板；Patrol 只跑该类型设备
-- [ ] 项目设置中可新增类型并绑定 6 模板
+- [x] 存量设备打开列表时 EnsureDefault → NEWARE
+- [x] `device_profile_id` 为空：API 拒绝 start/stop（批量）；Patrol 会回填 NEWARE
+- [x] 批量启动含多类型 → 多 task + 前端确认
+- [x] 每类型独立 status 模板；Patrol 按 profile 拆任务
+- [x] Devices → Device types 可新增类型并绑定 6 模板
 
 ---
 

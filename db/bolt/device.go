@@ -70,6 +70,9 @@ func filterDevicesInMemory(devices []db.Device, filter *db.DeviceListFilter) []d
 		if as != "" && string(dev.APIStatus) != as {
 			continue
 		}
+		if filter.DeviceProfileID > 0 && dev.DeviceProfileID != filter.DeviceProfileID {
+			continue
+		}
 		out = append(out, dev)
 	}
 	return out

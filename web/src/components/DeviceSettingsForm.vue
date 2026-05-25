@@ -2,6 +2,12 @@
   <div>
     <v-alert v-if="formError" color="error" dense class="mb-2">{{ formError }}</v-alert>
 
+    <v-alert type="info" dense class="mb-3" outlined>
+      Templates and refresh intervals belong under
+      <strong>Devices → Device types</strong>.
+      This form is kept only for migration compatibility.
+    </v-alert>
+
     <p class="text--secondary mb-2">{{ $t('deviceSettingsHelp') }}</p>
 
     <v-row dense>

@@ -85,6 +85,7 @@ type DeviceListFilter struct {
 	RDPStatus         string
 	WinRMStatus       string
 	APIStatus         string
+	DeviceProfileID   int // 0 = no filter
 }
 
 // Validate enforces the device invariants checked at the API/store boundary.

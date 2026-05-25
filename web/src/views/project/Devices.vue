@@ -274,6 +274,13 @@
       @yes="bulkDelete()"
     />
 
+    <YesNoDialog
+      title="Confirm bulk action"
+      :text="bulkActionConfirmText"
+      v-model="bulkActionConfirmDialog"
+      @yes="executePendingBulkAction()"
+    />
+
     <v-row class="ma-4" dense>
       <v-col cols="6" sm="3">
         <v-card outlined>
@@ -369,6 +376,18 @@
             <v-text-field
               v-model.trim="filters.hostname"
               :label="$t('deviceFilterHostname')"
+              clearable
+              dense
+              outlined
+            />
+          </v-col>
+          <v-col cols="12" md="2">
+            <v-select
+              v-model="filters.deviceProfileId"
+              :items="profileFilterOptions"
+              item-value="id"
+              item-text="label"
+              label="Device type"
               clearable
               dense
               outlined
@@ -571,10 +590,15 @@ export default {
       importingDiscovery: false,
       bulkLoading: false,
       bulkDeleteDialog: false,
+      bulkActionConfirmDialog: false,
+      pendingBulkAction: null,
+      pendingBulkTaskCount: 0,
+      profilesList: [],
       profileById: {},
       filters: {
         hostname: '',
         ip: '',
+        deviceProfileId: null,
         deviceStatus: null,
         rdpStatus: null,
         winrmStatus: null,
@@ -610,6 +634,18 @@ export default {
       const some = this.pageDeviceIds.some((id) => this.selectedDeviceIds.includes(id));
       return some && !this.pageAllSelected;
     },
+    profileFilterOptions() {
+      return (this.profilesList || []).map((p) => ({
+        id: p.id,
+        label: `${p.name} (${p.profile_key})`,
+      }));
+    },
+    bulkActionConfirmText() {
+      const n = this.pendingBulkTaskCount;
+      const action = this.pendingBulkAction || '';
+      return `Selected devices span ${n} device type(s). This will create ${n} separate `
+        + `task(s) (one per type). Continue with "${action}"?`;
+    },
   },
 
   watch: {
@@ -644,6 +680,78 @@ export default {
         taskId: id,
       });
       EventBus.$emit('i-show-task', { taskId: id });
+    },
+
+    notifyDeviceTasksFromResponse(data) {
+      if (!data) {
+        return;
+      }
+      if (data.id != null) {
+        this.notifyDeviceTaskQueued(data.id);
+        return;
+      }
+      const tasks = data.tasks;
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        return;
+      }
+      const ids = tasks.map((t) => t && t.id).filter((id) => id != null);
+      EventBus.$emit('i-snackbar', {
+        color: 'success',
+        text: `Queued ${ids.length} task(s) (one per device type): ${ids.join(', ')}`,
+      });
+      if (ids.length > 0) {
+        this.notifyDeviceTaskQueued(ids[0]);
+      }
+    },
+
+    countProfileGroupsForSelection() {
+      const selected = new Set(this.selectedDeviceIds);
+      const profileIds = new Set();
+      (this.items || []).forEach((d) => {
+        if (!selected.has(d.id)) {
+          return;
+        }
+        profileIds.add(d.device_profile_id > 0 ? d.device_profile_id : 0);
+      });
+      if (profileIds.has(0) && profileIds.size > 1) {
+        return profileIds.size;
+      }
+      return profileIds.size || 0;
+    },
+
+    runBulkAction(action) {
+      const n = this.countProfileGroupsForSelection();
+      if (n > 1) {
+        this.pendingBulkAction = action;
+        this.pendingBulkTaskCount = n;
+        this.bulkActionConfirmDialog = true;
+        return;
+      }
+      this.executeBulkAction(action);
+    },
+
+    executePendingBulkAction() {
+      const action = this.pendingBulkAction;
+      this.pendingBulkAction = null;
+      this.pendingBulkTaskCount = 0;
+      if (action) {
+        this.executeBulkAction(action);
+      }
+    },
+
+    async executeBulkAction(action) {
+      this.bulkLoading = true;
+      try {
+        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
+          action,
+          device_ids: this.selectedDeviceIds,
+        });
+        this.notifyDeviceTasksFromResponse(res.data);
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.bulkLoading = false;
+      }
     },
     async askDeleteItem(itemId) {
       this.itemId = itemId;
@@ -746,8 +854,10 @@ export default {
         (data || []).forEach((p) => {
           map[p.id] = p.profile_key;
         });
+        this.profilesList = data || [];
         this.profileById = map;
       } catch (_) {
+        this.profilesList = [];
         this.profileById = {};
       }
     },
@@ -776,6 +886,9 @@ export default {
         };
         if (this.filters.hostname) params.hostname = this.filters.hostname;
         if (this.filters.ip) params.ip = this.filters.ip;
+        if (this.filters.deviceProfileId) {
+          params.device_profile_id = this.filters.deviceProfileId;
+        }
         if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
         if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
         if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
@@ -843,7 +956,7 @@ export default {
           action,
           device_ids: [device.id],
         });
-        this.notifyDeviceTaskQueued(res.data && res.data.id);
+        this.notifyDeviceTasksFromResponse(res.data);
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
@@ -1116,7 +1229,7 @@ export default {
       this.patrolling = true;
       try {
         const res = await axios.post(`${this.getItemsUrl()}/patrol`);
-        this.notifyDeviceTaskQueued(res.data && res.data.id);
+        this.notifyDeviceTasksFromResponse(res.data);
         await this.loadItems();
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
@@ -1133,20 +1246,6 @@ export default {
           text: this.$i18n.t('deviceBulkDone', { count: this.selectedDeviceIds.length }),
         });
         await this.loadItems();
-      } catch (e) {
-        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
-      } finally {
-        this.bulkLoading = false;
-      }
-    },
-    async runBulkAction(action) {
-      this.bulkLoading = true;
-      try {
-        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
-          action,
-          device_ids: this.selectedDeviceIds,
-        });
-        this.notifyDeviceTaskQueued(res.data && res.data.id);
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {

@@ -276,8 +276,13 @@ func parseDeviceListFilter(q url.Values) *db.DeviceListFilter {
 	if f.APIStatus == string(db.DeviceStatusUnknown) {
 		f.APIStatus = string(db.DeviceStatusOffline)
 	}
+	if v := strings.TrimSpace(q.Get("device_profile_id")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			f.DeviceProfileID = n
+		}
+	}
 	if f.HostnameSubstring == "" && f.IPSubstring == "" && f.DeviceStatus == "" &&
-		f.RDPStatus == "" && f.WinRMStatus == "" && f.APIStatus == "" {
+		f.RDPStatus == "" && f.WinRMStatus == "" && f.APIStatus == "" && f.DeviceProfileID <= 0 {
 		return nil
 	}
 	return f
@@ -766,7 +771,19 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	extraVars["subnet"] = subnet
 	extraVars["network_cidr"] = subnet
 
-	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
+	store := helpers.Store(r)
+	defaultProf, err := server.EnsureDefaultDeviceProfile(store, project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	probeDevice := db.Device{ProjectID: project.ID, DeviceProfileID: defaultProf.ID}
+	_, ps, err := server.ResolveDeviceProfileSettings(store, project.ID, probeDevice)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	task, err := runDeviceTemplateWithProfileSettings(r, project, ps, db.DeviceActionDiscover, extraVars, ps.DefaultInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -1125,7 +1142,15 @@ func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 	tasks := make([]db.Task, 0)
 	for profileID, devs := range server.GroupDevicesByProfile(devices) {
 		if profileID <= 0 {
-			continue
+			prof, err := server.EnsureDefaultDeviceProfile(store, project.ID)
+			if err != nil {
+				helpers.WriteError(w, err)
+				return
+			}
+			for i := range devs {
+				devs[i].DeviceProfileID = prof.ID
+			}
+			profileID = prof.ID
 		}
 		_, ps, err := server.ResolveDeviceProfileSettings(store, project.ID, devs[0])
 		if err != nil {

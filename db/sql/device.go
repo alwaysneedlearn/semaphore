@@ -44,6 +44,9 @@ func applyDeviceListFilters(q squirrel.SelectBuilder, filter *db.DeviceListFilte
 	if t := strings.TrimSpace(filter.APIStatus); t != "" {
 		q = q.Where("`api_status` = ?", t)
 	}
+	if filter.DeviceProfileID > 0 {
+		q = q.Where("`device_profile_id` = ?", filter.DeviceProfileID)
+	}
 	return q
 }
 
