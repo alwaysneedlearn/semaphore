@@ -3,11 +3,11 @@
 - name: 单次 WinRM 建连尝试
   when: not (_winrm_session_ok | default(false) | bool)
   block:
-    - name: 重试前重置与等待
+    - name: "重试前重置与等待（第 {{ _winrm_connect_attempt }}/{{ winrm_connect_retries }} 次建连）"
       ansible.builtin.include_tasks: tasks/winrm_connect_retry_pause.yml
       when: (_winrm_connect_attempt | int) > 1
 
-    - name: WinRM ping 探测
+    - name: "WinRM ping 探测（第 {{ _winrm_connect_attempt }}/{{ winrm_connect_retries }} 次）"
       ansible.windows.win_ping:
       register: _winrm_ping
       failed_when: false
@@ -32,5 +32,15 @@
         - name: 标记 WinRM 建连未成功
           ansible.builtin.set_fact:
             _winrm_connect_failed: true
+        - name: DEBUG 本次 ping 未成功
+          ansible.builtin.debug:
+            msg: >-
+              [DEBUG-WINRM] 第 {{ _winrm_connect_attempt }}/{{ winrm_connect_retries }} 次 ping 未成功
+              （unreachable={{ _winrm_ping.unreachable | default(false) }} ping={{ _winrm_ping.ping | default('') }}）
+              {% if (_winrm_connect_attempt | int) < (winrm_connect_retries | int) %}
+              → 将继续下一次建连重试（非「已连通」后的业务步骤）
+              {% else %}
+              → 已达最大重试次数，将登记 unhealthy 并 end_host
+              {% endif %}
         - name: 执行 clear_host_errors
           ansible.builtin.meta: clear_host_errors

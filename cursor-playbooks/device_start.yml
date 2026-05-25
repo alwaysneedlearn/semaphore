@@ -85,6 +85,7 @@
     - name: WinRM 中途建连（状态/日志判断前）
       ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
       when: >
+        _winrm_session_ok | default(false) | bool and
         check_result is defined and
         'stdout' in check_result and
         'NOT_RUNNING' not in check_result.stdout
@@ -115,6 +116,7 @@
 
     - name: WinRM 中途建连（重配流程前）
       ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      when: _winrm_session_ok | default(false) | bool
       vars:
         winrm_refresh_label: "WinRM 中途建连（重配流程前）"
 

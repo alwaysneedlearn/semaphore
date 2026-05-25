@@ -139,7 +139,9 @@
 
     - name: WinRM 中途建连（重配流程前）
       ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
-      when: need_reconfigure | bool
+      when:
+        - _winrm_session_ok | default(false) | bool
+        - need_reconfigure | bool
       vars:
         winrm_refresh_label: "WinRM 中途建连（重配流程前）"
 
