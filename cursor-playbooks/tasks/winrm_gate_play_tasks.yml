@@ -1,0 +1,7 @@
+---
+# 在 winrm_ensure_reachable 之后 include：仅当 _winrm_session_ok（真实 ping pong）为 true 时继续本 play 的 win_* / 巡检步骤。
+# 建连失败时 winrm_ensure 已登记 unhealthy 并 end_host；此处在未 end 时双保险，避免误判已连通后仍跑 deploy 之后任务。
+
+- name: WinRM 未连通则跳过后续主机任务
+  ansible.builtin.meta: end_host
+  when: not (_winrm_session_ok | default(false) | bool)

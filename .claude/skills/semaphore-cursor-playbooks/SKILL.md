@@ -85,8 +85,8 @@ post_tasks:
 2. **`win_ping`** in `tasks/winrm_connect_one_attempt.yml`:
    - `failed_when: false`
    - **`ignore_unreachable: true`** (mandatory)
-   - **Never use `_winrm_ping is succeeded` alone** — with `ignore_unreachable`, unreachable still shows task **ok**. Use **`tasks/winrm_eval_ping_result.yml`**: `_winrm_ping_ok` = `ping == 'pong'` and not `unreachable`.
-   - First failed ping sets **`_winrm_abort_connect_retries: true`** (skip remaining attempts; fast fail + callback).
+   - **Never use `_winrm_ping is succeeded` alone** — with `ignore_unreachable`, unreachable still shows task **ok** and used to set **`_winrm_session_ok`** wrongly. Use **`tasks/winrm_eval_ping_result.yml`**: `_winrm_ping_ok` = `ping == 'pong'` and not `unreachable`. Only then set **`_winrm_session_ok`**.
+   - After ensure, include **`tasks/winrm_gate_play_tasks.yml`** so deploy/collect never run on a host without real pong (keep full **`WINRM_CONNECT_RETRIES`** loop).
 3. In the same attempt, use **`block` + `always:`** when ping is not succeeded:
    - `meta: clear_host_errors`
    - optional `set_fact: _winrm_connect_failed: true`

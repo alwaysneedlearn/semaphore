@@ -38,6 +38,9 @@
     - name: WinRM 建连（含重试，须在其它 win_* 任务之前）
       ansible.builtin.include_tasks: tasks/winrm_ensure_reachable.yml
 
+    - name: WinRM 未连通则不再执行本主机后续步骤
+      ansible.builtin.include_tasks: tasks/winrm_gate_play_tasks.yml
+
     - name: 一次性部署 Windows 辅助脚本
       ansible.builtin.include_tasks: tasks/deploy_sem_windows_helper_scripts.yml
 
