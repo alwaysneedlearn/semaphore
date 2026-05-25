@@ -27,7 +27,7 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 |----------|-------------|
 | `semaphore_project_id` | Injected by Semaphore (extra-vars); used by `tasks/semaphore_bulk_put_from_hostvars.yml` |
 | `SEMAPHORE_PROJECT_ID` | Optional fallback (numeric id) if not in extra-vars |
-| `SEMAPHORE_API_TOKEN` | User API token (`Authorization: Bearer …`) — **required** for the callback to run |
+| `SEMAPHORE_API_TOKEN` | User API token (`Authorization: Bearer …`) — **required** for bulk PUT. Use Variable Group **ENV** *or* **JSON** extra-var (playbook reads both); server may inject via `env_vars` / `SEMAPHORE_DEVICE_CALLBACK_API_TOKEN` in `config.json` |
 | `SEMAPHORE_URL` | Optional; default `http://127.0.0.1:3000` (must reach Semaphore from the Ansible controller) |
 
 - **`device_discovery.yml`** — **No** bulk callback: only prints a JSON array for the UI to parse; persistence is **Import selected** → API `discovery/import`.

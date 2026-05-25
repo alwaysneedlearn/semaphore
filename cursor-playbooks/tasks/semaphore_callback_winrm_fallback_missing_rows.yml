@@ -8,12 +8,13 @@
       hostname: "{{ (_sem_fb_dev | default({})).hostname | default(item, true) }}"
       ip: "{{ (_sem_fb_dev | default({})).ip | default(item, true) }}"
       device_status: unhealthy
+      status: unhealthy
       winrm_status: offline
       api_status: offline
       abnormal_reason: "{{ _sem_fb_reason }}"
   delegate_to: "{{ item }}"
   delegate_facts: true
-  loop: "{{ groups['windows_hosts'] | default([]) }}"
+  loop: "{{ _sem_bulk_host_list | default(groups['windows_hosts'] | default([])) }}"
   when:
     - hostvars[item].semaphore_callback_row is not defined
     - not (hostvars[item]._winrm_session_ok | default(false) | bool)

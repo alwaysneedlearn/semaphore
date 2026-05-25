@@ -8,6 +8,7 @@
       hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
       ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
       device_status: unhealthy
+      status: unhealthy
       winrm_status: offline
       api_status: offline
       abnormal_reason: >-

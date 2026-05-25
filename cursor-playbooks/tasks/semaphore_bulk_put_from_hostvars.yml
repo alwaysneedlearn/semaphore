@@ -1,60 +1,64 @@
 ---
-# Include from a play with hosts: localhost after a windows_hosts play that set
-# hostvar semaphore_callback_row per host (device_status + winrm_status + api_status
-# as applicable; rdp_status is usually omitted — use Probe for RDP TCP).
-# Env: SEMAPHORE_URL (optional), SEMAPHORE_PROJECT_ID, SEMAPHORE_API_TOKEN
-# 调用方宜在 windows_hosts play 的 post_tasks 中 run_once + delegate_to localhost（避免 play exit 4 跳过原 localhost play）。
+# Include from windows_hosts play post_tasks: run_once + delegate_to localhost + block wrapper.
+# hostvar semaphore_callback_row per host; rdp_status usually omitted.
+
+- ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
 
 - name: 补登记 WinRM ping 失败但未写回调的主机
   ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_fallback_missing_rows.yml
 
-- name: 汇总各主机 semaphore_callback_row
+- name: 汇总各主机 semaphore_callback_row（含 status 字段供 API）
   ansible.builtin.set_fact:
-    semaphore_status_bulk_updates: "{{ semaphore_status_bulk_updates | default([]) + [ hostvars[item].semaphore_callback_row ] }}"
-  loop: "{{ groups['windows_hosts'] | default([]) }}"
+    semaphore_status_bulk_updates: "{{ semaphore_status_bulk_updates | default([]) + [_sem_bulk_item] }}"
+  loop: "{{ _sem_bulk_host_list | default([]) }}"
   when: hostvars[item].semaphore_callback_row is defined
+  vars:
+    _sem_row: "{{ hostvars[item].semaphore_callback_row }}"
+    _sem_bulk_item: "{{ _sem_row | combine({'status': _sem_row.device_status | default(_sem_row.status | default('unhealthy'))}, recursive=True) }}"
 
-- name: 提示缺少 SEMAPHORE_API_TOKEN（不会 PUT，设备可能保持 checking）
+- name: DEBUG bulk 回调前置检查
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-API] bulk_hosts={{ _sem_bulk_host_list | default([]) | length }} rows={{ semaphore_status_bulk_updates | default([]) | length }}"
+      - "[DEBUG-API] bulk_pid={{ _sem_bulk_pid | default('') }}"
+      - "[DEBUG-API] bulk_url={{ _sem_bulk_url | default('') }}"
+      - "[DEBUG-API] bulk_token_set={{ (_sem_bulk_token | default('') | trim | length) > 0 }}"
+  when: semaphore_status_bulk_updates is defined
+
+- name: 提示缺少 bulk 凭据（设备可能保持 checking）
   ansible.builtin.debug:
     msg: >-
-      Bulk status callback skipped: set SEMAPHORE_API_TOKEN on the template
-      (and SEMAPHORE_URL if the controller cannot reach Semaphore at 127.0.0.1:3000).
-      Project id is passed as extra-var semaphore_project_id; SEMAPHORE_PROJECT_ID env is optional.
+      Bulk status callback skipped: need semaphore_project_id (injected by Semaphore task)
+      and SEMAPHORE_API_TOKEN (Variable Group ENV or JSON extra-var, or server env_vars).
+      rows={{ semaphore_status_bulk_updates | default([]) | length }} pid={{ _sem_bulk_pid | default('') }}
+      token_set={{ (_sem_bulk_token | default('') | trim | length) > 0 }}
   when:
     - (semaphore_status_bulk_updates | default([])) | length > 0
-    - (lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim | length) < 1
+    - (_sem_bulk_pid | default('') | trim | length) < 1 or (_sem_bulk_token | default('') | trim | length) < 1
 
 - name: PUT Semaphore /devices/status/bulk
   ansible.builtin.uri:
-    url: "{{ _sem_url }}/api/project/{{ _sem_pid }}/devices/status/bulk"
+    url: "{{ _sem_bulk_url | regex_replace('/$', '') }}/api/project/{{ _sem_bulk_pid }}/devices/status/bulk"
     method: PUT
     headers:
       Content-Type: application/json
-      Authorization: "Bearer {{ _sem_token }}"
+      Authorization: "Bearer {{ _sem_bulk_token }}"
     body_format: json
     body:
       updates: "{{ semaphore_status_bulk_updates | default([]) }}"
-    status_code: [200]
+    status_code: [200, 400, 401, 403, 404]
   register: _sem_bulk_put_result
-  vars:
-    _sem_url: "{{ (lookup('env', 'SEMAPHORE_URL') | default('', true) | trim) | default('http://127.0.0.1:3000', true) }}"
-    # Injected by Semaphore task extra-vars (runDeviceTemplate / scheduler); env is fallback.
-    _sem_pid: "{{ (semaphore_project_id | default(lookup('env', 'SEMAPHORE_PROJECT_ID'), true) | string | trim) }}"
-    _sem_token: "{{ (lookup('env', 'SEMAPHORE_API_TOKEN') | default('', true) | trim) }}"
+  failed_when: false
   when:
-    - _sem_pid | length > 0
-    - _sem_token | length > 0
+    - (_sem_bulk_pid | default('') | trim | length) > 0
+    - (_sem_bulk_token | default('') | trim | length) > 0
     - (semaphore_status_bulk_updates | default([])) | length > 0
 
-- name: DEBUG Semaphore bulk PUT 响应（成功也打印）
+- name: DEBUG Semaphore bulk PUT 响应
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-API] bulk PUT url={{ _sem_url }}/api/project/{{ _sem_pid }}/devices/status/bulk"
+      - "[DEBUG-API] bulk PUT url={{ _sem_bulk_url | regex_replace('/$', '') }}/api/project/{{ _sem_bulk_pid }}/devices/status/bulk"
       - "[DEBUG-API] bulk PUT http_status={{ _sem_bulk_put_result.status | default('n/a') }}"
-      - "[DEBUG-API] bulk PUT response_body={{ _sem_bulk_put_result.content | default('') }}"
-  vars:
-    _sem_url: "{{ lookup('env', 'SEMAPHORE_URL') | default('http://127.0.0.1:3000', true) | trim }}"
-    _sem_pid: "{{ (semaphore_project_id | default(lookup('env', 'SEMAPHORE_PROJECT_ID'), true)) | trim | string }}"
-  when:
-    - _sem_bulk_put_result is defined
-    - not (_sem_bulk_put_result.skipped | default(false))
+      - "[DEBUG-API] bulk PUT response_body={{ _sem_bulk_put_result.content | default('') | truncate(2000, True) }}"
+      - "[DEBUG-API] bulk PUT json.updated={{ (_sem_bulk_put_result.json.updated | default('n/a')) if (_sem_bulk_put_result.json is defined) else 'n/a' }}"
+  when: _sem_bulk_put_result is defined and not (_sem_bulk_put_result.skipped | default(false))

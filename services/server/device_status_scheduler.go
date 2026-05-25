@@ -138,10 +138,12 @@ func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceS
 			"api_port":     db.EffectiveDeviceAPIPortForExtraVars(d),
 		})
 	}
-	envBytes, err := json.Marshal(map[string]any{
+	extraVars := map[string]any{
 		"devices":              devicePayload,
 		"semaphore_project_id": settings.ProjectID,
-	})
+	}
+	InjectPlaybookCallbackVars(extraVars)
+	envBytes, err := json.Marshal(extraVars)
 	if err != nil {
 		log.WithError(err).Warn("device status: failed to marshal devices")
 		return

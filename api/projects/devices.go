@@ -670,6 +670,7 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 	}
 	// Lets playbooks call PUT /devices/status/bulk without requiring SEMAPHORE_PROJECT_ID in template env.
 	mergedVars["semaphore_project_id"] = project.ID
+	server.InjectPlaybookCallbackVars(mergedVars)
 
 	env := ""
 	if len(mergedVars) > 0 {
