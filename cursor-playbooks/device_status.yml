@@ -59,6 +59,10 @@
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
       when: status.unreachable | default(false)
 
+    - name: 立即写回 Semaphore（单条 bulk，不依赖 post_tasks）
+      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_immediate.yml
+      when: status.unreachable | default(false)
+
     - name: 跳过不可达主机
       ansible.builtin.meta: end_host
       when: status.unreachable | default(false)
@@ -142,8 +146,15 @@
           ansible.builtin.debug:
             msg: "{{ _status_report_msg_lines }}"
 
-    - name: 写回 Semaphore 设备状态（post_tasks，避免 unreachable exit 4 跳过独立 localhost play）
+    - name: 写回 Semaphore 设备状态（post_tasks，成功主机批量汇总）
       run_once: true
       delegate_to: localhost
       block:
         - ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
+
+- name: 写回 Semaphore 设备状态（独立 play，play1 exit 4 时补跑 bulk）
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 执行 bulk 回调
+      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml

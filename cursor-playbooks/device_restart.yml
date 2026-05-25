@@ -69,6 +69,10 @@
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
       when: check_result.unreachable | default(false)
 
+    - name: 立即写回 Semaphore（单条 bulk，不依赖 post_tasks）
+      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_immediate.yml
+      when: check_result.unreachable | default(false)
+
     - name: 前置检查：跳过不可达主机
       ansible.builtin.meta: end_host
       when: check_result.unreachable | default(false)
