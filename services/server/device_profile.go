@@ -120,6 +120,35 @@ func ValidateDeviceHasProfile(device db.Device) error {
 	return nil
 }
 
+// SeedDeviceProfileSettings creates default per-profile settings row (templates empty until configured).
+func SeedDeviceProfileSettings(store db.Store, prof db.DeviceProfile) error {
+	empty := db.ProjectDeviceProfileSettings{}
+	ps := db.ProjectDeviceProfileSettings{
+		ProjectID:           prof.ProjectID,
+		ProfileID:           prof.ID,
+		TDengineStatusTable: empty.EffectiveTDengineStatusTable(prof.ProfileKey),
+	}
+	return store.UpdateProjectDeviceProfileSettings(ps)
+}
+
+// ProfileSettingsAsProjectDeviceSettings adapts profile settings for probe/enqueue helpers.
+func ProfileSettingsAsProjectDeviceSettings(ps db.ProjectDeviceProfileSettings) db.ProjectDeviceSettings {
+	return db.ProjectDeviceSettings{
+		ProjectID:                               ps.ProjectID,
+		DefaultInventoryID:                      ps.DefaultInventoryID,
+		DefaultAnsibleUser:                      ps.DefaultAnsibleUser,
+		DefaultAnsiblePassword:                  ps.DefaultAnsiblePassword,
+		DefaultAnsibleConnection:                ps.DefaultAnsibleConnection,
+		DefaultAnsibleWinRMTransport:            ps.DefaultAnsibleWinRMTransport,
+		DefaultAnsibleWinRMScheme:               ps.DefaultAnsibleWinRMScheme,
+		DefaultAnsiblePort:                      ps.DefaultAnsiblePort,
+		DefaultAnsibleWinRMServerCertValidation: ps.DefaultAnsibleWinRMServerCertValidation,
+		StatusTemplateID:                        ps.StatusTemplateID,
+		StatusRefreshIntervalMin:                ps.StatusRefreshIntervalMin,
+		LastStatusRefreshAt:                     ps.LastStatusRefreshAt,
+	}
+}
+
 // GroupDevicesByProfile groups devices by device_profile_id.
 func GroupDevicesByProfile(devices []db.Device) map[int][]db.Device {
 	m := map[int][]db.Device{}

@@ -1,5 +1,18 @@
 <template>
   <div v-if="items != null">
+    <v-dialog v-model="deviceProfilesDialog" :max-width="900" scrollable>
+      <v-card>
+        <v-card-title>Device types (profiles)</v-card-title>
+        <v-card-text>
+          <DeviceProfilesForm :project-id="projectId" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="deviceProfilesDialog = false">{{ $t('close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="deviceSettingsDialog" :max-width="900">
       <v-card>
         <v-card-title>{{ $t('deviceSettingsTitle') }}</v-card-title>
@@ -159,6 +172,15 @@
       <v-app-bar-nav-icon @click="showDrawer()"></v-app-bar-nav-icon>
       <v-toolbar-title>{{ $t('devices') }}</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn
+        v-if="can(USER_PERMISSIONS.manageProjectResources)"
+        text
+        class="mr-2"
+        @click="deviceProfilesDialog = true"
+      >
+        <v-icon left>mdi-shape-outline</v-icon>
+        Device types
+      </v-btn>
       <v-btn
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
         text
@@ -397,6 +419,9 @@
           {{ $t('devicePaginationSelectionHint') }}
         </div>
       </template>
+      <template v-slot:item.device_profile_id="{ item }">
+        {{ profileLabel(item.device_profile_id) }}
+      </template>
       <template v-slot:item.device_status="{ item }">
         <v-chip x-small :color="statusColor(item.device_status)" dark>
           {{ item.device_status }}
@@ -486,11 +511,17 @@ import ItemListPageBase from '@/components/ItemListPageBase';
 import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
 import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
+import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
   mixins: [ItemListPageBase],
-  components: { DeviceForm, DeviceConfigDialog, DeviceSettingsForm },
+  components: {
+    DeviceForm,
+    DeviceConfigDialog,
+    DeviceSettingsForm,
+    DeviceProfilesForm,
+  },
 
   data() {
     return {
@@ -500,6 +531,7 @@ export default {
       discovering: false,
       patrolling: false,
       deviceSettingsDialog: false,
+      deviceProfilesDialog: false,
       deviceSettingsSaving: false,
       busyId: null,
       configDialog: false,
@@ -539,6 +571,7 @@ export default {
       importingDiscovery: false,
       bulkLoading: false,
       bulkDeleteDialog: false,
+      profileById: {},
       filters: {
         hostname: '',
         ip: '',
@@ -659,7 +692,8 @@ export default {
           align: 'center',
         },
         { text: this.$i18n.t('deviceIpAddress'), value: 'ip_address', width: '18%' },
-        { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '25%' },
+        { text: this.$i18n.t('deviceHostname'), value: 'hostname', width: '20%' },
+        { text: 'Type', value: 'device_profile_id', width: '10%' },
         { text: this.$i18n.t('deviceStatus'), value: 'device_status', width: '12%' },
         { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status', width: '9%' },
         { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status', width: '9%' },
@@ -705,6 +739,23 @@ export default {
       }
     },
 
+    async loadDeviceProfiles() {
+      try {
+        const { data } = await axios.get(`/api/project/${this.projectId}/devices/profiles`);
+        const map = {};
+        (data || []).forEach((p) => {
+          map[p.id] = p.profile_key;
+        });
+        this.profileById = map;
+      } catch (_) {
+        this.profileById = {};
+      }
+    },
+
+    profileLabel(profileId) {
+      return this.profileById[profileId] || '—';
+    },
+
     async loadItems() {
       this.devicesLoading = true;
       try {
@@ -733,6 +784,7 @@ export default {
         const [devicesRes, statsRes] = await Promise.all([
           axios.get(this.getItemsUrl(), { params }),
           axios.get(`${this.getItemsUrl()}/stats`),
+          this.loadDeviceProfiles(),
         ]);
         const body = devicesRes.data || {};
         this.items = body.devices || [];

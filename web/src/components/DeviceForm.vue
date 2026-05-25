@@ -22,6 +22,18 @@
       placeholder="10.0.0.5"
     ></v-text-field>
 
+    <v-select
+      v-model="item.device_profile_id"
+      :items="profileOptions"
+      item-value="id"
+      item-text="label"
+      label="Device type"
+      :rules="[v => !!v || 'Device type is required']"
+      :disabled="formSaving || profilesLoading"
+      outlined
+      dense
+    />
+
     <v-text-field
       v-model="item.hostname"
       :label="$t('deviceHostname')"
@@ -156,6 +168,7 @@
   </v-form>
 </template>
 <script>
+import axios from 'axios';
 import ItemFormBase from '@/components/ItemFormBase';
 
 export default {
@@ -165,10 +178,39 @@ export default {
     return {
       showAnsiblePassword: false,
       showRdpPassword: false,
+      profiles: [],
+      profilesLoading: false,
+      defaultProfileId: null,
     };
   },
 
+  computed: {
+    profileOptions() {
+      return this.profiles.map((p) => ({
+        id: p.id,
+        label: `${p.name} (${p.profile_key})`,
+      }));
+    },
+  },
+
+  async created() {
+    await this.loadProfiles();
+  },
+
   methods: {
+    async loadProfiles() {
+      this.profilesLoading = true;
+      try {
+        const { data } = await axios.get(`/api/project/${this.projectId}/devices/profiles`);
+        this.profiles = data || [];
+        const def = this.profiles.find((p) => p.profile_key === 'NEWARE');
+        this.defaultProfileId = def ? def.id : (this.profiles[0] && this.profiles[0].id);
+      } catch (_) {
+        this.profiles = [];
+      } finally {
+        this.profilesLoading = false;
+      }
+    },
     beforeSave() {
       if (!this.item) {
         return;
@@ -205,6 +247,7 @@ export default {
     },
     getNewItem() {
       return {
+        device_profile_id: this.defaultProfileId,
         ip_address: '',
         hostname: '',
         rdp_user: '',
@@ -224,6 +267,9 @@ export default {
     afterLoadData() {
       this.showAnsiblePassword = false;
       this.showRdpPassword = false;
+      if (this.item && !this.item.device_profile_id && this.defaultProfileId) {
+        this.item.device_profile_id = this.defaultProfileId;
+      }
       if (this.item && (this.item.rdp_port == null || this.item.rdp_port === '')) {
         this.item.rdp_port = 3389;
       }

@@ -79,6 +79,62 @@ func (s *DeviceStatusScheduler) tick() {
 	for _, settings := range due {
 		s.refreshProject(settings, now)
 	}
+
+	profileDue, err := s.store.GetDeviceProfileSettingsDueForRefresh(now)
+	if err != nil {
+		log.WithError(err).Warn("device status: failed to list profiles due for refresh")
+		return
+	}
+	for _, ps := range profileDue {
+		s.refreshProfile(ps, now)
+	}
+}
+
+func (s *DeviceStatusScheduler) refreshProfile(ps db.ProjectDeviceProfileSettings, now time.Time) {
+	projectSettings, err := s.store.GetProjectDeviceSettings(ps.ProjectID)
+	if err != nil {
+		log.WithError(err).WithField("project_id", ps.ProjectID).Warn("device status: failed to load project settings")
+		return
+	}
+	MergeProfileSettingsFromProject(&ps, projectSettings)
+	probeSettings := ProfileSettingsAsProjectDeviceSettings(ps)
+
+	devices, err := s.store.GetDevices(ps.ProjectID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		log.WithError(err).WithField("project_id", ps.ProjectID).Warn("device status: failed to load devices for profile refresh")
+		return
+	}
+
+	var profileDevices []db.Device
+	for _, device := range devices {
+		if device.DeviceProfileID == ps.ProfileID {
+			profileDevices = append(profileDevices, device)
+		}
+	}
+
+	for _, device := range profileDevices {
+		rdp, winrm, api, refreshed := ProbeDevice(device, probeSettings)
+		if err := s.store.UpdateDeviceStatus(
+			ps.ProjectID, device.ID, rdp, winrm, api, refreshed,
+		); err != nil {
+			log.WithError(err).
+				WithField("project_id", ps.ProjectID).
+				WithField("device_id", device.ID).
+				Warn("device status: failed to persist profile probe result")
+		}
+	}
+
+	if err := s.store.MarkDeviceProfileStatusRefreshed(ps.ProjectID, ps.ProfileID, now); err != nil {
+		log.WithError(err).
+			WithField("project_id", ps.ProjectID).
+			WithField("profile_id", ps.ProfileID).
+			Warn("device status: failed to record profile last refresh time")
+	}
+
+	if ps.StatusTemplateID == nil || *ps.StatusTemplateID == 0 || len(profileDevices) == 0 {
+		return
+	}
+	s.enqueueStatusTemplate(probeSettings, profileDevices)
 }
 
 func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings, now time.Time) {

@@ -468,6 +468,9 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	device.ID = old.ID
 	device.ProjectID = old.ProjectID
+	if device.DeviceProfileID <= 0 {
+		device.DeviceProfileID = old.DeviceProfileID
+	}
 	device.IPAddress = strings.TrimSpace(device.IPAddress)
 	device.Hostname = strings.TrimSpace(device.Hostname)
 	device.Name = device.Hostname

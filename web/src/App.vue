@@ -520,6 +520,18 @@
 
               <v-divider />
 
+              <v-subheader v-if="user.admin">Platform</v-subheader>
+
+              <v-list-item key="tdengine-menu" to="/admin/tdengine" v-if="user.admin">
+                <v-list-item-icon>
+                  <v-icon>mdi-database</v-icon>
+                </v-list-item-icon>
+
+                <v-list-item-content>
+                  TDengine
+                </v-list-item-content>
+              </v-list-item>
+
               <v-list-item key="runners" to="/runners" v-if="user.admin">
                 <v-list-item-icon>
                   <v-icon>mdi-cogs</v-icon>
@@ -557,16 +569,6 @@
 
                 <v-list-item-content>
                   {{ $t('users') }}
-                </v-list-item-content>
-              </v-list-item>
-
-              <v-list-item key="tdengine" to="/admin/tdengine" v-if="user.admin">
-                <v-list-item-icon>
-                  <v-icon>mdi-database</v-icon>
-                </v-list-item-icon>
-
-                <v-list-item-content>
-                  TDengine
                 </v-list-item-content>
               </v-list-item>
 

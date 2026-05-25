@@ -68,15 +68,6 @@
         :project-id="projectId"
       />
 
-      <h2 class="mt-8 mb-1" v-if="projectType === ''">Device profiles</h2>
-
-      <v-divider class="mb-4" v-if="projectType === ''" />
-
-      <DeviceProfilesForm
-        v-if="projectType === ''"
-        :project-id="projectId"
-      />
-
       <h2 class="mt-8 mb-1">{{ $t('danger_zone_settings') }}</h2>
 
       <v-divider class="mb-8" />
@@ -189,7 +180,6 @@ import YesNoDialog from '@/components/YesNoDialog.vue';
 import delay from '@/lib/delay';
 import DashboardMenu from '@/components/DashboardMenu.vue';
 import DeviceSettingsForm from '@/components/DeviceSettingsForm.vue';
-import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 
 export default {
   components: {
@@ -197,7 +187,6 @@ export default {
     YesNoDialog,
     ProjectForm,
     DeviceSettingsForm,
-    DeviceProfilesForm,
   },
   props: {
     projectId: Number,
