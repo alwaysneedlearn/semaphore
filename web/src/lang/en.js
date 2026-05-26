@@ -457,7 +457,7 @@ export default {
   deviceDiscoverySettingsTitle: 'Discovery template',
   deviceDiscoverySettingsBtn: 'Discovery settings',
   deviceDiscoverySettingsHelp:
-    'Project-level discovery template (not tied to a device type). Results are written via playbook API callback.',
+    'Project-level discovery template (not tied to a device type). Use the same Variable Group as other device playbooks (SEMAPHORE_API_TOKEN), or server env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN.',
   deviceDiscoveryDefaultInventory: 'Default inventory (optional)',
   deviceDiscoveryTemplateRequired: 'Configure a discovery template before running a scan.',
   deviceDiscoveryRefreshResults: 'Refresh results',
@@ -469,7 +469,7 @@ export default {
   deviceDiscoveryCallbackMissing:
     'Task finished but no discovery callback was received. Use cursor-playbooks/device_discovery.yml with SEMAPHORE_API_TOKEN, or re-run with a playbook that logs SEMAPHORE_DISCOVERY_JSON for log sync.',
   deviceDiscoveryMissingApiToken:
-    'SEMAPHORE_API_TOKEN is not set (template env or server config env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN). Results cannot be written via API callback; configure a token and re-scan, or rely on log sync from SEMAPHORE_DISCOVERY_JSON output.',
+    'Same as patrol/start templates: SEMAPHORE_API_TOKEN is required for API callback. Attach the same Variable Group to your discovery template (ENV or JSON with SEMAPHORE_API_TOKEN), or set env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN in server config.json (shared by all device tasks). Without it, use SEMAPHORE_DISCOVERY_JSON log sync after re-scan.',
   deviceDiscoveryListNotDeviceList:
     'The table below is cached discovery results, not the device list. Select hosts, choose a device type, then click Import selected.',
   deviceDiscoveryCallbackEmpty: 'Discovery task finished but no hosts were reported in the callback.',

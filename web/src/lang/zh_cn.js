@@ -383,7 +383,8 @@ export default {
   deviceDiscoveryTitle: '设备发现',
   deviceDiscoverySettingsTitle: '发现模板配置',
   deviceDiscoverySettingsBtn: '发现模板配置',
-  deviceDiscoverySettingsHelp: '项目级发现模板（不绑定设备类型）。扫描结果通过 playbook 回调写入下方列表。',
+  deviceDiscoverySettingsHelp:
+    '项目级发现模板（不绑定设备类型）。请为该模板绑定与其它设备 playbook 相同的 Variable Group（含 SEMAPHORE_API_TOKEN），或在服务器 config.json 配置 env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN。',
   deviceDiscoveryDefaultInventory: '默认清单（可选）',
   deviceDiscoveryTemplateRequired: '请先配置发现模板后再扫描。',
   deviceDiscoveryRefreshResults: '刷新发现结果',
@@ -394,7 +395,7 @@ export default {
   deviceDiscoveryCallbackMissing:
     '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/device_discovery.yml 且已配置 SEMAPHORE_API_TOKEN；若未配置 token，需使用含 SEMAPHORE_DISCOVERY_JSON 日志输出的最新 playbook 并重新扫描。',
   deviceDiscoveryMissingApiToken:
-    '未配置 SEMAPHORE_API_TOKEN（模板环境或服务器 config.json 的 env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN）。发现结果无法通过 API 回调写入；请配置 token 后重扫，或使用已输出 SEMAPHORE_DISCOVERY_JSON 的任务由系统自动从日志同步。',
+    '与巡检/启动模板相同，需要 SEMAPHORE_API_TOKEN 才能 API 回调。请在「发现模板」上绑定与设备操作模板相同的 Variable Group（ENV 或 JSON 里含 SEMAPHORE_API_TOKEN），或在服务器 config.json 的 env_vars 配置 SEMAPHORE_DEVICE_CALLBACK_API_TOKEN（全项目设备任务共用）。未配置时可用 playbook 输出的 SEMAPHORE_DISCOVERY_JSON 从任务日志同步。',
   deviceDiscoveryListNotDeviceList:
     '下方表格是「发现结果」缓存，不会自动进入「设备列表」。勾选主机、选择设备类型后点击「导入选中设备」。',
   deviceDiscoveryCallbackEmpty: '发现任务已完成，但回调未上报任何主机。',
