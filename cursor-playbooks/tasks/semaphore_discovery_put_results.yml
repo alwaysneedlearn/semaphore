@@ -52,7 +52,6 @@
     - (_sem_bulk_pid | default('') | trim | length) > 0
     - (_sem_bulk_token | default('') | trim | length) > 0
     - (_sem_discovery_task_id | default('') | trim | length) > 0
-    - (discovered_devices | default([])) | length > 0
 
 - name: DEBUG Semaphore discovery PUT 响应
   ansible.builtin.debug:

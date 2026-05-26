@@ -982,7 +982,14 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	extraVars["subnet"] = subnet
 	extraVars["network_cidr"] = subnet
 
-	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, nil)
+	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	invID := settings.DefaultInventoryID
+
+	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, invID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return

@@ -3,51 +3,81 @@
     <v-toolbar flat>
       <v-app-bar-nav-icon @click="showDrawer()" />
       <v-toolbar-title>{{ $t('deviceDiscoveryTitle') }}</v-toolbar-title>
+      <v-spacer />
+      <v-btn
+        v-if="can(USER_PERMISSIONS.manageProjectResources)"
+        text
+        small
+        class="mr-2"
+        @click="openSettingsDialog"
+      >
+        <v-icon left small>mdi-cog</v-icon>
+        {{ $t('deviceDiscoverySettingsBtn') }}
+      </v-btn>
     </v-toolbar>
 
-    <v-card flat class="mx-4 mb-4" v-if="can(USER_PERMISSIONS.manageProjectResources)">
-      <v-card-title class="subtitle-1">{{ $t('deviceDiscoverySettingsTitle') }}</v-card-title>
-      <v-card-text>
-        <p class="text--secondary mb-4">
-          {{ $t('deviceDiscoverySettingsHelp') }}
-        </p>
-        <v-row dense>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="settings.discover_template_id"
-              :items="templateItems"
-              item-text="name"
-              item-value="id"
-              :label="$t('deviceTemplateDiscover')"
-              clearable
-              outlined
-              dense
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-select
-              v-model="settings.default_inventory_id"
-              :items="inventoryItems"
-              item-text="name"
-              item-value="id"
-              :label="$t('deviceDiscoveryDefaultInventory')"
-              clearable
-              outlined
-              dense
-            />
-          </v-col>
-        </v-row>
-        <v-btn color="primary" depressed :loading="savingSettings" @click="saveSettings">
-          {{ $t('save') }}
-        </v-btn>
-      </v-card-text>
-    </v-card>
+    <v-dialog v-model="settingsDialog" max-width="560" persistent>
+      <v-card>
+        <v-card-title>{{ $t('deviceDiscoverySettingsTitle') }}</v-card-title>
+        <v-card-text>
+          <p class="text--secondary mb-4">
+            {{ $t('deviceDiscoverySettingsHelp') }}
+          </p>
+          <v-select
+            v-model="settingsDraft.discover_template_id"
+            :items="templateItems"
+            item-text="name"
+            item-value="id"
+            :label="$t('deviceTemplateDiscover')"
+            clearable
+            outlined
+            dense
+            class="mb-2"
+          />
+          <v-select
+            v-model="settingsDraft.default_inventory_id"
+            :items="inventoryItems"
+            item-text="name"
+            item-value="id"
+            :label="$t('deviceDiscoveryDefaultInventory')"
+            clearable
+            outlined
+            dense
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="settingsDialog = false">{{ $t('cancel') }}</v-btn>
+          <v-btn color="primary" depressed :loading="savingSettings" @click="saveSettings">
+            {{ $t('save') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-card flat class="mx-4">
       <v-card-text>
         <p class="text--secondary">
           {{ $t('deviceDiscoveryHelp') }}
         </p>
+        <v-alert
+          v-if="!settings.discover_template_id"
+          dense
+          type="info"
+          class="mb-3"
+        >
+          {{ $t('deviceDiscoveryTemplateRequired') }}
+          <v-btn
+            v-if="can(USER_PERMISSIONS.manageProjectResources)"
+            x-small
+            text
+            class="ml-1"
+            @click="openSettingsDialog"
+          >
+            {{ $t('deviceDiscoverySettingsBtn') }}
+          </v-btn>
+        </v-alert>
+
         <v-text-field
           v-model="discoverySubnet"
           :label="$t('deviceDiscoverySubnet')"
@@ -60,16 +90,23 @@
         />
         <v-btn
           color="primary"
-          class="mb-3"
+          class="mb-3 mr-2"
           :loading="discovering"
           :disabled="!settings.discover_template_id"
           @click="runDiscoverTemplate"
         >
           {{ $t('deviceDiscoverRunTemplate') }}
         </v-btn>
-        <v-alert v-if="!settings.discover_template_id" dense type="info" class="mb-3">
-          {{ $t('deviceDiscoveryTemplateRequired') }}
-        </v-alert>
+        <v-btn
+          v-if="discoveryPollTaskId"
+          text
+          class="mb-3"
+          :loading="discoveryPolling"
+          @click="refreshDiscoveryResultsNow"
+        >
+          {{ $t('deviceDiscoveryRefreshResults') }}
+        </v-btn>
+
         <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
 
         <v-data-table
@@ -154,11 +191,19 @@ export default {
         discover_template_id: null,
         default_inventory_id: null,
       },
+      settingsDraft: {
+        discover_template_id: null,
+        default_inventory_id: null,
+      },
+      settingsDialog: false,
       templates: [],
       inventories: [],
       profiles: [],
       savingSettings: false,
       discovering: false,
+      discoveryPolling: false,
+      discoveryPollTaskId: null,
+      discoveryPollTimer: null,
       discoverySubnet: '',
       discoveryError: '',
       discoveredDevices: [],
@@ -204,9 +249,21 @@ export default {
     ]);
   },
 
+  beforeDestroy() {
+    this.stopDiscoveryPoll();
+  },
+
   methods: {
     showDrawer() {
       EventBus.$emit('i-show-drawer');
+    },
+
+    openSettingsDialog() {
+      this.settingsDraft = {
+        discover_template_id: this.settings.discover_template_id,
+        default_inventory_id: this.settings.default_inventory_id,
+      };
+      this.settingsDialog = true;
     },
 
     statusColor(status) {
@@ -252,9 +309,11 @@ export default {
       this.savingSettings = true;
       try {
         await axios.put(`${this.devicesApiBase}/discovery/settings`, {
-          discover_template_id: this.settings.discover_template_id,
-          default_inventory_id: this.settings.default_inventory_id,
+          discover_template_id: this.settingsDraft.discover_template_id,
+          default_inventory_id: this.settingsDraft.default_inventory_id,
         });
+        this.settings = { ...this.settingsDraft };
+        this.settingsDialog = false;
         EventBus.$emit('i-snackbar', { color: 'success', text: this.$t('save') });
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
@@ -263,11 +322,113 @@ export default {
       }
     },
 
+    /** Snackbar with clickable task id + open task log dialog (same as device list actions). */
     notifyDeviceTaskQueued(taskId) {
+      const id = taskId != null ? Number(taskId) : null;
+      if (!id) {
+        return;
+      }
       EventBus.$emit('i-snackbar', {
-        color: 'info',
-        text: this.$i18n.t('deviceTaskQueued', { id: taskId }),
+        color: 'success',
+        textPrefix: this.$t('deviceTaskQueuedPrefix'),
+        textSuffix: this.$t('deviceTaskQueuedSuffix'),
+        taskId: id,
       });
+      EventBus.$emit('i-show-task', { taskId: id });
+    },
+
+    stopDiscoveryPoll() {
+      if (this.discoveryPollTimer) {
+        clearTimeout(this.discoveryPollTimer);
+        this.discoveryPollTimer = null;
+      }
+      this.discoveryPollTaskId = null;
+      this.discoveryPolling = false;
+    },
+
+    startDiscoveryPoll(taskId) {
+      this.stopDiscoveryPoll();
+      this.discoveryPollTaskId = taskId;
+      this.scheduleDiscoveryPoll(taskId, 60);
+    },
+
+    scheduleDiscoveryPoll(taskId, attemptsLeft) {
+      this.discoveryPollTimer = setTimeout(async () => {
+        await this.pollDiscoveryOnce(taskId, attemptsLeft);
+      }, 2000);
+    },
+
+    async refreshDiscoveryResultsNow() {
+      if (!this.discoveryPollTaskId) {
+        await this.loadPersistedDiscovery();
+        return;
+      }
+      this.discoveryPolling = true;
+      try {
+        await this.pollDiscoveryOnce(this.discoveryPollTaskId, 1);
+      } finally {
+        this.discoveryPolling = false;
+      }
+    },
+
+    async pollDiscoveryOnce(taskId, attemptsLeft) {
+      if (!this.discoveryPollTaskId || this.discoveryPollTaskId !== taskId) {
+        return;
+      }
+      let taskStatus = '';
+      try {
+        const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
+        taskStatus = (taskRes.data && taskRes.data.status) || '';
+      } catch (e) {
+        this.discoveryError = getErrorMessage(e);
+        this.stopDiscoveryPoll();
+        return;
+      }
+
+      if (taskStatus === 'error' || taskStatus === 'stopped') {
+        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskFailed');
+        this.stopDiscoveryPoll();
+        return;
+      }
+
+      try {
+        const results = await this.fetchDiscoveryResults(taskId);
+        if (results.status === 'ready' || (results.devices || []).length > 0) {
+          if ((results.devices || []).length > 0) {
+            this.applyDiscoveredDevicesFromApi(results.devices);
+            this.discoveryError = '';
+            EventBus.$emit('i-snackbar', {
+              color: 'success',
+              text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+            });
+            this.stopDiscoveryPoll();
+            return;
+          }
+          if (results.status === 'ready') {
+            this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackEmpty');
+            this.stopDiscoveryPoll();
+            return;
+          }
+        }
+      } catch (e) {
+        if (attemptsLeft <= 1) {
+          this.discoveryError = getErrorMessage(e);
+          this.stopDiscoveryPoll();
+          return;
+        }
+      }
+
+      if (attemptsLeft <= 1) {
+        if (taskStatus === 'success') {
+          this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackMissing');
+        } else {
+          this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
+        }
+        this.stopDiscoveryPoll();
+        return;
+      }
+
+      this.scheduleDiscoveryPoll(taskId, attemptsLeft - 1);
     },
 
     async discoverDevices() {
@@ -286,7 +447,7 @@ export default {
         const taskId = res.data && res.data.id;
         if (taskId) {
           this.notifyDeviceTaskQueued(taskId);
-          await this.waitAndLoadDiscoveryResult(taskId);
+          this.startDiscoveryPoll(taskId);
         }
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
@@ -328,60 +489,6 @@ export default {
       }
       const { data } = await axios.get(`${this.devicesApiBase}/discovery/results`, { params });
       return data || {};
-    },
-
-    async waitAndLoadDiscoveryResult(taskId, attemptsLeft = 60) {
-      let taskStatus = '';
-      try {
-        const taskRes = await axios.get(`/api/project/${this.projectId}/tasks/${taskId}`);
-        taskStatus = (taskRes.data && taskRes.data.status) || '';
-      } catch (e) {
-        this.discoveryError = getErrorMessage(e);
-        return;
-      }
-
-      if (taskStatus === 'error' || taskStatus === 'stopped') {
-        this.discoveryError = this.$i18n.t('deviceDiscoveryTaskFailed');
-        return;
-      }
-
-      try {
-        const results = await this.fetchDiscoveryResults(taskId);
-        if (results.status === 'ready' || (results.devices || []).length > 0) {
-          if ((results.devices || []).length > 0) {
-            this.applyDiscoveredDevicesFromApi(results.devices);
-            EventBus.$emit('i-snackbar', {
-              color: 'success',
-              text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
-            });
-            return;
-          }
-          if (results.status === 'ready') {
-            this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackEmpty');
-            return;
-          }
-        }
-      } catch (e) {
-        // keep polling until timeout unless hard error
-        if (attemptsLeft <= 1) {
-          this.discoveryError = getErrorMessage(e);
-          return;
-        }
-      }
-
-      if (attemptsLeft <= 1) {
-        if (taskStatus === 'success') {
-          this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackMissing');
-        } else {
-          this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
-        }
-        return;
-      }
-
-      await new Promise((resolve) => {
-        setTimeout(resolve, 2000);
-      });
-      await this.waitAndLoadDiscoveryResult(taskId, attemptsLeft - 1);
     },
 
     async runDiscoverTemplate() {

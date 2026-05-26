@@ -183,5 +183,7 @@
           path: /tmp/scan_ports.py
           state: absent
 
+      # Requires SEMAPHORE_API_TOKEN (+ semaphore_project_id / semaphore_task_id in task extra-vars).
+      # Marks the discovery run ready even when devices: [] (no hosts found).
       - name: 回调发现结果到 Semaphore API
         ansible.builtin.include_tasks: tasks/semaphore_discovery_put_results.yml
