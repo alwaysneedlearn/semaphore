@@ -795,11 +795,22 @@ func normalizeDiscoveredDeviceRows(rows []db.DiscoveredDeviceRow) []db.Discovere
 func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	taskID, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("task_id")))
+	syncLog := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("sync")), "1") ||
+		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("sync")), "true")
 	store := helpers.Store(r)
 	hosts, err := store.ListDiscoveredHosts(project.ID, taskID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
+	}
+	if taskID > 0 && (syncLog || len(hosts) == 0) {
+		if _, syncErr := SyncDiscoveryResultsFromTaskOutput(store, project.ID, taskID); syncErr == nil {
+			hosts, err = store.ListDiscoveredHosts(project.ID, taskID)
+			if err != nil {
+				helpers.WriteError(w, err)
+				return
+			}
+		}
 	}
 	devices := make([]db.DiscoveredDeviceRow, 0, len(hosts))
 	for _, h := range hosts {
@@ -814,6 +825,9 @@ func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 			out["task_id"] = run.TaskID
 			out["subnet"] = run.Subnet
 			out["status"] = run.Status
+		}
+		if len(devices) == 0 && !server.HasPlaybookCallbackToken(nil) {
+			out["callback_hint"] = "missing_semaphore_api_token"
 		}
 	}
 	helpers.WriteJSON(w, http.StatusOK, out)
@@ -1012,7 +1026,18 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	helpers.WriteJSON(w, http.StatusCreated, task)
+	resp := map[string]any{}
+	taskBytes, _ := json.Marshal(task)
+	_ = json.Unmarshal(taskBytes, &resp)
+	warnCheck := map[string]any{}
+	for k, v := range extraVars {
+		warnCheck[k] = v
+	}
+	server.InjectPlaybookCallbackVars(warnCheck)
+	if warn := discoveryCallbackWarning(warnCheck); warn != "" {
+		resp["discovery_warning"] = warn
+	}
+	helpers.WriteJSON(w, http.StatusCreated, resp)
 }
 
 func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {

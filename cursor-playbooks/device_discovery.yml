@@ -183,6 +183,11 @@
           path: /tmp/scan_ports.py
           state: absent
 
+      - name: 输出发现结果 JSON（任务日志兜底，未配置 API token 时 UI 可解析）
+        ansible.builtin.debug:
+          msg: "SEMAPHORE_DISCOVERY_JSON={{ discovered_devices | default([]) | to_json }}"
+        when: discovered_devices is defined
+
       # Requires SEMAPHORE_API_TOKEN (+ semaphore_project_id / semaphore_task_id in task extra-vars).
       # Marks the discovery run ready even when devices: [] (no hosts found).
       - name: 回调发现结果到 Semaphore API

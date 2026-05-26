@@ -392,7 +392,11 @@ export default {
   deviceDiscoveryImportProfileRequired: '导入前请选择设备类型。',
   deviceDiscoveryHelp: '输入网段并执行发现模板；playbook 通过 API 回调写入发现列表，收到结果后显示在下表。选择设备类型后导入选中行。',
   deviceDiscoveryCallbackMissing:
-    '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/device_discovery.yml 且已配置 SEMAPHORE_API_TOKEN。',
+    '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/device_discovery.yml 且已配置 SEMAPHORE_API_TOKEN；若未配置 token，需使用含 SEMAPHORE_DISCOVERY_JSON 日志输出的最新 playbook 并重新扫描。',
+  deviceDiscoveryMissingApiToken:
+    '未配置 SEMAPHORE_API_TOKEN（模板环境或服务器 config.json 的 env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN）。发现结果无法通过 API 回调写入；请配置 token 后重扫，或使用已输出 SEMAPHORE_DISCOVERY_JSON 的任务由系统自动从日志同步。',
+  deviceDiscoveryListNotDeviceList:
+    '下方表格是「发现结果」缓存，不会自动进入「设备列表」。勾选主机、选择设备类型后点击「导入选中设备」。',
   deviceDiscoveryCallbackEmpty: '发现任务已完成，但回调未上报任何主机。',
   deviceDiscoverySubnet: '网段（模板变量）',
   deviceDiscoverySubnetHint: '必填。会以 subnet 与 network_cidr 传给发现模板。支持 CIDR（如 192.168.1.0/24）或单主机 IP。',

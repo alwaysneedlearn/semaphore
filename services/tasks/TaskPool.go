@@ -814,6 +814,10 @@ func (p *TaskPool) AddTask(
 		return
 	}
 
+	if err = server.ApplySemaphoreTaskIDToTask(p.store, &newTask); err != nil {
+		log.WithError(err).WithField("task_id", newTask.ID).Warn("failed to inject semaphore_task_id into task environment")
+	}
+
 	taskRunner := NewTaskRunner(newTask, p, username, p.keyInstallationService)
 
 	if needAlias {

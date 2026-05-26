@@ -107,6 +107,12 @@
           {{ $t('deviceDiscoveryRefreshResults') }}
         </v-btn>
 
+        <v-alert dense type="warning" v-if="discoveryWarning" class="mb-3">
+          {{ discoveryWarningText }}
+        </v-alert>
+        <v-alert dense type="info" class="mb-3">
+          {{ $t('deviceDiscoveryListNotDeviceList') }}
+        </v-alert>
         <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
 
         <v-data-table
@@ -205,6 +211,7 @@ export default {
       discoveryPollTaskId: null,
       discoveryPollTimer: null,
       discoverySubnet: '',
+      discoveryWarning: '',
       discoveryError: '',
       discoveredDevices: [],
       selectedDiscovered: [],
@@ -236,6 +243,12 @@ export default {
     },
     devicesApiBase() {
       return `/api/project/${this.projectId}/devices`;
+    },
+    discoveryWarningText() {
+      if (this.discoveryWarning === 'missing_semaphore_api_token') {
+        return this.$t('deviceDiscoveryMissingApiToken');
+      }
+      return this.discoveryWarning;
     },
   },
 
@@ -392,7 +405,15 @@ export default {
       }
 
       try {
-        const results = await this.fetchDiscoveryResults(taskId);
+        let results = await this.fetchDiscoveryResults(taskId);
+        const trySync = taskStatus === 'success'
+          && (results.devices || []).length === 0;
+        if (trySync) {
+          results = await this.fetchDiscoveryResults(taskId, true);
+        }
+        if (results.callback_hint === 'missing_semaphore_api_token') {
+          this.discoveryWarning = 'missing_semaphore_api_token';
+        }
         if (results.status === 'ready' || (results.devices || []).length > 0) {
           if ((results.devices || []).length > 0) {
             this.applyDiscoveredDevicesFromApi(results.devices);
@@ -445,6 +466,7 @@ export default {
       try {
         const res = await axios.post(`${this.devicesApiBase}/discover`, { subnet: sub });
         const taskId = res.data && res.data.id;
+        this.discoveryWarning = res.data?.discovery_warning || '';
         if (taskId) {
           this.notifyDeviceTaskQueued(taskId);
           this.startDiscoveryPoll(taskId);
@@ -477,15 +499,24 @@ export default {
         if ((data.devices || []).length > 0) {
           this.applyDiscoveredDevicesFromApi(data.devices);
         }
+        if (this.discoveryPollTaskId && (data.devices || []).length === 0) {
+          const synced = await this.fetchDiscoveryResults(this.discoveryPollTaskId, true);
+          if ((synced.devices || []).length > 0) {
+            this.applyDiscoveredDevicesFromApi(synced.devices);
+          }
+        }
       } catch (e) {
         // ignore — empty table until first scan
       }
     },
 
-    async fetchDiscoveryResults(taskId) {
+    async fetchDiscoveryResults(taskId, syncFromLog = false) {
       const params = {};
       if (taskId) {
         params.task_id = taskId;
+      }
+      if (syncFromLog) {
+        params.sync = '1';
       }
       const { data } = await axios.get(`${this.devicesApiBase}/discovery/results`, { params });
       return data || {};

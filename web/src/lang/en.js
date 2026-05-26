@@ -467,7 +467,11 @@ export default {
   deviceDiscoveryHelp:
     'Enter a subnet and run the discovery template. The playbook PUTs results to the API; the table refreshes when the callback arrives. Choose a device type, then import selected rows.',
   deviceDiscoveryCallbackMissing:
-    'Task finished but no discovery callback was received. Ensure the template runs cursor-playbooks/device_discovery.yml with SEMAPHORE_API_TOKEN set.',
+    'Task finished but no discovery callback was received. Use cursor-playbooks/device_discovery.yml with SEMAPHORE_API_TOKEN, or re-run with a playbook that logs SEMAPHORE_DISCOVERY_JSON for log sync.',
+  deviceDiscoveryMissingApiToken:
+    'SEMAPHORE_API_TOKEN is not set (template env or server config env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN). Results cannot be written via API callback; configure a token and re-scan, or rely on log sync from SEMAPHORE_DISCOVERY_JSON output.',
+  deviceDiscoveryListNotDeviceList:
+    'The table below is cached discovery results, not the device list. Select hosts, choose a device type, then click Import selected.',
   deviceDiscoveryCallbackEmpty: 'Discovery task finished but no hosts were reported in the callback.',
   deviceDiscoverySubnet: 'Subnet (template variable)',
   deviceDiscoverySubnetHint: 'Required. Sent as subnet and network_cidr to the discovery template. Use CIDR (e.g. 192.168.1.0/24) or a single host IP.',
