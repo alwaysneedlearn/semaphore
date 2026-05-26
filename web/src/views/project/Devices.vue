@@ -216,6 +216,113 @@
       </v-col>
     </v-row>
 
+    <v-card outlined flat class="mx-4 mb-2 device-list-filters">
+      <v-card-text class="py-3 px-4">
+        <div class="d-flex align-center flex-wrap mb-2">
+          <v-icon small color="primary" class="mr-2">mdi-filter-variant</v-icon>
+          <span class="subtitle-2">{{ $t('deviceFiltersTitle') }}</span>
+          <v-spacer />
+          <v-btn
+            text
+            small
+            class="px-2"
+            :disabled="!hasActiveFilters"
+            @click="clearDeviceFilters"
+          >
+            <v-icon left small>mdi-filter-off</v-icon>
+            {{ $t('deviceFiltersClear') }}
+          </v-btn>
+        </div>
+        <v-row dense align="center">
+          <v-col cols="12" sm="6" md="4">
+            <v-text-field
+              v-model.trim="filters.ip"
+              :label="$t('deviceFilterIp')"
+              clearable
+              dense
+              outlined
+              hide-details
+              prepend-inner-icon="mdi-ip-network"
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="4">
+            <v-text-field
+              v-model.trim="filters.hostname"
+              :label="$t('deviceFilterHostname')"
+              clearable
+              dense
+              outlined
+              hide-details
+              prepend-inner-icon="mdi-server"
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="4">
+            <v-select
+              v-model="filters.deviceProfileId"
+              :items="profileFilterOptions"
+              item-value="id"
+              item-text="label"
+              :label="$t('deviceFilterType')"
+              clearable
+              dense
+              outlined
+              hide-details
+              prepend-inner-icon="mdi-shape-outline"
+            />
+          </v-col>
+        </v-row>
+        <v-row dense align="center" class="mt-1">
+          <v-col cols="6" sm="3">
+            <v-select
+              v-model="filters.deviceStatus"
+              :items="statusFilterOptions"
+              :label="$t('deviceStatus')"
+              clearable
+              dense
+              outlined
+              hide-details
+            />
+          </v-col>
+          <v-col cols="6" sm="3">
+            <v-select
+              v-model="filters.rdpStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceRdpStatus')"
+              clearable
+              dense
+              outlined
+              hide-details
+            />
+          </v-col>
+          <v-col cols="6" sm="3">
+            <v-select
+              v-model="filters.winrmStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceWinrmStatus')"
+              clearable
+              dense
+              outlined
+              hide-details
+            />
+          </v-col>
+          <v-col cols="6" sm="3">
+            <v-select
+              v-model="filters.apiStatus"
+              :items="protocolFilterOptions"
+              :label="$t('deviceFilterApiStatus')"
+              clearable
+              dense
+              outlined
+              hide-details
+            />
+          </v-col>
+        </v-row>
+        <p class="text--secondary caption mb-0 mt-2">
+          {{ $t('devicePaginationSelectionHint') }}
+        </p>
+      </v-card-text>
+    </v-card>
+
     <v-data-table
       :headers="headers"
       :items="items || []"
@@ -251,83 +358,6 @@
           :input-value="selectedDeviceIds.includes(item.id)"
           @click.stop.prevent="toggleDeviceRow(item)"
         />
-      </template>
-      <template v-slot:top>
-        <v-row dense class="px-4 pt-3">
-          <v-col cols="12" md="2">
-            <v-text-field
-              v-model.trim="filters.ip"
-              :label="$t('deviceFilterIp')"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-text-field
-              v-model.trim="filters.hostname"
-              :label="$t('deviceFilterHostname')"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-select
-              v-model="filters.deviceProfileId"
-              :items="profileFilterOptions"
-              item-value="id"
-              item-text="label"
-              label="Device type"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-select
-              v-model="filters.deviceStatus"
-              :items="statusFilterOptions"
-              :label="$t('deviceStatus')"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-select
-              v-model="filters.rdpStatus"
-              :items="protocolFilterOptions"
-              :label="$t('deviceRdpStatus')"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-select
-              v-model="filters.winrmStatus"
-              :items="protocolFilterOptions"
-              :label="$t('deviceWinrmStatus')"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-          <v-col cols="12" md="2">
-            <v-select
-              v-model="filters.apiStatus"
-              :items="protocolFilterOptions"
-              :label="$t('deviceFilterApiStatus')"
-              clearable
-              dense
-              outlined
-            />
-          </v-col>
-        </v-row>
-        <div class="px-4 pb-1 text--secondary caption">
-          {{ $t('devicePaginationSelectionHint') }}
-        </div>
       </template>
       <template v-slot:item.device_profile_id="{ item }">
         {{ profileLabel(item.device_profile_id) }}
@@ -518,6 +548,18 @@ export default {
       return `Selected devices span ${n} device type(s). This will create ${n} separate `
         + `task(s) (one per type). Continue with "${action}"?`;
     },
+    hasActiveFilters() {
+      const f = this.filters || {};
+      return Boolean(
+        (f.ip && String(f.ip).trim())
+        || (f.hostname && String(f.hostname).trim())
+        || f.deviceProfileId
+        || f.deviceStatus
+        || f.rdpStatus
+        || f.winrmStatus
+        || f.apiStatus,
+      );
+    },
   },
 
   watch: {
@@ -539,6 +581,18 @@ export default {
   // ItemListPageBase has askDeleteItem call /refs which we don't expose;
   // override to skip the refs check and go straight to the confirm dialog.
   methods: {
+    clearDeviceFilters() {
+      this.filters = {
+        hostname: '',
+        ip: '',
+        deviceProfileId: null,
+        deviceStatus: null,
+        rdpStatus: null,
+        winrmStatus: null,
+        apiStatus: null,
+      };
+    },
+
     /** Snackbar with clickable task id + open task log dialog (same as single-device actions). */
     notifyDeviceTaskQueued(taskId) {
       const id = taskId != null ? Number(taskId) : null;

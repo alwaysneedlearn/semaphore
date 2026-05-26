@@ -439,6 +439,9 @@ export default {
   deviceBulkDeleteConfirm: '确认删除已选 {count} 台设备？',
   deviceFilterHostname: '按主机名筛选',
   deviceFilterIp: '按 IP 筛选',
+  deviceFilterType: '设备类型',
+  deviceFiltersTitle: '筛选',
+  deviceFiltersClear: '清除筛选',
   deviceBulkDone: '已完成 {count} 台设备的批量操作',
   devicePaginationSelectionHint:
     '换页后仍保留已选设备；表头全选仅勾选当前页。',

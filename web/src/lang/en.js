@@ -513,6 +513,9 @@ export default {
   deviceBulkDeleteConfirm: 'Delete {count} selected devices?',
   deviceFilterHostname: 'Filter by hostname',
   deviceFilterIp: 'Filter by IP',
+  deviceFilterType: 'Device type',
+  deviceFiltersTitle: 'Filters',
+  deviceFiltersClear: 'Clear filters',
   deviceBulkDone: 'Batch completed for {count} devices',
   devicePaginationSelectionHint:
     'Selection is kept when you change pages. The header checkbox only selects rows on the current page.',
