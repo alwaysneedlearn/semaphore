@@ -19,6 +19,8 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/
 
 Top-level files such as `cursor-playbooks/device_start.yml` remain as thin **`import_playbook`** wrappers to the matching file under `neware/`. Existing template paths keep working; new work should use `neware/` explicitly.
 
+Semaphore binds **one auto inventory per device type** (`windows_hosts (auto: …)`). Point each type’s templates at that inventory for manual runs; list actions still use ephemeral `windows_hosts batch …` inventories.
+
 ## Documentation
 
 - **NEWARE playbooks (detailed):** [`neware/README.md`](neware/README.md) — Variable Groups, callbacks, WinRM, debug markers.

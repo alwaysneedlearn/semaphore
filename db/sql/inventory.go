@@ -38,6 +38,7 @@ func (d *SqlDb) UpdateInventory(inventory db.Inventory) error {
 			"name=?, "+
 			"type=?, "+
 			"is_device_default_auto=?, "+
+			"device_profile_id=?, "+
 			"runner_tag=?, "+
 			"ssh_key_id=?, "+
 			"inventory=?, "+
@@ -48,6 +49,7 @@ func (d *SqlDb) UpdateInventory(inventory db.Inventory) error {
 		inventory.Name,
 		inventory.Type,
 		inventory.IsDeviceDefaultAuto,
+		inventory.DeviceProfileID,
 		inventory.RunnerTag,
 		inventory.SSHKeyID,
 		inventory.Inventory,
@@ -64,16 +66,17 @@ func (d *SqlDb) CreateInventory(inventory db.Inventory) (newInventory db.Invento
 		"id",
 		"insert into project__inventory ("+
 			"project_id, name, type, "+
-			"is_device_default_auto, "+
+			"is_device_default_auto, device_profile_id, "+
 			"ssh_key_id, inventory, become_key_id, "+
 			"template_id, repository_id, runner_tag) values "+
 			"(?, ?, ?, "+
-			"?, ?, ?, "+
+			"?, ?, ?, ?, "+
 			"?, ?, ?, ?)",
 		inventory.ProjectID,
 		inventory.Name,
 		inventory.Type,
 		inventory.IsDeviceDefaultAuto,
+		inventory.DeviceProfileID,
 		inventory.SSHKeyID,
 		inventory.Inventory,
 		inventory.BecomeKeyID,

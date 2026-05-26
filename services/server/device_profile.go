@@ -38,7 +38,6 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 		RestartTemplateID:        projectSettings.RestartTemplateID,
 		StatusTemplateID:         projectSettings.StatusTemplateID,
 		ConfigTemplateID:         projectSettings.ConfigTemplateID,
-		DefaultInventoryID:       projectSettings.DefaultInventoryID,
 		DefaultAnsibleUser:       projectSettings.DefaultAnsibleUser,
 		DefaultAnsiblePassword:   projectSettings.DefaultAnsiblePassword,
 		DefaultAnsibleConnection: projectSettings.DefaultAnsibleConnection,
@@ -56,6 +55,9 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 
 	if err := store.AssignDevicesWithoutProfile(projectID, p.ID); err != nil {
 		log.WithError(err).WithField("project_id", projectID).Warn("device profile: failed to assign devices")
+	}
+	if err := SyncDeviceProfileAutoInventory(store, projectID, p.ID); err != nil {
+		log.WithError(err).WithField("project_id", projectID).Warn("device profile: failed to sync auto inventory")
 	}
 	return p, nil
 }
@@ -114,9 +116,6 @@ func ResolveDeviceProfileSettings(store db.Store, projectID int, device db.Devic
 
 // MergeProfileSettingsFromProject fills empty profile connection defaults from project-level row (legacy DB only).
 func MergeProfileSettingsFromProject(ps *db.ProjectDeviceProfileSettings, project db.ProjectDeviceSettings) {
-	if ps.DefaultInventoryID == nil {
-		ps.DefaultInventoryID = project.DefaultInventoryID
-	}
 	if strings.TrimSpace(ps.DefaultAnsibleUser) == "" {
 		ps.DefaultAnsibleUser = project.DefaultAnsibleUser
 	}

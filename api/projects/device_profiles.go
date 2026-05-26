@@ -45,7 +45,12 @@ func CreateDeviceProfile(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	if err := server.SeedDeviceProfileSettings(helpers.Store(r), created); err != nil {
+	store := helpers.Store(r)
+	if err := server.SeedDeviceProfileSettings(store, created); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	if err := server.SyncDeviceProfileAutoInventory(store, project.ID, created.ID); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}

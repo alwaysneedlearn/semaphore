@@ -17,10 +17,6 @@ import (
 	"github.com/semaphoreui/semaphore/services/server"
 )
 
-const (
-	deviceAutoInventoryName  = "windows_hosts (auto)"
-	deviceAutoInventoryGroup = "windows_hosts"
-)
 
 func normalizeProtocolStatus(status db.DeviceStatus) db.DeviceStatus {
 	if status == db.DeviceStatusOnline {
@@ -48,7 +44,7 @@ func normalizeDeviceStatuses(device *db.Device) {
 // normalizeDeviceConnection fills connection-related fields from project defaults when the
 // device leaves them blank. ansible_user / ansible_password are intentionally omitted here so
 // empty values stay empty in the database; buildInventoryLine still applies project defaults
-// when generating Ansible inventory for tasks.
+// when generating Ansible inventory for tasks (see server.BuildDeviceInventoryLine).
 func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSettings) {
 	if device.AnsibleConnection == "" {
 		device.AnsibleConnection = settings.DefaultAnsibleConnection
@@ -88,68 +84,6 @@ func normalizeDeviceConnection(device *db.Device, settings db.ProjectDeviceSetti
 	}
 }
 
-func buildInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) string {
-	user := dev.AnsibleUser
-	if user == "" {
-		user = settings.DefaultAnsibleUser
-	}
-	password := dev.AnsiblePassword
-	if password == "" {
-		password = settings.DefaultAnsiblePassword
-	}
-	connection := dev.AnsibleConnection
-	if connection == "" {
-		connection = settings.DefaultAnsibleConnection
-	}
-	if connection == "" {
-		connection = "winrm"
-	}
-	transport := dev.AnsibleWinRMTransport
-	if transport == "" {
-		transport = settings.DefaultAnsibleWinRMTransport
-	}
-	if transport == "" {
-		transport = "basic"
-	}
-	scheme := dev.AnsibleWinRMScheme
-	if scheme == "" {
-		scheme = settings.DefaultAnsibleWinRMScheme
-	}
-	if scheme == "" {
-		scheme = "http"
-	}
-	port := db.EffectiveDeviceAnsiblePort(dev, settings)
-	certValidation := dev.AnsibleWinRMServerCertValidation
-	if certValidation == "" {
-		certValidation = settings.DefaultAnsibleWinRMServerCertValidation
-	}
-	if certValidation == "" {
-		certValidation = "ignore"
-	}
-
-	inventoryHost := strings.TrimSpace(dev.IPAddress)
-	parts := []string{inventoryHost}
-	if dev.IPAddress != "" {
-		parts = append(parts, "ansible_host="+dev.IPAddress)
-	}
-	if user != "" {
-		parts = append(parts, "ansible_user="+user)
-	}
-	if password != "" {
-		parts = append(parts, "ansible_password="+password)
-	}
-	parts = append(parts, "ansible_connection="+connection)
-	parts = append(parts, "ansible_winrm_transport="+transport)
-	parts = append(parts, "ansible_winrm_scheme="+scheme)
-	parts = append(parts, "ansible_port="+strconv.Itoa(port))
-	parts = append(parts, "ansible_winrm_server_cert_validation="+certValidation)
-	parts = append(parts, "rdp_port="+strconv.Itoa(db.EffectiveDeviceRDPPort(dev)))
-	if ap := db.EffectiveDeviceAPIPortForInventory(dev); ap > 0 {
-		parts = append(parts, "api_port="+strconv.Itoa(ap))
-	}
-	return strings.Join(parts, " ")
-}
-
 func projectHasDeviceWithIP(r *http.Request, projectID int, ip string, exceptID int) (bool, error) {
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
@@ -170,69 +104,8 @@ func projectHasDeviceWithIP(r *http.Request, projectID int, ip string, exceptID 
 	return false, nil
 }
 
-func renderWindowsInventory(devices []db.Device, settings db.ProjectDeviceSettings) string {
-	var b strings.Builder
-	b.WriteString("[" + deviceAutoInventoryGroup + "]\n")
-	for _, dev := range devices {
-		if strings.TrimSpace(dev.IPAddress) == "" {
-			continue
-		}
-		b.WriteString(buildInventoryLine(dev, settings))
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-func ensureProjectAutoInventory(r *http.Request, projectID int, devices []db.Device, settings db.ProjectDeviceSettings) (db.Inventory, error) {
-	inventories, err := helpers.Store(r).GetInventories(projectID, db.RetrieveQueryParams{}, nil)
-	if err != nil {
-		return db.Inventory{}, err
-	}
-	content := renderWindowsInventory(devices, settings)
-	for _, inv := range inventories {
-		if !inv.IsDeviceDefaultAuto {
-			continue
-		}
-		inv.Name = deviceAutoInventoryName
-		inv.Type = db.InventoryStatic
-		inv.Inventory = content
-		if err = helpers.Store(r).UpdateInventory(inv); err != nil {
-			return db.Inventory{}, err
-		}
-		return inv, nil
-	}
-
-	inv, err := helpers.Store(r).CreateInventory(db.Inventory{
-		ProjectID:           projectID,
-		Name:                deviceAutoInventoryName,
-		Type:                db.InventoryStatic,
-		Inventory:           content,
-		IsDeviceDefaultAuto: true,
-	})
-	if err != nil {
-		return db.Inventory{}, err
-	}
-	return inv, nil
-}
-
-func syncProjectAutoInventory(r *http.Request, projectID int) error {
-	settings, err := helpers.Store(r).GetProjectDeviceSettings(projectID)
-	if err != nil {
-		return err
-	}
-	devices, err := helpers.Store(r).GetDevices(projectID, db.RetrieveQueryParams{}, nil)
-	if err != nil {
-		return err
-	}
-	inv, err := ensureProjectAutoInventory(r, projectID, devices, settings)
-	if err != nil {
-		return err
-	}
-	if settings.DefaultInventoryID == nil || *settings.DefaultInventoryID != inv.ID {
-		settings.DefaultInventoryID = &inv.ID
-		return helpers.Store(r).UpdateProjectDeviceSettings(settings)
-	}
-	return nil
+func syncDeviceProfilesAutoInventory(r *http.Request, projectID int, profileIDs ...int) error {
+	return server.SyncDeviceProfilesAutoInventory(helpers.Store(r), projectID, profileIDs)
 }
 
 // DeviceMiddleware ensures the device exists, belongs to the current project,
@@ -450,7 +323,7 @@ func AddDevice(w http.ResponseWriter, r *http.Request) {
 		ObjectID:    newDevice.ID,
 		Description: fmt.Sprintf("Device %s created", newDevice.Hostname),
 	})
-	if err = syncProjectAutoInventory(r, project.ID); err != nil {
+	if err = syncDeviceProfilesAutoInventory(r, project.ID, newDevice.DeviceProfileID); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -523,7 +396,8 @@ func UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		ObjectID:    old.ID,
 		Description: fmt.Sprintf("Device %s updated", device.Hostname),
 	})
-	if err = syncProjectAutoInventory(r, old.ProjectID); err != nil {
+	profileIDs := []int{old.DeviceProfileID, device.DeviceProfileID}
+	if err = syncDeviceProfilesAutoInventory(r, old.ProjectID, profileIDs...); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -547,7 +421,7 @@ func RemoveDevice(w http.ResponseWriter, r *http.Request) {
 		ObjectID:    device.ID,
 		Description: fmt.Sprintf("Device %s deleted", device.Hostname),
 	})
-	if err = syncProjectAutoInventory(r, device.ProjectID); err != nil {
+	if err = syncDeviceProfilesAutoInventory(r, device.ProjectID, device.DeviceProfileID); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -1167,7 +1041,11 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	if err = syncProjectAutoInventory(r, project.ID); err != nil {
+	profileIDs := make([]int, 0, len(toUpsert))
+	for _, d := range toUpsert {
+		profileIDs = append(profileIDs, d.DeviceProfileID)
+	}
+	if err = syncDeviceProfilesAutoInventory(r, project.ID, profileIDs...); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
@@ -1425,10 +1303,6 @@ func (u bulkDeviceStatusUpdate) toDeviceStatusUpdate() db.DeviceStatusUpdate {
 
 func RunPatrolForAllDevices(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
-	if err := syncProjectAutoInventory(r, project.ID); err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
 	_, _ = server.EnsureDefaultDeviceProfile(helpers.Store(r), project.ID)
 	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
 	if err != nil {
@@ -1503,7 +1377,7 @@ func createTemporaryInventoryForDevices(r *http.Request, projectID int, devices 
 	if err != nil {
 		return nil, err
 	}
-	content := renderWindowsInventory(devices, settings)
+	content := server.RenderWindowsInventory(devices, settings)
 	inv, err := helpers.Store(r).CreateInventory(db.Inventory{
 		ProjectID: projectID,
 		Name:      fmt.Sprintf("%s%d", db.DeviceEphemeralBatchInventoryPrefix, time.Now().Unix()),

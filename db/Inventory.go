@@ -22,7 +22,9 @@ type Inventory struct {
 	Name                string `db:"name" json:"name" binding:"required"`
 	ProjectID           int    `db:"project_id" json:"project_id" backup:"-"`
 	Inventory           string `db:"inventory" json:"inventory"`
-	IsDeviceDefaultAuto bool   `db:"is_device_default_auto" json:"is_device_default_auto"`
+	IsDeviceDefaultAuto bool `db:"is_device_default_auto" json:"is_device_default_auto"`
+	// DeviceProfileID ties auto inventories to a device type; null = legacy project-wide auto.
+	DeviceProfileID *int `db:"device_profile_id" json:"device_profile_id,omitempty" backup:"-"`
 
 	// accesses hosts in inventory
 	SSHKeyID *int      `db:"ssh_key_id" json:"ssh_key_id" backup:"-"`
