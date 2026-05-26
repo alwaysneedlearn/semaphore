@@ -1,0 +1,2 @@
+-- Data migration for per-profile device auto inventories runs at server start
+-- (see server.MigrateDeviceProfileAutoInventories).

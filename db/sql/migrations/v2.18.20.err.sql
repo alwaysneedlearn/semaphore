@@ -1,0 +1,1 @@
+-- no-op rollback for v2.18.20 (data migration is not reversed)

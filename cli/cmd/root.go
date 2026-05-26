@@ -75,6 +75,10 @@ func Execute() {
 func runService() {
 	store := createStore("root")
 
+	if err := server.MigrateDeviceProfileAutoInventories(store); err != nil {
+		log.WithError(err).Warn("device inventory: startup migration encountered errors")
+	}
+
 	initSyslog(util.Config.Syslog)
 
 	// Initialize HA node identity before any component that uses it.
