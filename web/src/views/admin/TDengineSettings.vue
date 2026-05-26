@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-toolbar flat>
-      <v-btn icon class="mr-4" @click="$router.push('/users')">
+      <v-btn icon class="mr-4" @click="goBack">
         <v-icon>mdi-arrow-left</v-icon>
       </v-btn>
       <v-toolbar-title>TDengine</v-toolbar-title>
@@ -36,6 +36,7 @@
 
 <script>
 import axios from 'axios';
+import EventBus from '@/event-bus';
 
 export default {
   data() {
@@ -63,6 +64,10 @@ export default {
     await this.load();
   },
   methods: {
+    goBack() {
+      // Same as Runners/Tokens/Users toolbar: return to last project, not /users.
+      EventBus.$emit('i-open-last-project');
+    },
     async load() {
       this.error = null;
       try {
