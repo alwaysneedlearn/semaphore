@@ -34,6 +34,14 @@
       or (_sem_bulk_token | default('') | trim | length) < 1
       or (_sem_discovery_task_id | default('') | trim | length) < 1
 
+- name: 构建 discovery PUT JSON body（devices 必须为数组，勿用引号包成字符串）
+  ansible.builtin.set_fact:
+    _sem_discovery_put_json: "{{ {'task_id': (_sem_discovery_task_id | int), 'devices': (discovered_devices | default([]))} | to_json }}"
+
+- name: 解析 discovery PUT body 为对象
+  ansible.builtin.set_fact:
+    _sem_discovery_put_body: "{{ _sem_discovery_put_json | from_json }}"
+
 - name: PUT Semaphore /devices/discovery/results
   ansible.builtin.uri:
     url: "{{ _sem_bulk_url | regex_replace('/$', '') }}/api/project/{{ _sem_bulk_pid }}/devices/discovery/results"
@@ -42,9 +50,7 @@
       Content-Type: application/json
       Authorization: "Bearer {{ _sem_bulk_token }}"
     body_format: json
-    body:
-      task_id: "{{ _sem_discovery_task_id | int }}"
-      devices: "{{ discovered_devices | default([]) }}"
+    body: "{{ _sem_discovery_put_body }}"
     status_code: [200, 400, 401, 403, 404]
   register: _sem_discovery_put_result
   failed_when: false

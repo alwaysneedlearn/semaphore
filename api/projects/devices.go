@@ -839,31 +839,31 @@ func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 // PutDeviceDiscoveryResults is the playbook callback that stores discovery scan rows.
 func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
-	var body struct {
-		TaskID  int                     `json:"task_id"`
-		Devices []db.DiscoveredDeviceRow `json:"devices"`
-	}
-	if !helpers.Bind(w, r, &body) {
+	taskID, deviceRows, err := parseDiscoveryPutRequest(r)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
 		return
 	}
-	if body.TaskID <= 0 {
+	if taskID <= 0 {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "task_id is required",
 		})
 		return
 	}
 	store := helpers.Store(r)
-	if _, err := store.GetTask(project.ID, body.TaskID); err != nil {
+	if _, err := store.GetTask(project.ID, taskID); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-	normalized := normalizeDiscoveredDeviceRows(body.Devices)
-	upserted, err := store.UpsertDiscoveredHostsByIP(project.ID, body.TaskID, normalized)
+	normalized := normalizeDiscoveredDeviceRows(deviceRows)
+	upserted, err := store.UpsertDiscoveredHostsByIP(project.ID, taskID, normalized)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
 	}
-	existing, err := store.GetDeviceDiscoveryRun(project.ID, body.TaskID)
+	existing, err := store.GetDeviceDiscoveryRun(project.ID, taskID)
 	subnet := ""
 	if err == nil {
 		subnet = existing.Subnet
@@ -872,7 +872,7 @@ func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	run := db.DeviceDiscoveryRun{
-		TaskID:      body.TaskID,
+		TaskID:      taskID,
 		ProjectID:   project.ID,
 		Subnet:      subnet,
 		Status:      db.DeviceDiscoveryRunReady,
@@ -884,7 +884,7 @@ func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"task_id":  body.TaskID,
+		"task_id":  taskID,
 		"count":    upserted,
 		"received": len(normalized),
 	})
