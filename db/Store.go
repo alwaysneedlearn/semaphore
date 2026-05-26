@@ -348,6 +348,7 @@ type DeviceManager interface {
 	GetDeviceDiscoveryRun(projectID, taskID int) (DeviceDiscoveryRun, error)
 	UpsertDiscoveredHostsByIP(projectID, taskID int, rows []DiscoveredDeviceRow) (int, error)
 	ListDiscoveredHosts(projectID int, taskID int) ([]DiscoveredHost, error)
+	DeleteDiscoveredHostsByIP(projectID int, ipAddresses []string) (int, error)
 }
 
 // RepositoryManager handles repository-related operations

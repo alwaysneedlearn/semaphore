@@ -100,3 +100,23 @@ func (d *SqlDb) ListDiscoveredHosts(projectID int, taskID int) (hosts []db.Disco
 	}
 	return
 }
+
+func (d *SqlDb) DeleteDiscoveredHostsByIP(projectID int, ipAddresses []string) (int, error) {
+	n := 0
+	for _, ip := range ipAddresses {
+		ip = strings.TrimSpace(ip)
+		if ip == "" {
+			continue
+		}
+		res, err := d.exec(
+			"delete from project__device_discovery_host where project_id=? and ip_address=?",
+			projectID, ip,
+		)
+		if err != nil {
+			return n, err
+		}
+		affected, _ := res.RowsAffected()
+		n += int(affected)
+	}
+	return n, nil
+}

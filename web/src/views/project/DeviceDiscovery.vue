@@ -144,26 +144,54 @@
               {{ item.api_status }}
             </v-chip>
           </template>
+          <template v-slot:item.import_profile_id="{ item }">
+            <v-select
+              v-model="item.import_profile_id"
+              :items="profileItems"
+              item-text="name"
+              item-value="id"
+              :label="$t('deviceDiscoveryImportProfileColumn')"
+              dense
+              outlined
+              hide-details
+              class="mt-1 mb-1"
+              style="max-width: 220px"
+              :disabled="importingDiscovery"
+            />
+          </template>
         </v-data-table>
 
-        <v-select
-          v-model="importProfileId"
-          :items="profileItems"
-          item-text="name"
-          item-value="id"
-          :label="$t('deviceDiscoveryImportProfile')"
-          :hint="$t('deviceDiscoveryImportProfileHint')"
-          persistent-hint
-          outlined
-          dense
-          class="mb-4"
-          :disabled="selectedDiscovered.length === 0"
-        />
+        <v-row dense class="mb-3 align-center">
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="bulkImportProfileId"
+              :items="profileItems"
+              item-text="name"
+              item-value="id"
+              :label="$t('deviceDiscoveryDefaultImportProfile')"
+              :hint="$t('deviceDiscoveryDefaultImportProfileHint')"
+              persistent-hint
+              outlined
+              dense
+              clearable
+            />
+          </v-col>
+          <v-col cols="12" md="6" class="d-flex align-center">
+            <v-btn
+              text
+              small
+              :disabled="!bulkImportProfileId || selectedDiscovered.length === 0"
+              @click="applyBulkImportProfileToSelected"
+            >
+              {{ $t('deviceDiscoveryApplyDefaultType') }}
+            </v-btn>
+          </v-col>
+        </v-row>
 
         <v-btn
           color="primary"
           :loading="importingDiscovery"
-          :disabled="!importProfileId || selectedDiscovered.length === 0"
+          :disabled="!canImportSelected"
           @click="importSelectedDiscovery"
         >
           {{ $t('deviceImportSelected') }}
@@ -216,19 +244,27 @@ export default {
       discoveredDevices: [],
       selectedDiscovered: [],
       importingDiscovery: false,
-      importProfileId: null,
-      discoveryHeaders: [
+      bulkImportProfileId: null,
+    };
+  },
+
+  computed: {
+    discoveryHeaders() {
+      return [
         { text: 'IP', value: 'ip_address' },
         { text: 'Hostname', value: 'hostname' },
         { text: 'Status', value: 'device_status' },
         { text: 'RDP', value: 'rdp_status' },
         { text: 'WinRM', value: 'winrm_status' },
         { text: 'API', value: 'api_status' },
-      ],
-    };
-  },
-
-  computed: {
+        {
+          text: this.$t('deviceDiscoveryImportProfileColumn'),
+          value: 'import_profile_id',
+          sortable: false,
+          width: '240px',
+        },
+      ];
+    },
     templateItems() {
       return (this.templates || []).map((t) => ({ id: t.id, name: t.name }));
     },
@@ -249,6 +285,20 @@ export default {
         return this.$t('deviceDiscoveryMissingApiToken');
       }
       return this.discoveryWarning;
+    },
+    defaultImportProfileId() {
+      const list = this.profiles || [];
+      const neware = list.find((p) => {
+        const key = String(p.profile_key || p.key || '').toUpperCase();
+        return key === 'NEWARE';
+      });
+      return (neware && neware.id) || (list[0] && list[0].id) || null;
+    },
+    canImportSelected() {
+      if (this.selectedDiscovered.length === 0) {
+        return false;
+      }
+      return this.selectedDiscovered.every((row) => Number(row.import_profile_id) > 0);
     },
   },
 
@@ -315,7 +365,11 @@ export default {
       this.profiles = (data || []).map((row) => ({
         id: row.id,
         name: row.name || row.profile_key || row.key || `Type #${row.id}`,
+        profile_key: row.profile_key || row.key,
       }));
+      if (!this.bulkImportProfileId && this.defaultImportProfileId) {
+        this.bulkImportProfileId = this.defaultImportProfileId;
+      }
     },
 
     async saveSettings() {
@@ -481,6 +535,7 @@ export default {
     },
 
     applyDiscoveredDevicesFromApi(devices) {
+      const defaultProfile = this.bulkImportProfileId || this.defaultImportProfileId;
       this.discoveredDevices = (devices || [])
         .map((x) => ({
           hostname: (x.hostname || '').trim(),
@@ -490,9 +545,44 @@ export default {
           winrm_status: x.winrm_status || 'offline',
           api_status: x.api_status || 'offline',
           abnormal_reason: x.abnormal_reason || null,
+          import_profile_id: x.import_profile_id || defaultProfile || null,
         }))
         .filter((x) => x.ip_address || x.hostname);
       this.selectedDiscovered = [...this.discoveredDevices];
+    },
+
+    applyBulkImportProfileToSelected() {
+      const pid = this.bulkImportProfileId;
+      if (!pid) {
+        return;
+      }
+      const selectedIPs = new Set(
+        this.selectedDiscovered.map((r) => String(r.ip_address || '').trim()).filter(Boolean),
+      );
+      this.discoveredDevices = this.discoveredDevices.map((row) => {
+        const ip = String(row.ip_address || '').trim();
+        if (!selectedIPs.has(ip)) {
+          return row;
+        }
+        return { ...row, import_profile_id: pid };
+      });
+      this.selectedDiscovered = this.discoveredDevices.filter((row) => {
+        const ip = String(row.ip_address || '').trim();
+        return selectedIPs.has(ip);
+      });
+    },
+
+    removeImportedFromDiscoveryList(importedIPs) {
+      const imported = new Set((importedIPs || []).map((ip) => String(ip).trim()).filter(Boolean));
+      if (imported.size === 0) {
+        return;
+      }
+      this.discoveredDevices = this.discoveredDevices.filter(
+        (row) => !imported.has(String(row.ip_address || '').trim()),
+      );
+      this.selectedDiscovered = this.selectedDiscovered.filter(
+        (row) => !imported.has(String(row.ip_address || '').trim()),
+      );
     },
 
     async loadPersistedDiscovery() {
@@ -529,7 +619,7 @@ export default {
     },
 
     async importSelectedDiscovery() {
-      if (!this.importProfileId) {
+      if (!this.canImportSelected) {
         EventBus.$emit('i-snackbar', {
           color: 'error',
           text: this.$i18n.t('deviceDiscoveryImportProfileRequired'),
@@ -539,19 +629,21 @@ export default {
       this.importingDiscovery = true;
       this.discoveryError = '';
       try {
+        const imports = this.selectedDiscovered.map((row) => ({
+          ip_address: String(row.ip_address || row.ip || '').trim(),
+          device_profile_id: Number(row.import_profile_id),
+        })).filter((x) => x.ip_address && x.device_profile_id > 0);
         const payload = {
           devices: this.discoveredDevices,
-          selected_ips: this.selectedDiscovered
-            .map((x) => String(x.ip_address || x.ip || '').trim())
-            .filter((ip) => ip),
-          device_profile_id: this.importProfileId,
+          imports,
         };
         const res = await axios.post(`${this.devicesApiBase}/discovery/import`, payload);
+        const importedIPs = res.data.imported_ips || imports.map((x) => x.ip_address);
+        this.removeImportedFromDiscoveryList(importedIPs);
         EventBus.$emit('i-snackbar', {
           color: 'success',
           text: this.$i18n.t('deviceImportSaved', { count: res.data.saved_count || 0 }),
         });
-        await this.$router.push(`/project/${this.projectId}/devices/list`);
       } catch (e) {
         this.discoveryError = getErrorMessage(e);
       } finally {

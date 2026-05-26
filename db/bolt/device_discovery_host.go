@@ -111,3 +111,27 @@ func (d *BoltDb) ListDiscoveredHosts(projectID int, taskID int) (hosts []db.Disc
 	}
 	return filtered, nil
 }
+
+func (d *BoltDb) DeleteDiscoveredHostsByIP(projectID int, ipAddresses []string) (int, error) {
+	hosts, err := d.ListDiscoveredHosts(projectID, 0)
+	if err != nil {
+		return 0, err
+	}
+	toDelete := map[string]bool{}
+	for _, ip := range ipAddresses {
+		if t := strings.TrimSpace(ip); t != "" {
+			toDelete[t] = true
+		}
+	}
+	n := 0
+	for _, h := range hosts {
+		if !toDelete[strings.TrimSpace(h.IPAddress)] {
+			continue
+		}
+		if err := d.deleteObject(projectID, deviceDiscoveryHostProps, intObjectID(h.ID), nil); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}

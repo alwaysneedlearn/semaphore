@@ -1049,42 +1049,92 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		Devices           []db.Device `json:"devices"`
 		SelectedIPs       []string    `json:"selected_ips"`
 		SelectedHostnames []string    `json:"selected_hostnames"` // legacy: used only if selected_ips is empty
-		DeviceProfileID   int         `json:"device_profile_id"`
+		DeviceProfileID   int         `json:"device_profile_id"`  // default when imports omitted
+		Imports           []struct {
+			IPAddress       string `json:"ip_address"`
+			DeviceProfileID int    `json:"device_profile_id"`
+		} `json:"imports"`
 	}
 	if !helpers.Bind(w, r, &body) {
 		return
 	}
-	if body.DeviceProfileID <= 0 {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "device_profile_id is required to import discovered devices",
-		})
-		return
-	}
 	store := helpers.Store(r)
-	if _, err := store.GetDeviceProfile(project.ID, body.DeviceProfileID); err != nil {
-		helpers.WriteError(w, err)
-		return
+
+	profileByIP := map[string]int{}
+	if len(body.Imports) > 0 {
+		for _, spec := range body.Imports {
+			ip := strings.TrimSpace(spec.IPAddress)
+			if ip == "" || spec.DeviceProfileID <= 0 {
+				continue
+			}
+			if _, err := store.GetDeviceProfile(project.ID, spec.DeviceProfileID); err != nil {
+				helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+					"error": fmt.Sprintf("invalid device_profile_id for ip %s", ip),
+				})
+				return
+			}
+			profileByIP[ip] = spec.DeviceProfileID
+		}
+		if len(profileByIP) == 0 {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "imports must include ip_address and device_profile_id per row",
+			})
+			return
+		}
+	} else {
+		if body.DeviceProfileID <= 0 {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "device_profile_id is required to import discovered devices",
+			})
+			return
+		}
+		if _, err := store.GetDeviceProfile(project.ID, body.DeviceProfileID); err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		selectedByIP := map[string]bool{}
+		for _, ip := range body.SelectedIPs {
+			if t := strings.TrimSpace(ip); t != "" {
+				selectedByIP[t] = true
+				profileByIP[t] = body.DeviceProfileID
+			}
+		}
+		if len(profileByIP) == 0 {
+			selectedByHostname := map[string]bool{}
+			for _, h := range body.SelectedHostnames {
+				if t := strings.TrimSpace(h); t != "" {
+					selectedByHostname[t] = true
+				}
+			}
+			for _, dev := range body.Devices {
+				ip := strings.TrimSpace(dev.IPAddress)
+				host := strings.TrimSpace(dev.Hostname)
+				if ip != "" && selectedByHostname[host] {
+					profileByIP[ip] = body.DeviceProfileID
+				}
+			}
+		}
+		if len(profileByIP) == 0 {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "no devices selected for import",
+			})
+			return
+		}
 	}
+
 	selectedByIP := map[string]bool{}
-	for _, ip := range body.SelectedIPs {
-		if t := strings.TrimSpace(ip); t != "" {
-			selectedByIP[t] = true
-		}
+	for ip := range profileByIP {
+		selectedByIP[ip] = true
 	}
-	selectedByHostname := map[string]bool{}
-	for _, h := range body.SelectedHostnames {
-		if t := strings.TrimSpace(h); t != "" {
-			selectedByHostname[t] = true
-		}
-	}
-	useIPFilter := len(selectedByIP) > 0
-	useHostnameFilter := !useIPFilter && len(selectedByHostname) > 0
 
 	byIP := map[string]db.Device{}
 	for _, dev := range body.Devices {
 		dev.Hostname = strings.TrimSpace(dev.Hostname)
 		dev.IPAddress = strings.TrimSpace(dev.IPAddress)
 		if dev.IPAddress == "" {
+			continue
+		}
+		if !selectedByIP[dev.IPAddress] {
 			continue
 		}
 		if dev.Hostname == "" {
@@ -1096,25 +1146,29 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		}
 		normalizeDeviceStatuses(&dev)
 		normalizeDeviceConnection(&dev, settings)
-		// Upsert merges ports only when non-zero; avoid normalized defaults overwriting
-		// manually configured ports when discovery JSON does not specify ports.
 		dev.AnsiblePort = 0
 		dev.RDPPort = 0
 		dev.APIPort = 0
-		if useIPFilter && !selectedByIP[dev.IPAddress] {
-			continue
-		}
-		if useHostnameFilter && !selectedByHostname[dev.Hostname] {
-			continue
-		}
 		byIP[dev.IPAddress] = dev
 	}
 	toUpsert := make([]db.Device, 0, len(byIP))
-	for _, dev := range byIP {
-		dev.DeviceProfileID = body.DeviceProfileID
+	importedIPs := make([]string, 0, len(byIP))
+	for ip, dev := range byIP {
+		pid, ok := profileByIP[ip]
+		if !ok || pid <= 0 {
+			continue
+		}
+		dev.DeviceProfileID = pid
 		toUpsert = append(toUpsert, dev)
+		importedIPs = append(importedIPs, ip)
 	}
-	saved, err := helpers.Store(r).UpsertDevicesByIPAddress(project.ID, toUpsert)
+	if len(toUpsert) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "no matching discovered devices to import",
+		})
+		return
+	}
+	saved, err := store.UpsertDevicesByIPAddress(project.ID, toUpsert)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -1123,9 +1177,12 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
+	removedFromDiscovery, _ := store.DeleteDiscoveredHostsByIP(project.ID, importedIPs)
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"saved_count": len(saved),
-		"devices":     saved,
+		"saved_count":            len(saved),
+		"devices":                saved,
+		"imported_ips":           importedIPs,
+		"removed_from_discovery": removedFromDiscovery,
 	})
 }
 

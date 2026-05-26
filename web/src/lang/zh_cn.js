@@ -389,8 +389,12 @@ export default {
   deviceDiscoveryTemplateRequired: '请先配置发现模板后再扫描。',
   deviceDiscoveryRefreshResults: '刷新发现结果',
   deviceDiscoveryImportProfile: '导入时的设备类型',
+  deviceDiscoveryImportProfileColumn: '设备类型',
   deviceDiscoveryImportProfileHint: '必选。仅将选中的发现结果以该类型加入设备列表。',
-  deviceDiscoveryImportProfileRequired: '导入前请选择设备类型。',
+  deviceDiscoveryDefaultImportProfile: '批量默认类型',
+  deviceDiscoveryDefaultImportProfileHint: '为选中行批量设置设备类型；表格中也可逐台修改。',
+  deviceDiscoveryApplyDefaultType: '应用到选中行',
+  deviceDiscoveryImportProfileRequired: '导入前请为每台选中的设备选择设备类型。',
   deviceDiscoveryHelp: '输入网段并执行发现模板；playbook 通过 API 回调写入发现列表，收到结果后显示在下表。选择设备类型后导入选中行。',
   deviceDiscoveryCallbackMissing:
     '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/device_discovery.yml 且已配置 SEMAPHORE_API_TOKEN；若未配置 token，需使用含 SEMAPHORE_DISCOVERY_JSON 日志输出的最新 playbook 并重新扫描。',

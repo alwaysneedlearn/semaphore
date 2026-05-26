@@ -462,8 +462,12 @@ export default {
   deviceDiscoveryTemplateRequired: 'Configure a discovery template before running a scan.',
   deviceDiscoveryRefreshResults: 'Refresh results',
   deviceDiscoveryImportProfile: 'Device type for import',
+  deviceDiscoveryImportProfileColumn: 'Device type',
   deviceDiscoveryImportProfileHint: 'Required. Discovered hosts are added to the device list under this type only.',
-  deviceDiscoveryImportProfileRequired: 'Select a device type before importing.',
+  deviceDiscoveryDefaultImportProfile: 'Default type for selection',
+  deviceDiscoveryDefaultImportProfileHint: 'Apply one type to selected rows; you can also set type per row in the table.',
+  deviceDiscoveryApplyDefaultType: 'Apply to selected',
+  deviceDiscoveryImportProfileRequired: 'Choose a device type for each selected host before importing.',
   deviceDiscoveryHelp:
     'Enter a subnet and run the discovery template. The playbook PUTs results to the API; the table refreshes when the callback arrives. Choose a device type, then import selected rows.',
   deviceDiscoveryCallbackMissing:
