@@ -397,7 +397,7 @@ export default {
   deviceDiscoveryImportProfileRequired: '导入前请为每台选中的设备选择设备类型。',
   deviceDiscoveryHelp: '输入网段并执行发现模板；playbook 通过 API 回调写入发现列表，收到结果后显示在下表。选择设备类型后导入选中行。',
   deviceDiscoveryCallbackMissing:
-    '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/device_discovery.yml 且已配置 SEMAPHORE_API_TOKEN；若未配置 token，需使用含 SEMAPHORE_DISCOVERY_JSON 日志输出的最新 playbook 并重新扫描。',
+    '任务已成功结束，但未收到发现回调。请确认模板使用 cursor-playbooks/neware/device_discovery.yml（或根目录兼容入口）且已配置 SEMAPHORE_API_TOKEN；若未配置 token，需使用含 SEMAPHORE_DISCOVERY_JSON 日志输出的最新 playbook 并重新扫描。',
   deviceDiscoveryMissingApiToken:
     '与巡检/启动模板相同，需要 SEMAPHORE_API_TOKEN。仅在 Variable Group 里添加不够：必须在 Semaphore「模板」页打开你的发现模板，在 Variable Groups 中勾选该组（ENV 或 JSON 标签里键名为 SEMAPHORE_API_TOKEN）。也可在服务器 config.json 的 env_vars 配置 SEMAPHORE_DEVICE_CALLBACK_API_TOKEN。若已绑定仍提示，请硬刷新后重跑发现；看任务日志 discovery_token_set 应为 True。',
   deviceDiscoveryListNotDeviceList:

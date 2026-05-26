@@ -20,7 +20,7 @@ Ansible playbooks in **`cursor-playbooks/`** drive Windows hosts (`windows_hosts
 ## Before you edit
 
 1. Read the target playbook’s **first 80 lines** (vars: `_semaphore_device_rows`, `devices` / `device`) and **how it ends** (bulk `post_tasks`).
-2. Prefer **shared tasks** under `cursor-playbooks/tasks/` over duplicating callback Jinja in five playbooks.
+2. Prefer **shared tasks** under `cursor-playbooks/neware/tasks/` (per device-type folder) over duplicating callback Jinja in five playbooks.
 3. Assume the runner inventory uses **`inventory_hostname` = device IP**; callback rows must include **`hostname` + `ip`** from `_semaphore_device_rows`.
 4. After changing playbooks, remind operators to sync **`/root/playbook/`** (or their runner path) from **`develop`**.
 
@@ -68,11 +68,11 @@ post_tasks:
   run_once: true
 ```
 
-**Before committing any new/edited `cursor-playbooks/tasks/*.yml`**, run:
+**Before committing any new/edited `cursor-playbooks/**/tasks/*.yml`**, run:
 
 ```bash
 rg -n 'include_tasks:.*\n\s+delegate_to:' cursor-playbooks/ || true
-rg 'delegate_to:|run_once:' cursor-playbooks/tasks/*.yml | rg -B2 'include_tasks'
+rg 'delegate_to:|run_once:' cursor-playbooks/neware/tasks/*.yml | rg -B2 'include_tasks'
 ```
 
 If the second command shows `include_tasks` immediately followed by `delegate_to` / `run_once` on the **same task** (not inside a parent `block:`), fix it before push.
@@ -170,14 +170,18 @@ Wrap **collect**, **resolve EXE_DIR**, **log health check** in blocks with **`ig
 
 ```
 cursor-playbooks/
-  device_status.yml      # Patrol — no app HTTP API for api_status
-  device_start.yml       # Start + reconfig + start_verify_after_reconfig
-  device_restart.yml
-  device_stop.yml
-  check_restart_redeploy.yml
-  device_discovery.yml   # No bulk callback
-  files/sem_*.ps1        # Deployed once via deploy_sem_windows_helper_scripts.yml
-  tasks/
+  README.md              # Layout index; per-type docs under <type>/README.md
+  device_*.yml           # Optional wrappers: import_playbook → neware/...
+  neware/                # NEWARE Windows hosts (current production tree)
+    device_status.yml    # Patrol — no app HTTP API for api_status
+    device_start.yml
+    device_restart.yml
+    device_stop.yml
+    check_restart_redeploy.yml
+    device_discovery.yml # Discovery PUT callback (not bulk status)
+    ansible.cfg
+    files/sem_*.ps1      # Deployed once via deploy_sem_windows_helper_scripts.yml
+    tasks/
     winrm_ensure_reachable.yml
     winrm_connect_one_attempt.yml
     semaphore_callback_winrm_connect_failed.yml

@@ -196,7 +196,7 @@ tdengine_status_table   -- 默认 NEWARE → 'status'，可在 Profile 编辑页
 | 状态/巡检 | status | ✓（Patrol 用此模板） |
 | 配置/应用配置 | config | ✓（可与 restart 共用 playbook，但模板 ID 独立） |
 
-- Playbook 路径可约定：`cursor-playbooks/profiles/<profile_key>/device_start.yml`，首期 **NEWARE 仍用现有** `cursor-playbooks/device_*.yml`（软链接或复制），新类型再加目录。
+- Playbook 路径约定：`cursor-playbooks/<profile_key>/device_*.yml`（首期 **NEWARE** 在 `cursor-playbooks/neware/`；根目录 `device_*.yml` 为 `import_playbook` 兼容入口），新设备类型新增同级目录即可。
 - **新增类型**：Admin UI 创建 Profile → 绑定 6 个 Semaphore 模板 → 指定 playbook 路径/仓库。
 
 ### 2.4 API / 调度行为
