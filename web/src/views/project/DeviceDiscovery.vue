@@ -426,13 +426,15 @@ export default {
     },
 
     async refreshDiscoveryResultsNow() {
-      if (!this.discoveryPollTaskId) {
-        await this.loadPersistedDiscovery();
-        return;
-      }
       this.discoveryPolling = true;
       try {
-        await this.pollDiscoveryOnce(this.discoveryPollTaskId, 1);
+        const syncId = this.discoveryPollTaskId || null;
+        if (syncId) {
+          await this.fetchDiscoveryResults(syncId, true);
+        }
+        await this.loadPersistedDiscovery();
+      } catch (e) {
+        this.discoveryError = getErrorMessage(e);
       } finally {
         this.discoveryPolling = false;
       }
@@ -470,18 +472,26 @@ export default {
         } else if ((results.devices || []).length > 0) {
           this.discoveryWarning = '';
         }
-        if (results.status === 'ready' || (results.devices || []).length > 0) {
-          if ((results.devices || []).length > 0) {
-            this.applyDiscoveredDevicesFromApi(results.devices);
+        const runReady = results.status === 'ready';
+        const taskHasRows = (results.devices || []).length > 0;
+        if (runReady || taskHasRows) {
+          await this.loadPersistedDiscovery();
+          if (this.discoveredDevices.length > 0) {
             this.discoveryError = '';
-            EventBus.$emit('i-snackbar', {
-              color: 'success',
-              text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
-            });
-            this.stopDiscoveryPoll();
+            if (taskStatus === 'success' || runReady) {
+              EventBus.$emit('i-snackbar', {
+                color: 'success',
+                text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+              });
+            }
+            if (taskStatus === 'success' || runReady) {
+              this.stopDiscoveryPoll();
+              return;
+            }
+            this.scheduleDiscoveryPoll(taskId, attemptsLeft - 1);
             return;
           }
-          if (results.status === 'ready') {
+          if (taskStatus === 'success' || runReady) {
             this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackEmpty');
             this.stopDiscoveryPoll();
             return;
@@ -497,6 +507,16 @@ export default {
 
       if (attemptsLeft <= 1) {
         if (taskStatus === 'success') {
+          await this.loadPersistedDiscovery();
+          if (this.discoveredDevices.length > 0) {
+            this.discoveryError = '';
+            EventBus.$emit('i-snackbar', {
+              color: 'success',
+              text: this.$i18n.t('deviceDiscoveryLoaded', { count: this.discoveredDevices.length }),
+            });
+            this.stopDiscoveryPoll();
+            return;
+          }
           this.discoveryError = this.$i18n.t('deviceDiscoveryCallbackMissing');
         } else {
           this.discoveryError = this.$i18n.t('deviceDiscoveryTaskTimeout');
@@ -534,19 +554,31 @@ export default {
       }
     },
 
-    applyDiscoveredDevicesFromApi(devices) {
+    applyDiscoveredDevicesFromApi(devices, { preserveProfiles = false } = {}) {
       const defaultProfile = this.bulkImportProfileId || this.defaultImportProfileId;
+      const profileByIP = {};
+      if (preserveProfiles) {
+        (this.discoveredDevices || []).forEach((row) => {
+          const ip = String(row.ip_address || '').trim();
+          if (ip && row.import_profile_id) {
+            profileByIP[ip] = row.import_profile_id;
+          }
+        });
+      }
       this.discoveredDevices = (devices || [])
-        .map((x) => ({
-          hostname: (x.hostname || '').trim(),
-          ip_address: (x.ip_address || x.ip || '').trim(),
-          device_status: x.device_status || x.status || 'unhealthy',
-          rdp_status: x.rdp_status || 'offline',
-          winrm_status: x.winrm_status || 'offline',
-          api_status: x.api_status || 'offline',
-          abnormal_reason: x.abnormal_reason || null,
-          import_profile_id: x.import_profile_id || defaultProfile || null,
-        }))
+        .map((x) => {
+          const ip = (x.ip_address || x.ip || '').trim();
+          return {
+            hostname: (x.hostname || '').trim(),
+            ip_address: ip,
+            device_status: x.device_status || x.status || 'unhealthy',
+            rdp_status: x.rdp_status || 'offline',
+            winrm_status: x.winrm_status || 'offline',
+            api_status: x.api_status || 'offline',
+            abnormal_reason: x.abnormal_reason || null,
+            import_profile_id: profileByIP[ip] || x.import_profile_id || defaultProfile || null,
+          };
+        })
         .filter((x) => x.ip_address || x.hostname);
       this.selectedDiscovered = [...this.discoveredDevices];
     },
@@ -588,15 +620,10 @@ export default {
     async loadPersistedDiscovery() {
       try {
         const data = await this.fetchDiscoveryResults();
-        if ((data.devices || []).length > 0) {
-          this.applyDiscoveredDevicesFromApi(data.devices);
+        if (data.callback_hint === 'missing_semaphore_api_token') {
+          this.discoveryWarning = 'missing_semaphore_api_token';
         }
-        if (this.discoveryPollTaskId && (data.devices || []).length === 0) {
-          const synced = await this.fetchDiscoveryResults(this.discoveryPollTaskId, true);
-          if ((synced.devices || []).length > 0) {
-            this.applyDiscoveredDevicesFromApi(synced.devices);
-          }
-        }
+        this.applyDiscoveredDevicesFromApi(data.devices || [], { preserveProfiles: true });
       } catch (e) {
         // ignore — empty table until first scan
       }
