@@ -99,7 +99,11 @@ export default {
       this.error = null;
       this.testOk = false;
       try {
-        await axios.post('/api/admin/tdengine/test');
+        const body = { ...this.form };
+        if (this.passwordSet && !body.password) {
+          body.password = '********';
+        }
+        await axios.post('/api/admin/tdengine/test', body);
         this.testOk = true;
       } catch (e) {
         this.error = e?.response?.data?.error || e.message;

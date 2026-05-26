@@ -38,13 +38,8 @@ func PutAdminTDengineConfig(w http.ResponseWriter, r *http.Request) {
 	if !helpers.Bind(w, r, &body) {
 		return
 	}
-	// Preserve password when UI sends placeholder
-	if body.Password == "********" || body.Password == "" {
-		prev := server.EffectiveTDengineConfig(helpers.Store(r))
-		if body.Password == "" && prev.Password != "" {
-			body.Password = prev.Password
-		}
-	}
+	prev := server.EffectiveTDengineConfig(helpers.Store(r))
+	mergeTDengineTestConfig(&body, prev)
 	if err := server.SaveTDengineConfig(helpers.Store(r), body); err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -56,11 +51,28 @@ func PostAdminTDengineTest(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
 	}
-	cfg := server.EffectiveTDengineConfig(helpers.Store(r))
+	store := helpers.Store(r)
+	cfg := server.EffectiveTDengineConfig(store)
+	// Use request body when present so "Test connection" works before Save.
+	if r.Body != nil && r.ContentLength != 0 {
+		var body tdengine.Config
+		if helpers.Bind(w, r, &body) {
+			mergeTDengineTestConfig(&body, cfg)
+			cfg = body
+		} else {
+			return
+		}
+	}
 	client := tdengine.NewClient(cfg)
 	if err := client.TestConnection(); err != nil {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func mergeTDengineTestConfig(body *tdengine.Config, prev tdengine.Config) {
+	if body.Password == "********" || (body.Password == "" && prev.Password != "") {
+		body.Password = prev.Password
+	}
 }

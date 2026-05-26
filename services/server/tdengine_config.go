@@ -45,9 +45,7 @@ func EffectiveTDengineConfig(store db.Store) tdengine.Config {
 		raw, err := store.GetOption(tdengineOptionKey)
 		if err == nil && strings.TrimSpace(raw) != "" {
 			if dbCfg, err := tdengine.ParseConfigJSON(raw); err == nil {
-				if dbCfg.Enabled {
-					cfg.Enabled = true
-				}
+				cfg.Enabled = dbCfg.Enabled
 				if strings.TrimSpace(dbCfg.URL) != "" {
 					cfg.URL = dbCfg.URL
 				}
