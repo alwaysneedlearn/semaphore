@@ -1,9 +1,11 @@
 <template>
   <div>
     <p class="text--secondary mb-2">
-      Configure templates, connection defaults, and TDengine table per device type.
+      Configure templates and TDengine table per device type.
       <strong>NEWARE</strong> is the default type for existing devices.
+      WinRM connection defaults for inventory are project-wide (below).
     </p>
+    <DeviceProjectConnectionSettings :project-id="projectId" class="mb-4" />
     <v-btn
       color="primary"
       small
@@ -85,10 +87,11 @@
 <script>
 import axios from 'axios';
 import DeviceProfileSettingsEditor from '@/components/DeviceProfileSettingsEditor.vue';
+import DeviceProjectConnectionSettings from '@/components/DeviceProjectConnectionSettings.vue';
 import YesNoDialog from '@/components/YesNoDialog.vue';
 
 export default {
-  components: { DeviceProfileSettingsEditor, YesNoDialog },
+  components: { DeviceProfileSettingsEditor, DeviceProjectConnectionSettings, YesNoDialog },
   props: {
     projectId: { type: Number, required: true },
   },

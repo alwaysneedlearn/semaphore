@@ -49,79 +49,6 @@
     />
 
     <v-divider class="my-4" />
-    <p class="text--secondary mb-2">{{ $t('deviceConnectionDefaultsHelp') }}</p>
-    <v-row dense>
-      <v-col cols="12" md="6">
-        <v-text-field
-          v-model="settings.default_ansible_user"
-          :label="$t('deviceAnsibleUser')"
-          outlined
-          dense
-          :disabled="saving"
-        />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field
-          v-model="settings.default_ansible_password"
-          :label="$t('deviceAnsiblePassword')"
-          outlined
-          dense
-          :type="showPassword ? 'text' : 'password'"
-          autocomplete="new-password"
-          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-          @click:append="showPassword = !showPassword"
-          :disabled="saving"
-        />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field
-          v-model="settings.default_ansible_connection"
-          :label="$t('deviceAnsibleConnection')"
-          outlined
-          dense
-          :disabled="saving"
-        />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field
-          v-model="settings.default_ansible_winrm_transport"
-          :label="$t('deviceAnsibleWinrmTransport')"
-          outlined
-          dense
-          :disabled="saving"
-        />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field
-          v-model="settings.default_ansible_winrm_scheme"
-          :label="$t('deviceAnsibleWinrmScheme')"
-          outlined
-          dense
-          :disabled="saving"
-        />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field
-          v-model.number="settings.default_ansible_port"
-          :label="$t('deviceAnsiblePort')"
-          type="number"
-          outlined
-          dense
-          :disabled="saving"
-        />
-      </v-col>
-      <v-col cols="12">
-        <v-text-field
-          v-model="settings.default_ansible_winrm_server_cert_validation"
-          :label="$t('deviceAnsibleWinrmCertValidation')"
-          outlined
-          dense
-          :disabled="saving"
-        />
-      </v-col>
-    </v-row>
-
-    <v-divider class="my-4" />
     <p class="text--secondary mb-2">默认配置（该类型下设备）</p>
     <v-data-table
       :headers="defaultConfigHeaders"
@@ -170,7 +97,6 @@ export default {
       templates: [],
       inventories: [],
       saving: false,
-      showPassword: false,
       defaultConfigItems: [],
       defaultConfigHeaders: [
         { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
@@ -183,7 +109,6 @@ export default {
         { field: 'stop_template_id', label: 'Stop template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'status_template_id', label: 'Status / Patrol template' },
-        { field: 'config_template_id', label: 'Config template' },
       ],
     };
   },
@@ -209,7 +134,6 @@ export default {
       );
       this.settings = { ...data };
       this.defaultConfigItems = this.parseDefaultConfigJson(this.settings.default_config_json);
-      this.showPassword = false;
     },
     parseDefaultConfigJson(raw) {
       if (!raw || String(raw).trim() === '') {
@@ -260,7 +184,15 @@ export default {
         const payload = { ...this.settings };
         payload.default_config_json = this.buildDefaultConfigJson();
         payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
-        payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
+        delete payload.default_ansible_user;
+        delete payload.default_ansible_password;
+        delete payload.default_ansible_connection;
+        delete payload.default_ansible_winrm_transport;
+        delete payload.default_ansible_winrm_scheme;
+        delete payload.default_ansible_port;
+        delete payload.default_ansible_winrm_server_cert_validation;
+        delete payload.config_template_id;
+        delete payload.discover_template_id;
         await axios.put(
           `/api/project/${this.projectId}/devices/profiles/${this.profileId}/settings`,
           payload,

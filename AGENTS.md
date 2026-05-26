@@ -32,7 +32,7 @@ All commands use `task` (go-task). See `Taskfile.yml` for the full list.
 
 - **Device list**: `/project/{id}/devices/list` (sidebar **Devices** redirects here)
 - **Discovery** (project-level discover template + import with device type): `/project/{id}/devices/discovery`. Scan results persist in **`project__device_discovery_host`** (upsert by **`project_id` + `ip_address`**). Playbook **`PUT .../devices/discovery/results`**; UI loads **`GET .../discovery/results`** (all hosts) or **`?task_id=`** (hosts from that run). Requires **`SEMAPHORE_API_TOKEN`** and **`semaphore_task_id`** in task extra-vars. See `cursor-playbooks/device_discovery.yml`.
-- **Device types**: dialog from list toolbar (**Device types**)
+- **Device types**: dialog from list toolbar (**Device types**); templates/inventory per type. **WinRM connection defaults** (windows_hosts inventory): project-only via `GET/PUT /api/project/{id}/devices/settings/connection`.
 
 ### Running the server
 

@@ -108,6 +108,46 @@ func ListDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, out)
 }
 
+// deviceProfileSettingsView is per-type template/config only (connection defaults are project-level).
+type deviceProfileSettingsView struct {
+	ProjectID                int    `json:"project_id"`
+	ProfileID                int    `json:"profile_id"`
+	StartTemplateID          *int   `json:"start_template_id,omitempty"`
+	StopTemplateID           *int   `json:"stop_template_id,omitempty"`
+	RestartTemplateID        *int   `json:"restart_template_id,omitempty"`
+	StatusTemplateID         *int   `json:"status_template_id,omitempty"`
+	DefaultInventoryID       *int   `json:"default_inventory_id,omitempty"`
+	DefaultConfigJSON        string `json:"default_config_json"`
+	StatusRefreshIntervalMin int    `json:"status_refresh_interval_min"`
+	TDengineStatusTable      string `json:"tdengine_status_table"`
+}
+
+func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSettingsView {
+	return deviceProfileSettingsView{
+		ProjectID:                ps.ProjectID,
+		ProfileID:                ps.ProfileID,
+		StartTemplateID:          ps.StartTemplateID,
+		StopTemplateID:           ps.StopTemplateID,
+		RestartTemplateID:        ps.RestartTemplateID,
+		StatusTemplateID:         ps.StatusTemplateID,
+		DefaultInventoryID:       ps.DefaultInventoryID,
+		DefaultConfigJSON:        ps.DefaultConfigJSON,
+		StatusRefreshIntervalMin: ps.StatusRefreshIntervalMin,
+		TDengineStatusTable:      ps.TDengineStatusTable,
+	}
+}
+
+func applyProfileSettingsView(existing *db.ProjectDeviceProfileSettings, body deviceProfileSettingsView) {
+	existing.StartTemplateID = body.StartTemplateID
+	existing.StopTemplateID = body.StopTemplateID
+	existing.RestartTemplateID = body.RestartTemplateID
+	existing.StatusTemplateID = body.StatusTemplateID
+	existing.DefaultInventoryID = body.DefaultInventoryID
+	existing.DefaultConfigJSON = body.DefaultConfigJSON
+	existing.StatusRefreshIntervalMin = body.StatusRefreshIntervalMin
+	existing.TDengineStatusTable = body.TDengineStatusTable
+}
+
 func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	profileID, err := helpers.GetIntParam("profile_id", w, r)
@@ -119,7 +159,7 @@ func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	helpers.WriteJSON(w, http.StatusOK, ps)
+	helpers.WriteJSON(w, http.StatusOK, profileSettingsToView(ps))
 }
 
 func UpdateDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
@@ -128,13 +168,20 @@ func UpdateDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	var ps db.ProjectDeviceProfileSettings
-	if !helpers.Bind(w, r, &ps) {
+	var body deviceProfileSettingsView
+	if !helpers.Bind(w, r, &body) {
 		return
 	}
-	ps.ProjectID = project.ID
-	ps.ProfileID = profileID
-	if err := helpers.Store(r).UpdateProjectDeviceProfileSettings(ps); err != nil {
+	store := helpers.Store(r)
+	existing, err := store.GetProjectDeviceProfileSettings(project.ID, profileID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	applyProfileSettingsView(&existing, body)
+	existing.ProjectID = project.ID
+	existing.ProfileID = profileID
+	if err := store.UpdateProjectDeviceProfileSettings(existing); err != nil {
 		helpers.WriteError(w, err)
 		return
 	}

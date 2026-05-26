@@ -610,6 +610,75 @@ func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// deviceConnectionSettingsPayload is project-level WinRM defaults for windows_hosts inventory generation.
+type deviceConnectionSettingsPayload struct {
+	DefaultAnsibleUser                      string `json:"default_ansible_user"`
+	DefaultAnsiblePassword                  string `json:"default_ansible_password"`
+	DefaultAnsibleConnection                string `json:"default_ansible_connection"`
+	DefaultAnsibleWinRMTransport            string `json:"default_ansible_winrm_transport"`
+	DefaultAnsibleWinRMScheme               string `json:"default_ansible_winrm_scheme"`
+	DefaultAnsiblePort                      int    `json:"default_ansible_port"`
+	DefaultAnsibleWinRMServerCertValidation string `json:"default_ansible_winrm_server_cert_validation"`
+}
+
+func applyConnectionPayload(s *db.ProjectDeviceSettings, body deviceConnectionSettingsPayload) {
+	s.DefaultAnsibleUser = strings.TrimSpace(body.DefaultAnsibleUser)
+	s.DefaultAnsiblePassword = body.DefaultAnsiblePassword
+	s.DefaultAnsibleConnection = strings.TrimSpace(body.DefaultAnsibleConnection)
+	s.DefaultAnsibleWinRMTransport = strings.TrimSpace(body.DefaultAnsibleWinRMTransport)
+	s.DefaultAnsibleWinRMScheme = strings.TrimSpace(body.DefaultAnsibleWinRMScheme)
+	s.DefaultAnsiblePort = body.DefaultAnsiblePort
+	if s.DefaultAnsiblePort <= 0 {
+		s.DefaultAnsiblePort = db.DefaultDeviceAnsiblePort
+	}
+	s.DefaultAnsibleWinRMServerCertValidation = strings.TrimSpace(body.DefaultAnsibleWinRMServerCertValidation)
+}
+
+func connectionPayloadFromSettings(s db.ProjectDeviceSettings) deviceConnectionSettingsPayload {
+	return deviceConnectionSettingsPayload{
+		DefaultAnsibleUser:                      s.DefaultAnsibleUser,
+		DefaultAnsiblePassword:                  s.DefaultAnsiblePassword,
+		DefaultAnsibleConnection:                s.DefaultAnsibleConnection,
+		DefaultAnsibleWinRMTransport:            s.DefaultAnsibleWinRMTransport,
+		DefaultAnsibleWinRMScheme:               s.DefaultAnsibleWinRMScheme,
+		DefaultAnsiblePort:                      s.DefaultAnsiblePort,
+		DefaultAnsibleWinRMServerCertValidation: s.DefaultAnsibleWinRMServerCertValidation,
+	}
+}
+
+// GetDeviceConnectionSettings returns project-level inventory connection defaults.
+func GetDeviceConnectionSettings(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	s, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, connectionPayloadFromSettings(s))
+}
+
+// UpdateDeviceConnectionSettings updates project-level inventory connection defaults only.
+func UpdateDeviceConnectionSettings(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body deviceConnectionSettingsPayload
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	store := helpers.Store(r)
+	s, err := store.GetProjectDeviceSettings(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	s.ProjectID = project.ID
+	applyConnectionPayload(&s, body)
+	if err := store.UpdateProjectDeviceSettings(s); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // deviceDiscoverySettingsResponse is the project-level discovery template binding (no device type).
 type deviceDiscoverySettingsResponse struct {
 	DiscoverTemplateID *int `json:"discover_template_id,omitempty"`
