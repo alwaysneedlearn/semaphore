@@ -57,6 +57,58 @@ func HasPlaybookCallbackToken(merged map[string]any) bool {
 	return false
 }
 
+func environmentHasCallbackToken(env db.Environment) bool {
+	if strings.TrimSpace(env.JSON) != "" && env.JSON != "{}" {
+		var partial map[string]any
+		if err := json.Unmarshal([]byte(env.JSON), &partial); err == nil {
+			if t, ok := partial["SEMAPHORE_API_TOKEN"]; ok && strings.TrimSpace(fmt.Sprint(t)) != "" {
+				return true
+			}
+		}
+	}
+	if env.ENV != nil && strings.TrimSpace(*env.ENV) != "" && *env.ENV != "{}" {
+		var partial map[string]string
+		if err := json.Unmarshal([]byte(*env.ENV), &partial); err == nil {
+			if strings.TrimSpace(partial["SEMAPHORE_API_TOKEN"]) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// TemplateHasPlaybookCallbackToken checks Variable Groups linked on the template (JSON or ENV tab).
+func TemplateHasPlaybookCallbackToken(store db.Store, projectID, templateID int) bool {
+	if templateID <= 0 {
+		return false
+	}
+	envIDs, err := store.GetTemplateEnvironments(projectID, templateID)
+	if err != nil || len(envIDs) == 0 {
+		return false
+	}
+	for _, envID := range envIDs {
+		env, err := store.GetEnvironment(projectID, envID)
+		if err != nil {
+			continue
+		}
+		if environmentHasCallbackToken(env) {
+			return true
+		}
+	}
+	return false
+}
+
+// DiscoveryCallbackTokenConfigured is true when token is available via server env_vars or the discover template's Variable Groups.
+func DiscoveryCallbackTokenConfigured(store db.Store, projectID int, discoverTemplateID *int) bool {
+	if HasPlaybookCallbackToken(nil) {
+		return true
+	}
+	if discoverTemplateID == nil || *discoverTemplateID <= 0 {
+		return false
+	}
+	return TemplateHasPlaybookCallbackToken(store, projectID, *discoverTemplateID)
+}
+
 // ApplySemaphoreTaskIDToTask injects semaphore_task_id into task JSON environment before the runner starts.
 // Device playbooks already receive semaphore_project_id; task id must be present for discovery/status callbacks.
 func ApplySemaphoreTaskIDToTask(store db.Store, task *db.Task) error {

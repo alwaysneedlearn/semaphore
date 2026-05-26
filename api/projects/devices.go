@@ -826,8 +826,11 @@ func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 			out["subnet"] = run.Subnet
 			out["status"] = run.Status
 		}
-		if len(devices) == 0 && !server.HasPlaybookCallbackToken(nil) {
-			out["callback_hint"] = "missing_semaphore_api_token"
+		if len(devices) == 0 {
+			ds, dsErr := store.GetProjectDeviceSettings(project.ID)
+			if dsErr == nil && !server.DiscoveryCallbackTokenConfigured(store, project.ID, ds.DiscoverTemplateID) {
+				out["callback_hint"] = "missing_semaphore_api_token"
+			}
 		}
 	}
 	helpers.WriteJSON(w, http.StatusOK, out)
@@ -1029,13 +1032,8 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{}
 	taskBytes, _ := json.Marshal(task)
 	_ = json.Unmarshal(taskBytes, &resp)
-	warnCheck := map[string]any{}
-	for k, v := range extraVars {
-		warnCheck[k] = v
-	}
-	server.InjectPlaybookCallbackVars(warnCheck)
-	if warn := discoveryCallbackWarning(warnCheck); warn != "" {
-		resp["discovery_warning"] = warn
+	if !server.DiscoveryCallbackTokenConfigured(store, project.ID, settings.DiscoverTemplateID) {
+		resp["discovery_warning"] = discoveryCallbackWarning(nil)
 	}
 	helpers.WriteJSON(w, http.StatusCreated, resp)
 }

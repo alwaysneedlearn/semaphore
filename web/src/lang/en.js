@@ -469,7 +469,7 @@ export default {
   deviceDiscoveryCallbackMissing:
     'Task finished but no discovery callback was received. Use cursor-playbooks/device_discovery.yml with SEMAPHORE_API_TOKEN, or re-run with a playbook that logs SEMAPHORE_DISCOVERY_JSON for log sync.',
   deviceDiscoveryMissingApiToken:
-    'Same as patrol/start templates: SEMAPHORE_API_TOKEN is required for API callback. Attach the same Variable Group to your discovery template (ENV or JSON with SEMAPHORE_API_TOKEN), or set env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN in server config.json (shared by all device tasks). Without it, use SEMAPHORE_DISCOVERY_JSON log sync after re-scan.',
+    'Same as patrol/start templates: SEMAPHORE_API_TOKEN is required. Creating a Variable Group is not enough — open your discovery template in Semaphore, link that group under Variable Groups (ENV or JSON key SEMAPHORE_API_TOKEN). Or set env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN in server config.json. If already linked, hard-refresh and re-run; task log should show discovery_token_set=True.',
   deviceDiscoveryListNotDeviceList:
     'The table below is cached discovery results, not the device list. Select hosts, choose a device type, then click Import selected.',
   deviceDiscoveryCallbackEmpty: 'Discovery task finished but no hosts were reported in the callback.',

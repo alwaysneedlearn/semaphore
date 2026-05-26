@@ -413,6 +413,8 @@ export default {
         }
         if (results.callback_hint === 'missing_semaphore_api_token') {
           this.discoveryWarning = 'missing_semaphore_api_token';
+        } else if ((results.devices || []).length > 0) {
+          this.discoveryWarning = '';
         }
         if (results.status === 'ready' || (results.devices || []).length > 0) {
           if ((results.devices || []).length > 0) {

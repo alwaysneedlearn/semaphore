@@ -94,8 +94,8 @@ func parseDiscoveredDevicesFromTaskLog(logText string) ([]db.DiscoveredDeviceRow
 }
 
 func discoveryCallbackWarning(merged map[string]any) string {
-	if !server.HasPlaybookCallbackToken(merged) {
-		return "missing_semaphore_api_token"
+	if merged != nil && server.HasPlaybookCallbackToken(merged) {
+		return ""
 	}
-	return ""
+	return "missing_semaphore_api_token"
 }
