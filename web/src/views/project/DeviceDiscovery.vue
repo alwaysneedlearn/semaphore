@@ -61,7 +61,7 @@
           {{ $t('deviceDiscoveryHelp') }}
         </p>
         <v-alert
-          v-if="!settings.discover_template_id"
+          v-if="settingsReady && !settings.discover_template_id"
           dense
           type="info"
           class="mb-3"
@@ -110,9 +110,9 @@
         <v-alert dense type="warning" v-if="discoveryWarning" class="mb-3">
           {{ discoveryWarningText }}
         </v-alert>
-        <v-alert dense type="info" class="mb-3">
+        <p class="text--secondary caption mb-3">
           {{ $t('deviceDiscoveryListNotDeviceList') }}
-        </v-alert>
+        </p>
         <v-alert dense type="error" v-if="discoveryError">{{ discoveryError }}</v-alert>
 
         <v-data-table
@@ -230,6 +230,7 @@ export default {
         default_inventory_id: null,
       },
       settingsDialog: false,
+      settingsReady: false,
       templates: [],
       inventories: [],
       profiles: [],
@@ -343,11 +344,15 @@ export default {
     },
 
     async loadSettings() {
-      const { data } = await axios.get(`${this.devicesApiBase}/discovery/settings`);
-      this.settings = {
-        discover_template_id: data.discover_template_id || null,
-        default_inventory_id: data.default_inventory_id || null,
-      };
+      try {
+        const { data } = await axios.get(`${this.devicesApiBase}/discovery/settings`);
+        this.settings = {
+          discover_template_id: data.discover_template_id || null,
+          default_inventory_id: data.default_inventory_id || null,
+        };
+      } finally {
+        this.settingsReady = true;
+      }
     },
 
     async loadTemplates() {
@@ -620,9 +625,6 @@ export default {
     async loadPersistedDiscovery() {
       try {
         const data = await this.fetchDiscoveryResults();
-        if (data.callback_hint === 'missing_semaphore_api_token') {
-          this.discoveryWarning = 'missing_semaphore_api_token';
-        }
         this.applyDiscoveredDevicesFromApi(data.devices || [], { preserveProfiles: true });
       } catch (e) {
         // ignore — empty table until first scan

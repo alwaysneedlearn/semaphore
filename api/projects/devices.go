@@ -826,12 +826,6 @@ func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 			out["subnet"] = run.Subnet
 			out["status"] = run.Status
 		}
-		if len(devices) == 0 {
-			ds, dsErr := store.GetProjectDeviceSettings(project.ID)
-			if dsErr == nil && !server.DiscoveryCallbackTokenConfigured(store, project.ID, ds.DiscoverTemplateID) {
-				out["callback_hint"] = "missing_semaphore_api_token"
-			}
-		}
 	}
 	helpers.WriteJSON(w, http.StatusOK, out)
 }
