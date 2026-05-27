@@ -28,15 +28,15 @@
       }}
 
 - name: 重配执行：检测 Profile 用户目录是否存在
-  ansible.builtin.win_shell: |
-    $p = 'C:\\Users\\' + "{{ _reconfig_profile_user }}"
-    if (Test-Path -LiteralPath $p) {
-      Write-Output 'PROFILE_DIR_EXISTS=yes'
-    } else {
-      Write-Output 'PROFILE_DIR_EXISTS=no'
-    }
-  register: _reconfig_profile_dir_check
-  changed_when: false
+  ansible.windows.win_stat:
+    path: "C:\\Users\\{{ _reconfig_profile_user }}"
+  register: _reconfig_profile_dir_stat
+
+- name: 重配执行：规范化 Profile 目录存在性输出（供后续 when 使用）
+  ansible.builtin.set_fact:
+    _reconfig_profile_dir_exists: "{{ _reconfig_profile_dir_stat.stat.exists | default(false) | bool }}"
+    _reconfig_profile_dir_check:
+      stdout: "{{ 'PROFILE_DIR_EXISTS=yes' if (_reconfig_profile_dir_stat.stat.exists | default(false) | bool) else 'PROFILE_DIR_EXISTS=no' }}"
 
 - name: 重配执行：Profile 目录缺失时按序检测回退用户目录
   ansible.builtin.win_shell: |
@@ -66,14 +66,14 @@
     RECONFIG_CONFIG_FALLBACK_USERS: "{{ _reconfig_fallback_users_csv }}"
   register: _reconfig_fallback_pick
   changed_when: false
-  when: "'PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))"
+  when: not (_reconfig_profile_dir_exists | default(false) | bool)
 
 - name: 重配执行：登记配置文件存储用户（profile 目录存在）
   ansible.builtin.set_fact:
     _reconfig_config_user: "{{ _reconfig_profile_user }}"
     _reconfig_config_user_source: detected_profile_user
     _reconfig_fallback_checked: ""
-  when: "'PROFILE_DIR_EXISTS=yes' in (_reconfig_profile_dir_check.stdout | default(''))"
+  when: _reconfig_profile_dir_exists | default(false) | bool
 
 - name: 重配执行：登记配置文件存储用户（回退列表）
   ansible.builtin.set_fact:
