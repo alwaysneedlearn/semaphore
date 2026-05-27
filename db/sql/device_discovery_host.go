@@ -101,6 +101,42 @@ func (d *SqlDb) ListDiscoveredHosts(projectID int, taskID int) (hosts []db.Disco
 	return
 }
 
+func (d *SqlDb) ClearDiscoveredHosts(projectID int) (int, error) {
+	res, err := d.exec(
+		"delete from project__device_discovery_host where project_id=?",
+		projectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	affected, _ := res.RowsAffected()
+	return int(affected), nil
+}
+
+func (d *SqlDb) UpdateDiscoveredHostHostname(projectID int, ipAddress, hostname string) error {
+	ipAddress = strings.TrimSpace(ipAddress)
+	hostname = strings.TrimSpace(hostname)
+	if ipAddress == "" {
+		return &db.ValidationError{Message: "ip_address is required"}
+	}
+	if hostname == "" {
+		hostname = ipAddress
+	}
+	now := tz.Now()
+	res, err := d.exec(
+		"update project__device_discovery_host set hostname=?, updated=? where project_id=? and ip_address=?",
+		hostname, now, projectID, ipAddress,
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return db.ErrNotFound
+	}
+	return nil
+}
+
 func (d *SqlDb) DeleteDiscoveredHostsByIP(projectID int, ipAddresses []string) (int, error) {
 	n := 0
 	for _, ip := range ipAddresses {

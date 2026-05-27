@@ -241,6 +241,72 @@ func (d *BoltDb) UpdateDeviceStatusByHostname(projectID int, hostname string, st
 	return db.ErrNotFound
 }
 
+func (d *BoltDb) UpsertDevicesFromDiscoveryImport(projectID int, devices []db.Device) ([]db.Device, error) {
+	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		return nil, err
+	}
+	byIP := map[string]db.Device{}
+	for _, dev := range existing {
+		if ip := strings.TrimSpace(dev.IPAddress); ip != "" {
+			byIP[ip] = dev
+		}
+	}
+	var saved []db.Device
+	for _, dev := range devices {
+		ip := strings.TrimSpace(dev.IPAddress)
+		if ip == "" {
+			continue
+		}
+		dev.IPAddress = ip
+		if old, ok := byIP[ip]; ok {
+			old.IPAddress = ip
+			if strings.TrimSpace(dev.Hostname) != "" {
+				old.Hostname = strings.TrimSpace(dev.Hostname)
+				old.Name = old.Hostname
+			}
+			db.MergeDeviceCredentialsOnUpsert(&old, dev)
+			db.MergeDevicePortsOnUpsert(&old, dev)
+			old.AnsibleConnection = dev.AnsibleConnection
+			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
+			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
+			old.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
+			if dev.RDPStatus != "" {
+				old.RDPStatus = dev.RDPStatus
+			}
+			if dev.WinRMStatus != "" {
+				old.WinRMStatus = dev.WinRMStatus
+			}
+			if dev.APIStatus != "" {
+				old.APIStatus = dev.APIStatus
+			}
+			now := tz.Now()
+			old.LastUpdated = &now
+			if err = d.UpdateDevice(old); err != nil {
+				return nil, err
+			}
+			byIP[ip] = old
+			saved = append(saved, old)
+		} else {
+			dev.ProjectID = projectID
+			if strings.TrimSpace(dev.Hostname) == "" {
+				dev.Hostname = ip
+			}
+			dev.Name = dev.Hostname
+			if dev.DeviceStatus == "" {
+				dev.DeviceStatus = db.DeviceStatusUnknown
+			}
+			created, cErr := d.CreateDevice(dev)
+			if cErr != nil {
+				return nil, cErr
+			}
+			byIP[ip] = created
+			saved = append(saved, created)
+		}
+	}
+	return saved, nil
+}
+
 func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]db.Device, error) {
 	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {

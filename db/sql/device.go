@@ -239,6 +239,72 @@ func (d *SqlDb) UpdateDeviceStatusByHostname(projectID int, hostname string, sta
 	return err
 }
 
+// UpsertDevicesFromDiscoveryImport creates or updates devices from discovery import.
+// Existing devices keep device_status unchanged; new devices get unknown health status.
+func (d *SqlDb) UpsertDevicesFromDiscoveryImport(projectID int, devices []db.Device) ([]db.Device, error) {
+	var saved []db.Device
+	for _, dev := range devices {
+		ip := strings.TrimSpace(dev.IPAddress)
+		if ip == "" {
+			continue
+		}
+		dev.IPAddress = ip
+
+		var existing db.Device
+		err := d.selectOne(&existing,
+			"select * from project__device where project_id=? and ip_address=?",
+			projectID, ip)
+		if err != nil && !errors.Is(err, db.ErrNotFound) {
+			return nil, err
+		}
+
+		if errors.Is(err, db.ErrNotFound) {
+			dev.ProjectID = projectID
+			if strings.TrimSpace(dev.Hostname) == "" {
+				dev.Hostname = ip
+			}
+			dev.Name = dev.Hostname
+			if dev.DeviceStatus == "" {
+				dev.DeviceStatus = db.DeviceStatusUnknown
+			}
+			created, cErr := d.CreateDevice(dev)
+			if cErr != nil {
+				return nil, cErr
+			}
+			saved = append(saved, created)
+			continue
+		}
+
+		existing.IPAddress = ip
+		if strings.TrimSpace(dev.Hostname) != "" {
+			existing.Hostname = strings.TrimSpace(dev.Hostname)
+			existing.Name = existing.Hostname
+		}
+		db.MergeDeviceCredentialsOnUpsert(&existing, dev)
+		db.MergeDevicePortsOnUpsert(&existing, dev)
+		existing.AnsibleConnection = dev.AnsibleConnection
+		existing.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
+		existing.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
+		existing.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
+		if dev.RDPStatus != "" {
+			existing.RDPStatus = dev.RDPStatus
+		}
+		if dev.WinRMStatus != "" {
+			existing.WinRMStatus = dev.WinRMStatus
+		}
+		if dev.APIStatus != "" {
+			existing.APIStatus = dev.APIStatus
+		}
+		now := tz.Now()
+		existing.LastUpdated = &now
+		if err = d.UpdateDevice(existing); err != nil {
+			return nil, err
+		}
+		saved = append(saved, existing)
+	}
+	return saved, nil
+}
+
 func (d *SqlDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]db.Device, error) {
 	var saved []db.Device
 	for _, dev := range devices {

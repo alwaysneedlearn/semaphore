@@ -704,6 +704,34 @@ func GetDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, out)
 }
 
+// ClearDeviceDiscoveryResults removes all persisted discovery hosts for the project.
+func ClearDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	n, err := helpers.Store(r).ClearDiscoveredHosts(project.ID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{"deleted": n})
+}
+
+// PatchDeviceDiscoveryHost updates editable fields on one discovery list row (e.g. hostname).
+func PatchDeviceDiscoveryHost(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body struct {
+		IPAddress string `json:"ip_address"`
+		Hostname  string `json:"hostname"`
+	}
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	if err := helpers.Store(r).UpdateDiscoveredHostHostname(project.ID, body.IPAddress, body.Hostname); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // PutDeviceDiscoveryResults is the playbook callback that stores discovery scan rows.
 func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
@@ -1009,10 +1037,10 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 			dev.Hostname = dev.IPAddress
 		}
 		dev.Name = dev.Hostname
-		if dev.DeviceStatus == "" {
-			dev.DeviceStatus = db.DeviceStatusFromChannelProbes(dev.RDPStatus, dev.WinRMStatus, dev.APIStatus)
-		}
-		normalizeDeviceStatuses(&dev)
+		dev.DeviceStatus = ""
+		dev.RDPStatus = normalizeProtocolStatus(dev.RDPStatus)
+		dev.WinRMStatus = normalizeProtocolStatus(dev.WinRMStatus)
+		dev.APIStatus = normalizeProtocolStatus(dev.APIStatus)
 		normalizeDeviceConnection(&dev, settings)
 		dev.AnsiblePort = 0
 		dev.RDPPort = 0
@@ -1036,7 +1064,7 @@ func ImportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	saved, err := store.UpsertDevicesByIPAddress(project.ID, toUpsert)
+	saved, err := store.UpsertDevicesFromDiscoveryImport(project.ID, toUpsert)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return

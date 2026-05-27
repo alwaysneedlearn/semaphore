@@ -100,11 +100,22 @@
         <v-btn
           v-if="discoveryPollTaskId"
           text
-          class="mb-3"
+          class="mb-3 mr-2"
           :loading="discoveryPolling"
           @click="refreshDiscoveryResultsNow"
         >
           {{ $t('deviceDiscoveryRefreshResults') }}
+        </v-btn>
+        <v-btn
+          text
+          class="mb-3 mr-2"
+          color="error"
+          :disabled="discoveredDevices.length === 0"
+          :loading="clearingDiscovery"
+          @click="confirmClearDiscovery"
+        >
+          <v-icon left small>mdi-delete-sweep</v-icon>
+          {{ $t('deviceDiscoveryClearList') }}
         </v-btn>
 
         <v-alert dense type="warning" v-if="discoveryWarning" class="mb-3">
@@ -124,10 +135,17 @@
           dense
           class="mb-4"
         >
-          <template v-slot:item.device_status="{ item }">
-            <v-chip x-small :color="statusColor(item.device_status)" dark>
-              {{ item.device_status }}
-            </v-chip>
+          <template v-slot:item.hostname="{ item }">
+            <v-text-field
+              v-model="item.hostname"
+              dense
+              outlined
+              hide-details
+              class="mt-1 mb-1"
+              style="max-width: 220px"
+              :disabled="importingDiscovery"
+              @blur="saveDiscoveryHostname(item)"
+            />
           </template>
           <template v-slot:item.rdp_status="{ item }">
             <v-chip x-small :color="statusColor(item.rdp_status)" dark>
@@ -245,6 +263,7 @@ export default {
       discoveredDevices: [],
       selectedDiscovered: [],
       importingDiscovery: false,
+      clearingDiscovery: false,
       bulkImportProfileId: null,
     };
   },
@@ -253,8 +272,7 @@ export default {
     discoveryHeaders() {
       return [
         { text: 'IP', value: 'ip_address' },
-        { text: 'Hostname', value: 'hostname' },
-        { text: 'Status', value: 'device_status' },
+        { text: 'Hostname', value: 'hostname', sortable: false, width: '240px' },
         { text: 'RDP', value: 'rdp_status' },
         { text: 'WinRM', value: 'winrm_status' },
         { text: 'API', value: 'api_status' },
@@ -576,7 +594,6 @@ export default {
           return {
             hostname: (x.hostname || '').trim(),
             ip_address: ip,
-            device_status: x.device_status || x.status || 'unhealthy',
             rdp_status: x.rdp_status || 'offline',
             winrm_status: x.winrm_status || 'offline',
             api_status: x.api_status || 'offline',
@@ -647,6 +664,51 @@ export default {
       await this.discoverDevices();
     },
 
+    async saveDiscoveryHostname(item) {
+      const ip = String(item.ip_address || '').trim();
+      const hostname = String(item.hostname || '').trim();
+      if (!ip) {
+        return;
+      }
+      try {
+        await axios.patch(`${this.devicesApiBase}/discovery/host`, {
+          ip_address: ip,
+          hostname: hostname || ip,
+        });
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      }
+    },
+
+    confirmClearDiscovery() {
+      if (this.discoveredDevices.length === 0) {
+        return;
+      }
+      // eslint-disable-next-line no-alert
+      if (!window.confirm(this.$t('deviceDiscoveryClearConfirm'))) {
+        return;
+      }
+      this.clearDiscoveryList();
+    },
+
+    async clearDiscoveryList() {
+      this.clearingDiscovery = true;
+      this.discoveryError = '';
+      try {
+        await axios.delete(`${this.devicesApiBase}/discovery/results`);
+        this.discoveredDevices = [];
+        this.selectedDiscovered = [];
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$t('deviceDiscoveryClearDone'),
+        });
+      } catch (e) {
+        this.discoveryError = getErrorMessage(e);
+      } finally {
+        this.clearingDiscovery = false;
+      }
+    },
+
     async importSelectedDiscovery() {
       if (!this.canImportSelected) {
         EventBus.$emit('i-snackbar', {
@@ -662,8 +724,18 @@ export default {
           ip_address: String(row.ip_address || row.ip || '').trim(),
           device_profile_id: Number(row.import_profile_id),
         })).filter((x) => x.ip_address && x.device_profile_id > 0);
+        const selectedIPs = new Set(imports.map((x) => x.ip_address));
         const payload = {
-          devices: this.discoveredDevices,
+          devices: this.discoveredDevices
+            .filter((row) => selectedIPs.has(String(row.ip_address || '').trim()))
+            .map((row) => ({
+              hostname: String(row.hostname || '').trim(),
+              ip_address: String(row.ip_address || '').trim(),
+              rdp_status: row.rdp_status,
+              winrm_status: row.winrm_status,
+              api_status: row.api_status,
+              api_port: row.api_port,
+            })),
           imports,
         };
         const res = await axios.post(`${this.devicesApiBase}/discovery/import`, payload);

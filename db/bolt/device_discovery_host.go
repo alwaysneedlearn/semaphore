@@ -112,6 +112,45 @@ func (d *BoltDb) ListDiscoveredHosts(projectID int, taskID int) (hosts []db.Disc
 	return filtered, nil
 }
 
+func (d *BoltDb) ClearDiscoveredHosts(projectID int) (int, error) {
+	hosts, err := d.ListDiscoveredHosts(projectID, 0)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, h := range hosts {
+		if err := d.deleteObject(projectID, deviceDiscoveryHostProps, intObjectID(h.ID), nil); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+func (d *BoltDb) UpdateDiscoveredHostHostname(projectID int, ipAddress, hostname string) error {
+	ipAddress = strings.TrimSpace(ipAddress)
+	hostname = strings.TrimSpace(hostname)
+	if ipAddress == "" {
+		return &db.ValidationError{Message: "ip_address is required"}
+	}
+	if hostname == "" {
+		hostname = ipAddress
+	}
+	hosts, err := d.ListDiscoveredHosts(projectID, 0)
+	if err != nil {
+		return err
+	}
+	for _, h := range hosts {
+		if strings.TrimSpace(h.IPAddress) != ipAddress {
+			continue
+		}
+		h.Hostname = hostname
+		h.Updated = tz.Now()
+		return d.updateObject(projectID, deviceDiscoveryHostProps, h)
+	}
+	return db.ErrNotFound
+}
+
 func (d *BoltDb) DeleteDiscoveredHostsByIP(projectID int, ipAddresses []string) (int, error) {
 	hosts, err := d.ListDiscoveredHosts(projectID, 0)
 	if err != nil {
