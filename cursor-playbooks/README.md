@@ -13,7 +13,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/
 
 - `cursor-playbooks/neware/device_status.yml`
 - `cursor-playbooks/neware/device_start.yml`
-- `cursor-playbooks/neware/device_discovery.yml` (network scan + API callback)
+- `cursor-playbooks/device_discovery.yml` (network scan + API callback; device-type agnostic)
 
 ### Backward compatibility
 
@@ -32,4 +32,4 @@ Semaphore binds **one auto inventory per device type** (`windows_hosts (auto: â€
 1. Create `cursor-playbooks/<profile_key>/` (e.g. `acme/`).
 2. Start from `neware/` â€” copy or symlink playbooks and adjust paths, EXE paths, and callbacks as needed.
 3. Bind templates in Semaphore **Device types** to `cursor-playbooks/<profile_key>/device_*.yml`.
-4. Project-level **discovery** can stay on `neware/device_discovery.yml` until a type-specific scanner exists.
+4. Project-level **discovery** uses `cursor-playbooks/device_discovery.yml` (device-type agnostic).

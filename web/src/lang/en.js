@@ -471,7 +471,7 @@ export default {
   deviceDiscoveryHelp:
     'Enter a subnet and run the discovery template. The playbook PUTs results to the API; the table refreshes when the callback arrives. Choose a device type, then import selected rows.',
   deviceDiscoveryCallbackMissing:
-    'Task finished but no discovery callback was received. Use cursor-playbooks/neware/device_discovery.yml (or the root compatibility wrapper) with SEMAPHORE_API_TOKEN, or re-run with a playbook that logs SEMAPHORE_DISCOVERY_JSON for log sync.',
+    'Task finished but no discovery callback was received. Use cursor-playbooks/device_discovery.yml with SEMAPHORE_API_TOKEN, or re-run with a playbook that logs SEMAPHORE_DISCOVERY_JSON for log sync.',
   deviceDiscoveryMissingApiToken:
     'Same as patrol/start templates: SEMAPHORE_API_TOKEN is required. Creating a Variable Group is not enough — open your discovery template in Semaphore, link that group under Variable Groups (ENV or JSON key SEMAPHORE_API_TOKEN). Or set env_vars.SEMAPHORE_DEVICE_CALLBACK_API_TOKEN in server config.json. If already linked, hard-refresh and re-run; task log should show discovery_token_set=True.',
   deviceDiscoveryListNotDeviceList:

@@ -1,7 +1,10 @@
 ---
 # PUT discovered hosts to Semaphore (Devices → Discovery tab). Requires SEMAPHORE_API_TOKEN.
+#
+# Note: this task file can be included from playbooks in `cursor-playbooks/` root,
+# so includes must use an absolute-ish path within the repo, not `tasks/...`.
 
-- ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
+- ansible.builtin.include_tasks: neware/tasks/semaphore_resolve_bulk_credentials.yml
 
 - name: 解析 discovery 回调 task_id
   ansible.builtin.set_fact:
