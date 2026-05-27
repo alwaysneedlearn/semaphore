@@ -60,4 +60,12 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 
 ## 调试
 
-任务日志中搜索 **`[DEBUG-TDENGINE]`**。
+任务日志中搜索 **`[DEBUG-TDENGINE]`**。成功时 REST 仍可能 **HTTP 200**，请查看：
+
+- `raw_body` / `json.code`（`0` 为成功）
+- `json.desc`（失败时的错误说明）
+- `json.affected_rows`（写入行数；为 `0` 时表内无变化）
+
+请求 URL 为 `{TDENGINE_URL}/rest/sql/{TDENGINE_DATABASE}`（无状态连接，库名在 URL 中）。INSERT 使用 `INSERT INTO neware_remote_computer_status ...`（表名不带库前缀）。
+
+**注意**：若表主键仅 `ts` 且所有设备共用同一固定 `ts`，TDengine 中最终可能只保留 **一行**（后写入覆盖先写入）；需多行时请确认表结构是否以 `computer_name` 等区分主键/标签。

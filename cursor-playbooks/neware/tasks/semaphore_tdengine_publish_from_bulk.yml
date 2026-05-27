@@ -1,21 +1,11 @@
 ---
 # 在 bulk PUT 之后向 TDengine 写入 neware_remote_computer_status 行。
-# ts 使用固定值：2262-01-01T08:00:00.000000000+08:00
+# ts 固定值（可用 Variable Group TDENGINE_FIXED_TS 覆盖）默认：2262-01-01 08:00:00.000
 #
-# Variable Group ENV 配置项：
-#   TDENGINE_URL          必填，REST 基址（不含 /rest/sql），例如 http://tdengine:6041
-#   TDENGINE_USER         可选 Basic 认证用户名
-#   TDENGINE_PASSWORD     可选 Basic 认证密码
-#   TDENGINE_DATABASE     可选，默认 lab
-#   TDENGINE_STATUS_TABLE 可选，默认 neware_remote_computer_status
-#
-# 表结构：
-#   ts              TIMESTAMP  — 固定值 2262-01-01T08:00:00.000000000+08:00
-#   computer_name   VARCHAR(200) — 设备 hostname
-#   status          VARCHAR(200) — online（healthy）/ offline（其余）
-#   updated_time    TIMESTAMP  — 本次写入的实际 UTC 时间
-#   check_time      TIMESTAMP  — 本次写入的实际 UTC 时间（同 updated_time）
-#   supplier        VARCHAR(100) — 固定值 newarerm
+# Variable Group ENV：
+#   TDENGINE_URL, TDENGINE_USER, TDENGINE_PASSWORD
+#   TDENGINE_DATABASE (默认 lab), TDENGINE_STATUS_TABLE (默认 neware_remote_computer_status)
+#   TDENGINE_FIXED_TS  — 可选，覆盖固定 ts 字符串
 
 - name: 解析 TDengine 凭据（Variable Group ENV）
   ansible.builtin.set_fact:
@@ -24,6 +14,9 @@
     _td_pass: "{{ lookup('env', 'TDENGINE_PASSWORD') | default('', true) | trim }}"
     _td_db: "{{ (lookup('env', 'TDENGINE_DATABASE') | default('', true) | trim) | default('lab', true) }}"
     _td_table: "{{ (lookup('env', 'TDENGINE_STATUS_TABLE') | default('', true) | trim) | default('neware_remote_computer_status', true) }}"
+    _td_fixed_ts: >-
+      {{ (lookup('env', 'TDENGINE_FIXED_TS') | default('', true) | trim)
+         | default('2262-01-01 08:00:00.000', true) }}
 
 - name: TDengine 写入前提检查（需 TDENGINE_URL 且有 bulk 行）
   ansible.builtin.set_fact:
@@ -57,28 +50,45 @@
     _raw_st: "{{ item.device_status | default(item.status | default('unhealthy')) }}"
     _td_mapped: "{{ 'online' if (_raw_st | string) == 'healthy' else 'offline' }}"
     _cn: "{{ item.hostname | default(item.ip | default('')) | string | replace(\"'\", \"''\") }}"
-    _td_fixed_ts: "2262-01-01T08:00:00.000000000+08:00"
+    _now_esc: "{{ _td_now | replace(\"'\", \"''\") }}"
+    _ts_esc: "{{ _td_fixed_ts | replace(\"'\", \"''\") }}"
     _td_tuple: >-
-      ('{{ _td_fixed_ts }}','{{ _cn }}','{{ _td_mapped }}','{{ _td_now }}','{{ _td_now }}','newarerm')
+      ('{{ _ts_esc }}','{{ _cn }}','{{ _td_mapped }}','{{ _now_esc }}','{{ _now_esc }}','newarerm')
   when:
     - _td_enabled | bool
     - _td_now is defined
 
-- name: POST TDengine status INSERT（覆盖更新各设备唯一行）
+- name: 生成 TDengine INSERT SQL
+  ansible.builtin.set_fact:
+    _td_sql: >-
+      INSERT INTO {{ _td_table }}
+      (ts, computer_name, status, updated_time, check_time, supplier)
+      VALUES {{ _td_value_parts | join(',') }}
+  when:
+    - _td_enabled | bool
+    - (_td_value_parts | default([]) | length) > 0
+
+- name: DEBUG TDengine INSERT 请求
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-TDENGINE] post_url={{ _td_base }}/rest/sql/{{ _td_db }}"
+      - "[DEBUG-TDENGINE] table={{ _td_db }}.{{ _td_table }} rows={{ _td_value_parts | default([]) | length }} fixed_ts={{ _td_fixed_ts }}"
+      - "[DEBUG-TDENGINE] sql={{ _td_sql | default('') }}"
+  when:
+    - _td_enabled | bool
+    - _td_sql is defined
+
+- name: POST TDengine status INSERT
   ansible.builtin.uri:
-    url: "{{ _td_base }}/rest/sql"
+    url: "{{ _td_base }}/rest/sql/{{ _td_db }}"
     method: POST
     headers: "{{ _td_headers }}"
     body: "{{ _td_sql }}"
-    body_format: raw
+    return_content: true
     status_code: [200, 400, 401, 403, 500, 502, 503]
   register: _td_put_result
   failed_when: false
   vars:
-    _td_sql: >-
-      INSERT INTO `{{ _td_db }}`.`{{ _td_table }}`
-      (ts, computer_name, status, updated_time, check_time, supplier)
-      VALUES {{ _td_value_parts | join(',') }}
     _td_headers: >-
       {{
         {'Content-Type': 'text/plain'}
@@ -89,16 +99,52 @@
       }}
   when:
     - _td_enabled | bool
-    - (_td_value_parts | default([]) | length) > 0
+    - _td_sql is defined
     - _td_base is defined
 
-- name: DEBUG TDengine INSERT 响应
+- name: 解析 TDengine REST 响应体
+  ansible.builtin.set_fact:
+    _td_resp_raw: >-
+      {{
+        (_td_put_result.content | default(''))
+        if (_td_put_result.content is defined and (_td_put_result.content | string | length) > 0)
+        else ((_td_put_result.json | default({}) | to_json) if (_td_put_result.json is defined) else '')
+      }}
+    _td_resp_json: "{{ _td_put_result.json | default({}) }}"
+  when: _td_put_result is defined and not (_td_put_result.skipped | default(false))
+
+- name: DEBUG TDengine INSERT 响应（HTTP + JSON body）
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-TDENGINE] url={{ _td_base | default('') }}/rest/sql table={{ _td_db }}.{{ _td_table }} rows={{ _td_value_parts | default([]) | length }}"
       - "[DEBUG-TDENGINE] http_status={{ _td_put_result.status | default('n/a') }}"
-      - "[DEBUG-TDENGINE] response={{ _td_put_result.content | default('') | truncate(1500, True) }}"
+      - "[DEBUG-TDENGINE] content_type={{ _td_put_result.content_type | default('n/a') }}"
+      - "[DEBUG-TDENGINE] content_length={{ (_td_resp_raw | default('') | length) }}"
+      - "[DEBUG-TDENGINE] raw_body={{ _td_resp_raw | default('(empty)') }}"
+      - "[DEBUG-TDENGINE] json.code={{ _td_resp_json.code | default('n/a') }}"
+      - "[DEBUG-TDENGINE] json.desc={{ _td_resp_json.desc | default('') }}"
+      - "[DEBUG-TDENGINE] json.affected_rows={{ _td_affected | default('n/a') }}"
+      - "[DEBUG-TDENGINE] json.rows={{ _td_resp_json.rows | default('n/a') }}"
+  vars:
+    _td_affected: >-
+      {{
+        (_td_resp_json.data | default([]) | first | default([]) | first)
+        if (_td_resp_json.data is defined and (_td_resp_json.data | length) > 0)
+        else none
+      }}
   when: _td_put_result is defined and not (_td_put_result.skipped | default(false))
+
+- name: 警告 TDengine INSERT 业务失败（HTTP 200 但 code≠0 或 affected_rows=0）
+  ansible.builtin.debug:
+    msg: >-
+      [DEBUG-TDENGINE] WARN: TDengine returned HTTP {{ _td_put_result.status | default('?') }}
+      but insert may have failed — code={{ _td_resp_json.code | default('?') }}
+      desc={{ _td_resp_json.desc | default('') }}
+      affected_rows={{ _td_affected | default('?') }}.
+      Check timestamp range, table name lab.{{ _td_table }}, and SQL in log above.
+  when:
+    - _td_put_result is defined and not (_td_put_result.skipped | default(false))
+    - (_td_resp_json.code | default(0) | int != 0)
+      or (_td_affected is defined and (_td_affected | int) == 0)
 
 - name: 跳过 TDengine（未配置 TDENGINE_URL）
   ansible.builtin.debug:
