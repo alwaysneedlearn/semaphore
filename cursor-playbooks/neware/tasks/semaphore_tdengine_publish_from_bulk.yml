@@ -1,6 +1,6 @@
 ---
 # 在 bulk PUT 之后向 TDengine 写入 neware_remote_computer_status 行。
-# 每台设备只保留一行：ts 由 computer_name 哈希派生，固定不变，相同 ts INSERT 时 TDengine 覆盖该行。
+# ts 使用固定值：2262-01-01T08:00:00.000000000+08:00
 #
 # Variable Group ENV 配置项：
 #   TDENGINE_URL          必填，REST 基址（不含 /rest/sql），例如 http://tdengine:6041
@@ -9,8 +9,8 @@
 #   TDENGINE_DATABASE     可选，默认 lab
 #   TDENGINE_STATUS_TABLE 可选，默认 neware_remote_computer_status
 #
-# 表结构（每台设备一行，ts 固定，重复 INSERT 覆盖）：
-#   ts              TIMESTAMP  — 由 computer_name md5 哈希派生的固定毫秒时间戳
+# 表结构：
+#   ts              TIMESTAMP  — 固定值 2262-01-01T08:00:00.000000000+08:00
 #   computer_name   VARCHAR(200) — 设备 hostname
 #   status          VARCHAR(200) — online（healthy）/ offline（其余）
 #   updated_time    TIMESTAMP  — 本次写入的实际 UTC 时间
@@ -47,7 +47,7 @@
     - _td_enabled | bool
     - _td_now_cmd is defined and not (_td_now_cmd.skipped | default(false))
 
-- name: 组装 TDengine INSERT 行（每台设备 ts 固定，重复写入覆盖同行）
+- name: 组装 TDengine INSERT 行（ts 固定值）
   ansible.builtin.set_fact:
     _td_value_parts: "{{ _td_value_parts | default([]) + [_td_tuple] }}"
   loop: "{{ semaphore_status_bulk_updates | default([]) }}"
@@ -57,14 +57,9 @@
     _raw_st: "{{ item.device_status | default(item.status | default('unhealthy')) }}"
     _td_mapped: "{{ 'online' if (_raw_st | string) == 'healthy' else 'offline' }}"
     _cn: "{{ item.hostname | default(item.ip | default('')) | string | replace(\"'\", \"''\") }}"
-    # 固定 ts：以 2000-01-01 00:00:00 UTC（epoch ms = 946684800000）为基准，
-    # 加上 computer_name md5 哈希前8位（十六进制）转换成的整数毫秒偏移（0~4294967295 ms ≈ 49.7天范围，唯一性足够）。
-    # 相同 computer_name 每次算出相同 ts，TDengine 覆盖该行，实现「每台设备只保留一行」。
-    _hash_hex: "{{ _cn | hash('md5') | truncate(8, True, '') }}"
-    _hash_int: "{{ (_hash_hex | int(base=16)) }}"
-    _td_fixed_ts_ms: "{{ 946684800000 + (_hash_int | int) }}"
+    _td_fixed_ts: "2262-01-01T08:00:00.000000000+08:00"
     _td_tuple: >-
-      ({{ _td_fixed_ts_ms }},'{{ _cn }}','{{ _td_mapped }}','{{ _td_now }}','{{ _td_now }}','newarerm')
+      ('{{ _td_fixed_ts }}','{{ _cn }}','{{ _td_mapped }}','{{ _td_now }}','{{ _td_now }}','newarerm')
   when:
     - _td_enabled | bool
     - _td_now is defined

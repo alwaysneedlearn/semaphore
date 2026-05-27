@@ -21,7 +21,7 @@ Semaphore **不再**在服务端自动写 TDengine。设备操作 playbook（`cu
 ```
 describe `lab`.`neware_remote_computer_status`
 field          type       length
-ts             TIMESTAMP  8        -- TDengine 时序主键（自动递增）
+ts             TIMESTAMP  8        -- 固定值 2262-01-01T08:00:00.000000000+08:00
 computer_name  VARCHAR    200      -- 设备 hostname
 status         VARCHAR    200      -- online / offline
 updated_time   TIMESTAMP  8        -- 写入时间
@@ -38,13 +38,13 @@ supplier       VARCHAR    100      -- 固定 newarerm
 
 ## 每台设备只保留一行（ts 固定策略）
 
-`ts` 由 `computer_name` 的 MD5 哈希前 8 位（十六进制 → 整数毫秒）加上基准时间 `2000-01-01 00:00:00 UTC` 派生：
+`ts` 固定写入：
 
 ```
-ts_ms = 946684800000 + int(md5(computer_name)[0:8], 16)
+2262-01-01T08:00:00.000000000+08:00
 ```
 
-相同 hostname 每次算出相同 `ts`，TDengine INSERT 相同主键时覆盖该行，从而实现**每台设备只保留最新一行**。`updated_time` / `check_time` 仍写入本次真实时间，反映最后更新时刻。
+每次任务都用同一个 `ts` 写入；`updated_time` / `check_time` 仍写入本次真实时间，反映最后更新时刻。
 
 ## 覆盖的操作
 
