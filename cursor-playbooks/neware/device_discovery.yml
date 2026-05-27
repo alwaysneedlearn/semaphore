@@ -1,3 +1,0 @@
----
-# Compatibility entrypoint — discovery is device-type agnostic.
-- import_playbook: ../device_discovery.yml

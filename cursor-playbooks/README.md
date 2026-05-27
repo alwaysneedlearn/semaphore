@@ -13,11 +13,9 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/
 
 - `cursor-playbooks/neware/device_status.yml`
 - `cursor-playbooks/neware/device_start.yml`
-- `cursor-playbooks/device_discovery.yml` (network scan + API callback; device-type agnostic)
+- `cursor-playbooks/device_discovery.yml` (network scan + API callback; device-type agnostic; uses `neware/tasks/semaphore_discovery_put_results.yml` for the API PUT)
 
-### Backward compatibility
-
-Top-level files such as `cursor-playbooks/device_start.yml` remain as thin **`import_playbook`** wrappers to the matching file under `neware/`. Existing template paths keep working; new work should use `neware/` explicitly.
+The **`cursor-playbooks/`** root keeps only **`README.md`** and **`device_discovery.yml`**. All NEWARE device action playbooks live under **`neware/`**.
 
 Semaphore binds **one auto inventory per device type** (`windows_hosts (auto: …)`). Point each type’s templates at that inventory for manual runs; list actions still use ephemeral `windows_hosts batch …` inventories.
 

@@ -1,3 +1,0 @@
----
-# Compatibility entrypoint — prefer neware/check_restart_redeploy.yml in Semaphore templates.
-- import_playbook: neware/check_restart_redeploy.yml

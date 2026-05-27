@@ -170,15 +170,14 @@ Wrap **collect**, **resolve EXE_DIR**, **log health check** in blocks with **`ig
 
 ```
 cursor-playbooks/
-  README.md              # Layout index; per-type docs under <type>/README.md
-  device_*.yml           # Optional wrappers: import_playbook → neware/...
+  README.md
+  device_discovery.yml   # Project-level discovery (not under neware/)
   neware/                # NEWARE Windows hosts (current production tree)
     device_status.yml    # Patrol — no app HTTP API for api_status
     device_start.yml
     device_restart.yml
     device_stop.yml
     check_restart_redeploy.yml
-    device_discovery.yml # Discovery PUT callback (not bulk status)
     ansible.cfg
     files/sem_*.ps1      # Deployed once via deploy_sem_windows_helper_scripts.yml
     tasks/

@@ -1,3 +1,0 @@
----
-# Compatibility entrypoint — prefer neware/device_restart.yml in Semaphore templates.
-- import_playbook: neware/device_restart.yml

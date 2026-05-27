@@ -1,3 +1,0 @@
----
-# Compatibility entrypoint — prefer neware/device_start.yml in Semaphore templates.
-- import_playbook: neware/device_start.yml
