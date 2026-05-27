@@ -164,6 +164,35 @@ Wrap **collect**, **resolve EXE_DIR**, **log health check** in blocks with **`ig
 | `need_reconfigure \| default(false)` when var may be string `"False"` | Wrong gate | Set booleans with literal `true`/`false` in `health_gate_need_reconfigure_from_log.yml` pattern |
 | `api_port` via broken ternary | Becomes boolean | Use explicit `{% if (hp \| int) > 0 %}` pattern in play vars |
 
+## Windows `win_shell` quoting / Ansible argument-splitting (critical)
+
+Some Ansible versions/environments can fail **before execution** with:
+
+- `failed at splitting arguments, either an unbalanced jinja2 block or quotes`
+
+This is typically triggered by mixing **Windows paths** (`C:\...` with backslashes), **nested quotes**, and **inline Jinja** (`{{ ... }}`) inside a `win_shell` scalar.
+
+**Rules**
+
+- Prefer **structured modules** over `win_shell` whenever possible:
+  - **Path existence**: use `ansible.windows.win_stat` (not `Test-Path` in `win_shell`)
+  - **Create dirs**: `ansible.windows.win_file`
+  - **Copy files**: `ansible.windows.win_copy`
+  - **Registry reads**: `ansible.windows.win_reg_stat` / `win_regedit`
+- If you must use `win_shell`:
+  - Use YAML block scalar `|` (not `>-`) for multi-line scripts.
+  - Avoid writing `C:\Users\{{ var }}` in a single quoted/escaped PS string; put the dynamic value in an environment var or in a separate `set_fact` and reference it plainly.
+  - Avoid PowerShell string literals that end with a single backslash (e.g. `"C:\Users\"`) — the trailing `\` escapes the closing quote.
+
+**Example (preferred)**
+
+```yaml
+- name: Check profile directory exists
+  ansible.windows.win_stat:
+    path: "C:\\Users\\{{ _reconfig_profile_user }}"
+  register: _profile_dir
+```
+
 ---
 
 ## Repository layout & conventions
