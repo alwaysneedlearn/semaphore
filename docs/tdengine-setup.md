@@ -33,9 +33,18 @@ supplier       VARCHAR    100      -- 固定 newarerm
 
 - `device_status` **`healthy`** → `status` = **`online`**；其余 → **`offline`**
 - `computer_name` = bulk 回调行的 **`hostname`**
-- `updated_time` = `check_time` = playbook 执行时的 UTC 时间戳
+- `updated_time` = `check_time` = playbook 执行时的实际 UTC 时间戳
 - `supplier` 固定为 **`newarerm`**
-- 每台设备每次任务生成一条新记录（`ts` 递增，不覆盖历史）
+
+## 每台设备只保留一行（ts 固定策略）
+
+`ts` 由 `computer_name` 的 MD5 哈希前 8 位（十六进制 → 整数毫秒）加上基准时间 `2000-01-01 00:00:00 UTC` 派生：
+
+```
+ts_ms = 946684800000 + int(md5(computer_name)[0:8], 16)
+```
+
+相同 hostname 每次算出相同 `ts`，TDengine INSERT 相同主键时覆盖该行，从而实现**每台设备只保留最新一行**。`updated_time` / `check_time` 仍写入本次真实时间，反映最后更新时刻。
 
 ## 覆盖的操作
 
