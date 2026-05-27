@@ -11,35 +11,31 @@ Semaphore **不再**在服务端自动写 TDengine。设备操作 playbook（`cu
 | `TDENGINE_URL` | 是 | REST 基址，如 `http://tdengine:6041`（不要带 `/rest/sql`，playbook 会自动追加） |
 | `TDENGINE_USER` | 否 | Basic 认证用户名 |
 | `TDENGINE_PASSWORD` | 否 | Basic 认证密码 |
-| `TDENGINE_DATABASE` | 否 | 库名，默认 `semaphore_devices` |
-| `TDENGINE_STATUS_TABLE` | 否 | 表名，默认 `status` |
+| `TDENGINE_DATABASE` | 否 | 库名，默认 `lab` |
+| `TDENGINE_STATUS_TABLE` | 否 | 表名，默认 `neware_remote_computer_status` |
 
 未设置 `TDENGINE_URL` 时跳过 TDengine，仅写 Semaphore DB。
 
-## 表结构示例
+## 表结构（NEWARE）
 
-```sql
-CREATE DATABASE IF NOT EXISTS semaphore_devices;
-CREATE STABLE IF NOT EXISTS semaphore_devices.status (
-  ts TIMESTAMP,
-  project_id INT,
-  device_id INT,
-  hostname NCHAR(128),
-  ip NCHAR(64),
-  status NCHAR(16),
-  device_status_raw NCHAR(32),
-  winrm_status NCHAR(16),
-  api_status NCHAR(16)
-) TAGS (dummy INT);
 ```
-
-（若团队使用子表/其它建模，请按 DBA 规范调整；playbook 当前使用 `INSERT INTO \`db\`.\`table\` (...) VALUES ...`。）
+describe `lab`.`neware_remote_computer_status`
+field          type       length
+ts             TIMESTAMP  8        -- TDengine 时序主键（自动递增）
+computer_name  VARCHAR    200      -- 设备 hostname
+status         VARCHAR    200      -- online / offline
+updated_time   TIMESTAMP  8        -- 写入时间
+check_time     TIMESTAMP  8        -- 写入时间（同 updated_time）
+supplier       VARCHAR    100      -- 固定 newarerm
+```
 
 ## 映射规则
 
-- `device_status` **`healthy`** → TDengine 列 **`status`** = `online`，否则 `offline`
-- 同时写入 `device_status_raw`、`winrm_status`、`api_status`（来自 playbook 回调行）
-- `device_id` / `project_id` 来自任务 extra-vars 中的 `devices` / `device` 与 `semaphore_project_id`
+- `device_status` **`healthy`** → `status` = **`online`**；其余 → **`offline`**
+- `computer_name` = bulk 回调行的 **`hostname`**
+- `updated_time` = `check_time` = playbook 执行时的 UTC 时间戳
+- `supplier` 固定为 **`newarerm`**
+- 每台设备每次任务生成一条新记录（`ts` 递增，不覆盖历史）
 
 ## 覆盖的操作
 
