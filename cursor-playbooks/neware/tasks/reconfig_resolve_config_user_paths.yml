@@ -1,20 +1,105 @@
 ---
-# 在 _reconfig_profile_user 已 set_fact 之后 include：若 C:\Users\<profile> 不存在则用 NEWARE 存配置
+# 在 _reconfig_profile_user 已 set_fact 之后 include。
+# 若 C:\Users\<profile_user> 存在 → 配置写在 profile 用户下；
+# 否则按 Variable Group 回退列表顺序检测 C:\Users\<name>，选用第一个存在的目录。
+#
+# Variable Group ENV（推荐）：
+#   RECONFIG_CONFIG_FALLBACK_USERS=NEWARE,Administrator
+#   逗号或分号分隔，按从左到右顺序尝试；可继续追加其他本地 profile 名。
+# 兼容旧变量（仅当未设置 USERS 时）：
+#   RECONFIG_CONFIG_FALLBACK_USER=NEWARE
+#   未配置任何回退变量时默认：NEWARE,Administrator
+
 - name: 重配执行：登记 Public 与 zip 源路径
   ansible.builtin.set_fact:
     _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
     _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
-    _reconfig_config_fallback_user: "{{ (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USER') | default('', true) | trim) | default('NEWARE', true) }}"
+    _reconfig_fallback_users_csv: >-
+      {{
+        (
+          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim)
+          | regex_replace('[;\\s]+', ',')
+        )
+        if ((lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim) | length > 0)
+        else (
+          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USER') | default('', true) | trim)
+          | default('NEWARE,Administrator', true)
+        )
+      }}
 
 - name: 重配执行：检测 Profile 用户目录是否存在
-  ansible.builtin.win_shell: "if (Test-Path -LiteralPath 'C:\\Users\\{{ _reconfig_profile_user }}') { Write-Output 'PROFILE_DIR_EXISTS=yes' } else { Write-Output 'PROFILE_DIR_EXISTS=no' }"
+  ansible.builtin.win_shell: >-
+    if (Test-Path -LiteralPath 'C:\Users\{{ _reconfig_profile_user | replace("'", "''") }}') {
+      Write-Output 'PROFILE_DIR_EXISTS=yes'
+    } else {
+      Write-Output 'PROFILE_DIR_EXISTS=no'
+    }
   register: _reconfig_profile_dir_check
   changed_when: false
 
-- name: 重配执行：登记配置文件存储用户
+- name: 重配执行：Profile 目录缺失时按序检测回退用户目录
+  ansible.builtin.win_shell: |
+    $ErrorActionPreference = 'Continue'
+    $raw = $env:RECONFIG_CONFIG_FALLBACK_USERS
+    if (-not $raw) { $raw = 'NEWARE,Administrator' }
+    $users = @()
+    foreach ($part in ($raw -split '[,;]')) {
+      $u = $part.Trim()
+      if ($u) { $users += $u }
+    }
+    if ($users.Count -eq 0) { $users = @('NEWARE', 'Administrator') }
+    $checked = [System.Collections.Generic.List[string]]::new()
+    foreach ($u in $users) {
+      $checked.Add($u) | Out-Null
+      if (Test-Path -LiteralPath "C:\Users\$u") {
+        Write-Output "SELECTED=$u"
+        Write-Output "CHECKED=$($checked -join ',')"
+        Write-Output "NONE_EXIST=false"
+        exit 0
+      }
+    }
+    Write-Output "SELECTED=$($users[0])"
+    Write-Output "CHECKED=$($checked -join ',')"
+    Write-Output "NONE_EXIST=true"
+  environment:
+    RECONFIG_CONFIG_FALLBACK_USERS: "{{ _reconfig_fallback_users_csv }}"
+  register: _reconfig_fallback_pick
+  changed_when: false
+  when: "'PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))"
+
+- name: 重配执行：登记配置文件存储用户（profile 目录存在）
   ansible.builtin.set_fact:
-    _reconfig_config_user: "{{ _reconfig_config_fallback_user if ('PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))) else _reconfig_profile_user }}"
-    _reconfig_config_user_source: "{{ 'fallback_profile_dir_missing' if ('PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))) else 'detected_profile_user' }}"
+    _reconfig_config_user: "{{ _reconfig_profile_user }}"
+    _reconfig_config_user_source: detected_profile_user
+    _reconfig_fallback_checked: ""
+  when: "'PROFILE_DIR_EXISTS=yes' in (_reconfig_profile_dir_check.stdout | default(''))"
+
+- name: 重配执行：登记配置文件存储用户（回退列表）
+  ansible.builtin.set_fact:
+    _reconfig_config_user: >-
+      {{
+        (
+          (_reconfig_fallback_pick.stdout_lines | default([]) | select('match', '^SELECTED=') | list | first | default(''))
+          | regex_replace('^SELECTED=', '')
+          | trim
+        )
+        | default((_reconfig_fallback_users_csv.split(',')[0] | trim), true)
+      }}
+    _reconfig_config_user_source: >-
+      {{
+        'fallback_first_existing'
+        if ('NONE_EXIST=false' in (_reconfig_fallback_pick.stdout | default('')))
+        else 'fallback_none_exist_use_first'
+      }}
+    _reconfig_fallback_checked: >-
+      {{
+        (
+          (_reconfig_fallback_pick.stdout_lines | default([]) | select('match', '^CHECKED=') | list | first | default(''))
+          | regex_replace('^CHECKED=', '')
+          | trim
+        )
+      }}
+  when: "'PROFILE_DIR_EXISTS=no' in (_reconfig_profile_dir_check.stdout | default(''))"
 
 - name: 重配执行：派生 BTSClient 与配置文件完整路径
   ansible.builtin.set_fact:

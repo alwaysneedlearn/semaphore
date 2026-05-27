@@ -65,7 +65,16 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 
 | Prefix / marker | Meaning |
 |-----------------|--------|
-| `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved profile user and INI paths after username detection (`device_start` / `device_restart`). **`config_user`** may differ from **`profile_user`**: if `C:\Users\<profile_user>` does not exist, config copy/modify uses **`RECONFIG_CONFIG_FALLBACK_USER`** (default **NEWARE**) via `tasks/reconfig_resolve_config_user_paths.yml`; interactive exe start still uses **`_reconfig_profile_user`**. |
+| `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved profile user and INI paths after username detection (`device_start` / `device_restart`). **`config_user`** may differ from **`profile_user`**: if `C:\Users\<profile_user>` does not exist, playbook tries **`RECONFIG_CONFIG_FALLBACK_USERS`** in order (default **`NEWARE,Administrator`**) and picks the **first** name whose `C:\Users\<name>` exists (`tasks/reconfig_resolve_config_user_paths.yml`). Interactive exe start still uses **`_reconfig_profile_user`**. |
+
+**Variable Group — config path fallbacks when profile folder missing**
+
+| ENV | Example | Meaning |
+|-----|---------|---------|
+| **`RECONFIG_CONFIG_FALLBACK_USERS`** | `NEWARE,Administrator` | Comma/semicolon-separated; try left-to-right, first existing `C:\Users\<name>` wins |
+| **`RECONFIG_CONFIG_FALLBACK_USER`** | `NEWARE` | Legacy: used only if **`RECONFIG_CONFIG_FALLBACK_USERS`** is empty (then defaults to `NEWARE,Administrator`) |
+
+Add more local profile names as needed, e.g. `NEWARE,Administrator,Operator`.
 | `RECONFIG_LOG_*` / `RECONFIG_MODIFY_*` | Same info from the Windows `win_shell` task stdout (visible without expanding `debug`) |
 | `RECONFIG_REPORT_API_DEFAULTS` | Effective `ServerIpAddrStr` / `ServerPort` / `EnableReportApiCall` defaults computed from the device |
 | `[DEBUG-WINRM]` | After **`tasks/winrm_ensure_reachable.yml`**: `session_ok`, retry count/delay |

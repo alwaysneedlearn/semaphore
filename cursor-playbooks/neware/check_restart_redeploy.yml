@@ -211,7 +211,7 @@
           ansible.builtin.debug:
             msg:
               - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }}"
-              - "[DEBUG-重配-用户] config_user={{ _reconfig_config_user }}|source={{ _reconfig_config_user_source }}|fallback={{ _reconfig_config_fallback_user }}"
+              - "[DEBUG-重配-用户] config_user={{ _reconfig_config_user }}|source={{ _reconfig_config_user_source }}|fallback_csv={{ _reconfig_fallback_users_csv | default('') }}|fallback_checked={{ _reconfig_fallback_checked | default('') }}"
               - "[DEBUG-重配-用户] profile_dir_check={{ _reconfig_profile_dir_check.stdout | default('') | trim }}"
               - "[DEBUG-重配-用户] get_username stdout_lines={{ get_username_result.stdout_lines | default([]) }}"
               - "[DEBUG-重配-路径] user_cfg={{ _reconfig_user_cfg_file }}"
