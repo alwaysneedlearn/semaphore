@@ -19,7 +19,9 @@
 - name: DEBUG bulk 回调前置检查
   ansible.builtin.debug:
     msg:
+      - "[DEBUG-API] bulk_host_list={{ _sem_bulk_host_list | default([]) }}"
       - "[DEBUG-API] bulk_hosts={{ _sem_bulk_host_list | default([]) | length }} rows={{ semaphore_status_bulk_updates | default([]) | length }}"
+      - "[DEBUG-API] ansible_play_hosts_all={{ ansible_play_hosts_all | default([]) }} windows_hosts={{ groups['windows_hosts'] | default([]) | length }}"
       - "[DEBUG-API] bulk_pid={{ _sem_bulk_pid | default('') }}"
       - "[DEBUG-API] bulk_url={{ _sem_bulk_url | default('') }}"
       - "[DEBUG-API] bulk_token_set={{ (_sem_bulk_token | default('') | trim | length) > 0 }}"
