@@ -29,7 +29,8 @@
 
 - name: 重配执行：检测 Profile 用户目录是否存在
   ansible.builtin.win_shell: |
-    if (Test-Path -LiteralPath ("C:\Users\" + "{{ _reconfig_profile_user }}")) {
+    $p = 'C:\\Users\\' + "{{ _reconfig_profile_user }}"
+    if (Test-Path -LiteralPath $p) {
       Write-Output 'PROFILE_DIR_EXISTS=yes'
     } else {
       Write-Output 'PROFILE_DIR_EXISTS=no'
