@@ -5,6 +5,8 @@
 # Variable Group ENV：
 #   TDENGINE_URL, TDENGINE_USER, TDENGINE_PASSWORD
 #   TDENGINE_DATABASE (默认 lab), TDENGINE_STATUS_TABLE (默认 neware_remote_computer_status)
+#   TDENGINE_TAG_SUPPLIER — supplier 为超级表 TAG（非列），默认 newarerm
+#   TDENGINE_SUPER_TABLE  — 可选；若设置则 INSERT INTO <table> USING <super> TAGS(...)
 #   TDENGINE_FIXED_TS  — 可选，覆盖固定 ts 字符串
 
 - name: 解析 TDengine 凭据（Variable Group ENV）
@@ -17,6 +19,10 @@
     _td_fixed_ts: >-
       {{ (lookup('env', 'TDENGINE_FIXED_TS') | default('', true) | trim)
          | default('2262-01-01 08:00:00.000', true) }}
+    _td_tag_supplier: >-
+      {{ (lookup('env', 'TDENGINE_TAG_SUPPLIER') | default('', true) | trim)
+         | default('newarerm', true) }}
+    _td_super_table: "{{ lookup('env', 'TDENGINE_SUPER_TABLE') | default('', true) | trim }}"
 
 - name: TDengine 写入前提检查（需 TDENGINE_URL 且有 bulk 行）
   ansible.builtin.set_fact:
@@ -53,16 +59,22 @@
     _now_esc: "{{ _td_now | replace(\"'\", \"''\") }}"
     _ts_esc: "{{ _td_fixed_ts | replace(\"'\", \"''\") }}"
     _td_tuple: >-
-      ('{{ _ts_esc }}','{{ _cn }}','{{ _td_mapped }}','{{ _now_esc }}','{{ _now_esc }}','newarerm')
+      ('{{ _ts_esc }}','{{ _cn }}','{{ _td_mapped }}','{{ _now_esc }}','{{ _now_esc }}')
   when:
     - _td_enabled | bool
     - _td_now is defined
 
-- name: 生成 TDengine INSERT SQL
+- name: 生成 TDengine INSERT SQL（supplier 为 TAG，非列）
   ansible.builtin.set_fact:
+    _td_tag_esc: "{{ _td_tag_supplier | replace(\"'\", \"''\") }}"
+    _td_using_clause: >-
+      {{
+        (' USING ' + (_td_super_table | trim))
+        if ((_td_super_table | default('') | trim | length) > 0)
+        else ''
+      }}
     _td_sql: >-
-      INSERT INTO {{ _td_table }}
-      (ts, computer_name, status, updated_time, check_time, supplier)
+      INSERT INTO {{ _td_table }}{{ _td_using_clause }} TAGS('{{ _td_tag_esc }}')
       VALUES {{ _td_value_parts | join(',') }}
   when:
     - _td_enabled | bool
@@ -72,7 +84,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-TDENGINE] post_url={{ _td_base }}/rest/sql/{{ _td_db }}"
-      - "[DEBUG-TDENGINE] table={{ _td_db }}.{{ _td_table }} rows={{ _td_value_parts | default([]) | length }} fixed_ts={{ _td_fixed_ts }}"
+      - "[DEBUG-TDENGINE] table={{ _td_db }}.{{ _td_table }} tag_supplier={{ _td_tag_supplier }} super_table={{ _td_super_table | default('') | trim | default('(none)', true) }} rows={{ _td_value_parts | default([]) | length }} fixed_ts={{ _td_fixed_ts }}"
       - "[DEBUG-TDENGINE] sql={{ _td_sql | default('') }}"
   when:
     - _td_enabled | bool
