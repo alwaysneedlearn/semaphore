@@ -67,14 +67,18 @@
 - name: 生成 TDengine INSERT SQL（supplier 为 TAG，非列）
   ansible.builtin.set_fact:
     _td_tag_esc: "{{ _td_tag_supplier | replace(\"'\", \"''\") }}"
-    _td_using_clause: >-
-      {{
+  when:
+    - _td_enabled | bool
+    - (_td_value_parts | default([]) | length) > 0
+
+- name: 拼接 TDengine INSERT SQL 正文
+  ansible.builtin.set_fact:
+    _td_sql: >-
+      INSERT INTO {{ _td_table }}{{
         (' USING ' + (_td_super_table | trim))
         if ((_td_super_table | default('') | trim | length) > 0)
         else ''
-      }}
-    _td_sql: >-
-      INSERT INTO {{ _td_table }}{{ _td_using_clause }} TAGS('{{ _td_tag_esc }}')
+      }} TAGS('{{ _td_tag_esc }}')
       VALUES {{ _td_value_parts | join(',') }}
   when:
     - _td_enabled | bool
