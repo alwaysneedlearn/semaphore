@@ -272,7 +272,12 @@ export default {
     discoveryHeaders() {
       return [
         { text: 'IP', value: 'ip_address' },
-        { text: 'Hostname', value: 'hostname', sortable: false, width: '240px' },
+        {
+          text: 'Hostname',
+          value: 'hostname',
+          sortable: false,
+          width: '240px',
+        },
         { text: 'RDP', value: 'rdp_status' },
         { text: 'WinRM', value: 'winrm_status' },
         { text: 'API', value: 'api_status' },
