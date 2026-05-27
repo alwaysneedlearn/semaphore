@@ -42,7 +42,7 @@ func (d *BoltDb) UpsertDiscoveredHostsByIP(projectID, taskID int, rows []db.Disc
 			devStatus = strings.TrimSpace(row.Status)
 		}
 		if devStatus == "" {
-			devStatus = string(db.DeviceStatusUnknown)
+			devStatus = string(db.DeviceStatusUnhealthy)
 		}
 		rdp := strings.TrimSpace(row.RDPStatus)
 		if rdp == "" {

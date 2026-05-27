@@ -293,9 +293,6 @@ func (d *BoltDb) UpsertDevicesFromDiscoveryImport(projectID int, devices []db.De
 				dev.Hostname = ip
 			}
 			dev.Name = dev.Hostname
-			if dev.DeviceStatus == "" {
-				dev.DeviceStatus = db.DeviceStatusUnknown
-			}
 			created, cErr := d.CreateDevice(dev)
 			if cErr != nil {
 				return nil, cErr

@@ -240,7 +240,7 @@ func (d *SqlDb) UpdateDeviceStatusByHostname(projectID int, hostname string, sta
 }
 
 // UpsertDevicesFromDiscoveryImport creates or updates devices from discovery import.
-// Existing devices keep device_status unchanged; new devices get unknown health status.
+// Existing devices keep device_status unchanged; new devices use CreateDevice defaults (unhealthy if unset).
 func (d *SqlDb) UpsertDevicesFromDiscoveryImport(projectID int, devices []db.Device) ([]db.Device, error) {
 	var saved []db.Device
 	for _, dev := range devices {
@@ -264,9 +264,6 @@ func (d *SqlDb) UpsertDevicesFromDiscoveryImport(projectID int, devices []db.Dev
 				dev.Hostname = ip
 			}
 			dev.Name = dev.Hostname
-			if dev.DeviceStatus == "" {
-				dev.DeviceStatus = db.DeviceStatusUnknown
-			}
 			created, cErr := d.CreateDevice(dev)
 			if cErr != nil {
 				return nil, cErr
