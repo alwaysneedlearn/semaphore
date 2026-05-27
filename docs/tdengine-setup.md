@@ -1,38 +1,58 @@
-# TDengine 状态同步（运维）
+# TDengine 状态写入（模板 / Variable Group）
 
-Semaphore 在 playbook 通过 `PUT /api/project/{id}/devices/status/bulk` 更新 SQLite 后，可选将**当前 DB 快照**写入 TDengine（`healthy` → `online`，其余 → `offline`）。
+Semaphore **不再**在服务端自动写 TDengine。设备操作 playbook（`cursor-playbooks/neware/device_*.yml`、`check_restart_redeploy.yml`）在 **`PUT /devices/status/bulk`** 之后，由 **`tasks/semaphore_tdengine_publish_from_bulk.yml`** 将**本任务**的 bulk 行写入 TDengine（单台与批量共用同一任务链）。
 
-## 1. 启用（管理端）
+## Variable Group（ENV）
 
-1. 使用 **admin** 账号登录。
-2. 打开 **Users** 页工具栏 **TDengine**，或账号菜单 **Platform → TDengine**，或访问 `/admin/tdengine`。
-3. 填写 REST URL（例 `http://127.0.0.1:6041`）、用户、密码、数据库名，打开 **Enable**，点 **Test connection** 后 **Save**。
+在绑定设备模板的 **Variable Group → Environment** 中配置：
 
-也可在 `config.json` 或环境变量 `SEMAPHORE_TDENGINE_*` 提供默认值；DB 中 Admin 保存的配置优先级更高。
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `TDENGINE_URL` | 是 | REST 基址，如 `http://tdengine:6041`（不要带 `/rest/sql`，playbook 会自动追加） |
+| `TDENGINE_USER` | 否 | Basic 认证用户名 |
+| `TDENGINE_PASSWORD` | 否 | Basic 认证密码 |
+| `TDENGINE_DATABASE` | 否 | 库名，默认 `semaphore_devices` |
+| `TDENGINE_STATUS_TABLE` | 否 | 表名，默认 `status` |
 
-## 2. 建库与超级表（NEWARE 默认表 `status`）
+未设置 `TDENGINE_URL` 时跳过 TDengine，仅写 Semaphore DB。
+
+## 表结构示例
 
 ```sql
 CREATE DATABASE IF NOT EXISTS semaphore_devices;
 CREATE STABLE IF NOT EXISTS semaphore_devices.status (
   ts TIMESTAMP,
+  project_id INT,
+  device_id INT,
+  hostname NCHAR(128),
+  ip NCHAR(64),
   status NCHAR(16),
-  device_status_raw NCHAR(16),
+  device_status_raw NCHAR(32),
   winrm_status NCHAR(16),
   api_status NCHAR(16)
-) TAGS (project_id INT, device_id INT, hostname NCHAR(128), ip NCHAR(64));
+) TAGS (dummy INT);
 ```
 
-其它设备类型在 **Devices → Device types** 中配置 **TDengine status table**（未填时 NEWARE 用 `status`，其它类型默认 `status_<profile_key小写>`）。
+（若团队使用子表/其它建模，请按 DBA 规范调整；playbook 当前使用 `INSERT INTO \`db\`.\`table\` (...) VALUES ...`。）
 
-## 3. 写入时机
+## 映射规则
 
-- 打开 **Enable TDengine status sync** 并配置 REST URL 后：每次 playbook **bulk 回调**成功更新 DB，会按 **profile** 对该类型设备做**全量**快照写入对应 TDengine 表。
-- TCP 定时探针**不**写 TDengine（仅更新 DB 协议列）。
+- `device_status` **`healthy`** → TDengine 列 **`status`** = `online`，否则 `offline`
+- 同时写入 `device_status_raw`、`winrm_status`、`api_status`（来自 playbook 回调行）
+- `device_id` / `project_id` 来自任务 extra-vars 中的 `devices` / `device` 与 `semaphore_project_id`
 
-## 4. 设备类型（Profile）
+## 覆盖的操作
 
-- 新项目自动创建 **NEWARE** 类型；可在 **Devices → Device types** 新增类型并绑定 6 个模板。
-- 设备须绑定 `device_profile_id`；Patrol / 批量启动会按类型拆成多个 Task。
+凡包含 **`semaphore_bulk_put_from_hostvars.yml`** 的模板均会尝试写 TDengine（在配置了 `TDENGINE_URL` 时）：
 
-详见 [plan-tdengine-device-profiles.md](./plan-tdengine-device-profiles.md)。
+- Patrol / `device_status.yml`
+- `device_start.yml` / `device_stop.yml` / `device_restart.yml`
+- `check_restart_redeploy.yml`
+
+**不包含**：`device_discovery.yml`（发现不写设备状态 bulk）。
+
+TCP 定时探针、RDP Probe **不**写 TDengine。
+
+## 调试
+
+任务日志中搜索 **`[DEBUG-TDENGINE]`**。

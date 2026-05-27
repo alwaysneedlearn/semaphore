@@ -210,9 +210,6 @@ func Route(
 	adminAPI.Path("/options").HandlerFunc(getOptions).Methods("GET", "HEAD")
 	adminAPI.Path("/options").HandlerFunc(setOption).Methods("POST")
 	adminAPI.Path("/admin/info").HandlerFunc(getAdminInfo).Methods("GET", "HEAD")
-	adminAPI.Path("/admin/tdengine").HandlerFunc(GetAdminTDengineConfig).Methods("GET", "HEAD")
-	adminAPI.Path("/admin/tdengine").HandlerFunc(PutAdminTDengineConfig).Methods("PUT")
-	adminAPI.Path("/admin/tdengine/test").HandlerFunc(PostAdminTDengineTest).Methods("POST")
 
 	adminAPI.Path("/runners").HandlerFunc(getAllRunners).Methods("GET", "HEAD")
 	adminAPI.Path("/runners").HandlerFunc(addGlobalRunner).Methods("POST", "HEAD")

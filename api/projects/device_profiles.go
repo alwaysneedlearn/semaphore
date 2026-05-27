@@ -124,7 +124,6 @@ type deviceProfileSettingsView struct {
 	DefaultInventoryID       *int   `json:"default_inventory_id,omitempty"`
 	DefaultConfigJSON        string `json:"default_config_json"`
 	StatusRefreshIntervalMin int    `json:"status_refresh_interval_min"`
-	TDengineStatusTable      string `json:"tdengine_status_table"`
 }
 
 func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSettingsView {
@@ -138,7 +137,6 @@ func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSett
 		DefaultInventoryID:       ps.DefaultInventoryID,
 		DefaultConfigJSON:        ps.DefaultConfigJSON,
 		StatusRefreshIntervalMin: ps.StatusRefreshIntervalMin,
-		TDengineStatusTable:      ps.TDengineStatusTable,
 	}
 }
 
@@ -150,7 +148,6 @@ func applyProfileSettingsView(existing *db.ProjectDeviceProfileSettings, body de
 	existing.DefaultInventoryID = body.DefaultInventoryID
 	existing.DefaultConfigJSON = body.DefaultConfigJSON
 	existing.StatusRefreshIntervalMin = body.StatusRefreshIntervalMin
-	existing.TDengineStatusTable = body.TDengineStatusTable
 }
 
 func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {

@@ -1,7 +1,7 @@
 <template>
   <div>
     <p class="text--secondary mb-2">
-      Configure templates and TDengine table per device type.
+      Configure templates per device type. TDengine is configured on each template Variable Group (see docs/tdengine-setup.md).
       <strong>NEWARE</strong> is the default type for existing devices.
       WinRM connection defaults for inventory are project-wide (below).
     </p>

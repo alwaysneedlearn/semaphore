@@ -28,15 +28,6 @@
       :disabled="saving"
     />
     <v-text-field
-      v-model="settings.tdengine_status_table"
-      label="TDengine status table"
-      hint="NEWARE default: status"
-      persistent-hint
-      outlined
-      dense
-      :disabled="saving"
-    />
-    <v-text-field
       v-model.number="settings.status_refresh_interval_min"
       :label="$t('deviceRefreshIntervalMinutes')"
       :hint="$t('deviceRefreshIntervalHelp')"

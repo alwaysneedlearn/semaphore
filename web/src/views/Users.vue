@@ -41,14 +41,6 @@
       <v-toolbar-title>{{ $t('users') }}</v-toolbar-title>
       <v-spacer></v-spacer>
       <v-btn
-        class="mr-2"
-        text
-        to="/admin/tdengine"
-      >
-        <v-icon left>mdi-database</v-icon>
-        TDengine
-      </v-btn>
-      <v-btn
         color="primary"
         @click="editItem('new')"
       >{{ $t('newUser') }}</v-btn>

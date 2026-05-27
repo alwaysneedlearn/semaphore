@@ -281,15 +281,6 @@ type ConfigDirs struct {
 	SSHAgentSockets string `json:"ssh_agent_sockets,omitempty" env:"SEMAPHORE_SSH_AGENT_SOCKETS_DIR" default:"/tmp/semaphore"`
 }
 
-// TDengineConfig is the default TDengine connection (overridable via Admin UI / options).
-type TDengineConfig struct {
-	Enabled  bool   `json:"enabled,omitempty"`
-	URL      string `json:"url,omitempty" env:"SEMAPHORE_TDENGINE_URL"`
-	User     string `json:"user,omitempty" env:"SEMAPHORE_TDENGINE_USER"`
-	Password string `json:"password,omitempty" env:"SEMAPHORE_TDENGINE_PASSWORD,sensitive"`
-	Database string `json:"database,omitempty" env:"SEMAPHORE_TDENGINE_DATABASE"`
-}
-
 // ConfigType mapping between Config and the json file that sets it
 type ConfigType struct {
 	MySQL    *DbConfig `json:"mysql,omitempty"`
@@ -416,8 +407,6 @@ type ConfigType struct {
 	Debugging *DebuggingConfig `json:"debugging,omitempty"`
 
 	HA *HAConfig `json:"ha,omitempty"`
-
-	TDengine *TDengineConfig `json:"tdengine,omitempty"`
 
 	// SubscriptionKey is a subscription key or token that can be set via config.
 	// When this is set, subscription activation from the web interface is disabled.

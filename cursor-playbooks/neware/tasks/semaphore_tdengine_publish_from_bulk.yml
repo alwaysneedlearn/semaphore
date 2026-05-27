@@ -1,0 +1,102 @@
+---
+# After Semaphore bulk PUT: write status rows to TDengine via REST (Variable Group ENV).
+# TDENGINE_URL required; optional TDENGINE_USER, TDENGINE_PASSWORD, TDENGINE_DATABASE, TDENGINE_STATUS_TABLE.
+
+- name: 解析 TDengine 凭据（Variable Group ENV）
+  ansible.builtin.set_fact:
+    _td_url: "{{ lookup('env', 'TDENGINE_URL') | default('', true) | trim }}"
+    _td_user: "{{ lookup('env', 'TDENGINE_USER') | default('', true) | trim }}"
+    _td_pass: "{{ lookup('env', 'TDENGINE_PASSWORD') | default('', true) | trim }}"
+    _td_db: "{{ (lookup('env', 'TDENGINE_DATABASE') | default('', true) | trim) | default('semaphore_devices', true) }}"
+    _td_table: "{{ (lookup('env', 'TDENGINE_STATUS_TABLE') | default('', true) | trim) | default('status', true) }}"
+    _sem_device_catalog: >-
+      {{ (devices | default([]))
+         + ([device] if (device is defined and device is mapping) else []) }}
+
+- name: TDengine UTC 时间戳
+  ansible.builtin.command: date -u +"%Y-%m-%d %H:%M:%S.000"
+  register: _td_date_cmd
+  changed_when: false
+  when:
+    - (_td_url | default('') | trim | length) > 0
+    - (semaphore_status_bulk_updates | default([]) | length) > 0
+    - (_sem_bulk_pid | default('') | trim | length) > 0
+
+- name: 规范化 TDengine REST 基址
+  ansible.builtin.set_fact:
+    _td_ts: "{{ _td_date_cmd.stdout | trim }}"
+    _td_base: "{{ _td_url | regex_replace('/rest/sql/?$', '') | regex_replace('/$', '') }}"
+  when:
+    - (_td_url | default('') | trim | length) > 0
+    - (semaphore_status_bulk_updates | default([]) | length) > 0
+    - (_sem_bulk_pid | default('') | trim | length) > 0
+    - _td_date_cmd is defined
+
+- name: 组装 TDengine INSERT 行
+  ansible.builtin.set_fact:
+    _td_value_parts: "{{ _td_value_parts | default([]) + [_td_tuple] }}"
+  loop: "{{ semaphore_status_bulk_updates | default([]) }}"
+  loop_control:
+    label: "{{ item.hostname | default(item.ip | default('host')) }}"
+  vars:
+    _dev_match: >-
+      {{ _sem_device_catalog | selectattr('ip', 'equalto', item.ip | default('')) | list | first
+         | default(_sem_device_catalog | selectattr('hostname', 'equalto', item.hostname | default('')) | list | first, true)
+         | default(_sem_device_catalog | selectattr('hostname', 'equalto', item.ip | default('')) | list | first, true) }}
+    _raw_st: "{{ item.device_status | default(item.status | default('unhealthy')) }}"
+    _td_mapped: "{{ 'online' if (_raw_st | string) == 'healthy' else 'offline' }}"
+    _h: "{{ item.hostname | default('') | string | replace(\"'\", \"''\") }}"
+    _ip: "{{ (item.ip | default(item.hostname | default(''))) | string | replace(\"'\", \"''\") }}"
+    _wr: "{{ (item.winrm_status | default('')) | string | replace(\"'\", \"''\") }}"
+    _api: "{{ (item.api_status | default('')) | string | replace(\"'\", \"''\") }}"
+    _raw_esc: "{{ _raw_st | string | replace(\"'\", \"''\") }}"
+    _td_tuple: "('{{ _td_ts }}',{{ _sem_bulk_pid | int }},{{ (_dev_match.id | default(0)) | int }},'{{ _h }}','{{ _ip }}','{{ _td_mapped }}','{{ _raw_esc }}','{{ _wr }}','{{ _api }}')"
+  when:
+    - (_td_url | default('') | trim | length) > 0
+    - (semaphore_status_bulk_updates | default([]) | length) > 0
+    - (_sem_bulk_pid | default('') | trim | length) > 0
+    - _td_ts is defined
+
+- name: POST TDengine status INSERT
+  ansible.builtin.uri:
+    url: "{{ _td_base }}/rest/sql"
+    method: POST
+    headers: "{{ _td_headers }}"
+    body: "{{ _td_sql }}"
+    status_code: [200, 400, 401, 403, 500, 502, 503]
+  register: _td_put_result
+  failed_when: false
+  vars:
+    _td_sql: >-
+      INSERT INTO `{{ _td_db }}`.`{{ _td_table }}`
+      (ts, project_id, device_id, hostname, ip, status, device_status_raw, winrm_status, api_status)
+      VALUES {{ _td_value_parts | join(',') }}
+    _td_headers: >-
+      {{
+        {'Content-Type': 'text/plain'}
+        | combine(
+            {'Authorization': 'Basic ' + ((_td_user + ':' + _td_pass) | b64encode)}
+            if (_td_user | length) > 0 else {}
+          )
+      }}
+  when:
+    - (_td_url | default('') | trim | length) > 0
+    - (_td_value_parts | default([]) | length) > 0
+    - _td_base is defined
+
+- name: DEBUG TDengine INSERT 响应
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-TDENGINE] url={{ _td_base }}/rest/sql table={{ _td_db }}.{{ _td_table }} rows={{ _td_value_parts | default([]) | length }}"
+      - "[DEBUG-TDENGINE] http_status={{ _td_put_result.status | default('n/a') }}"
+      - "[DEBUG-TDENGINE] response={{ _td_put_result.content | default('') | truncate(1500, True) }}"
+  when: _td_put_result is defined and not (_td_put_result.skipped | default(false))
+
+- name: 跳过 TDengine（未配置 TDENGINE_URL）
+  ansible.builtin.debug:
+    msg: >-
+      TDengine publish skipped: set TDENGINE_URL (and optional TDENGINE_* ) in template Variable Group ENV.
+      bulk_rows={{ semaphore_status_bulk_updates | default([]) | length }}
+  when:
+    - (semaphore_status_bulk_updates | default([]) | length) > 0
+    - (_td_url | default('') | trim | length) < 1

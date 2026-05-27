@@ -47,7 +47,6 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 		DefaultAnsibleWinRMServerCertValidation: projectSettings.DefaultAnsibleWinRMServerCertValidation,
 		DefaultConfigJSON:            projectSettings.DefaultConfigJSON,
 		StatusRefreshIntervalMin:     projectSettings.StatusRefreshIntervalMin,
-		TDengineStatusTable:          "status",
 	}
 	if err := store.UpdateProjectDeviceProfileSettings(ps); err != nil {
 		log.WithError(err).WithField("project_id", projectID).Warn("device profile: failed to seed profile settings")
@@ -85,9 +84,6 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 	ps.StatusTemplateID = projectSettings.StatusTemplateID
 	ps.ConfigTemplateID = projectSettings.ConfigTemplateID
 	MergeProfileSettingsFromProject(&ps, projectSettings)
-	if ps.TDengineStatusTable == "" {
-		ps.TDengineStatusTable = "status"
-	}
 	return store.UpdateProjectDeviceProfileSettings(ps)
 }
 
@@ -151,11 +147,9 @@ func ValidateDeviceHasProfile(device db.Device) error {
 
 // SeedDeviceProfileSettings creates default per-profile settings row (templates empty until configured).
 func SeedDeviceProfileSettings(store db.Store, prof db.DeviceProfile) error {
-	empty := db.ProjectDeviceProfileSettings{}
 	ps := db.ProjectDeviceProfileSettings{
-		ProjectID:           prof.ProjectID,
-		ProfileID:           prof.ID,
-		TDengineStatusTable: empty.EffectiveTDengineStatusTable(prof.ProfileKey),
+		ProjectID: prof.ProjectID,
+		ProfileID: prof.ID,
 	}
 	return store.UpdateProjectDeviceProfileSettings(ps)
 }
