@@ -213,6 +213,7 @@ func Route(
 	adminAPI.Path("/admin/tdengine").HandlerFunc(GetAdminTDengineConfig).Methods("GET", "HEAD")
 	adminAPI.Path("/admin/tdengine").HandlerFunc(PutAdminTDengineConfig).Methods("PUT")
 	adminAPI.Path("/admin/tdengine/test").HandlerFunc(PostAdminTDengineTest).Methods("POST")
+	adminAPI.Path("/admin/tdengine/publish").HandlerFunc(PostAdminTDenginePublish).Methods("POST")
 
 	adminAPI.Path("/runners").HandlerFunc(getAllRunners).Methods("GET", "HEAD")
 	adminAPI.Path("/runners").HandlerFunc(addGlobalRunner).Methods("POST", "HEAD")

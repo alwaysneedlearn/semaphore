@@ -18,6 +18,9 @@ type Config struct {
 	User     string `json:"user"`
 	Password string `json:"password"`
 	Database string `json:"database"`
+	// AutoSyncOnBulk writes a full project snapshot to TDengine after each
+	// playbook bulk status callback. Default false — use manual publish or enable explicitly.
+	AutoSyncOnBulk bool `json:"auto_sync_on_bulk,omitempty"`
 }
 
 // StatusRow is one device snapshot row for the status table.
