@@ -1151,8 +1151,6 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		updated++
 	}
-	store := helpers.Store(r)
-	go server.PublishProjectStatusSnapshots(store, project.ID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
 }
 

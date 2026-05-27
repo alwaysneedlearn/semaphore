@@ -13,7 +13,14 @@
       <v-alert v-if="error" type="error" dense class="mb-4">{{ error }}</v-alert>
       <v-alert v-if="testOk" type="success" dense class="mb-4">Connection OK</v-alert>
       <v-switch v-model="form.enabled" label="Enable TDengine status sync" />
-      <v-text-field v-model="form.url" label="REST URL" hint="e.g. http://127.0.0.1:6041" persistent-hint outlined dense />
+      <v-text-field
+        v-model="form.url"
+        label="REST URL"
+        hint="Base URL only, e.g. http://10.40.81.130:6041 (do not add /rest/sql; default REST port is 6041)"
+        persistent-hint
+        outlined
+        dense
+      />
       <v-text-field v-model="form.user" label="User" outlined dense />
       <v-text-field
         v-model="form.password"
@@ -26,9 +33,10 @@
       <v-text-field v-model="form.database" label="Database" outlined dense />
       <v-btn class="mt-2" :loading="testing" @click="testConnection">Test connection</v-btn>
       <p class="text--secondary mt-6 text-caption">
-        After playbook bulk callback updates the DB, Semaphore writes a full
-        project snapshot per device profile (healthy → online, other → offline).
-        Table names are set per device profile under Project Settings.
+        Use Test connection to verify REST access. Status table names per device type
+        are configured under Project → Device types. Automatic TDengine writes after
+        device bulk callbacks are disabled; enable sync here only when you add a
+        separate publish path later.
       </p>
     </div>
   </div>
