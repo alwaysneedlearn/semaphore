@@ -1152,7 +1152,7 @@ func BulkUpdateDeviceStatus(w http.ResponseWriter, r *http.Request) {
 		updated++
 	}
 	store := helpers.Store(r)
-	server.MaybePublishAfterBulkStatusCallback(store, project.ID)
+	go server.PublishProjectStatusSnapshots(store, project.ID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"updated": updated})
 }
 

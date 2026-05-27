@@ -27,9 +27,7 @@ CREATE STABLE IF NOT EXISTS semaphore_devices.status (
 
 ## 3. 写入时机
 
-- **默认**：playbook bulk 回调只更新 Semaphore 数据库，**不**写 TDengine。
-- **手动**：Admin → TDengine → **Publish snapshot (all projects)**，把当前 DB 设备状态按设备类型表名全量写入 TDengine。
-- **可选自动**：打开 **Auto-sync after playbook bulk status callback** 并 Save 后，每次 bulk 回调更新 DB 后会异步写入 TDengine（与旧行为相同）。
+- 打开 **Enable TDengine status sync** 并配置 REST URL 后：每次 playbook **bulk 回调**成功更新 DB，会按 **profile** 对该类型设备做**全量**快照写入对应 TDengine 表。
 - TCP 定时探针**不**写 TDengine（仅更新 DB 协议列）。
 
 ## 4. 设备类型（Profile）

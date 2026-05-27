@@ -64,7 +64,6 @@ func EffectiveTDengineConfig(store db.Store) tdengine.Config {
 				if strings.TrimSpace(dbCfg.Database) != "" {
 					cfg.Database = dbCfg.Database
 				}
-				cfg.AutoSyncOnBulk = dbCfg.AutoSyncOnBulk
 			}
 		}
 	}

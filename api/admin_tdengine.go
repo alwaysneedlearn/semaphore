@@ -76,29 +76,3 @@ func mergeTDengineTestConfig(body *tdengine.Config, prev tdengine.Config) {
 		body.Password = prev.Password
 	}
 }
-
-// PostAdminTDenginePublish writes current device DB snapshots to TDengine (manual).
-func PostAdminTDenginePublish(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
-		return
-	}
-	var body struct {
-		ProjectID int `json:"project_id"`
-	}
-	if r.Body != nil && r.ContentLength != 0 {
-		_ = helpers.Bind(w, r, &body)
-	}
-	store := helpers.Store(r)
-	result, err := server.PublishAllProjectStatusSnapshots(store, body.ProjectID)
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]any{
-			"error":  err.Error(),
-			"result": result,
-		})
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"result": result,
-	})
-}
