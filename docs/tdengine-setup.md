@@ -25,9 +25,11 @@ describe `lab`.`neware_remote_computer_status`
 field          type       length
 ts             TIMESTAMP  8        -- 固定值 2262-01-01T08:00:00.000000000+08:00
 computer_name  VARCHAR    200      -- 设备 hostname
+ip_addr        VARCHAR    200      -- 设备 IP（无 IP 时回退 hostname）
 status         VARCHAR    200      -- online / offline
 updated_time   TIMESTAMP  8        -- 写入时间
 check_time     TIMESTAMP  8        -- 写入时间（同 updated_time）
+normal_reason  VARCHAR    255      -- 正常/异常原因
 
 TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 ```
@@ -36,7 +38,9 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 
 - `device_status` **`healthy`** → `status` = **`online`**；其余 → **`offline`**
 - `computer_name` = bulk 回调行的 **`hostname`**
+- `ip_addr` = bulk 回调行的 **`ip`**（为空时回退 `hostname`）
 - `updated_time` = `check_time` = playbook 执行时的 **UTC** 时间，格式 `YYYY-MM-DD HH:MM:SS.mmm`（三位毫秒，如 `2026-05-28 01:01:39.000`）
+- `normal_reason` = `normal_reason`（若回调已有）否则取 `abnormal_reason`；两者都空时：`online`→`NORMAL`，`offline`→`ABNORMAL`
 - **`supplier`** 为超级表 **TAG**，固定 **`newarerm`**（Variable Group：`TDENGINE_TAG_SUPPLIER`）
 
 ## 每台设备只保留一行（ts 固定策略）
@@ -74,7 +78,8 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 ```sql
 INSERT INTO lab.neware_remote_computer_status
 USING lab.dws_computer_status TAGS('newarerm')
-VALUES ('2262-01-01 08:00:00.000', 'JSC1306XHXW018', 'offline', '2026-05-27 10:07:51.000', '2026-05-27 10:07:51.000');
+(ts, computer_name, ip_addr, status, updated_time, check_time, normal_reason)
+VALUES ('2262-01-01 08:00:00.000', 'JSC1306XHXW018', '10.0.0.18', 'offline', '2026-05-27 10:07:51.000', '2026-05-27 10:07:51.000', 'WinRM ping failed');
 ```
 
 变量可只写表名（自动加 `TDENGINE_DATABASE` 前缀）；也可写全名如 `lab.dws_computer_status`。
