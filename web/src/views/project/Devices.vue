@@ -143,10 +143,6 @@
             <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click="runBulkAction('config')">
-            <v-list-item-icon><v-icon>mdi-cloud-upload</v-icon></v-list-item-icon>
-            <v-list-item-title>{{ $t('deviceConfigPush') }}</v-list-item-title>
-          </v-list-item>
           <v-divider />
           <v-list-item @click="bulkDeleteDialog = true">
             <v-list-item-icon><v-icon color="error">mdi-delete</v-icon></v-list-item-icon>
@@ -416,10 +412,6 @@
               <v-list-item @click="runAction(item, 'status')">
                 <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item @click="runAction(item, 'config')">
-                <v-list-item-icon><v-icon>mdi-cloud-upload</v-icon></v-list-item-icon>
-                <v-list-item-title>{{ $t('deviceConfigPush') }}</v-list-item-title>
               </v-list-item>
             </v-list>
           </v-menu>

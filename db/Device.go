@@ -254,9 +254,6 @@ func (s ProjectDeviceSettings) TemplateIDForAction(action DeviceAction) *int {
 		return s.RestartTemplateID
 	case DeviceActionStatus:
 		return s.StatusTemplateID
-	case DeviceActionConfig:
-		// "Apply configuration" now reuses restart template flow.
-		return s.RestartTemplateID
 	}
 	return nil
 }

@@ -1454,7 +1454,7 @@ func buildCategorizedDeviceConfig(items []db.DeviceConfigItem) map[string]map[st
 }
 
 // RunDeviceAction triggers the configured template for {start, stop, restart,
-// status, config} on a specific device.
+// status} on a specific device.
 func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	device := helpers.GetFromContext(r, "device").(db.Device)
@@ -1468,7 +1468,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 
 	switch body.Action {
 	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
-		db.DeviceActionStatus, db.DeviceActionConfig:
+		db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Unsupported device action",
@@ -1507,7 +1507,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		extraVars["default_config"] = defaultConfig
 	}
 
-	if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
+	if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
 		if err != nil {
 			helpers.WriteError(w, err)
@@ -1522,12 +1522,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	effectiveAction := body.Action
-	if body.Action == db.DeviceActionConfig {
-		effectiveAction = db.DeviceActionRestart
-		extraVars["triggered_by"] = "config"
-	}
-	task, err := runDeviceTemplateWithProfileSettings(r, project, ps, effectiveAction, extraVars, tmpInventoryID)
+	task, err := runDeviceTemplateWithProfileSettings(r, project, ps, body.Action, extraVars, tmpInventoryID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -1546,7 +1541,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 	switch body.Action {
 	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
-		db.DeviceActionStatus, db.DeviceActionConfig:
+		db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Unsupported device action",
@@ -1596,11 +1591,6 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	effectiveAction := body.Action
-	if body.Action == db.DeviceActionConfig {
-		effectiveAction = db.DeviceActionRestart
-	}
-
 	store := helpers.Store(r)
 	tasks := make([]db.Task, 0)
 	byProfile := server.GroupDevicesByProfile(selected)
@@ -1645,7 +1635,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		} else if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
 			extraVars["default_config"] = defaultConfig
 		}
-		if body.Action == db.DeviceActionConfig || body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
+		if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
 			configByHostname := map[string]map[string]map[string]string{}
 			configsByHost := map[string]map[string]map[string]string{}
 			for _, d := range devs {
@@ -1666,10 +1656,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 			extraVars["configs_by_hostname"] = configByHostname
 			extraVars["configs_by_host"] = configsByHost
 		}
-		if body.Action == db.DeviceActionConfig {
-			extraVars["triggered_by"] = "config"
-		}
-		task, err := runDeviceTemplateWithProfileSettings(r, project, ps, effectiveAction, extraVars, tmpInventoryID)
+		task, err := runDeviceTemplateWithProfileSettings(r, project, ps, body.Action, extraVars, tmpInventoryID)
 		if err != nil {
 			helpers.WriteError(w, err)
 			return

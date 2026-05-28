@@ -67,8 +67,6 @@ func (s ProjectDeviceProfileSettings) TemplateIDForAction(action DeviceAction) *
 		return s.RestartTemplateID
 	case DeviceActionStatus:
 		return s.StatusTemplateID
-	case DeviceActionConfig:
-		return s.RestartTemplateID
 	}
 	return nil
 }
