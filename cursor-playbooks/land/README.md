@@ -5,7 +5,6 @@ LAND device type uses API-first status/config with optional Windows process cont
 ## Playbooks
 
 - `device_status.yml` — check exe existence + process running + API status, then bulk callback
-- `device_config.yml` — push key/value config to device API, then bulk callback
 - `device_start.yml` — start process if not running, optional API check, then bulk callback
 - `device_stop.yml` — force stop process, optional API check, then bulk callback
 - `device_restart.yml` — force restart process, optional API check, then bulk callback
