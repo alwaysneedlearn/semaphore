@@ -65,7 +65,7 @@
   vars:
     _raw_st: "{{ item.device_status | default(item.status | default('unhealthy')) }}"
     _td_mapped: "{{ 'online' if (_raw_st | string) == 'healthy' else 'offline' }}"
-    _cn: "{{ item.hostname | default(item.ip | default('')) | string | replace(\"'\", \"''\") }}"
+    _cn: "{{ ((item.hostname | default('') | trim) or (item.ip | default(''))) | string | replace(\"'\", \"''\") }}"
     _ip: "{{ item.ip | default(item.hostname | default('')) | string | replace(\"'\", \"''\") }}"
     _raw_reason: "{{ item.abnormal_reason | default('') | string }}"
     _reason_default: "{{ '' if _td_mapped == 'online' else 'ABNORMAL' }}"

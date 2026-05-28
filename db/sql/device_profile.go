@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"errors"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -64,9 +65,12 @@ func (d *SqlDb) GetProjectDeviceProfileSettings(projectID, profileID int) (db.Pr
 		"select * from project__device_profile_settings where project_id=? and profile_id=?",
 	), projectID, profileID)
 	if err != nil {
-		s = db.ProjectDeviceProfileSettings{ProjectID: projectID, ProfileID: profileID}
+		if errors.Is(err, db.ErrNotFound) {
+			return db.ProjectDeviceProfileSettings{ProjectID: projectID, ProfileID: profileID}, nil
+		}
+		return s, err
 	}
-	return s, err
+	return s, nil
 }
 
 func (d *SqlDb) UpdateProjectDeviceProfileSettings(s db.ProjectDeviceProfileSettings) error {

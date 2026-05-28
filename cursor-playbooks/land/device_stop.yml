@@ -64,7 +64,7 @@
     - name: 登记 LAND 停止回调行
       ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ _land_dev.hostname | default(inventory_hostname, true) }}"
+          hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'unhealthy' if 'NOT_RUNNING' in (_land_process_after_stop.stdout | default('')) else 'healthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"

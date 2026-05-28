@@ -49,7 +49,7 @@
     - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
       ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
           ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
           device_status: unhealthy
           winrm_status: offline
@@ -94,7 +94,7 @@
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ (_sem_dev | default({})).hostname | default(inventory_hostname, true) }}"
+          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
           ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
           device_status: >-
             {% if status is not defined or ('stdout' not in status) %}unhealthy

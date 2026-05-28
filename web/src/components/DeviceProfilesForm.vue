@@ -1,30 +1,41 @@
 <template>
-  <div>
-    <p class="text--secondary mb-2">
-      Configure templates per device type.
-      TDengine credentials live on each template Variable Group (see docs/tdengine-setup.md).
-      <strong>NEWARE</strong> is the default type for existing devices.
-      WinRM connection defaults for inventory are project-wide (below).
-    </p>
+  <div class="device-profiles-form">
+    <v-card outlined class="mb-4">
+      <v-card-title class="text-h6 py-3">
+        <v-icon left color="primary">mdi-shape-outline</v-icon>
+        Device types
+      </v-card-title>
+      <v-card-text class="pt-0">
+        <p class="text--secondary body-2 mb-0">
+          Bind playbook templates and refresh policy per device type.
+          TDengine credentials stay on template Variable Groups
+          (<code>docs/tdengine-setup.md</code>).
+          <strong>NEWARE</strong> is the default type for existing devices.
+        </p>
+      </v-card-text>
+    </v-card>
+
     <DeviceProjectConnectionSettings :project-id="projectId" class="mb-4" />
-    <v-btn
-      color="primary"
-      small
-      class="mb-4"
-      :disabled="loading"
-      @click="addDialog = true"
-    >
-      <v-icon left small>mdi-plus</v-icon>
-      Add device type
-    </v-btn>
+
+    <div class="d-flex align-center mb-3">
+      <v-btn color="primary" depressed :disabled="loading" @click="addDialog = true">
+        <v-icon left>mdi-plus</v-icon>
+        Add device type
+      </v-btn>
+      <v-spacer />
+      <v-btn icon :loading="loading" title="Refresh list" @click="load">
+        <v-icon>mdi-refresh</v-icon>
+      </v-btn>
+    </div>
+
     <v-dialog v-model="addDialog" max-width="480">
       <v-card>
-        <v-card-title>Add device type</v-card-title>
+        <v-card-title class="text-h6">Add device type</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="newProfileKey"
             label="Profile key"
-            hint="Uppercase identifier, e.g. ACME"
+            hint="Uppercase identifier, e.g. LAND"
             persistent-hint
             outlined
             dense
@@ -35,28 +46,39 @@
             outlined
             dense
           />
-          <v-alert v-if="addError" type="error" dense>{{ addError }}</v-alert>
+          <v-alert v-if="addError" type="error" dense class="mt-2">{{ addError }}</v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn text @click="addDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="adding" @click="createProfile">Create</v-btn>
+          <v-btn color="primary" depressed :loading="adding" @click="createProfile">Create</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-alert v-if="error" type="error" dense class="mb-2">{{ error }}</v-alert>
+
+    <v-alert v-if="error" type="error" dense dismissible class="mb-3" @input="error = null">
+      {{ error }}
+    </v-alert>
+
     <v-progress-linear v-if="loading" indeterminate class="mb-4" />
-    <v-expansion-panels v-if="!loading" accordion>
+
+    <v-expansion-panels v-if="!loading && profiles.length > 0" accordion multiple>
       <v-expansion-panel v-for="p in profiles" :key="p.id">
-        <v-expansion-panel-header>
-          <span>{{ p.name }} ({{ p.profile_key }})</span>
-          <v-chip x-small class="ml-2" v-if="p.device_count > 0">
-            {{ p.device_count }} device(s)
-          </v-chip>
-          <v-spacer />
+        <v-expansion-panel-header class="profile-panel-header">
+          <div class="d-flex align-center flex-grow-1 pr-2">
+            <v-icon class="mr-2" color="primary">mdi-layers</v-icon>
+            <div>
+              <div class="font-weight-medium">{{ p.name }}</div>
+              <div class="text--secondary caption">{{ p.profile_key }}</div>
+            </div>
+            <v-chip x-small class="ml-3" color="primary" outlined>
+              {{ p.device_count }} device(s)
+            </v-chip>
+          </div>
           <v-btn
             icon
             small
+            class="mr-2"
             :disabled="p.device_count > 0 || deleting"
             :title="p.device_count > 0
               ? 'Remove or reassign all devices before deleting this type'
@@ -66,7 +88,7 @@
             <v-icon small>mdi-delete</v-icon>
           </v-btn>
         </v-expansion-panel-header>
-        <v-expansion-panel-content>
+        <v-expansion-panel-content class="profile-panel-content">
           <DeviceProfileSettingsEditor
             :project-id="projectId"
             :profile-id="p.id"
@@ -75,6 +97,10 @@
         </v-expansion-panel-content>
       </v-expansion-panel>
     </v-expansion-panels>
+
+    <v-alert v-else-if="!loading" type="info" outlined dense class="mt-2">
+      No device types yet. Click <strong>Add device type</strong> to create one.
+    </v-alert>
 
     <YesNoDialog
       title="Delete device type"
@@ -180,3 +206,13 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.profile-panel-header {
+  min-height: 56px;
+}
+.profile-panel-content {
+  background: rgba(0, 0, 0, 0.02);
+  padding-top: 8px !important;
+}
+</style>

@@ -5,7 +5,7 @@
 - name: 补登记缺失回调行的主机（UNREACHABLE 兜底，delegate_facts）
   ansible.builtin.set_fact:
     semaphore_callback_row:
-      hostname: "{{ (_sem_fb_dev | default({})).hostname | default(item, true) }}"
+      hostname: "{{ (_sem_fb_dev | default({})).hostname | default('', true) }}"
       ip: "{{ (_sem_fb_dev | default({})).ip | default(item, true) }}"
       device_status: unhealthy
       status: unhealthy

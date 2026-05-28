@@ -190,5 +190,10 @@ func UpdateDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	saved, err := store.GetProjectDeviceProfileSettings(project.ID, profileID)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, profileSettingsToView(saved))
 }

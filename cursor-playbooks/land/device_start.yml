@@ -73,7 +73,7 @@
     - name: 登记 LAND 启动回调行
       ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ _land_dev.hostname | default(inventory_hostname, true) }}"
+          hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'healthy' if (_land_exe_stat.stat.exists | default(false)) and ('RUNNING' in (_land_process_after_start.stdout | default(''))) and ((not (land_start_check_api | bool)) or ((_land_api_after_start.status | default(0) | int) >= 200 and (_land_api_after_start.status | default(0) | int) < 300)) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
