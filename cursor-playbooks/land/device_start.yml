@@ -80,14 +80,14 @@
       block:
         - name: 确保 HKCU\Software\LH\ProjectFlag 存在
           ansible.windows.win_regedit:
-            path: HKCU:\Software\LH
+            path: HKCU:\SOFTWARE\LH
             name: ProjectFlag
             data: ""
             type: string
             state: present
         - name: 确保 HKCU\Software\LH\ProjectType 存在
           ansible.windows.win_regedit:
-            path: HKCU:\Software\LH
+            path: HKCU:\SOFTWARE\LH
             name: ProjectType
             data: "0"
             type: string
