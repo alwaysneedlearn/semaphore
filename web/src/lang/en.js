@@ -545,7 +545,7 @@ export default {
   deviceTemplateRestart: 'Restart template',
   deviceTemplateStatus: 'Status template',
   deviceTemplateConfig: 'Config template',
-  deviceRefreshIntervalMinutes: 'Status refresh interval (minutes)',
+  deviceRefreshIntervalMinutes: 'Status refresh interval (hours)',
   deviceRefreshIntervalHelp: 'Set to 0 to disable periodic status refresh.',
   deviceSettingsSaved: 'Device settings saved.',
 };

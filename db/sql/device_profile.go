@@ -140,7 +140,7 @@ func (d *SqlDb) GetDeviceProfileSettingsDueForRefresh(now time.Time) ([]db.Proje
 			continue
 		}
 		if s.LastStatusRefreshAt == nil ||
-			now.Sub(*s.LastStatusRefreshAt) >= time.Duration(s.StatusRefreshIntervalMin)*time.Minute {
+			now.Sub(*s.LastStatusRefreshAt) >= time.Duration(s.StatusRefreshIntervalMin)*time.Hour {
 			due = append(due, s)
 		}
 	}

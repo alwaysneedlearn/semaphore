@@ -541,7 +541,7 @@ func (d *SqlDb) GetProjectsDueForStatusRefresh(now time.Time) ([]db.ProjectDevic
 			continue
 		}
 		if s.LastStatusRefreshAt == nil ||
-			now.Sub(*s.LastStatusRefreshAt) >= time.Duration(s.StatusRefreshIntervalMin)*time.Minute {
+			now.Sub(*s.LastStatusRefreshAt) >= time.Duration(s.StatusRefreshIntervalMin)*time.Hour {
 			due = append(due, s)
 		}
 	}
