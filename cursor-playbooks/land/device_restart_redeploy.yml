@@ -6,6 +6,12 @@
   vars:
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('land_agent.exe', true) }}"
+    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
+    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
+    zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
+    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('9002', true)) | int }}"
@@ -24,6 +30,15 @@
     - name: WinRM 未连通则不再执行本主机后续步骤
       ansible.builtin.include_tasks: ../neware/tasks/winrm_gate_play_tasks.yml
 
+    - name: 部署 Windows 启动辅助脚本
+      ansible.windows.win_copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+      loop:
+        - { src: "../neware/files/sem_reconfig_start_program_windows.ps1", dest: "C:\\Windows\\Temp\\sem_reconfig_start_program_windows.ps1" }
+        - { src: "../neware/files/sem_process_alive_windows.ps1", dest: "C:\\Windows\\Temp\\sem_process_alive_windows.ps1" }
+      changed_when: false
+
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
@@ -31,8 +46,51 @@
 
     - name: 前置检查：检查 LAND 程序文件是否存在
       ansible.windows.win_stat:
-        path: "{{ exe_dir }}\\{{ exe_name }}"
+        path: "{{ exe_path }}"
       register: _land_exe_stat
+
+    - name: 检查本地压缩包是否存在
+      ansible.windows.win_shell: |
+        if (Test-Path "{{ exe_dir }}\\{{ zip_name }}.zip") { "ZIP_FOUND" } else { "ZIP_NOT_FOUND" }
+      register: zip_local_check_result
+      changed_when: false
+      when: not (_land_exe_stat.stat.exists | default(false))
+
+    - name: 创建程序根目录
+      ansible.builtin.win_file:
+        path: "{{ exe_dir }}"
+        state: directory
+      when: not (_land_exe_stat.stat.exists | default(false))
+
+    - name: 从服务器复制安装包
+      ansible.builtin.win_copy:
+        src: "{{ zip_path }}/{{ zip_name }}.zip"
+        dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
+      register: zip_copy_result
+      when: >
+        not (_land_exe_stat.stat.exists | default(false)) and
+        (zip_local_check_result is skipped or 'ZIP_NOT_FOUND' in (zip_local_check_result.stdout | default('')))
+
+    - name: 解压程序包
+      ansible.windows.win_shell: |
+        $zipPath = "{{ exe_dir }}\\{{ zip_name }}.zip"
+        $destDir = "{{ exe_dir }}"
+        try {
+          Expand-Archive -Path $zipPath -DestinationPath $destDir -Force
+          "EXTRACT_OK"
+        } catch {
+          "EXTRACT_ERROR:$($_.Exception.Message)"
+        }
+      register: extract_result
+      failed_when: >
+        extract_result is defined and 'stdout' in extract_result and
+        'EXTRACT_ERROR' in extract_result.stdout
+      when: not (_land_exe_stat.stat.exists | default(false))
+
+    - name: 重新检查 LAND 程序文件是否存在
+      ansible.windows.win_stat:
+        path: "{{ exe_path }}"
+      register: _land_exe_stat_after_extract
 
     - name: 前置检查：检查 LAND 进程状态
       ansible.windows.win_shell: |
@@ -60,7 +118,7 @@
       ansible.builtin.set_fact:
         _land_need_reconfigure: >-
           {{
-            (not (_land_exe_stat.stat.exists | default(false)))
+            (not ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))))
             or ('RUNNING' not in (_land_process_check.stdout | default('')))
             or (not (((_land_api_check.status | default(0) | int) >= 200) and ((_land_api_check.status | default(0) | int) < 300)))
           }}
@@ -74,15 +132,32 @@
             if ($null -ne $p) { $p | Stop-Process -Force -ErrorAction SilentlyContinue; "STOPPED" } else { "ALREADY_STOPPED" }
           register: _land_stop_result
           changed_when: "'STOPPED' in (_land_stop_result.stdout | default(''))"
-          when: _land_exe_stat.stat.exists | default(false)
+          when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
 
-        - name: 启动 LAND 程序
+        - name: 获取当前登录用户（用于交互式计划任务）
           ansible.windows.win_shell: |
-            Start-Process -FilePath "{{ exe_dir }}\{{ exe_name }}"
-            "STARTED"
-          register: _land_start_result
-          changed_when: true
-          when: _land_exe_stat.stat.exists | default(false)
+            $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+              ForEach-Object {
+                $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+                if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+              } |
+              Where-Object { $_ } |
+              Select-Object -First 1
+            if ($explorerUser) {
+              Write-Output $explorerUser
+            } else {
+              Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+            }
+          register: get_username_result
+          changed_when: false
+
+        - name: 规范化启动用户
+          ansible.builtin.set_fact:
+            _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+        - name: 启动 LAND 程序（管理员交互式计划任务）
+          ansible.builtin.include_tasks: ../neware/tasks/reconfig_start_program_windows.yml
+          when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
 
         - name: 重启后确认进程状态
           ansible.windows.win_shell: |
@@ -91,7 +166,7 @@
             if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
           register: _land_process_after_restart
           changed_when: false
-          when: _land_exe_stat.stat.exists | default(false)
+          when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
 
         - name: 重启后查询 LAND API 状态
           ansible.builtin.uri:
@@ -105,7 +180,7 @@
           register: _land_api_after_restart
           delegate_to: localhost
           failed_when: false
-          when: _land_exe_stat.stat.exists | default(false)
+          when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
 
     - name: 无需重启重部署时复用前置检查状态
       when: not (_land_need_reconfigure | bool)
@@ -118,11 +193,11 @@
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if (_land_exe_stat.stat.exists | default(false)) and ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))) and ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'offline' }}"
           abnormal_reason: >-
-            {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_dir }}\{{ exe_name }}
+            {% if not ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_land_process_after_restart.stdout | default('')) %}Process not running
             {% elif not (((_land_api_after_restart.status | default(0) | int) >= 200) and ((_land_api_after_restart.status | default(0) | int) < 300)) %}API check failed: http={{ _land_api_after_restart.status | default('n/a') }}
             {% else %}{% endif %}
