@@ -1,0 +1,85 @@
+---
+- name: LAND 状态巡检（API + 进程）
+  hosts: windows_hosts
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('land_agent.exe', true) }}"
+    process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
+    land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
+    land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('9002', true)) | int }}"
+    land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/api/status', true) }}"
+    land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
+    land_api_token: "{{ lookup('env', 'LAND_API_TOKEN') | default('', true) | trim }}"
+    land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - name: WinRM 建连（含重试）
+      ansible.builtin.include_tasks: ../neware/tasks/winrm_ensure_reachable.yml
+
+    - name: WinRM 未连通则不再执行本主机后续步骤
+      ansible.builtin.include_tasks: ../neware/tasks/winrm_gate_play_tasks.yml
+
+    - name: 解析当前设备信息
+      ansible.builtin.set_fact:
+        _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+        _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+
+    - name: 检查 LAND 程序文件是否存在
+      ansible.windows.win_stat:
+        path: "{{ exe_dir }}\\{{ exe_name }}"
+      register: _land_exe_stat
+      ignore_unreachable: true
+
+    - name: 检查 LAND 进程状态
+      ansible.windows.win_shell: |
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+      register: _land_process_check
+      changed_when: false
+      ignore_unreachable: true
+
+    - name: 查询 LAND API 状态
+      ansible.builtin.uri:
+        url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
+        method: GET
+        headers: "{{ ({'Authorization': 'Bearer ' ~ land_api_token} if (land_api_token | length) > 0 else {}) }}"
+        timeout: "{{ land_api_timeout }}"
+        validate_certs: "{{ land_api_verify_tls }}"
+        return_content: true
+        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+      register: _land_api_status
+      delegate_to: localhost
+      failed_when: false
+
+    - name: 组装 LAND 状态回调行
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _land_dev.hostname | default(inventory_hostname, true) }}"
+          ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if (_land_exe_stat.stat.exists | default(false)) and ('RUNNING' in (_land_process_check.stdout | default(''))) and ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) else 'offline' }}"
+          abnormal_reason: >-
+            {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_dir }}\{{ exe_name }}
+            {% elif 'RUNNING' not in (_land_process_check.stdout | default('')) %}Process not running: {{ process_name }}
+            {% elif not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _land_api_status.status | default('n/a') }}
+            {% else %}{% endif %}
+
+  post_tasks:
+    - name: 写回 Semaphore 设备状态（post_tasks）
+      run_once: true
+      delegate_to: localhost
+      block:
+        - ansible.builtin.include_tasks: ../neware/tasks/semaphore_bulk_put_from_hostvars.yml
+
+- name: 写回 Semaphore 设备状态（独立 play）
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 执行 bulk 回调
+      ansible.builtin.include_tasks: ../neware/tasks/semaphore_bulk_put_from_hostvars.yml
