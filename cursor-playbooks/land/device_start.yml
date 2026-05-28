@@ -76,6 +76,24 @@
         not (_land_exe_stat.stat.exists | default(false)) and
         (zip_local_check_result is skipped or 'ZIP_NOT_FOUND' in (zip_local_check_result.stdout | default('')))
 
+    - name: 解压前确保 LH 注册表项存在
+      block:
+        - name: 确保 HKCU\Software\LH\ProjectFlag 存在
+          ansible.windows.win_regedit:
+            path: HKCU:\Software\LH
+            name: ProjectFlag
+            data: ""
+            type: string
+            state: present
+        - name: 确保 HKCU\Software\LH\ProjectType 存在
+          ansible.windows.win_regedit:
+            path: HKCU:\Software\LH
+            name: ProjectType
+            data: "0"
+            type: string
+            state: present
+      when: not (_land_exe_stat.stat.exists | default(false))
+
     - name: 解压程序包
       ansible.windows.win_shell: |
         $zipPath = "{{ exe_dir }}\\{{ zip_name }}.zip"
