@@ -8,6 +8,7 @@ LAND device type uses API-first status/config with optional Windows process cont
 - `device_start.yml` — start process if not running, optional API check, then bulk callback
 - `device_stop.yml` — force stop process, optional API check, then bulk callback
 - `device_restart.yml` — force restart process, optional API check, then bulk callback
+- `device_restart_redeploy.yml` — check process/API health, then restart/redeploy only when unhealthy, then bulk callback
 
 All playbooks reuse shared callback/TDengine tasks from `../neware/tasks/semaphore_bulk_put_from_hostvars.yml`.
 
