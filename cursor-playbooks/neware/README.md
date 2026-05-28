@@ -32,9 +32,9 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 | `TDENGINE_URL` | If set (Variable Group ENV), after bulk PUT writes this task’s rows to TDengine REST (`tasks/semaphore_tdengine_publish_from_bulk.yml`) |
 | `TDENGINE_USER` / `TDENGINE_PASSWORD` | Optional Basic auth for TDengine REST |
 | `TDENGINE_DATABASE` | Default `lab` |
-| `TDENGINE_STATUS_TABLE` | Default `neware_remote_computer_status` |
+| `TDENGINE_STATUS_TABLE` | Child table; default `neware_remote_computer_status` → `lab.neware_remote_computer_status` in SQL |
+| `TDENGINE_SUPER_TABLE` | Super table; default `dws_computer_status` → `USING lab.dws_computer_status` |
 | `TDENGINE_TAG_SUPPLIER` | Super-table TAG `supplier` (not a column); default `newarerm` |
-| `TDENGINE_SUPER_TABLE` | Optional; `INSERT INTO <table> USING <super> TAGS(...)` when child ≠ super name |
 
 - **`../device_discovery.yml`** — **`PUT /api/project/{id}/devices/discovery/results`** (via **`tasks/semaphore_discovery_put_results.yml`**) when **`SEMAPHORE_API_TOKEN`** is set (`task_id` + `devices` array). Rows are **upserted in DB by IP** (`project__device_discovery_host`). UI **`GET .../discovery/results`** (persisted list) or **`?task_id=`** after a scan. Import to inventory is **Import selected** → **`discovery/import`** (with **`device_profile_id`**).
 - **`device_status.yml`**, **`device_start.yml`**, **`device_restart.yml`**, **`device_stop.yml`**, **`check_restart_redeploy.yml`** — play1 在任务或 **`post_tasks`** 登记每台 **`semaphore_callback_row`**；**bulk PUT 仅在独立 `hosts: localhost` 第二 play**（不在 post_tasks 里 `run_once` bulk，避免批量时第一台抢跑）。**已移除** **`semaphore_bulk_put_immediate.yml`** 的 include。

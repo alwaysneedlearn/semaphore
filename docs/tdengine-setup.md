@@ -12,9 +12,9 @@ Semaphore **不再**在服务端自动写 TDengine。设备操作 playbook（`cu
 | `TDENGINE_USER` | 否 | Basic 认证用户名 |
 | `TDENGINE_PASSWORD` | 否 | Basic 认证密码 |
 | `TDENGINE_DATABASE` | 否 | 库名，默认 `lab` |
-| `TDENGINE_STATUS_TABLE` | 否 | 超级表或子表名，默认 `neware_remote_computer_status` |
+| `TDENGINE_STATUS_TABLE` | 否 | 子表名，默认 `neware_remote_computer_status`（SQL 中为 `lab.neware_remote_computer_status`） |
+| `TDENGINE_SUPER_TABLE` | 否 | 超级表名，默认 `dws_computer_status`（SQL 中为 `lab.dws_computer_status`） |
 | `TDENGINE_TAG_SUPPLIER` | 否 | 超级表 **TAG** `supplier` 的值，默认 `newarerm`（**不是**数据列） |
-| `TDENGINE_SUPER_TABLE` | 否 | 若子表名与超级表名不同，填超级表名；playbook 生成 `INSERT INTO <table> USING <super> TAGS(...)` |
 
 未设置 `TDENGINE_URL` 时跳过 TDengine，仅写 Semaphore DB。
 
@@ -69,13 +69,14 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 - `json.desc`（失败时的错误说明）
 - `json.affected_rows`（写入行数；为 `0` 时表内无变化）
 
-请求 URL 为 `{TDENGINE_URL}/rest/sql/{TDENGINE_DATABASE}`（无状态连接，库名在 URL 中）。INSERT 示例（表名不带库前缀）：
+请求 URL 为 `{TDENGINE_URL}/rest/sql/{TDENGINE_DATABASE}`（无状态连接，库名在 URL 中）。INSERT 语法（子表 + 超级表 + TAG）：
 
 ```sql
-INSERT INTO neware_remote_computer_status TAGS('newarerm')
-VALUES ('2262-01-01 08:00:00.000','JSC3211CCXW004','online','2026-05-27 09:09:39.','2026-05-27 09:09:39.');
+INSERT INTO lab.neware_remote_computer_status
+USING lab.dws_computer_status TAGS('newarerm')
+VALUES ('2262-01-01 08:00:00.000', 'JSC1306XHXW018', 'offline', '2026-05-27 10:07:51.000', '2026-05-27 10:07:51.000');
 ```
 
-若使用子表 + 超级表：`INSERT INTO <child> USING <super_stable> TAGS('newarerm') VALUES (...)`（设置 `TDENGINE_SUPER_TABLE`）。
+变量可只写表名（自动加 `TDENGINE_DATABASE` 前缀）；也可写全名如 `lab.dws_computer_status`。
 
 **注意**：若表主键仅 `ts` 且所有设备共用同一固定 `ts`，TDengine 中最终可能只保留 **一行**（后写入覆盖先写入）；需多行时请确认表结构是否以 `computer_name` 等区分主键/标签。
