@@ -35,8 +35,16 @@
     _td_base: "{{ _td_url | regex_replace('/rest/sql/?$', '') | regex_replace('/$', '') }}"
   when: _td_enabled | bool
 
-- name: 获取当前 UTC 时间（作为 updated_time / check_time）
-  ansible.builtin.command: date -u +"%Y-%m-%d %H:%M:%S.%3N"
+# GNU date 的 %3N 在部分 runner 上无效，会落成 "2026-05-28 01:01:39."（无毫秒）
+- name: 获取当前 UTC 时间（作为 updated_time / check_time，毫秒三位）
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        from datetime import datetime, timezone
+        dt = datetime.now(timezone.utc)
+        print(f"{dt.strftime('%Y-%m-%d %H:%M:%S')}.{dt.microsecond // 1000:03d}")
   register: _td_now_cmd
   changed_when: false
   when: _td_enabled | bool

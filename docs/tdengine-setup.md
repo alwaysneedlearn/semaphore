@@ -36,7 +36,7 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 
 - `device_status` **`healthy`** → `status` = **`online`**；其余 → **`offline`**
 - `computer_name` = bulk 回调行的 **`hostname`**
-- `updated_time` = `check_time` = playbook 执行时的实际 UTC 时间戳
+- `updated_time` = `check_time` = playbook 执行时的 **UTC** 时间，格式 `YYYY-MM-DD HH:MM:SS.mmm`（三位毫秒，如 `2026-05-28 01:01:39.000`）
 - **`supplier`** 为超级表 **TAG**，固定 **`newarerm`**（Variable Group：`TDENGINE_TAG_SUPPLIER`）
 
 ## 每台设备只保留一行（ts 固定策略）
