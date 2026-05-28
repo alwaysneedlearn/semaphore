@@ -76,8 +76,8 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 请求 URL 为 `{TDENGINE_URL}/rest/sql/{TDENGINE_DATABASE}`（无状态连接，库名在 URL 中）。INSERT 语法（子表 + 超级表 + TAG）：
 
 ```sql
-INSERT INTO lab.neware_remote_computer_status
-USING lab.dws_computer_status TAGS('newarerm')
+INSERT INTO `lab`.`neware_remote_computer_status`
+USING `lab`.`dws_computer_status` TAGS('newarerm')
 (ts, computer_name, ip_addr, status, updated_time, check_time, abnormal_reason)
 VALUES ('2262-01-01 08:00:00.000', 'JSC1306XHXW018', '10.0.0.18', 'offline', '2026-05-27 10:07:51.000', '2026-05-27 10:07:51.000', 'WinRM ping failed');
 ```

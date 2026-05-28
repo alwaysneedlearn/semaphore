@@ -106,9 +106,11 @@
 
 - name: 拼接 TDengine INSERT SQL 正文
   ansible.builtin.set_fact:
+    _td_insert_table_quoted: "{{ '`' ~ (_td_insert_table | regex_replace('\\.', '`.`')) ~ '`' }}"
+    _td_using_stable_quoted: "{{ '`' ~ (_td_using_stable | regex_replace('\\.', '`.`')) ~ '`' }}"
     _td_sql: >-
-      INSERT INTO {{ _td_insert_table }}
-      USING {{ _td_using_stable }} TAGS('{{ _td_tag_esc }}')
+      INSERT INTO {{ _td_insert_table_quoted }}
+      USING {{ _td_using_stable_quoted }} TAGS('{{ _td_tag_esc }}')
       (ts, computer_name, ip_addr, status, updated_time, check_time, abnormal_reason)
       VALUES {{ _td_value_parts | join(',') }}
   when:
