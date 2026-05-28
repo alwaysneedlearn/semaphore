@@ -1,4 +1,6 @@
 ---
-# WinRM 超时（旧版 pywinrm 可能忽略 read/operation_timeout 并打 WARNING，可升级 pywinrm 或只保留第一项）
-ansible_winrm_connection_timeout: 60
+# WinRM 超时：单主机慢响应时优先快速失败，避免拖慢整批执行
+ansible_winrm_connection_timeout: 25
+ansible_winrm_operation_timeout_sec: 20
+ansible_winrm_read_timeout_sec: 30
 ansible_winrm_server_cert_validation: ignore
