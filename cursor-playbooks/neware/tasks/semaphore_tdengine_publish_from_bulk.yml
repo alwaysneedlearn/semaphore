@@ -67,8 +67,8 @@
     _td_mapped: "{{ 'online' if (_raw_st | string) == 'healthy' else 'offline' }}"
     _cn: "{{ item.hostname | default(item.ip | default('')) | string | replace(\"'\", \"''\") }}"
     _ip: "{{ item.ip | default(item.hostname | default('')) | string | replace(\"'\", \"''\") }}"
-    _raw_reason: "{{ item.normal_reason | default(item.abnormal_reason | default('')) | string }}"
-    _reason_default: "{{ 'NORMAL' if _td_mapped == 'online' else 'ABNORMAL' }}"
+    _raw_reason: "{{ item.abnormal_reason | default('') | string }}"
+    _reason_default: "{{ '' if _td_mapped == 'online' else 'ABNORMAL' }}"
     _reason: "{{ (_raw_reason | trim) if (_raw_reason | trim | length) > 0 else _reason_default }}"
     _reason_esc: "{{ _reason | replace(\"'\", \"''\") }}"
     _now_esc: "{{ _td_now | replace(\"'\", \"''\") }}"
@@ -109,7 +109,7 @@
     _td_sql: >-
       INSERT INTO {{ _td_insert_table }}
       USING {{ _td_using_stable }} TAGS('{{ _td_tag_esc }}')
-      (ts, computer_name, ip_addr, status, updated_time, check_time, normal_reason)
+      (ts, computer_name, ip_addr, status, updated_time, check_time, abnormal_reason)
       VALUES {{ _td_value_parts | join(',') }}
   when:
     - _td_enabled | bool
