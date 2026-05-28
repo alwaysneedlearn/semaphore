@@ -100,6 +100,7 @@ export default {
         { field: 'stop_template_id', label: 'Stop template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'status_template_id', label: 'Status / Patrol template' },
+        { field: 'check_restart_redeploy_template_id', label: 'Check-restart-redeploy template (for status refresh interval)' },
       ],
     };
   },

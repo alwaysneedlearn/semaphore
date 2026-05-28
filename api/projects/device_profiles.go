@@ -121,6 +121,7 @@ type deviceProfileSettingsView struct {
 	StopTemplateID           *int   `json:"stop_template_id,omitempty"`
 	RestartTemplateID        *int   `json:"restart_template_id,omitempty"`
 	StatusTemplateID         *int   `json:"status_template_id,omitempty"`
+	CheckRestartRedeployTemplateID *int `json:"check_restart_redeploy_template_id,omitempty"`
 	DefaultInventoryID       *int   `json:"default_inventory_id,omitempty"`
 	DefaultConfigJSON        string `json:"default_config_json"`
 	StatusRefreshIntervalMin int    `json:"status_refresh_interval_min"`
@@ -134,6 +135,7 @@ func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSett
 		StopTemplateID:           ps.StopTemplateID,
 		RestartTemplateID:        ps.RestartTemplateID,
 		StatusTemplateID:         ps.StatusTemplateID,
+		CheckRestartRedeployTemplateID: ps.CheckRestartRedeployTemplateID,
 		DefaultInventoryID:       ps.DefaultInventoryID,
 		DefaultConfigJSON:        ps.DefaultConfigJSON,
 		StatusRefreshIntervalMin: ps.StatusRefreshIntervalMin,
@@ -145,6 +147,7 @@ func applyProfileSettingsView(existing *db.ProjectDeviceProfileSettings, body de
 	existing.StopTemplateID = body.StopTemplateID
 	existing.RestartTemplateID = body.RestartTemplateID
 	existing.StatusTemplateID = body.StatusTemplateID
+	existing.CheckRestartRedeployTemplateID = body.CheckRestartRedeployTemplateID
 	existing.DefaultInventoryID = body.DefaultInventoryID
 	existing.DefaultConfigJSON = body.DefaultConfigJSON
 	existing.StatusRefreshIntervalMin = body.StatusRefreshIntervalMin

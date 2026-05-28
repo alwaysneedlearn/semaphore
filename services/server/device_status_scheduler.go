@@ -131,10 +131,14 @@ func (s *DeviceStatusScheduler) refreshProfile(ps db.ProjectDeviceProfileSetting
 			Warn("device status: failed to record profile last refresh time")
 	}
 
-	if ps.StatusTemplateID == nil || *ps.StatusTemplateID == 0 || len(profileDevices) == 0 {
+	templateID := ps.StatusTemplateID
+	if ps.CheckRestartRedeployTemplateID != nil && *ps.CheckRestartRedeployTemplateID > 0 {
+		templateID = ps.CheckRestartRedeployTemplateID
+	}
+	if templateID == nil || *templateID == 0 || len(profileDevices) == 0 {
 		return
 	}
-	s.enqueueStatusTemplate(probeSettings, profileDevices)
+	s.enqueueTemplateWithDevices(probeSettings, *templateID, profileDevices)
 }
 
 func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings, now time.Time) {
@@ -167,15 +171,15 @@ func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings
 	if settings.StatusTemplateID == nil || *settings.StatusTemplateID == 0 {
 		return
 	}
-	s.enqueueStatusTemplate(settings, devices)
+	s.enqueueTemplateWithDevices(settings, *settings.StatusTemplateID, devices)
 }
 
-func (s *DeviceStatusScheduler) enqueueStatusTemplate(settings db.ProjectDeviceSettings, devices []db.Device) {
-	tpl, err := s.store.GetTemplate(settings.ProjectID, *settings.StatusTemplateID)
+func (s *DeviceStatusScheduler) enqueueTemplateWithDevices(settings db.ProjectDeviceSettings, templateID int, devices []db.Device) {
+	tpl, err := s.store.GetTemplate(settings.ProjectID, templateID)
 	if err != nil {
 		log.WithError(err).
 			WithField("project_id", settings.ProjectID).
-			WithField("template_id", *settings.StatusTemplateID).
+			WithField("template_id", templateID).
 			Warn("device status: failed to load status template")
 		return
 	}
