@@ -108,6 +108,14 @@
   ansible.builtin.set_fact:
     _td_insert_table_quoted: "{{ '`' ~ (_td_insert_table | regex_replace('\\.', '`.`')) ~ '`' }}"
     _td_using_stable_quoted: "{{ '`' ~ (_td_using_stable | regex_replace('\\.', '`.`')) ~ '`' }}"
+  when:
+    - _td_enabled | bool
+    - (_td_value_parts | default([]) | length) > 0
+    - _td_insert_table is defined
+    - _td_using_stable is defined
+
+- name: 生成 TDengine INSERT SQL 正文
+  ansible.builtin.set_fact:
     _td_sql: >-
       INSERT INTO {{ _td_insert_table_quoted }}
       USING {{ _td_using_stable_quoted }} TAGS('{{ _td_tag_esc }}')
@@ -116,6 +124,8 @@
   when:
     - _td_enabled | bool
     - (_td_value_parts | default([]) | length) > 0
+    - _td_insert_table_quoted is defined
+    - _td_using_stable_quoted is defined
 
 - name: DEBUG TDengine INSERT 请求
   ansible.builtin.debug:
