@@ -6,10 +6,10 @@
   vars:
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('land_agent', true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
-    land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('9002', true)) | int }}"
-    land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/api/status', true) }}"
+    land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
+    land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
     land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
-    land_api_token: "{{ lookup('env', 'LAND_API_TOKEN') | default('', true) | trim }}"
+    land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
     land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
     land_stop_check_api: "{{ ((lookup('env', 'LAND_STOP_CHECK_API') | default('', true) | trim) | default('false', true)) | bool }}"
     _devices_from_extra: "{{ devices | default([]) }}"
@@ -50,8 +50,10 @@
     - name: 停止后查询 LAND API 状态（可选）
       ansible.builtin.uri:
         url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
-        method: GET
-        headers: "{{ ({'Authorization': 'Bearer ' ~ land_api_token} if (land_api_token | length) > 0 else {}) }}"
+        method: POST
+        body_format: json
+        body:
+          token: "{{ land_api_token }}"
         timeout: "{{ land_api_timeout }}"
         validate_certs: "{{ land_api_verify_tls }}"
         return_content: true
