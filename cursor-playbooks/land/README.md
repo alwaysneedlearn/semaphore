@@ -19,6 +19,30 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
+## Runner 部署（必做）
+
+日志若出现 `included: .../neware/tasks/winrm_ensure_reachable.yml` 或 `land/tasks/winrm_connect_one_attempt.yml`，说明 **runner 上的文件不是当前 develop**，与仓库代码无关。
+
+在 runner 上执行：
+
+```bash
+cd /root/playbook   # 或你的 cursor-playbooks 根目录
+git pull
+
+# 必须存在：
+test -f shared/tasks/winrm_connect_one_attempt.yml && echo OK shared
+test -f land/device_status.yml && head -28 land/device_status.yml | tail -8
+
+# 应看到 include：{{ sem_tasks_dir }}/winrm_ensure_reachable.yml
+# 不应再引用 ../neware/tasks/winrm_*
+
+# 删除 runner 上残留的旧文件（若存在）：
+rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks.yml
+```
+
+**Semaphore 模板**：LAND 类型的 Status/Start/… 模板 Playbook 路径填  
+`cursor-playbooks/land/device_status.yml`（等），**不要**填 `neware/device_status.yml`。
+
 ## Variable Group ENV
 
 | Variable | Default | Description |
