@@ -33,8 +33,9 @@ git pull
 test -f shared/tasks/winrm_connect_one_attempt.yml && echo OK shared
 test -f land/device_status.yml && head -28 land/device_status.yml | tail -8
 
-# 应看到 include：{{ sem_tasks_dir }}/winrm_ensure_reachable.yml
-# 不应再引用 ../neware/tasks/winrm_*
+# 应看到：include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+# 不应出现 include ../neware/tasks/ 或 tasks/playbook_path_assert
+# LAND 不需要 land/tasks/ 目录（业务在 device_*.yml 内）
 
 # 删除 runner 上残留的旧文件（若存在）：
 rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks.yml

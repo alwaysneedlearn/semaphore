@@ -27,8 +27,6 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - ansible.builtin.include_tasks: tasks/playbook_path_assert.yml
-
     - name: WinRM 建连（含重试）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - name: WinRM 未连通则不再执行本主机后续步骤
