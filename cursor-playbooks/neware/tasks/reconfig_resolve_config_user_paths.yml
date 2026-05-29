@@ -10,9 +10,13 @@
 #   RECONFIG_CONFIG_FALLBACK_USER=NEWARE
 #   未配置任何回退变量时默认：NEWARE,Administrator
 
+- name: 重配执行：登记客户端配置相对路径（Variable Group RECONFIG_CLIENT_REL_PATH）
+  ansible.builtin.set_fact:
+    _reconfig_client_rel_path: "{{ (lookup('env', 'RECONFIG_CLIENT_REL_PATH') | default('', true) | trim) | default('Documents\\NEWARE\\BTSClient', true) }}"
+
 - name: 重配执行：登记 Public 与 zip 源路径
   ansible.builtin.set_fact:
-    _reconfig_public_cfg_file: "C:\\Users\\Public\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+    _reconfig_public_cfg_file: "C:\\Users\\Public\\{{ _reconfig_client_rel_path }}\\{{ config_file_name }}"
     _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
     _reconfig_fallback_users_csv: >-
       {{
@@ -104,5 +108,5 @@
 
 - name: 重配执行：派生 BTSClient 与配置文件完整路径
   ansible.builtin.set_fact:
-    _reconfig_user_bts_dir: "C:\\Users\\{{ _reconfig_config_user }}\\Documents\\NEWARE\\BTSClient"
-    _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_config_user }}\\Documents\\NEWARE\\BTSClient\\{{ config_file_name }}"
+    _reconfig_user_bts_dir: "C:\\Users\\{{ _reconfig_config_user }}\\{{ _reconfig_client_rel_path }}"
+    _reconfig_user_cfg_file: "C:\\Users\\{{ _reconfig_config_user }}\\{{ _reconfig_client_rel_path }}\\{{ config_file_name }}"

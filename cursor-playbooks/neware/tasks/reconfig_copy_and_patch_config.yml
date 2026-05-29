@@ -1,0 +1,269 @@
+---
+# Copy controller-side {{ config_file_name }} from zip_path and merge merged_cfg into user + Public INI.
+# Requires play vars: config_file_name, zip_path, merged_cfg_json, merged_system_config, api_host, api_port,
+# his_data_from_time; and facts from reconfig_resolve_config_user_paths.yml.
+
+- name: 重配执行：创建配置文件目录（当前用户）
+  ansible.builtin.win_file:
+    path: "{{ _reconfig_user_bts_dir }}"
+    state: directory
+
+- name: 重配执行：创建配置文件目录（Public用户）
+  ansible.builtin.win_file:
+    path: "C:\\Users\\Public\\{{ _reconfig_client_rel_path }}"
+    state: directory
+
+- name: 重配执行：从服务器复制配置文件（当前用户）
+  ansible.builtin.win_copy:
+    src: "{{ _reconfig_cfg_src }}"
+    dest: "{{ _reconfig_user_cfg_file }}"
+  register: config_copy_result_user
+
+- name: 重配执行：从服务器复制配置文件（Public用户）
+  ansible.builtin.win_copy:
+    src: "{{ _reconfig_cfg_src }}"
+    dest: "{{ _reconfig_public_cfg_file }}"
+  register: config_copy_result_public
+
+- name: 重配执行：修改配置文件
+  win_shell: |
+    # 只在值发生变化时打印 CFG_CHANGE；未变化不输出，避免日志噪音
+    function Upsert-SectionKey {
+      param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, [string]$value, [string]$logPath)
+      $secStart = -1
+      $secEnd = $lines.Count
+      for ($i = 0; $i -lt $lines.Count; $i++) {
+        $trim = $lines[$i].Trim()
+        if ($trim -eq "[$section]") {
+          $secStart = $i
+          for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            if ($lines[$j].Trim() -match "^\[.*\]$") { $secEnd = $j; break }
+          }
+          break
+        }
+      }
+      $newLine = "$key=$value"
+      if ($secStart -lt 0) {
+        if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
+        $lines.Add("[$section]")
+        $lines.Add($newLine)
+        Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine (new section)"
+        return
+      }
+      for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
+        if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") {
+          $oldLine = $lines[$k]
+          if ($oldLine -ne $newLine) {
+            $oldVal = ($oldLine -replace "^$([regex]::Escape($key))=", "")
+            $lines[$k] = $newLine
+            Write-Output "CFG_CHANGE|$logPath|[$section]|${key}: $oldVal -> $value"
+          }
+          return
+        }
+      }
+      $lines.Insert($secEnd, $newLine)
+      Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine"
+    }
+
+    # 把 PSCustomObject(json) 与 Hashtable 递归转为 Hashtable，兼容 Windows PowerShell 5.1（无 -AsHashtable）
+    function ConvertTo-HT {
+      param($obj)
+      if ($null -eq $obj) { return @{} }
+      if ($obj -is [System.Collections.IDictionary]) {
+        $h = @{}
+        foreach ($k in $obj.Keys) {
+          $val = $obj[$k]
+          if ($val -is [pscustomobject] -or $val -is [System.Collections.IDictionary]) { $val = ConvertTo-HT $val }
+          $h[[string]$k] = $val
+        }
+        return $h
+      }
+      if ($obj -is [pscustomobject]) {
+        $h = @{}
+        foreach ($p in $obj.psobject.Properties) {
+          $val = $p.Value
+          if ($val -is [pscustomobject] -or $val -is [System.Collections.IDictionary]) { $val = ConvertTo-HT $val }
+          $h[[string]$p.Name] = $val
+        }
+        return $h
+      }
+      return $obj
+    }
+
+    # ReportApiSettings 这类 "key=<json对象>" 的整行：解析已有 JSON、深合并更新、再压成单行 JSON 写回。
+    # 打印**逐字段差异**（仅出现实际变化的子键），避免把整段 JSON 前后都贴一遍。
+    function Merge-JsonKey {
+      param([System.Collections.Generic.List[string]]$lines, [string]$section, [string]$key, $updates, [string]$logPath)
+      $updHT = ConvertTo-HT $updates
+      $secStart = -1
+      $secEnd = $lines.Count
+      for ($i = 0; $i -lt $lines.Count; $i++) {
+        $trim = $lines[$i].Trim()
+        if ($trim -eq "[$section]") {
+          $secStart = $i
+          for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            if ($lines[$j].Trim() -match "^\[.*\]$") { $secEnd = $j; break }
+          }
+          break
+        }
+      }
+      $existingIdx = -1
+      $existing = @{}
+      if ($secStart -ge 0) {
+        for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
+          if ($lines[$k].Trim() -match "^$([regex]::Escape($key))=") { $existingIdx = $k; break }
+        }
+        if ($existingIdx -ge 0) {
+          $raw = $lines[$existingIdx]
+          $eq = $raw.IndexOf("=")
+          if ($eq -gt 0) {
+            $jsonText = $raw.Substring($eq + 1).Trim()
+            try {
+              $parsed = ConvertFrom-Json -InputObject $jsonText
+              $existing = ConvertTo-HT $parsed
+            } catch {
+              Write-Output "CFG_CHANGE|$logPath|[$section]|$key (parse failed: $($_.Exception.Message))"
+            }
+          }
+        }
+      }
+      $merged = @{}
+      foreach ($k0 in @($existing.Keys)) { $merged[[string]$k0] = $existing[$k0] }
+      foreach ($u in @($updHT.Keys)) { $merged[[string]$u] = $updHT[$u] }
+      $newJson = ($merged | ConvertTo-Json -Compress -Depth 10)
+      $newLine = "$key=$newJson"
+      $changes = New-Object System.Collections.Generic.List[string]
+      foreach ($u in @($updHT.Keys)) {
+        $newV = $updHT[$u]
+        $newS = ConvertTo-Json -Compress -Depth 5 -InputObject $newV
+        if (-not $existing.ContainsKey($u)) {
+          $changes.Add("${u}: <absent> -> $newS")
+        } else {
+          $oldV = $existing[$u]
+          $oldS = ConvertTo-Json -Compress -Depth 5 -InputObject $oldV
+          if ($oldS -ne $newS) { $changes.Add("${u}: $oldS -> $newS") }
+        }
+      }
+      if ($existingIdx -ge 0) {
+        if ($lines[$existingIdx] -ne $newLine) {
+          $lines[$existingIdx] = $newLine
+          foreach ($c in $changes) { Write-Output "CFG_CHANGE|$logPath|[$section]|$key.$c" }
+        }
+        return
+      }
+      if ($secStart -lt 0) {
+        if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim() -ne "") { $lines.Add("") }
+        $lines.Add("[$section]")
+        $lines.Add($newLine)
+        Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine (new section)"
+        return
+      }
+      $lines.Insert($secEnd, $newLine)
+      Write-Output "CFG_CHANGE|$logPath|[$section]|+ $newLine"
+    }
+
+    function Update-ConfigFile {
+      param([string]$configPath, [string]$cfgJson, [string]$calbIp, [int]$serverPort, [string]$fromDate, [string]$toDate)
+      if (-not (Test-Path $configPath)) {
+        Write-Output "CONFIG_NOT_FOUND:$configPath"
+        return $false
+      }
+      try {
+        $rawCfg = ConvertFrom-Json -InputObject $cfgJson
+        $cfg = ConvertTo-HT $rawCfg
+        if (-not $cfg.ContainsKey("SystemConfig")) { $cfg["SystemConfig"] = @{} }
+        $sysCfg = $cfg["SystemConfig"]
+        # ReportApiSettings 是 SystemConfig 下的整段 JSON 值：合并 ServerIpAddrStr/ServerPort，保留其余字段
+        $reportApi = @{}
+        if ($sysCfg.ContainsKey("ReportApiSettings")) { $reportApi = ConvertTo-HT $sysCfg["ReportApiSettings"] }
+        if (-not $reportApi.ContainsKey("ServerIpAddrStr") -or [string]::IsNullOrEmpty([string]$reportApi["ServerIpAddrStr"])) {
+          if ($sysCfg.ContainsKey("ServerIpAddrStr") -and -not [string]::IsNullOrEmpty([string]$sysCfg["ServerIpAddrStr"])) {
+            $reportApi["ServerIpAddrStr"] = [string]$sysCfg["ServerIpAddrStr"]
+          } else {
+            $reportApi["ServerIpAddrStr"] = $calbIp
+          }
+        }
+        # ServerPort：始终以 Ansible 解析值写入（host api_port > 变量组 API_PORT > 9002），
+        # 覆盖旧 ini / merged JSON 中的空值、0 或无效残留，避免启动/重配后未写入正确 API 端口。
+        try {
+          $effApiPort = [int]$serverPort
+          if ($effApiPort -lt 1 -or $effApiPort -gt 65535) { $effApiPort = 9002 }
+        } catch { $effApiPort = 9002 }
+        $reportApi["ServerPort"] = $effApiPort
+        # 默认开启 API 回调；如 merged_cfg 显式设置则尊重用户选择
+        if (-not $reportApi.ContainsKey("EnableReportApiCall")) {
+          $reportApi["EnableReportApiCall"] = $true
+        } else {
+          $rawEnable = $reportApi["EnableReportApiCall"]
+          if ($rawEnable -is [string]) {
+            $reportApi["EnableReportApiCall"] = ($rawEnable -match '^(?i:true|1|yes)$')
+          } else {
+            try { $reportApi["EnableReportApiCall"] = [bool]$rawEnable } catch { $reportApi["EnableReportApiCall"] = $true }
+          }
+        }
+        $sysCfg.Remove("ServerIpAddrStr") | Out-Null
+        $sysCfg.Remove("ServerPort") | Out-Null
+        $sysCfg.Remove("EnableReportApiCall") | Out-Null
+        $sysCfg["ReportApiSettings"] = $reportApi
+        if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
+        if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
+        $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
+        foreach ($section in @($cfg.Keys)) {
+          $vals = $cfg[$section]
+          if (-not ($vals -is [System.Collections.IDictionary])) { continue }
+          foreach ($k in @($vals.Keys)) {
+            $v = $vals[$k]
+            if ($v -is [System.Collections.IDictionary]) {
+              Merge-JsonKey -lines $lines -section $section -key ([string]$k) -updates $v -logPath $configPath
+            } else {
+              Upsert-SectionKey -lines $lines -section $section -key ([string]$k) -value ([string]$v) -logPath $configPath
+            }
+          }
+        }
+        # 禁止 Set-Content 把每一行再写入 success 流，否则 Ansible 捕获的 stdout 可能被清空/异常
+        $null = $lines | Set-Content -LiteralPath $configPath
+        Write-Output "CONFIG_MODIFIED|$configPath"
+        return $true
+      } catch {
+        Write-Output "CONFIG_MODIFY_ERROR:$configPath|$($_.Exception.Message)"
+        return $false
+      }
+    }
+
+    $calbIp = "{{ merged_system_config.ServerIpAddrStr | default(api_host) }}"
+    $serverPort = [int]"{{ api_port | int }}"
+    $fromDate = "{{ merged_system_config.HisDataFromTime | default(his_data_from_time) }}"
+    if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
+    $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
+    if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
+    $userConfigPath = '{{ _reconfig_user_cfg_file | replace("\u0027", "\u0027\u0027") }}'
+    $publicConfigPath = "C:\Users\Public\{{ _reconfig_client_rel_path }}\{{ config_file_name }}"
+    # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
+    $cfgJson = '{{ merged_cfg_json | replace("\u0027", "\u0027\u0027") }}'
+
+    Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
+    Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
+    Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort|EnableReportApiCall=true"
+    Write-Output "=== 处理当前用户配置文件 ==="
+    $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+
+    Write-Output "`n=== 处理Public用户配置文件 ==="
+    $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+
+    if (-not $userResult -and -not $publicResult) {
+      exit 1
+    }
+    Write-Output "RECONFIG_CFG_RUN_SUMMARY|user_ok=$userResult|public_ok=$publicResult"
+  register: config_result
+  failed_when: >
+    config_result is defined and 'stdout' in config_result and
+    ('CONFIG_MODIFY_ERROR' in config_result.stdout)
+
+# win_shell 已经只输出"实际变化(CFG_CHANGE) + 路径 + 摘要"，直接 dump stdout_lines，不再做正则过滤
+- name: 重配执行：配置修改变更明细（仅打印实际变化与摘要）
+  ansible.builtin.debug:
+    msg:
+      - "[RECONFIG] 生效 API 端口 api_port={{ api_port }}（写入 ReportApiSettings.ServerPort；见下方 RECONFIG_REPORT_API_DEFAULTS）"
+      - "[RECONFIG] 程序完整路径 exe_path={{ exe_path }}"
+      - "stdout_lines={{ config_result.stdout_lines | default([]) }}"
+      - "stderr={{ (config_result.stderr | default('') | string | trim) }}"

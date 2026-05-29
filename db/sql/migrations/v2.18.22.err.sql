@@ -1,0 +1,1 @@
+-- no-op rollback for v2.18.22 (seeded device profiles are not removed)
