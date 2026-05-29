@@ -7,7 +7,7 @@
   run_once: true
   delegate_to: localhost
   block:
-    - ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_bulk_credentials.yml"
 
 - name: 立即 PUT 本主机设备状态（单条 bulk）
   ansible.builtin.uri:
