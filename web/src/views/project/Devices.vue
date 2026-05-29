@@ -613,13 +613,19 @@ export default {
         return;
       }
       const ids = tasks.map((t) => t && t.id).filter((id) => id != null);
+      if (ids.length === 0) {
+        return;
+      }
+      if (ids.length === 1) {
+        this.notifyDeviceTaskQueued(ids[0]);
+        return;
+      }
       EventBus.$emit('i-snackbar', {
         color: 'success',
-        text: `Queued ${ids.length} task(s) (one per device type): ${ids.join(', ')}`,
+        textPrefix: this.$t('deviceTasksQueuedPrefix'),
+        textSuffix: this.$t('deviceTasksQueuedSuffix'),
+        taskIds: ids,
       });
-      if (ids.length > 0) {
-        this.notifyDeviceTaskQueued(ids[0]);
-      }
     },
 
     countProfileGroupsForSelection() {

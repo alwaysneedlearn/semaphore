@@ -436,6 +436,8 @@ export default {
   deviceTaskQueued: '任务 #{id} 已排队',
   deviceTaskQueuedPrefix: '任务',
   deviceTaskQueuedSuffix: '已排队',
+  deviceTasksQueuedPrefix: '任务',
+  deviceTasksQueuedSuffix: '已排队（按设备类型各一任务）',
   deviceAbnormalReason: '异常原因',
   deviceReasonEmpty: '未记录异常原因',
   deviceBulkOps: '批量操作',

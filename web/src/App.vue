@@ -119,13 +119,19 @@
 
     <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="3000" top>
       <span class="snackbar-message">
-        <template v-if="snackbarTaskId">
+        <template v-if="snackbarTaskIds.length">
           {{ snackbarTextPrefix }}
-          <a
-            class="snackbar-task-link"
-            href="#"
-            @click.prevent="onSnackbarTaskClick"
-          >#{{ snackbarTaskId }}</a>
+          <span
+            v-for="(id, idx) in snackbarTaskIds"
+            :key="id"
+          >
+            <span v-if="idx > 0">, </span>
+            <a
+              class="snackbar-task-link"
+              href="#"
+              @click.prevent="onSnackbarTaskClick(id)"
+            >#{{ id }}</a>
+          </span>
           {{ snackbarTextSuffix }}
         </template>
         <span v-else>{{ snackbarText }}</span>
@@ -1048,6 +1054,7 @@ export default {
       snackbarTextPrefix: '',
       snackbarTextSuffix: '',
       snackbarTaskId: null,
+      snackbarTaskIds: [],
       snackbarColor: '',
       projects: null,
       newProjectDialog: null,
@@ -1198,9 +1205,21 @@ export default {
       this.snackbar = true;
       this.snackbarColor = e.color;
       this.snackbarText = e.text || '';
-      this.snackbarTaskId = e.taskId || null;
       this.snackbarTextPrefix = e.textPrefix || '';
       this.snackbarTextSuffix = e.textSuffix || '';
+      if (Array.isArray(e.taskIds) && e.taskIds.length > 0) {
+        this.snackbarTaskIds = e.taskIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id) && id > 0);
+        this.snackbarTaskId = null;
+      } else if (e.taskId != null) {
+        const id = Number(e.taskId);
+        this.snackbarTaskIds = Number.isFinite(id) && id > 0 ? [id] : [];
+        this.snackbarTaskId = this.snackbarTaskIds[0] || null;
+      } else {
+        this.snackbarTaskIds = [];
+        this.snackbarTaskId = null;
+      }
     });
 
     EventBus.$on('i-account-change', async () => {
@@ -1518,11 +1537,14 @@ export default {
       f.click();
     },
 
-    onSnackbarTaskClick() {
-      if (!this.snackbarTaskId) {
+    onSnackbarTaskClick(taskId) {
+      const id = taskId != null
+        ? Number(taskId)
+        : (this.snackbarTaskIds[0] || this.snackbarTaskId);
+      if (!id) {
         return;
       }
-      EventBus.$emit('i-show-task', { taskId: this.snackbarTaskId });
+      EventBus.$emit('i-show-task', { taskId: id });
       this.snackbar = false;
     },
 
@@ -1531,6 +1553,7 @@ export default {
       this.snackbarColor = '';
       this.snackbarText = '';
       this.snackbarTaskId = null;
+      this.snackbarTaskIds = [];
       this.snackbarTextPrefix = '';
       this.snackbarTextSuffix = '';
 

@@ -510,6 +510,8 @@ export default {
   deviceTaskQueued: 'Task #{id} queued',
   deviceTaskQueuedPrefix: 'Task',
   deviceTaskQueuedSuffix: 'queued',
+  deviceTasksQueuedPrefix: 'Tasks',
+  deviceTasksQueuedSuffix: 'queued (one per device type)',
   deviceAbnormalReason: 'Abnormal reason',
   deviceReasonEmpty: 'No abnormal reason recorded.',
   deviceBulkOps: 'Bulk operations',
