@@ -4,6 +4,7 @@
   gather_facts: no
   max_fail_percentage: 100
   vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('land_agent', true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"

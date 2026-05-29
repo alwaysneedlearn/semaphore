@@ -4,8 +4,9 @@
 
 # 仅在本 play 曾 WinRM 连通（_winrm_session_ok）时执行；play 开头 ping 全失败时不应再跑第二遍 ensure。
 - name: "{{ winrm_refresh_label | default('WinRM 中途建连（长任务前）') }}"
-  ansible.builtin.include_tasks: tasks/winrm_ensure_reachable.yml
+  ansible.builtin.include_tasks: "{{ _sem_tasks_dir | default(sem_tasks_dir | default(playbook_dir ~ '/tasks', true)) }}/winrm_ensure_reachable.yml"
   when: _winrm_session_ok | default(false) | bool
   vars:
     winrm_force_reconnect: true
     winrm_connect_context: "{{ winrm_refresh_label | default('mid-play') }}"
+    sem_tasks_dir: "{{ _sem_tasks_dir | default(sem_tasks_dir | default(playbook_dir ~ '/tasks', true)) }}"

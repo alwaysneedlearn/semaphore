@@ -4,6 +4,7 @@
   gather_facts: no
   max_fail_percentage: 100
   vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('land_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"

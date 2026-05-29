@@ -4,7 +4,7 @@
   when: not (_winrm_session_ok | default(false) | bool)
   block:
     - name: "重试前重置与等待（第 {{ _winrm_connect_attempt }}/{{ winrm_connect_retries }} 次建连）"
-      ansible.builtin.include_tasks: tasks/winrm_connect_retry_pause.yml
+      ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_connect_retry_pause.yml"
       when: (_winrm_connect_attempt | int) > 1
 
     - name: "WinRM ping 探测（第 {{ _winrm_connect_attempt }}/{{ winrm_connect_retries }} 次）"
@@ -13,7 +13,7 @@
       failed_when: false
       ignore_unreachable: true
 
-    - ansible.builtin.include_tasks: tasks/winrm_eval_ping_result.yml
+    - ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_eval_ping_result.yml"
 
     - name: 登记 WinRM 已连通
       ansible.builtin.set_fact:
@@ -22,7 +22,7 @@
       when: _winrm_ping_ok | default(false) | bool
 
   always:
-    - ansible.builtin.include_tasks: tasks/winrm_eval_ping_result.yml
+    - ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_eval_ping_result.yml"
       when: _winrm_ping is defined
 
     # 无 ignore_unreachable 时 UNREACHABLE 会跳过 block 内后续任务；always 内再 clear 以便重试与登记回调

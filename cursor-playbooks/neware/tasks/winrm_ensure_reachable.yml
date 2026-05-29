@@ -1,6 +1,11 @@
 ---
 # 在每个 windows_hosts play 最前 include：WinRM 建连重试，减轻首包 UNREACHABLE 导致后续任务全部 ...ignoring
 # 中途建连：include 时传 winrm_force_reconnect: true（见 tasks/winrm_refresh_midplay.yml）
+# LAND 等外部 play 请在 include 前设置 sem_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
+- name: 登记共享 tasks 目录
+  ansible.builtin.set_fact:
+    _sem_tasks_dir: "{{ sem_tasks_dir | default(playbook_dir ~ '/tasks', true) }}"
+
 - name: 强制刷新 WinRM 会话标记（中途建连）
   ansible.builtin.set_fact:
     _winrm_session_ok: false
@@ -13,7 +18,7 @@
 
 # loop 的 when 写在 include 上不会在迭代间重新求值；改在 winrm_connect_one_attempt 的 block 上 skip
 - name: WinRM 建连重试序列
-  ansible.builtin.include_tasks: tasks/winrm_connect_one_attempt.yml
+  ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_connect_one_attempt.yml"
   loop: "{{ range(1, (winrm_connect_retries | int) + 1) | list }}"
   loop_control:
     loop_var: _winrm_connect_attempt
@@ -38,7 +43,7 @@
     - name: 登记回调前清除 unreachable（ping 失败时否则跳过后续任务）
       ansible.builtin.meta: clear_host_errors
     - name: 执行 WinRM 建连失败回调
-      ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_connect_failed.yml
+      ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/semaphore_callback_winrm_connect_failed.yml"
 
 - name: 建连失败后清除 unreachable（无 bulk 回调变量的 play）
   when:

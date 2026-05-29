@@ -10,7 +10,7 @@ LAND device type uses API-first status/config with optional Windows process cont
 - `device_restart.yml` — force restart process, optional API check, then bulk callback
 - `device_restart_redeploy.yml` — check process/API health, then restart/redeploy only when unhealthy, then bulk callback
 
-All playbooks reuse shared callback/TDengine tasks from `../neware/tasks/semaphore_bulk_put_from_hostvars.yml`.
+All playbooks reuse shared WinRM/callback tasks from `../neware/tasks/`. Each LAND play sets `sem_tasks_dir: "{{ playbook_dir }}/../neware/tasks"` so nested includes inside `winrm_ensure_reachable.yml` resolve correctly (playbook dir is `land/`, not `neware/`).
 
 ## Variable Group ENV
 
