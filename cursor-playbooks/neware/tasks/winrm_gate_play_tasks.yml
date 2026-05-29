@@ -1,0 +1,2 @@
+---
+- ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/tasks/winrm_gate_play_tasks.yml"

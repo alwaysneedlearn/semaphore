@@ -3,7 +3,17 @@
 # 中途建连：include 时传 winrm_force_reconnect: true（见 winrm_refresh_midplay.yml）
 - name: 登记共享 tasks 目录
   ansible.builtin.set_fact:
-    _sem_tasks_dir: "{{ sem_tasks_dir }}"
+    _sem_tasks_dir: >-
+      {{
+        sem_tasks_dir
+        | default(
+            (playbook_dir ~ '/shared/tasks')
+            if ((playbook_dir | basename) not in ['land', 'neware'])
+            else (playbook_dir ~ '/../shared/tasks'),
+            true
+          )
+        | trim
+      }}
 
 - name: 强制刷新 WinRM 会话标记（中途建连）
   ansible.builtin.set_fact:

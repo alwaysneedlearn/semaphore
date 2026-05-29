@@ -1,0 +1,3 @@
+---
+# 兼容：旧模板仍 include neware/tasks/winrm_ensure_reachable.yml；实际逻辑在 shared/
+- ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/tasks/winrm_ensure_reachable.yml"
