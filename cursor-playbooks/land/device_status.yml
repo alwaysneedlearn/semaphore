@@ -81,6 +81,9 @@
 - name: 写回 Semaphore 设备状态（独立 play）
   hosts: localhost
   gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
   tasks:
     - name: 执行 bulk 回调
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
