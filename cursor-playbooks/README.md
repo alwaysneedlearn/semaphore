@@ -9,12 +9,16 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/
 | **`shared/`** | WinRM, bulk/discovery callbacks, generic helper scripts — see [`shared/README.md`](shared/README.md) |
 | **`neware/`** | NEWARE playbooks (`device_*.yml`), NEWARE-only `tasks/` + `files/` |
 | **`land/`** | LAND playbooks and LAND-only logic |
+| **`sinexcel/`** | SINEXCEL (LAND lifecycle + NEWARE INI config on start/restart) |
+| **`nbt/`** | NBT (same pattern as sinexcel) |
 | **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 
 **Semaphore templates** examples:
 
 - `cursor-playbooks/neware/device_status.yml`
 - `cursor-playbooks/land/device_status.yml`
+- `cursor-playbooks/sinexcel/device_status.yml`
+- `cursor-playbooks/nbt/device_status.yml`
 - `cursor-playbooks/device_discovery.yml`
 
 Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NEWARE also sets `sem_profile_tasks_dir` / `sem_profile_files_dir` for type-specific tasks (e.g. TDengine).
@@ -23,6 +27,8 @@ Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NE
 
 - **NEWARE (detailed):** [`neware/README.md`](neware/README.md)
 - **LAND:** [`land/README.md`](land/README.md)
+- **SINEXCEL:** [`sinexcel/README.md`](sinexcel/README.md)
+- **NBT:** [`nbt/README.md`](nbt/README.md)
 - **Shared tasks:** [`shared/README.md`](shared/README.md)
 - **Cloud agent:** `AGENTS.md` (Devices section)
 
