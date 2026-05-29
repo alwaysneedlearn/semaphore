@@ -7,7 +7,7 @@ Tasks, helper scripts, and group vars used by **all** device profiles (`neware/`
 | Path | Purpose |
 |------|---------|
 | `tasks/` | WinRM connect/retry, Semaphore bulk/discovery callbacks, interactive EXE start, deploy helper scripts |
-| `files/` | Generic `sem_*.ps1` (process alive, scheduled-task start) |
+| `files/` | Generic `sem_*.ps1` (process alive, scheduled-task start, graceful stop + popup confirm) |
 | `group_vars/windows_hosts.yml` | WinRM timeouts (copy or mirror under each profile dir for Ansible) |
 
 ## Required play vars
@@ -36,6 +36,18 @@ sem_tasks_dir: "{{ playbook_dir }}/shared/tasks"
 
 - NEWARE-only: log tail, BTSClient iconf, TDengine publish, `resolve_exe_dir_windows`, …
 - LAND-only: SyncLims API bodies, LH registry, zip layout, …
+
+## Graceful stop (`stop_program_close_main_window_confirm.yml`)
+
+Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / play vars:
+
+| Var / ENV | Default | Meaning |
+|-----------|---------|---------|
+| `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | `Get-Process` + `CloseMainWindow` |
+| `STOP_VERIFY_PROCESS_NAME` | same as `PROCESS_NAME` | Final running check |
+| `STOP_POPUP_WAIT_SECONDS` | `2` | Sleep before sending Enter |
+| `STOP_POPUP_KEYWORD` | `警告` | Visible window title substring |
+| `STOP_FORCE_AFTER_GRACEFUL` | `true` | Force kill if still running |
 
 Those stay under `neware/` or `land/` respectively.
 

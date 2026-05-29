@@ -7,6 +7,11 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('land_agent', true) }}"
+    stop_graceful_process_name: "{{ (lookup('env', 'STOP_GRACEFUL_PROCESS_NAME') | default('', true) | trim) | default('LHBTS', true) }}"
+    stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
+    stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
+    stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
+    stop_verify_process_name: "{{ (lookup('env', 'STOP_VERIFY_PROCESS_NAME') | default('', true) | trim) | default(process_name, true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
@@ -28,17 +33,11 @@
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 强制停止 LAND 进程
-      ansible.windows.win_shell: |
-        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue
-        if ($null -ne $p) {
-          $p | Stop-Process -Force -ErrorAction SilentlyContinue
-          "STOPPED"
-        } else {
-          "ALREADY_STOPPED"
-        }
-      register: _land_stop_result
-      changed_when: "'STOPPED' in (_land_stop_result.stdout | default(''))"
+    - name: 部署 Windows 辅助脚本
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+    - name: 优雅停止 LAND（主窗口 + 弹窗二次确认）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_close_main_window_confirm.yml"
 
     - name: 确认 LAND 进程已停止
       ansible.windows.win_shell: |

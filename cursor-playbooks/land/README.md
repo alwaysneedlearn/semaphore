@@ -64,6 +64,11 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_API_VERIFY_TLS` | `true` | Whether to verify TLS cert |
 | `LAND_START_CHECK_API` | `true` | After start/restart, verify API |
 | `LAND_STOP_CHECK_API` | `false` | After stop, verify API |
+| `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | Process for `CloseMainWindow` (graceful stop) |
+| `STOP_VERIFY_PROCESS_NAME` | (`PROCESS_NAME`) | Process name to verify stopped (`land_agent` by default) |
+| `STOP_POPUP_WAIT_SECONDS` | `2` | Seconds to wait for confirmation dialog |
+| `STOP_POPUP_KEYWORD` | `警告` | Substring match on visible window title; Enter is sent |
+| `STOP_FORCE_AFTER_GRACEFUL` | `true` | `Stop-Process -Force` if still running after popup step |
 | `RESTART_DELAY` | `30` | Seconds to poll for process after interactive task launch |
 | `PROCESS_VERIFY_POLL_SECONDS` | `5` | Poll interval seconds during process verification |
 

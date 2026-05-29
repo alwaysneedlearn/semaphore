@@ -40,6 +40,11 @@ Example paths:
 | `RECONFIG_CONFIG_FALLBACK_USERS` | `SINEXCEL,Administrator` | |
 | `SINEXCEL_API_*` | See `device_status.yml` | Same pattern as LAND SyncLims-style API |
 | `API_PORT` | `8080` | Written into INI `ReportApiSettings.ServerPort` |
+| `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | Graceful stop (`CloseMainWindow`) |
+| `STOP_VERIFY_PROCESS_NAME` | `sinexcel_agent` | Verify process stopped |
+| `STOP_POPUP_WAIT_SECONDS` | `2` | Wait for confirmation dialog |
+| `STOP_POPUP_KEYWORD` | `警告` | Dialog title keyword |
+| `STOP_FORCE_AFTER_GRACEFUL` | `true` | Force kill if still running |
 
 ## Extra-vars
 
