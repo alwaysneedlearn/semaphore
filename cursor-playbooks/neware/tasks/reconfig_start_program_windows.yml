@@ -1,2 +1,0 @@
----
-- ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/tasks/reconfig_start_program_windows.yml"

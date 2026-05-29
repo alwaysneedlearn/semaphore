@@ -1,2 +1,0 @@
----
-- ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/tasks/semaphore_bulk_put_from_hostvars.yml"

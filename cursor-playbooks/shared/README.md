@@ -38,3 +38,5 @@ sem_tasks_dir: "{{ playbook_dir }}/shared/tasks"
 - LAND-only: SyncLims API bodies, LH registry, zip layout, …
 
 Those stay under `neware/` or `land/` respectively.
+
+**No compatibility shims** under `neware/tasks/` for shared files — include `{{ sem_tasks_dir }}/…` directly from each play. Missing file → add under `shared/` or the device profile; wrong path → fix the play.

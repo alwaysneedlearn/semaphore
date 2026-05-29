@@ -1,19 +1,19 @@
 ---
-# 在每个 windows_hosts play 最前 include。play 必须设置 sem_tasks_dir（如 {{ playbook_dir }}/../shared/tasks）。
+# 在每个 windows_hosts play 最前 include。play vars 必须设置 sem_tasks_dir（见 shared/README.md）。
 # 中途建连：include 时传 winrm_force_reconnect: true（见 winrm_refresh_midplay.yml）
+- name: 校验 sem_tasks_dir
+  ansible.builtin.assert:
+    that:
+      - sem_tasks_dir is defined
+      - (sem_tasks_dir | string | trim | length) > 0
+    fail_msg: >-
+      未设置 sem_tasks_dir。设备类型 play 请添加：
+      sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+      （device_discovery.yml 使用 playbook_dir/shared/tasks）
+
 - name: 登记共享 tasks 目录
   ansible.builtin.set_fact:
-    _sem_tasks_dir: >-
-      {{
-        sem_tasks_dir
-        | default(
-            (playbook_dir ~ '/shared/tasks')
-            if ((playbook_dir | basename) not in ['land', 'neware'])
-            else (playbook_dir ~ '/../shared/tasks'),
-            true
-          )
-        | trim
-      }}
+    _sem_tasks_dir: "{{ sem_tasks_dir | trim }}"
 
 - name: 强制刷新 WinRM 会话标记（中途建连）
   ansible.builtin.set_fact:

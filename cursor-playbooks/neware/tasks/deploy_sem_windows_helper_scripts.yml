@@ -1,2 +1,0 @@
----
-- ansible.builtin.include_tasks: "{{ playbook_dir }}/../shared/tasks/deploy_sem_windows_helper_scripts.yml"
