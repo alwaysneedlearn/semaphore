@@ -34,7 +34,7 @@ Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NE
 
 ## Adding a new device type
 
-1. Create `cursor-playbooks/<profile_key>/` with `device_*.yml`.
+1. Create `cursor-playbooks/<profile_key>/` with the standard set: `device_status.yml`, `device_start.yml`, `device_stop.yml`, `device_restart.yml`, `device_check_restart_redeploy.yml`.
 2. In each play `vars`, set `sem_tasks_dir` and `sem_files_dir` (see `shared/README.md`).
 3. Put profile-specific tasks under `<profile_key>/tasks/`, scripts under `<profile_key>/files/`.
 4. Copy `shared/group_vars/windows_hosts.yml` to `<profile_key>/group_vars/` (Ansible loads vars next to the playbook).

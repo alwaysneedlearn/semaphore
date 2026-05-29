@@ -206,7 +206,7 @@ cursor-playbooks/
     device_start.yml
     device_restart.yml
     device_stop.yml
-    check_restart_redeploy.yml
+    device_check_restart_redeploy.yml
     ansible.cfg
     files/sem_*.ps1      # Deployed once via deploy_sem_windows_helper_scripts.yml
     tasks/

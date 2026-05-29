@@ -8,7 +8,7 @@ LAND device type uses API-first status/config with optional Windows process cont
 - `device_start.yml` — start process if not running, optional API check, then bulk callback
 - `device_stop.yml` — force stop process, optional API check, then bulk callback
 - `device_restart.yml` — force restart process, optional API check, then bulk callback
-- `device_restart_redeploy.yml` — check process/API health, then restart/redeploy only when unhealthy, then bulk callback
+- `device_check_restart_redeploy.yml` — check process/API health, then restart/redeploy only when unhealthy, then bulk callback
 
 All playbooks reuse shared WinRM/callback tasks from `../shared/tasks/` and helper scripts from `../shared/files/`. Each LAND play sets:
 
@@ -79,7 +79,7 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 
 Each host writes `semaphore_callback_row`; localhost bulk phase sends `/devices/status/bulk` and TDengine row publish if configured.
 
-`device_start.yml` / `device_restart.yml` / `device_restart_redeploy.yml` now use the same startup strategy as NEWARE:
+`device_start.yml` / `device_restart.yml` / `device_check_restart_redeploy.yml` now use the same startup strategy as NEWARE:
 - check exe first (`{{ exe_path }}`); if missing, check/copy `{{ exe_dir }}\{{ zip_name }}.zip` then `Expand-Archive`
 - launch via **interactive scheduled task** (desktop logged-in user, RunLevel Highest), not plain `Start-Process` under WinRM session
 

@@ -10,7 +10,7 @@ Device type **SINEXCEL**: LAND-style lifecycle (process + optional HTTP API) wit
 | `device_start.yml` | Config files (NEWARE) + zip/deploy + interactive task start |
 | `device_stop.yml` | Force stop process |
 | `device_restart.yml` | Stop + redeploy + config + start |
-| `device_restart_redeploy.yml` | Restart only when unhealthy (bind as **check_restart_redeploy** template) |
+| `device_check_restart_redeploy.yml` | Restart only when unhealthy (bind as **check_restart_redeploy** template) |
 
 Set in each play:
 

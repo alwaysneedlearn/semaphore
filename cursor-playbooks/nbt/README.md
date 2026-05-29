@@ -8,7 +8,7 @@ Device type **NBT**: same layout as [sinexcel/README.md](../sinexcel/README.md) 
 - `cursor-playbooks/nbt/device_start.yml`
 - `cursor-playbooks/nbt/device_stop.yml`
 - `cursor-playbooks/nbt/device_restart.yml`
-- `cursor-playbooks/nbt/device_restart_redeploy.yml`
+- `cursor-playbooks/nbt/device_check_restart_redeploy.yml`
 
 ## Variable Group (examples)
 

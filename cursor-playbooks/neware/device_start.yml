@@ -38,7 +38,7 @@
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
     log_read_retries: "{{ ((lookup('env', 'LOG_READ_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
     log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
-    # 状态判断「日志状态检查」：仅统计最近 N 分钟内的日志行（与 check_restart_redeploy 的 LOG_HEALTH_RECENT_MINUTES 一致）
+    # 状态判断「日志状态检查」：仅统计最近 N 分钟内的日志行（与 device_check_restart_redeploy 的 LOG_HEALTH_RECENT_MINUTES 一致）
     log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
 
   tasks:

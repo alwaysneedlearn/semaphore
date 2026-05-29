@@ -1,6 +1,6 @@
 # TDengine 状态写入（模板 / Variable Group）
 
-Semaphore **不再**在服务端自动写 TDengine。设备操作 playbook（`cursor-playbooks/neware/device_*.yml`、`check_restart_redeploy.yml`）在 **`PUT /devices/status/bulk`** 之后，由 **`tasks/semaphore_tdengine_publish_from_bulk.yml`** 将**本任务**的 bulk 行写入 TDengine（单台与批量共用同一任务链）。
+Semaphore **不再**在服务端自动写 TDengine。设备操作 playbook（`cursor-playbooks/neware/device_*.yml`、`device_check_restart_redeploy.yml`）在 **`PUT /devices/status/bulk`** 之后，由 **`tasks/semaphore_tdengine_publish_from_bulk.yml`** 将**本任务**的 bulk 行写入 TDengine（单台与批量共用同一任务链）。
 
 ## Variable Group（ENV）
 
@@ -59,7 +59,7 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 
 - Patrol / `device_status.yml`
 - `device_start.yml` / `device_stop.yml` / `device_restart.yml`
-- `check_restart_redeploy.yml`
+- `device_check_restart_redeploy.yml`
 
 **不包含**：`device_discovery.yml`（发现不写设备状态 bulk）。
 
