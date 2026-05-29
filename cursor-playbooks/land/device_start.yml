@@ -4,7 +4,8 @@
   gather_facts: no
   max_fail_percentage: 100
   vars:
-    sem_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('land_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
@@ -27,20 +28,11 @@
 
   tasks:
     - name: WinRM 建连（含重试）
-      ansible.builtin.include_tasks: ../neware/tasks/winrm_ensure_reachable.yml
-
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - name: WinRM 未连通则不再执行本主机后续步骤
-      ansible.builtin.include_tasks: ../neware/tasks/winrm_gate_play_tasks.yml
-
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - name: 部署 Windows 启动辅助脚本
-      ansible.windows.win_copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-      loop:
-        - { src: "../neware/files/sem_reconfig_start_program_windows.ps1", dest: "C:\\Windows\\Temp\\sem_reconfig_start_program_windows.ps1" }
-        - { src: "../neware/files/sem_process_alive_windows.ps1", dest: "C:\\Windows\\Temp\\sem_process_alive_windows.ps1" }
-      changed_when: false
-
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
@@ -138,11 +130,11 @@
         _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
 
     - name: 启动 LAND 程序（管理员交互式计划任务）
-      ansible.builtin.include_tasks: ../neware/tasks/reconfig_start_program_windows.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
       when: _land_exe_stat.stat.exists | default(false)
 
     - name: 启动 LAND 程序（解压后）
-      ansible.builtin.include_tasks: ../neware/tasks/reconfig_start_program_windows.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
       when: >
         not (_land_exe_stat.stat.exists | default(false)) and
         (_land_exe_stat_after_extract.stat.exists | default(false))
@@ -190,11 +182,10 @@
       run_once: true
       delegate_to: localhost
       block:
-        - ansible.builtin.include_tasks: ../neware/tasks/semaphore_bulk_put_from_hostvars.yml
-
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
 - name: 写回 Semaphore 设备状态（独立 play）
   hosts: localhost
   gather_facts: false
   tasks:
     - name: 执行 bulk 回调
-      ansible.builtin.include_tasks: ../neware/tasks/semaphore_bulk_put_from_hostvars.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

@@ -4,6 +4,10 @@
   gather_facts: no
   max_fail_percentage: 100
   vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_profile_files_dir: "{{ playbook_dir }}/files"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
@@ -39,14 +43,11 @@
 
   tasks:
     - name: WinRM 建连（含重试，须在其它 win_* 任务之前）
-      ansible.builtin.include_tasks: tasks/winrm_ensure_reachable.yml
-
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - name: WinRM 未连通则不再执行本主机后续步骤
-      ansible.builtin.include_tasks: tasks/winrm_gate_play_tasks.yml
-
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - name: 一次性部署 Windows 辅助脚本
-      ansible.builtin.include_tasks: tasks/deploy_sem_windows_helper_scripts.yml
-
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
     - name: 解析 EXE_DIR（目标盘符 D→E→C）
       block:
         - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
@@ -84,7 +85,7 @@
         'NOT_RUNNING' in check_result.stdout
 
     - name: WinRM 中途建连（状态/日志判断前）
-      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_refresh_midplay.yml"
       when: >
         _winrm_session_ok | default(false) | bool and
         check_result is defined and
@@ -116,7 +117,7 @@
               需要重配={{ need_reconfigure }}
 
     - name: WinRM 中途建连（重配流程前）
-      ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_refresh_midplay.yml"
       when: _winrm_session_ok | default(false) | bool
       vars:
         winrm_refresh_label: "WinRM 中途建连（重配流程前）"
@@ -532,7 +533,7 @@
           when: "'EXE_NOT_FOUND' in _reconfig_exe_check_text"
 
         - name: WinRM 中途建连（日志轮询前）
-          ansible.builtin.include_tasks: tasks/winrm_refresh_midplay.yml
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_refresh_midplay.yml"
           vars:
             winrm_refresh_label: "WinRM 中途建连（日志轮询前）"
 
@@ -548,7 +549,7 @@
           when: log_path is defined
 
         - name: 重配执行：启动程序
-          ansible.builtin.include_tasks: tasks/reconfig_start_program_windows.yml
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
           when: >
             'EXE_FOUND' in _reconfig_exe_check_text or
             (extract_result is defined and not (extract_result.skipped | default(false)) and
@@ -684,4 +685,4 @@
   gather_facts: false
   tasks:
     - name: 执行 bulk 回调
-      ansible.builtin.include_tasks: tasks/semaphore_bulk_put_from_hostvars.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

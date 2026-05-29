@@ -7,6 +7,7 @@
   hosts: localhost
   gather_facts: no
   vars:
+    sem_tasks_dir: "{{ playbook_dir }}/shared/tasks"
     # 优先级：Variable Group 环境变量（非空）> Semaphore extra-vars（subnet / network_cidr）> 默认值
     network_subnet: "{{ (lookup('env', 'NETWORK_SUBNET') | default('', true) | trim) | default(subnet | default('', true) | trim, true) | default(network_cidr | default('', true) | trim, true) | default('192.168.1.0/24', true) }}"
     winrm_port: "{{ (lookup('env', 'WINRM_PORT') | default('', true) | trim) | default('5985', true) }}"
@@ -191,4 +192,4 @@
     # Requires SEMAPHORE_API_TOKEN (+ semaphore_project_id / semaphore_task_id in task extra-vars).
     # Marks the discovery run ready even when devices: [] (no hosts found).
     - name: 回调发现结果到 Semaphore API
-      ansible.builtin.include_tasks: neware/tasks/semaphore_discovery_put_results.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_discovery_put_results.yml"

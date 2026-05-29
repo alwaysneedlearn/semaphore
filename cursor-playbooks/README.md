@@ -1,33 +1,36 @@
 # cursor-playbooks
 
-Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/stop/restart). Layout is **one directory per device type** so new profiles can add their own tree without touching existing ones.
+Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/stop/restart). Layout: **shared** common layer + **one directory per device type**.
 
 ## Layout
 
 | Path | Purpose |
 |------|---------|
-| **`neware/`** | NEWARE Windows hosts — current production playbooks (`device_*.yml`, `tasks/`, `files/`, `group_vars/`) |
-| *(future)* **`other_type/`** | Additional device types — copy `neware/` as a template |
+| **`shared/`** | WinRM, bulk/discovery callbacks, generic helper scripts — see [`shared/README.md`](shared/README.md) |
+| **`neware/`** | NEWARE playbooks (`device_*.yml`), NEWARE-only `tasks/` + `files/` |
+| **`land/`** | LAND playbooks and LAND-only logic |
+| **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 
-**Semaphore templates** should point at playbooks under the type folder, for example:
+**Semaphore templates** examples:
 
 - `cursor-playbooks/neware/device_status.yml`
-- `cursor-playbooks/neware/device_start.yml`
-- `cursor-playbooks/device_discovery.yml` (network scan + API callback; device-type agnostic; uses `neware/tasks/semaphore_discovery_put_results.yml` for the API PUT)
+- `cursor-playbooks/land/device_status.yml`
+- `cursor-playbooks/device_discovery.yml`
 
-The **`cursor-playbooks/`** root keeps only **`README.md`** and **`device_discovery.yml`**. All NEWARE device action playbooks live under **`neware/`**.
-
-Semaphore binds **one auto inventory per device type** (`windows_hosts (auto: …)`). Point each type’s templates at that inventory for manual runs; list actions still use ephemeral `windows_hosts batch …` inventories.
+Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NEWARE also sets `sem_profile_tasks_dir` / `sem_profile_files_dir` for type-specific tasks (e.g. TDengine).
 
 ## Documentation
 
-- **NEWARE playbooks (detailed):** [`neware/README.md`](neware/README.md) — Variable Groups, callbacks, WinRM, debug markers.
-- **Authoring / review:** `.claude/skills/semaphore-cursor-playbooks/SKILL.md`
-- **Cloud agent notes:** `AGENTS.md` (Devices section)
+- **NEWARE (detailed):** [`neware/README.md`](neware/README.md)
+- **LAND:** [`land/README.md`](land/README.md)
+- **Shared tasks:** [`shared/README.md`](shared/README.md)
+- **Cloud agent:** `AGENTS.md` (Devices section)
 
 ## Adding a new device type
 
-1. Create `cursor-playbooks/<profile_key>/` (e.g. `acme/`).
-2. Start from `neware/` — copy or symlink playbooks and adjust paths, EXE paths, and callbacks as needed.
-3. Bind templates in Semaphore **Device types** to `cursor-playbooks/<profile_key>/device_*.yml`.
-4. Project-level **discovery** uses `cursor-playbooks/device_discovery.yml` (device-type agnostic).
+1. Create `cursor-playbooks/<profile_key>/` with `device_*.yml`.
+2. In each play `vars`, set `sem_tasks_dir` and `sem_files_dir` (see `shared/README.md`).
+3. Put profile-specific tasks under `<profile_key>/tasks/`, scripts under `<profile_key>/files/`.
+4. Copy `shared/group_vars/windows_hosts.yml` to `<profile_key>/group_vars/` (Ansible loads vars next to the playbook).
+5. Bind templates in Semaphore **Device types** to `cursor-playbooks/<profile_key>/device_*.yml`.
+6. Discovery stays at `cursor-playbooks/device_discovery.yml`.

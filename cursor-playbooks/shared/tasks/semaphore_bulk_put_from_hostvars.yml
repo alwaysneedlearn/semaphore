@@ -2,10 +2,10 @@
 # Include from windows_hosts play post_tasks: run_once + delegate_to localhost + block wrapper.
 # hostvar semaphore_callback_row per host; rdp_status usually omitted.
 
-- ansible.builtin.include_tasks: tasks/semaphore_resolve_bulk_credentials.yml
+- ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_bulk_credentials.yml"
 
 - name: 补登记 WinRM ping 失败但未写回调的主机
-  ansible.builtin.include_tasks: tasks/semaphore_callback_winrm_fallback_missing_rows.yml
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_callback_winrm_fallback_missing_rows.yml"
 
 - name: 汇总各主机 semaphore_callback_row（含 status 字段供 API）
   ansible.builtin.set_fact:
@@ -65,5 +65,6 @@
       - "[DEBUG-API] bulk PUT json.updated={{ (_sem_bulk_put_result.json.updated | default('n/a')) if (_sem_bulk_put_result.json is defined) else 'n/a' }}"
   when: _sem_bulk_put_result is defined and not (_sem_bulk_put_result.skipped | default(false))
 
-- name: 写入 TDengine 状态（Variable Group ENV，本任务 bulk 行）
-  ansible.builtin.include_tasks: tasks/semaphore_tdengine_publish_from_bulk.yml
+- name: 写入 TDengine 状态（Variable Group ENV，本任务 bulk 行；仅设备类型提供 sem_profile_tasks_dir 时）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/semaphore_tdengine_publish_from_bulk.yml"
+  when: sem_profile_tasks_dir is defined

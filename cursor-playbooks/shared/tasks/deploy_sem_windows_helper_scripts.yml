@@ -1,0 +1,38 @@
+---
+# 每台主机每 play 仅一次：将 shared/files（及可选 profile files）复制到 C:\Windows\Temp\
+# 依赖 play vars：sem_files_dir、可选 sem_profile_files_dir
+
+- name: 一次性部署 Semaphore Windows 辅助脚本（shared）
+  ansible.windows.win_copy:
+    src: "{{ sem_files_dir }}/"
+    dest: C:\Windows\Temp\
+  changed_when: false
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (sem_helper_scripts_deployed | default(false) | bool)
+    - sem_files_dir is defined
+
+- name: 一次性部署设备类型辅助脚本（profile）
+  ansible.windows.win_copy:
+    src: "{{ sem_profile_files_dir }}/"
+    dest: C:\Windows\Temp\
+  changed_when: false
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (sem_helper_scripts_deployed | default(false) | bool)
+    - sem_profile_files_dir is defined
+    - (sem_profile_files_dir | trim | length) > 0
+
+- name: 登记辅助脚本已部署
+  ansible.builtin.set_fact:
+    sem_helper_scripts_deployed: true
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (sem_helper_scripts_deployed | default(false) | bool)
+
+- name: DEBUG 辅助脚本批量部署
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-DEPLOY] host={{ inventory_hostname }} dest=C:\\Windows\\Temp\\"
+      - "[DEBUG-DEPLOY] shared_files={{ sem_files_dir | default('n/a') }}"
+      - "[DEBUG-DEPLOY] profile_files={{ sem_profile_files_dir | default('(none)') }}"
