@@ -524,6 +524,9 @@ export default {
   deviceBulkDone: 'Batch completed for {count} devices',
   devicePaginationSelectionHint:
     'Selection is kept when you change pages. The header checkbox only selects rows on the current page.',
+  deviceClearSelection: 'Clear selection',
+  deviceSelectedCount: '{count} selected',
+  deviceSelectionCleared: 'Cleared selection for {count} device(s)',
   deviceAnsibleUser: 'Ansible user',
   deviceAnsiblePassword: 'Ansible password',
   deviceRdpUser: 'RDP user',

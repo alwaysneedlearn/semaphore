@@ -450,6 +450,9 @@ export default {
   deviceBulkDone: '已完成 {count} 台设备的批量操作',
   devicePaginationSelectionHint:
     '换页后仍保留已选设备；表头全选仅勾选当前页。',
+  deviceClearSelection: '清空已选',
+  deviceSelectedCount: '已选 {count} 台',
+  deviceSelectionCleared: '已清空 {count} 台设备的勾选',
   deviceAnsibleUser: 'Ansible 用户',
   deviceAnsiblePassword: 'Ansible 密码',
   deviceRdpUser: 'RDP 用户',

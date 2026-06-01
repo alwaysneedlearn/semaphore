@@ -109,6 +109,15 @@
         <v-icon left>mdi-plus</v-icon>
         {{ $t('newDevice') }}
       </v-btn>
+      <v-btn
+        class="ml-2"
+        text
+        :disabled="selectedDeviceIds.length === 0 || bulkLoading"
+        @click="clearSelectedDevices"
+      >
+        <v-icon left>mdi-checkbox-blank-off-outline</v-icon>
+        {{ $t('deviceClearSelection') }}
+      </v-btn>
       <v-menu offset-y v-if="can(USER_PERMISSIONS.manageProjectResources)">
         <template v-slot:activator="{ on, attrs }">
           <v-btn
@@ -313,9 +322,30 @@
             />
           </v-col>
         </v-row>
-        <p class="text--secondary caption mb-0 mt-2">
-          {{ $t('devicePaginationSelectionHint') }}
-        </p>
+        <div class="d-flex align-center flex-wrap mt-2">
+          <p class="text--secondary caption mb-0 mr-3">
+            {{ $t('devicePaginationSelectionHint') }}
+          </p>
+          <v-chip
+            v-if="selectedDeviceIds.length > 0"
+            small
+            color="primary"
+            text-color="white"
+            class="mr-2"
+          >
+            {{ $t('deviceSelectedCount', { count: selectedDeviceIds.length }) }}
+          </v-chip>
+          <v-btn
+            text
+            small
+            class="px-2"
+            :disabled="selectedDeviceIds.length === 0 || bulkLoading"
+            @click="clearSelectedDevices"
+          >
+            <v-icon left small>mdi-checkbox-blank-off-outline</v-icon>
+            {{ $t('deviceClearSelection') }}
+          </v-btn>
+        </div>
       </v-card-text>
     </v-card>
 
@@ -753,6 +783,18 @@ export default {
       } else {
         this.selectedDeviceIds.push(item.id);
       }
+    },
+
+    clearSelectedDevices() {
+      const count = this.selectedDeviceIds.length;
+      if (!count) {
+        return;
+      }
+      this.selectedDeviceIds = [];
+      EventBus.$emit('i-snackbar', {
+        color: 'info',
+        text: this.$i18n.t('deviceSelectionCleared', { count }),
+      });
     },
 
     async loadDeviceProfiles() {
