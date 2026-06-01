@@ -72,20 +72,25 @@ $taskName = "StopGraceful-$($procName)-$([DateTimeOffset]::UtcNow.ToUnixTimeSeco
 $helper = 'C:\Windows\Temp\sem_stop_close_main_window_confirm.ps1'
 $outFile = "C:\Windows\Temp\sem_stop_out_$($procName)_$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).log"
 
-$args = @(
+if (-not (Test-Path -LiteralPath $helper)) {
+  Write-Output "STOP_HELPER_MISSING|path=$helper"
+  Write-Output "STILL_RUNNING"
+  exit 1
+}
+
+$psArgList = @(
   '-NoProfile',
   '-ExecutionPolicy', 'Bypass',
-  '-File', $helper,
+  '-File', "`"$helper`"",
   '-ProcNameArg', $procName,
   '-PopupKeywordArg', $popupKeyword,
   '-PopupWaitSecondsArg', $waitSec,
   '-ForceAfterArg', $forceRaw,
-  '-VerifyNameArg', $verifyName
-) -join ' '
-
-$escapedOut = $outFile.Replace("'", "''")
-$cmd = "powershell.exe $args *> '$escapedOut'"
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c $cmd"
+  '-VerifyNameArg', $verifyName,
+  '-LogFileArg', "`"$outFile`""
+)
+$psArgs = $psArgList -join ' '
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
 $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
@@ -96,16 +101,39 @@ try {
   Write-Output "INTERACTIVE_STOP_TASK|name=$taskName|user=$profileUser|explorer_pid=$($session.explorer_pid)"
 
   $deadline = (Get-Date).AddSeconds($timeoutSec)
+  $lastResult = $null
   do {
     Start-Sleep -Seconds 1
-    $state = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State
-    if ($state -ne 'Running' -and (Test-Path -LiteralPath $outFile)) { break }
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    $state = $task.State
+    $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($info) { $lastResult = $info.LastTaskResult }
+    if ($state -ne 'Running') {
+      Start-Sleep -Seconds 2
+      if (Test-Path -LiteralPath $outFile) { break }
+    }
+    if (Test-Path -LiteralPath $outFile) { break }
   } while ((Get-Date) -lt $deadline)
+
+  if ($null -ne $lastResult) {
+    Write-Output "STOP_TASK_LAST_RESULT|task=$taskName|code=$lastResult"
+  }
 
   if (Test-Path -LiteralPath $outFile) {
     Get-Content -LiteralPath $outFile | ForEach-Object { Write-Output $_ }
   } else {
-    Write-Output "STOP_TASK_NO_OUTPUT|task=$taskName|timeout=${timeoutSec}s"
+    Write-Output "STOP_TASK_NO_OUTPUT|task=$taskName|timeout=${timeoutSec}s|log=$outFile"
+    $still = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
+    if ($still.Count -gt 0 -and ($forceRaw -match '^(?i:true|1|yes)$')) {
+      $still | Stop-Process -Force -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 1
+      $after = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
+      if ($after.Count -eq 0) {
+        Write-Output 'FORCE_STOPPED|reason=no_task_log_fallback'
+      } else {
+        Write-Output 'STILL_RUNNING|reason=no_task_log'
+      }
+    }
   }
 } catch {
   Write-Output "STOP_TASK_ERROR:$($_.Exception.Message)"

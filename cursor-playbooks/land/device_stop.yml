@@ -68,10 +68,17 @@
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'unhealthy' if 'NOT_RUNNING' in (_land_process_after_stop.stdout | default('')) else 'healthy' }}"
+          device_status: unhealthy
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'offline' if (not (land_stop_check_api | bool)) else ('online' if ((_land_api_after_stop.status | default(0) | int) >= 200 and (_land_api_after_stop.status | default(0) | int) < 300) else 'offline') }}"
-          abnormal_reason: "{{ '' if 'NOT_RUNNING' in (_land_process_after_stop.stdout | default('')) else 'Stop failed: process still running' }}"
+          api_status: offline
+          abnormal_reason: >-
+            {% set _proc = (_land_process_after_stop.stdout | default('') | trim) %}
+            {% set _grace = (stop_graceful_result.stdout | default('') | trim) if (stop_graceful_result is defined) else '' %}
+            {% if 'NOT_RUNNING' in _proc %}Stop completed; process not running
+            {% elif 'STOP_TASK_NO_OUTPUT' in _grace %}Graceful stop produced no log (check scheduled task / helper on desktop); process still running
+            {% elif 'POPUP_NOT_FOUND' in _grace %}Confirm popup not found (minimized/hidden window?); process still running
+            {% elif 'STILL_RUNNING' in _grace or 'RUNNING' in _proc %}Stop failed: process still running
+            {% else %}Stop failed: {{ _proc or _grace or 'unknown' }}{% endif %}
 
     - name: DEBUG LAND 停止结果
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"

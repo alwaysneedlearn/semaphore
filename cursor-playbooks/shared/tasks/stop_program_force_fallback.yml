@@ -1,0 +1,27 @@
+---
+# WinRM-session force stop when graceful interactive stop did not end the process.
+# Requires play vars: stop_verify_process_name (or stop_graceful_process_name).
+
+- name: 停止程序（强制结束回退）
+  ansible.windows.win_shell: |
+    $name = "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"
+    $p = Get-Process -Name $name -ErrorAction SilentlyContinue
+    if ($null -eq $p) {
+      Write-Output "NOT_RUNNING|reason=force_fallback"
+      exit 0
+    }
+    $p | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+    $after = Get-Process -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $after) { Write-Output "FORCE_STOPPED|reason=winrm_fallback" } else { Write-Output "STILL_RUNNING|reason=force_fallback_failed" }
+  register: stop_force_fallback_result
+  changed_when: >-
+    stop_force_fallback_result is defined and
+    'FORCE_STOPPED' in (stop_force_fallback_result.stdout | default(''))
+  when:
+    - stop_graceful_result is defined
+    - not (stop_graceful_result.unreachable | default(false))
+    - >-
+      'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
+      'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
+      'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))

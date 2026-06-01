@@ -57,3 +57,6 @@
   ansible.builtin.debug:
     msg: "{{ stop_graceful_result.stdout_lines | default([]) }}"
   when: stop_graceful_result is defined
+
+- name: 停止程序（优雅失败时 WinRM 强制结束）
+  ansible.builtin.include_tasks: stop_program_force_fallback.yml
