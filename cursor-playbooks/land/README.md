@@ -51,6 +51,7 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | Variable | Default | Description |
 |---|---|---|
 | `EXE_DIR` | `C:\Program Files\LAND` | Preferred executable directory; drive falls back `preferred -> E: -> C:` |
+| `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Optional drive order override (comma/space separated), e.g. `D,E,C` |
 | `EXE_NAME` | `LHBTS.exe` | LAND executable file name (GUI + API on typical installs) |
 | `ZIP_NAME` | `land` | Package folder/zip base name |
 | `ZIP_PATH` | `/root/neware/dbwb` | Controller-side zip source directory |

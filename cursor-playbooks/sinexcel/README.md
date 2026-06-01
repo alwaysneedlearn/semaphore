@@ -35,6 +35,7 @@ Example paths:
 | Variable | Default | Notes |
 |----------|---------|--------|
 | `EXE_DIR` | `C:\Program Files\SINEXCEL` | Preferred install root; drive fallback `preferred -> E: -> C:` |
+| `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Optional drive order override (comma/space separated), e.g. `E,C,D` |
 | `EXE_NAME` | `sinexcel_agent.exe` | |
 | `ZIP_NAME` | `sinexcel` | Subfolder under `EXE_DIR` |
 | `ZIP_PATH` | `/root/sinexcel/pkg` | Controller zip directory |

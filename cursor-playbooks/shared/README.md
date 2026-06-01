@@ -19,7 +19,7 @@ sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
 sem_files_dir: "{{ playbook_dir }}/../shared/files"
 ```
 
-SyncLims-style types (LAND/SINEXCEL/NBT) also use `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1` to resolve `EXE_DIR` drive with fallback order: preferred drive from `EXE_DIR`, then `E:`, then `C:`.
+SyncLims-style types (LAND/SINEXCEL/NBT) also use `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1` to resolve `EXE_DIR` drive. You can configure fallback order from Variable Group with `EXE_DIR_FALLBACK_DRIVES` (examples: `D,E,C` or `E,C,D`). If unset, default is: preferred drive from `EXE_DIR`, then `E:`, then `C:`.
 
 NEWARE (and any type with extra `sem_*.ps1` / TDengine) also sets:
 
