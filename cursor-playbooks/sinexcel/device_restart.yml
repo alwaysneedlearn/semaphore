@@ -7,7 +7,8 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: SINEXCEL
-    exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
+    exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
+    exe_dir: "{{ exe_dir_preferred }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('sinexcel_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('sinexcel', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
@@ -43,6 +44,8 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - name: 解析 EXE_DIR（盘符回退）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
 
     - name: 写入设备配置（INI 文件，NEWARE 方式）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/apply_neware_style_device_config_files.yml"

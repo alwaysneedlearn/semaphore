@@ -16,7 +16,7 @@ Task logs: search **`[DEBUG-NBT]`** (same shared debug tasks as LAND/SINEXCEL; `
 
 | Variable | Default |
 |----------|---------|
-| `EXE_DIR` | `C:\Program Files\NBT` |
+| `EXE_DIR` | `C:\Program Files\NBT` (preferred drive; fallback `preferred -> E: -> C:`) |
 | `EXE_NAME` | `nbt_agent.exe` |
 | `ZIP_NAME` | `nbt` |
 | `ZIP_PATH` | `/root/nbt/pkg` |

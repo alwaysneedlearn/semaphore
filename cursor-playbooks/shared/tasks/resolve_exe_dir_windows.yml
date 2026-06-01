@@ -1,0 +1,31 @@
+---
+# Resolve EXE_DIR drive like NEWARE: preferred drive first, then E, then C.
+# Requires deploy_sem_windows_helper_scripts.yml to have copied helper script.
+
+- name: 解析 EXE_DIR（盘符回退）
+  environment:
+    SEMAPHORE_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
+  ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
+  register: _resolve_exe_dir
+  changed_when: false
+
+- name: 登记 EXE_DIR 解析行
+  ansible.builtin.set_fact:
+    _exe_dir_resolved_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_DIR_RESOLVED=') | list | first) | default('EXE_DIR_RESOLVED=' + exe_dir_preferred, true) }}"
+
+- name: 登记解析后的 EXE_DIR
+  ansible.builtin.set_fact:
+    exe_dir: "{{ (_exe_dir_resolved_line | regex_replace('^EXE_DIR_RESOLVED=', '') | trim) }}"
+
+- name: 登记解析后的 EXE 路径
+  ansible.builtin.set_fact:
+    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
+  when: zip_name is defined and exe_name is defined
+
+- name: DEBUG 解析 EXE_DIR 盘符
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-EXE_DIR] preferred={{ exe_dir_preferred }}"
+      - "[DEBUG-EXE_DIR] resolved={{ exe_dir }}"
+      - "[DEBUG-EXE_DIR] win_shell={{ _resolve_exe_dir.stdout_lines | default([]) }}"
+  when: _resolve_exe_dir is defined
