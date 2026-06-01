@@ -74,16 +74,25 @@
       delegate_to: localhost
       failed_when: false
 
+    - name: 状态判断：综合判定是否需要重配
+      ansible.builtin.set_fact:
+        need_reconfigure: >-
+          {{
+            (not (_land_exe_stat.stat.exists | default(false)))
+            or ('RUNNING' not in (_land_process_check.stdout | default('')))
+            or (not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)))
+          }}
+
     - name: 组装 LAND 状态回调行
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if (_land_exe_stat.stat.exists | default(false)) and ('RUNNING' in (_land_process_check.stdout | default(''))) and ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if not (need_reconfigure | default(true) | bool) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) else 'offline' }}"
+          api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
-            {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_dir }}\{{ exe_name }}
+            {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_land_process_check.stdout | default('')) %}Process not running: {{ process_name }}
             {% elif not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _land_api_status.status | default('n/a') }} body={{ (_land_api_status.content | default('') | string) | truncate(200, True) }}
             {% else %}{% endif %}

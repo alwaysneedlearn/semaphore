@@ -30,6 +30,16 @@
     _sem_dbg_target: "{{ _land_target_host | default(_sinexcel_target_host | default(_nbt_target_host | default(inventory_hostname))) }}"
   when: _sem_dbg_api is defined
 
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（健康判定）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_status_ok={{ _sem_dbg_api_ok }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
+  vars:
+    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default(_nbt_api_status)) }}"
+    _sem_dbg_api_ok: "{{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) if (_sem_dbg_api is defined) else 'n/a' }}"
+  when: _sem_dbg_api is defined or need_reconfigure is defined
+
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（回调行预览）"
   ansible.builtin.debug:
     msg:
