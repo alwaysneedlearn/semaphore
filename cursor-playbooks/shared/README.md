@@ -67,6 +67,8 @@ Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / 
 
 The graceful stop task runs in the logged-in desktop user's interactive session (scheduled task), not the WinRM service session.
 
+**Restart / redeploy:** `land/device_restart.yml`, `land/device_check_restart_redeploy.yml` (and SINEXCEL equivalents) include `stop_program_graceful_before_reconfig.yml` before ModifyConfig + start — same behavior as `device_stop.yml`, not `Stop-Process -Force`.
+
 ### Troubleshooting graceful stop (LAND / SINEXCEL)
 
 | Log line | Meaning | What to check on the target |

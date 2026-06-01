@@ -41,6 +41,7 @@
     chdir: C:\Windows\Temp
   register: stop_graceful_result
   failed_when: >-
+    (stop_graceful_fail_on_still_running | default(true) | bool) and
     stop_graceful_result is defined and
     'stdout' in stop_graceful_result and
     'STILL_RUNNING' in stop_graceful_result.stdout

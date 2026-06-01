@@ -6,9 +6,9 @@ LAND device type uses API-first status/config with optional Windows process cont
 
 - `device_status.yml` — check exe existence + process running + API status, then bulk callback
 - `device_start.yml` — start process if not running, optional API check, then bulk callback
-- `device_stop.yml` — force stop process, optional API check, then bulk callback
-- `device_restart.yml` — force restart process, optional API check, then bulk callback
-- `device_check_restart_redeploy.yml` — check process/API health, then restart/redeploy only when unhealthy, then bulk callback
+- `device_stop.yml` — graceful stop (CloseMainWindow + popup confirm), optional API check, then bulk callback
+- `device_restart.yml` — graceful stop then ModifyConfig + interactive start (same stop path as `device_stop.yml`)
+- `device_check_restart_redeploy.yml` — check process/API health; when unhealthy, graceful stop + ModifyConfig + start, then bulk callback
 
 Start/restart flow now follows the NEWARE-style skeleton: pre-check health first, run reconfigure only when needed, then start+verify. LAND substitutes API-based steps for NEWARE file/log steps (health via `QueryStatus`, config via `ModifyConfig`).
 

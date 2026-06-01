@@ -17,6 +17,11 @@
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
+    stop_graceful_process_name: "{{ (lookup('env', 'STOP_GRACEFUL_PROCESS_NAME') | default('', true) | trim) | default(process_name, true) }}"
+    stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
+    stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
+    stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
+    stop_verify_process_name: "{{ (lookup('env', 'STOP_VERIFY_PROCESS_NAME') | default('', true) | trim) | default(stop_graceful_process_name, true) }}"
     sinexcel_api_scheme: "{{ (lookup('env', 'SINEXCEL_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     sinexcel_api_port: "{{ ((lookup('env', 'SINEXCEL_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     sinexcel_api_status_path: "{{ (lookup('env', 'SINEXCEL_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
@@ -150,12 +155,8 @@
     - name: 执行重启重部署（不健康时）
       when: _sinexcel_need_reconfigure | bool
       block:
-        - name: 强制停止 SINEXCEL 进程
-          ansible.windows.win_shell: |
-            $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue
-            if ($null -ne $p) { $p | Stop-Process -Force -ErrorAction SilentlyContinue; "STOPPED" } else { "ALREADY_STOPPED" }
-          register: _sinexcel_stop_result
-          changed_when: "'STOPPED' in (_sinexcel_stop_result.stdout | default(''))"
+        - name: 优雅停止 SINEXCEL（重部署前，与单独停止相同）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
           when: (_sinexcel_exe_stat.stat.exists | default(false)) or (_sinexcel_exe_stat_after_extract.stat.exists | default(false))
 
         - name: 获取当前登录用户（用于交互式计划任务）

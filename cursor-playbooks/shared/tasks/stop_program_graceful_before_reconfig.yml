@@ -1,0 +1,17 @@
+---
+# Graceful stop (same as device_stop) before restart / redeploy ModifyConfig+start.
+# Play vars required: stop_graceful_process_name, stop_popup_*, stop_force_after_graceful,
+#   stop_verify_process_name; optional stop_graceful_fail_on_still_running (default true).
+# Optional when guard: stop_graceful_when_exe_present — set true when exe_path checks passed.
+
+- name: 优雅停止程序（重启/重部署前）
+  ansible.builtin.include_tasks: stop_program_close_main_window_confirm.yml
+
+- name: 确认进程已停止（重启/重部署前）
+  ansible.windows.win_shell: |
+    $name = "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"
+    $p = Get-Process -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $p) { "NOT_RUNNING" } else { "RUNNING" }
+  register: _sem_stop_verify_before_reconfig
+  changed_when: false
+  when: stop_graceful_when_exe_present | default(true) | bool
