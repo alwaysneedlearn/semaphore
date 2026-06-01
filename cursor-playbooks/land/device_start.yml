@@ -20,6 +20,7 @@
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
+    land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
     land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
     land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
@@ -27,6 +28,9 @@
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
     - name: WinRM 建连（含重试）
@@ -112,6 +116,39 @@
         path: "{{ exe_path }}"
       register: _land_exe_stat_after_extract
 
+    - name: 前置检查：检查 LAND 进程状态
+      ansible.windows.win_shell: |
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+      register: _land_process_check
+      changed_when: false
+      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+
+    - name: 前置检查：查询 LAND API 状态
+      ansible.builtin.uri:
+        url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
+        method: POST
+        body_format: json
+        body:
+          token: "{{ land_api_token }}"
+        timeout: "{{ land_api_timeout }}"
+        validate_certs: "{{ land_api_verify_tls }}"
+        return_content: true
+        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+      register: _land_api_check
+      delegate_to: localhost
+      failed_when: false
+      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+
+    - name: 状态判断：判定是否需要重配
+      ansible.builtin.set_fact:
+        need_reconfigure: >-
+          {{
+            (not ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))))
+            or ('RUNNING' not in (_land_process_check.stdout | default('')))
+            or ((land_start_check_api | bool) and (not (((_land_api_check.status | default(0) | int) >= 200) and ((_land_api_check.status | default(0) | int) < 300))))
+          }}
+
     - name: 获取当前登录用户（用于交互式计划任务）
       ansible.windows.win_shell: |
         $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
@@ -128,18 +165,40 @@
         }
       register: get_username_result
       changed_when: false
+      when: need_reconfigure | default(true) | bool
 
     - name: 规范化启动用户
       ansible.builtin.set_fact:
         _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+      when: need_reconfigure | default(true) | bool
+
+    - name: 重配执行：API 修改配置（LAND）
+      ansible.builtin.uri:
+        url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_modify_config_path }}"
+        method: POST
+        body_format: json
+        body: "{{ {'token': land_api_token} | combine(merged_cfg, recursive=True) }}"
+        timeout: "{{ land_api_timeout }}"
+        validate_certs: "{{ land_api_verify_tls }}"
+        return_content: true
+        status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+      register: _land_api_modify_config
+      delegate_to: localhost
+      failed_when: false
+      when:
+        - need_reconfigure | default(true) | bool
+        - (merged_cfg | default({}) | length) > 0
 
     - name: 启动 LAND 程序（管理员交互式计划任务）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
-      when: _land_exe_stat.stat.exists | default(false)
+      when:
+        - need_reconfigure | default(true) | bool
+        - _land_exe_stat.stat.exists | default(false)
 
     - name: 启动 LAND 程序（解压后）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
       when: >
+        (need_reconfigure | default(true) | bool) and
         not (_land_exe_stat.stat.exists | default(false)) and
         (_land_exe_stat_after_extract.stat.exists | default(false))
 
@@ -149,7 +208,9 @@
         if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
       register: _land_process_after_start
       changed_when: false
-      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when:
+        - need_reconfigure | default(true) | bool
+        - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
 
     - name: 启动后查询 LAND API 状态（可选）
       ansible.builtin.uri:
@@ -165,7 +226,16 @@
       register: _land_api_after_start
       delegate_to: localhost
       failed_when: false
-      when: land_start_check_api | bool and ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)))
+      when:
+        - land_start_check_api | bool
+        - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+        - (need_reconfigure | default(true) | bool)
+
+    - name: 无需重配时复用前置检查状态
+      when: not (need_reconfigure | default(false) | bool)
+      ansible.builtin.set_fact:
+        _land_process_after_start: "{{ _land_process_check }}"
+        _land_api_after_start: "{{ _land_api_check }}"
 
     - name: 登记 LAND 启动回调行
       ansible.builtin.set_fact:

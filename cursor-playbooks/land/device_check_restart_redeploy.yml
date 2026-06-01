@@ -20,12 +20,16 @@
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
+    land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
     land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
     land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
     - name: WinRM 建连（含重试）
@@ -179,6 +183,21 @@
         - name: 规范化启动用户
           ansible.builtin.set_fact:
             _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+        - name: 重配执行：API 修改配置（LAND）
+          ansible.builtin.uri:
+            url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_modify_config_path }}"
+            method: POST
+            body_format: json
+            body: "{{ {'token': land_api_token} | combine(merged_cfg, recursive=True) }}"
+            timeout: "{{ land_api_timeout }}"
+            validate_certs: "{{ land_api_verify_tls }}"
+            return_content: true
+            status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+          register: _land_api_modify_config
+          delegate_to: localhost
+          failed_when: false
+          when: (merged_cfg | default({}) | length) > 0
 
         - name: 启动 LAND 程序（管理员交互式计划任务）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
