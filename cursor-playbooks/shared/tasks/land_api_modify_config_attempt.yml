@@ -1,0 +1,59 @@
+---
+# Single ModifyConfig POST. Sets phase facts for two-phase reconfig flow.
+# Vars: land_modify_config_phase (before_stop|after_start), merged_cfg, land_api_*, _land_target_host
+
+- name: 准备 LAND 平铺配置（若尚未平铺）
+  ansible.builtin.include_tasks: land_flatten_merged_cfg.yml
+  when: land_cfg_flat is not defined
+
+- name: "API 修改配置（LAND，{{ land_modify_config_phase | default('attempt') }}）"
+  ansible.builtin.uri:
+    url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_modify_config_path }}"
+    method: POST
+    body_format: json
+    body: "{{ {'token': land_api_token} | combine(land_cfg_flat, recursive=True) }}"
+    timeout: "{{ land_api_timeout }}"
+    validate_certs: "{{ land_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _land_modify_config_uri_raw
+  delegate_to: localhost
+  failed_when: false
+  when: (land_cfg_flat | default({}) | length) > 0
+
+- name: 登记 ModifyConfig 结果（停止前）
+  ansible.builtin.set_fact:
+    _land_api_modify_config_before: "{{ _land_modify_config_uri_raw }}"
+    _land_modify_config_before_ok: >-
+      {{
+        (_land_modify_config_uri_raw.status | default(-1) | int) >= 200 and
+        (_land_modify_config_uri_raw.status | default(-1) | int) < 300
+      }}
+  when:
+    - land_modify_config_phase | default('') == 'before_stop'
+    - _land_modify_config_uri_raw is defined
+    - not (_land_modify_config_uri_raw.skipped | default(false))
+
+- name: 登记 ModifyConfig 结果（启动后）
+  ansible.builtin.set_fact:
+    _land_api_modify_config_after: "{{ _land_modify_config_uri_raw }}"
+    _land_modify_config_after_ok: >-
+      {{
+        (_land_modify_config_uri_raw.status | default(-1) | int) >= 200 and
+        (_land_modify_config_uri_raw.status | default(-1) | int) < 300
+      }}
+  when:
+    - land_modify_config_phase | default('') == 'after_start'
+    - _land_modify_config_uri_raw is defined
+    - not (_land_modify_config_uri_raw.skipped | default(false))
+
+- name: DEBUG LAND ModifyConfig（{{ land_modify_config_phase | default('attempt') }}）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] modify_config phase={{ land_modify_config_phase | default('attempt') }}"
+      - "[DEBUG-LAND] modify_config flat_keys={{ land_cfg_flat | default({}) | dict2items | map(attribute='key') | list }}"
+      - "[DEBUG-LAND] modify_config http_status={{ _land_modify_config_uri_raw.status | default('skipped') }}"
+      - "[DEBUG-LAND] modify_config response_body={{ _land_modify_config_uri_raw.content | default('') | truncate(1500, True) }}"
+  when:
+    - _land_modify_config_uri_raw is defined
+    - not (_land_modify_config_uri_raw.skipped | default(false))

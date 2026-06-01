@@ -172,11 +172,20 @@
         _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
       when: need_reconfigure | default(true) | bool
 
-    - name: 重配执行：API 修改配置（LAND，平铺 JSON）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config.yml"
+    - name: 程序运行中：API 修改配置（启动前，进程已在跑时）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
       when:
         - need_reconfigure | default(true) | bool
         - (merged_cfg | default({}) | length) > 0
+        - 'RUNNING' in (_land_process_check.stdout | default(''))
+
+    - name: 初始化停止前改配置结果（进程未运行，启动后再试）
+      ansible.builtin.set_fact:
+        _land_modify_config_before_ok: false
+      when:
+        - need_reconfigure | default(true) | bool
+        - (merged_cfg | default({}) | length) > 0
+        - 'RUNNING' not in (_land_process_check.stdout | default(''))
 
     - name: 启动 LAND 程序（管理员交互式计划任务）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
@@ -219,6 +228,12 @@
         - land_start_check_api | bool
         - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
         - (need_reconfigure | default(true) | bool)
+
+    - name: 启动后：API 修改配置（停止前失败或未尝试时重试）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
+      when:
+        - need_reconfigure | default(true) | bool
+        - (merged_cfg | default({}) | length) > 0
 
     - name: 无需重配时复用前置检查状态
       when: not (need_reconfigure | default(false) | bool)

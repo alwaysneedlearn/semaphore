@@ -1,0 +1,28 @@
+---
+# ModifyConfig while LAND process is still running (before graceful stop / restart).
+# Requires: merged_cfg; optional _land_process_check or _land_process_before_restart with RUNNING in stdout.
+
+- name: 初始化停止前改配置结果（未尝试）
+  ansible.builtin.set_fact:
+    _land_modify_config_before_ok: false
+    _land_api_modify_config_before: {}
+
+- name: 程序运行中：API 修改配置（停止前）
+  ansible.builtin.include_tasks: land_api_modify_config_attempt.yml
+  vars:
+    land_modify_config_phase: before_stop
+  when:
+    - (merged_cfg | default({}) | length) > 0
+    - >-
+      'RUNNING' in (_land_process_before_restart.stdout | default('')) or
+      'RUNNING' in (_land_process_check.stdout | default(''))
+
+- name: DEBUG LAND 停止前未改配置（进程未运行）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] modify_config phase=before_stop skipped=process_not_running"
+  when:
+    - (merged_cfg | default({}) | length) > 0
+    - >-
+      'RUNNING' not in (_land_process_before_restart.stdout | default('')) and
+      'RUNNING' not in (_land_process_check.stdout | default(''))
