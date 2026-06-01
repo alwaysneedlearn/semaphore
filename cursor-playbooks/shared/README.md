@@ -63,7 +63,8 @@ Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / 
 | `STOP_POPUP_WAIT_SECONDS` | `2` | Sleep before sending Enter |
 | `STOP_POPUP_KEYWORD` | `警告` | Visible window title substring |
 | `STOP_FORCE_AFTER_GRACEFUL` | `true` | Force kill if still running |
+| `STOP_TASK_TIMEOUT_SECONDS` | `45` | Interactive scheduled-stop wait timeout |
 
-Those stay under `neware/` or `land/` respectively.
+The graceful stop task runs in the logged-in desktop user's interactive session (scheduled task), not the WinRM service session.
 
 **No compatibility shims** under `neware/tasks/` for shared files — include `{{ sem_tasks_dir }}/…` directly from each play. Missing file → add under `shared/` or the device profile; wrong path → fix the play.

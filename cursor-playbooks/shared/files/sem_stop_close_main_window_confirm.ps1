@@ -1,26 +1,51 @@
 # Graceful stop: CloseMainWindow -> wait -> confirm popup by title keyword (Enter).
-# Env (Ansible): STOP_GRACEFUL_PROCESS_NAME, STOP_POPUP_WAIT_SECONDS, STOP_POPUP_KEYWORD,
-#                STOP_FORCE_AFTER_GRACEFUL (true/false), optional STOP_VERIFY_PROCESS_NAME
+# Supports args (preferred for scheduled-task invocation) and env fallback.
+param(
+  [string]$ProcNameArg = '',
+  [string]$PopupKeywordArg = '',
+  [int]$PopupWaitSecondsArg = -1,
+  [string]$ForceAfterArg = '',
+  [string]$VerifyNameArg = ''
+)
+
+# Env fallback: STOP_GRACEFUL_PROCESS_NAME, STOP_POPUP_WAIT_SECONDS, STOP_POPUP_KEYWORD,
+#               STOP_FORCE_AFTER_GRACEFUL (true/false), optional STOP_VERIFY_PROCESS_NAME
 $ErrorActionPreference = 'Continue'
 
-$procName = [string]$env:STOP_GRACEFUL_PROCESS_NAME
+$procName = $ProcNameArg
+if ([string]::IsNullOrWhiteSpace($procName)) {
+  $procName = [string]$env:STOP_GRACEFUL_PROCESS_NAME
+}
 if ([string]::IsNullOrWhiteSpace($procName)) { $procName = 'LHBTS' }
 
-$waitSec = 2
-if (-not [string]::IsNullOrWhiteSpace($env:STOP_POPUP_WAIT_SECONDS)) {
-  [int]::TryParse($env:STOP_POPUP_WAIT_SECONDS, [ref]$waitSec) | Out-Null
+$waitSec = $PopupWaitSecondsArg
+if ($waitSec -lt 0) {
+  $waitSec = 2
+  if (-not [string]::IsNullOrWhiteSpace($env:STOP_POPUP_WAIT_SECONDS)) {
+    [int]::TryParse($env:STOP_POPUP_WAIT_SECONDS, [ref]$waitSec) | Out-Null
+  }
 }
 if ($waitSec -lt 0) { $waitSec = 0 }
 
-$keyword = [string]$env:STOP_POPUP_KEYWORD
+$keyword = $PopupKeywordArg
+if ([string]::IsNullOrWhiteSpace($keyword)) {
+  $keyword = [string]$env:STOP_POPUP_KEYWORD
+}
 if ([string]::IsNullOrWhiteSpace($keyword)) { $keyword = '警告' }
 
 $forceAfter = $true
-if (-not [string]::IsNullOrWhiteSpace($env:STOP_FORCE_AFTER_GRACEFUL)) {
-  $forceAfter = $env:STOP_FORCE_AFTER_GRACEFUL -match '^(?i:true|1|yes)$'
+$forceRaw = $ForceAfterArg
+if ([string]::IsNullOrWhiteSpace($forceRaw)) {
+  $forceRaw = [string]$env:STOP_FORCE_AFTER_GRACEFUL
+}
+if (-not [string]::IsNullOrWhiteSpace($forceRaw)) {
+  $forceAfter = $forceRaw -match '^(?i:true|1|yes)$'
 }
 
-$verifyName = [string]$env:STOP_VERIFY_PROCESS_NAME
+$verifyName = $VerifyNameArg
+if ([string]::IsNullOrWhiteSpace($verifyName)) {
+  $verifyName = [string]$env:STOP_VERIFY_PROCESS_NAME
+}
 if ([string]::IsNullOrWhiteSpace($verifyName)) { $verifyName = $procName }
 
 $procs = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
