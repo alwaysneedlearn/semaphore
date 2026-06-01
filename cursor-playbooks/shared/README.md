@@ -77,6 +77,7 @@ The graceful stop task runs in the logged-in desktop user's interactive session 
 |----------|---------|------------------------------|
 | `INTERACTIVE_STOP_TASK\|user=pc\|explorer_pid=…` | Scheduled task started as desktop user `pc` | User must be logged in (explorer running for that user) |
 | `STOP_TASK_NO_OUTPUT\|…\|log=C:\Windows\Temp\sem_stop_out_….log` | No log file within timeout | On host: Task Scheduler → task history; open the `log=` path; confirm `C:\Windows\Temp\sem_stop_close_main_window_confirm.ps1` exists (play must run `deploy_sem_windows_helper_scripts` first) |
+| `STOP_TASK_LOG_INCOMPLETE\|…` | Log read before helper wrote final line (older wrappers broke when log file was merely created) | Fixed in current `sem_stop_close_main_window_confirm_interactive.ps1` — poll until `NOT_RUNNING`/`STILL_RUNNING`/`FORCE_STOPPED`/`ALREADY_STOPPED` in log |
 | `STOP_TASK_LAST_RESULT\|code=…` | Windows task exit code (`0` = success) | Non-zero → helper failed before writing log |
 | `STOP_HELPER_MISSING` | Helper not deployed to `C:\Windows\Temp` | Re-run stop play from start (includes deploy task) |
 | `POPUP_NOT_FOUND` | No window title contained `STOP_POPUP_KEYWORD` (default `警告`) | Confirm dialog title; restore/minimize: script now restores main window and retries hidden/minimized popups |

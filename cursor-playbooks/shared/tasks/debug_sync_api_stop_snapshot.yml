@@ -6,13 +6,17 @@
     msg: "{{ stop_graceful_result.stdout_lines | default(['(no stdout)']) }}"
   when: stop_graceful_result is defined
 
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（强制停止输出）"
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（WinRM 强制回退输出）"
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] force_stop_stdout={{ (_sem_dbg_force_stop.stdout | default('') | trim) }}"
-  when: _sem_dbg_force_stop is defined
-  vars:
-    _sem_dbg_force_stop: "{{ _land_stop_result | default(_sinexcel_stop_result | default(_nbt_stop_result)) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] force_fallback_stdout={{ (stop_force_fallback_result.stdout | default('') | trim) if (stop_force_fallback_result is defined) else '(not run)' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_POPUP_CONFIRMED={{ 'POPUP_CONFIRMED' in (stop_graceful_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_POPUP_NOT_FOUND={{ 'POPUP_NOT_FOUND' in (stop_graceful_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_NOT_RUNNING={{ 'NOT_RUNNING' in (stop_graceful_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_FORCE_STOPPED={{ 'FORCE_STOPPED' in (stop_graceful_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_STILL_RUNNING={{ 'STILL_RUNNING' in (stop_graceful_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_log_incomplete={{ 'STOP_TASK_LOG_INCOMPLETE' in (stop_graceful_result.stdout | default('')) }}"
+  when: stop_graceful_result is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（进程与 API）"
   ansible.builtin.debug:
@@ -23,7 +27,7 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_after_stop.status | default('n/a') if (_sem_dbg_api_after_stop is defined) else 'skipped' }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ ((_sem_dbg_api_after_stop.content | default('') | string) | truncate(1500, True)) if (_sem_dbg_api_after_stop is defined) else '' }}"
   vars:
-    _sem_dbg_after_stop: "{{ _land_process_after_stop | default(_sinexcel_process_after_stop | default(_nbt_process_after_stop)) }}"
+    _sem_dbg_after_stop: "{{ _land_process_after_stop | default(_sem_stop_verify_before_reconfig | default(_sinexcel_process_after_stop | default(_nbt_process_after_stop))) }}"
     _sem_dbg_api_after_stop: "{{ _land_api_after_stop | default(_sinexcel_api_after_stop | default(_nbt_api_after_stop)) }}"
     _sem_dbg_stop_check_api: "{{ land_stop_check_api | default(sinexcel_stop_check_api | default(nbt_stop_check_api | default(false))) }}"
   when: _sem_dbg_after_stop is defined

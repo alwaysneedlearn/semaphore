@@ -15,3 +15,7 @@
   register: _sem_stop_verify_before_reconfig
   changed_when: false
   when: stop_graceful_when_exe_present | default(true) | bool
+
+- name: DEBUG 优雅停止（与 device_stop 相同快照）
+  ansible.builtin.include_tasks: debug_sync_api_stop_snapshot.yml
+  when: sem_debug_tag is defined

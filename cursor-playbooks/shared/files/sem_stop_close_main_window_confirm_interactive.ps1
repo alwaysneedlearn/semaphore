@@ -43,6 +43,23 @@ if (-not [string]::IsNullOrWhiteSpace($timeoutRaw)) {
 }
 if ($timeoutSec -lt 10) { $timeoutSec = 10 }
 
+function Test-StopLogTerminalLine {
+  param([string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) { return $false }
+  try {
+    $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
+  } catch {
+    return $false
+  }
+  foreach ($line in $lines) {
+    $t = ([string]$line).Trim()
+    if ($t -match '^(NOT_RUNNING|STILL_RUNNING|FORCE_STOPPED|ALREADY_STOPPED)\b') {
+      return $true
+    }
+  }
+  return $false
+}
+
 function Test-ProfileUserInteractiveSession {
   param([string]$ShortName)
   $explorers = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue
@@ -102,25 +119,36 @@ try {
 
   $deadline = (Get-Date).AddSeconds($timeoutSec)
   $lastResult = $null
+  $logComplete = $false
   do {
     Start-Sleep -Seconds 1
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     $state = $task.State
     $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
     if ($info) { $lastResult = $info.LastTaskResult }
+    if (Test-StopLogTerminalLine -Path $outFile) {
+      $logComplete = $true
+      break
+    }
     if ($state -ne 'Running') {
       Start-Sleep -Seconds 2
-      if (Test-Path -LiteralPath $outFile) { break }
+      if (Test-StopLogTerminalLine -Path $outFile) {
+        $logComplete = $true
+        break
+      }
     }
-    if (Test-Path -LiteralPath $outFile) { break }
   } while ((Get-Date) -lt $deadline)
 
-  if ($null -ne $lastResult) {
-    Write-Output "STOP_TASK_LAST_RESULT|task=$taskName|code=$lastResult"
+  if (-not $logComplete -and (Test-Path -LiteralPath $outFile)) {
+    Start-Sleep -Seconds 3
+    if (Test-StopLogTerminalLine -Path $outFile) { $logComplete = $true }
   }
 
   if (Test-Path -LiteralPath $outFile) {
     Get-Content -LiteralPath $outFile | ForEach-Object { Write-Output $_ }
+    if (-not $logComplete) {
+      Write-Output "STOP_TASK_LOG_INCOMPLETE|task=$taskName|log=$outFile|hint=read_before_helper_finished"
+    }
   } else {
     Write-Output "STOP_TASK_NO_OUTPUT|task=$taskName|timeout=${timeoutSec}s|log=$outFile"
     $still = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
@@ -134,6 +162,10 @@ try {
         Write-Output 'STILL_RUNNING|reason=no_task_log'
       }
     }
+  }
+
+  if ($null -ne $lastResult) {
+    Write-Output "STOP_TASK_LAST_RESULT|task=$taskName|code=$lastResult"
   }
 } catch {
   Write-Output "STOP_TASK_ERROR:$($_.Exception.Message)"
