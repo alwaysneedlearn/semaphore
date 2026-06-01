@@ -1,0 +1,16 @@
+---
+# Flatten Semaphore categorized config for LAND SyncLims ModifyConfig (top-level JSON keys only).
+# Input play var: merged_cfg — typically { "Category": { "key": "value", ... }, ... }
+# Output fact: land_cfg_flat — { "key": "value", ... } (device keys override type defaults on collision)
+
+- name: 平铺 LAND 配置（去掉分类嵌套）
+  ansible.builtin.set_fact:
+    land_cfg_flat: "{{ land_cfg_flat | default({}) | combine(_land_flat_chunk) }}"
+  vars:
+    _land_flat_chunk: "{{ item.value if (item.value is mapping) else { item.key: item.value } }}"
+  loop: "{{ merged_cfg | default({}) | dict2items }}"
+
+- name: 登记空平铺配置
+  ansible.builtin.set_fact:
+    land_cfg_flat: {}
+  when: (merged_cfg | default({}) | length) == 0

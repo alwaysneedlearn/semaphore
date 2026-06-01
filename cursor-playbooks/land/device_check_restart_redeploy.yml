@@ -185,19 +185,8 @@
           ansible.builtin.set_fact:
             _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
 
-        - name: 重配执行：API 修改配置（LAND）
-          ansible.builtin.uri:
-            url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_modify_config_path }}"
-            method: POST
-            body_format: json
-            body: "{{ {'token': land_api_token} | combine(merged_cfg, recursive=True) }}"
-            timeout: "{{ land_api_timeout }}"
-            validate_certs: "{{ land_api_verify_tls }}"
-            return_content: true
-            status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
-          register: _land_api_modify_config
-          delegate_to: localhost
-          failed_when: false
+        - name: 重配执行：API 修改配置（LAND，平铺 JSON）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config.yml"
           when: (merged_cfg | default({}) | length) > 0
 
         - name: 启动 LAND 程序（管理员交互式计划任务）

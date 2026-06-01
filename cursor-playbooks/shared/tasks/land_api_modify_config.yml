@@ -1,0 +1,29 @@
+---
+# POST LAND /SyncLims/ModifyConfig with flat JSON body (token + config keys at root).
+# Play vars: merged_cfg, land_api_*, land_api_modify_config_path, _land_target_host
+
+- name: 准备 LAND 平铺配置
+  ansible.builtin.include_tasks: land_flatten_merged_cfg.yml
+
+- name: 重配执行：API 修改配置（LAND，平铺 JSON）
+  ansible.builtin.uri:
+    url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_modify_config_path }}"
+    method: POST
+    body_format: json
+    body: "{{ {'token': land_api_token} | combine(land_cfg_flat, recursive=True) }}"
+    timeout: "{{ land_api_timeout }}"
+    validate_certs: "{{ land_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _land_api_modify_config
+  delegate_to: localhost
+  failed_when: false
+  when: (land_cfg_flat | default({}) | length) > 0
+
+- name: DEBUG LAND ModifyConfig 请求体（平铺）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] modify_config flat_keys={{ land_cfg_flat | default({}) | dict2items | map(attribute='key') | list }}"
+      - "[DEBUG-LAND] modify_config http_status={{ _land_api_modify_config.status | default('skipped') }}"
+      - "[DEBUG-LAND] modify_config response_body={{ _land_api_modify_config.content | default('') | truncate(1500, True) }}"
+  when: _land_api_modify_config is defined and not (_land_api_modify_config.skipped | default(false))

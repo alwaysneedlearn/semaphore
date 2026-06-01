@@ -69,6 +69,8 @@ The graceful stop task runs in the logged-in desktop user's interactive session 
 
 **Restart / redeploy:** `land/device_restart.yml`, `land/device_check_restart_redeploy.yml` (and SINEXCEL equivalents) include `stop_program_graceful_before_reconfig.yml` before ModifyConfig + start — same behavior as `device_stop.yml`, not `Stop-Process -Force`.
 
+**LAND ModifyConfig body:** `land_api_modify_config.yml` flattens categorized `merged_cfg` to top-level keys (`land_flatten_merged_cfg.yml`) before POST — API expects flat JSON, not Semaphore category nesting.
+
 ### Troubleshooting graceful stop (LAND / SINEXCEL)
 
 | Log line | Meaning | What to check on the target |

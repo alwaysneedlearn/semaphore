@@ -108,5 +108,5 @@ SINEXCEL and NBT use the same shared tasks with `sem_debug_tag: SINEXCEL` / `NBT
 
 3) Modify config
 - `POST http://<ip>:<port>{{ LAND_API_MODIFY_CONFIG_PATH }}`
-- Body:
-  - `{"token":"landapi", "...": "see your full Postman payload"}`
+- Body: **flat JSON** at the root — `{"token":"landapi", "FieldA": "...", "FieldB": "..."}` (no `SystemConfig` wrapper).
+- Semaphore **device type / device config categories** are merged then **flattened** in `shared/tasks/land_flatten_merged_cfg.yml` (same key in two categories → later category wins). Use unique keys across categories or put overrides only on the device.
