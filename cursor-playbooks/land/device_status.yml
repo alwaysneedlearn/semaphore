@@ -7,7 +7,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
-    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('land_agent.exe', true) }}"
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"

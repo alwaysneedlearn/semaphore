@@ -19,6 +19,8 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
+**Install layout:** playbooks expect `{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}` (defaults `C:\Program Files\LAND\land\LHBTS.exe`). If `LHBTS.exe` sits directly under `EXE_DIR`, set `ZIP_NAME=.` or adjust `EXE_DIR` in the Variable Group. Older docs used `land_agent.exe`; typical sites only ship **`LHBTS.exe`** — do not configure a separate `land_agent` process.
+
 ## Runner 部署（必做）
 
 日志若出现 `included: .../neware/tasks/winrm_ensure_reachable.yml` 或 `land/tasks/winrm_connect_one_attempt.yml`，说明 **runner 上的文件不是当前 develop**，与仓库代码无关。
@@ -49,11 +51,11 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | Variable | Default | Description |
 |---|---|---|
 | `EXE_DIR` | `C:\Program Files\LAND` | LAND executable directory |
-| `EXE_NAME` | `land_agent.exe` | LAND executable file name |
+| `EXE_NAME` | `LHBTS.exe` | LAND executable file name (GUI + API on typical installs) |
 | `ZIP_NAME` | `land` | Package folder/zip base name |
 | `ZIP_PATH` | `/root/neware/dbwb` | Controller-side zip source directory |
 | `EXE_ARGS` | empty | Optional executable arguments |
-| `PROCESS_NAME` | (`EXE_NAME` without `.exe`) | Process name for `Get-Process` |
+| `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |
 | `LAND_API_SCHEME` | `http` | API scheme (`http`/`https`) |
 | `LAND_API_PORT` | `8080` | API port |
 | `LAND_API_STATUS_PATH` | `/SyncLims/QueryStatus` | Query status endpoint |
@@ -65,7 +67,7 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_START_CHECK_API` | `true` | After start/restart, verify API |
 | `LAND_STOP_CHECK_API` | `false` | After stop, verify API |
 | `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | Process for `CloseMainWindow` (graceful stop) |
-| `STOP_VERIFY_PROCESS_NAME` | (`PROCESS_NAME`) | Process name to verify stopped (`land_agent` by default) |
+| `STOP_VERIFY_PROCESS_NAME` | (`STOP_GRACEFUL_PROCESS_NAME`) | Process name to verify stopped (default `LHBTS`, same as graceful stop) |
 | `STOP_POPUP_WAIT_SECONDS` | `2` | Seconds to wait for confirmation dialog |
 | `STOP_POPUP_KEYWORD` | `警告` | Substring match on visible window title; Enter is sent |
 | `STOP_FORCE_AFTER_GRACEFUL` | `true` | `Stop-Process -Force` if still running after popup step |

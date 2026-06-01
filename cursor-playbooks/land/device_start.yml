@@ -7,7 +7,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
-    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('land_agent.exe', true) }}"
+    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
     zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
