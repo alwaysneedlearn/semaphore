@@ -106,7 +106,12 @@
     - name: 前置检查：检查 LAND 进程状态
       ansible.windows.win_shell: |
         $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+        if ($null -ne $p) {
+          $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+          "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+        } else {
+          "NOT_RUNNING"
+        }
       register: _land_process_check
       changed_when: false
       when: _land_exe_stat.stat.exists | default(false)
@@ -135,6 +140,15 @@
             or ('RUNNING' not in (_land_process_check.stdout | default('')))
             or (not (((_land_api_check.status | default(0) | int) >= 200) and ((_land_api_check.status | default(0) | int) < 300)))
           }}
+
+    - name: DEBUG LAND 按需重部署判定
+      ansible.builtin.debug:
+        msg:
+          - "[DEBUG-LAND] need_reconfigure={{ _land_need_reconfigure | bool }}"
+          - "[DEBUG-LAND] gate exe_exists={{ (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)) }}"
+          - "[DEBUG-LAND] gate process={{ _land_process_check.stdout | default('n/a') if (_land_process_check is defined) else 'n/a' }}"
+          - "[DEBUG-LAND] gate api_http={{ _land_api_check.status | default('n/a') if (_land_api_check is defined) else 'n/a' }}"
+          - "[DEBUG-LAND] gate api_body={{ (_land_api_check.content | default('') | string | truncate(500, True)) if (_land_api_check is defined) else '' }}"
 
     - name: 执行重启重部署（不健康时）
       when: _land_need_reconfigure | bool
@@ -216,6 +230,9 @@
             {% elif 'RUNNING' not in (_land_process_after_restart.stdout | default('')) %}Process not running
             {% elif not (((_land_api_after_restart.status | default(0) | int) >= 200) and ((_land_api_after_restart.status | default(0) | int) < 300)) %}API check failed: http={{ _land_api_after_restart.status | default('n/a') }}
             {% else %}{% endif %}
+
+    - name: DEBUG LAND 重启重部署结果
+      ansible.builtin.include_tasks: tasks/debug_start_snapshot.yml
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

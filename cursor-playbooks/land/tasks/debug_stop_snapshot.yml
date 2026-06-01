@@ -1,0 +1,25 @@
+---
+# After stop + optional API. Uses stop_graceful_result, _land_process_after_stop, semaphore_callback_row.
+
+- name: DEBUG LAND 停止（优雅停止脚本输出）
+  ansible.builtin.debug:
+    msg: "{{ stop_graceful_result.stdout_lines | default(['(no stdout)']) }}"
+  when: stop_graceful_result is defined
+
+- name: DEBUG LAND 停止（进程与 API）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] host={{ inventory_hostname }} verify_process={{ stop_verify_process_name | default(process_name) }}"
+      - "[DEBUG-LAND] after_stop={{ (_land_process_after_stop.stdout | default('') | trim) }}"
+      - "[DEBUG-LAND] stop_check_api={{ land_stop_check_api | default(false) }}"
+      - "[DEBUG-LAND] api http_status={{ _land_api_after_stop.status | default('n/a') if (_land_api_after_stop is defined) else 'skipped' }}"
+      - "[DEBUG-LAND] api response_body={{ ((_land_api_after_stop.content | default('') | string) | truncate(1500, True)) if (_land_api_after_stop is defined) else '' }}"
+  when: _land_process_after_stop is defined
+
+- name: DEBUG LAND 停止（回调行预览）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
+      - "[DEBUG-LAND] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
+      - "[DEBUG-LAND] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
+  when: semaphore_callback_row is defined

@@ -177,6 +177,9 @@
             {% elif (land_start_check_api | bool) and not (((_land_api_after_start.status | default(0) | int) >= 200) and ((_land_api_after_start.status | default(0) | int) < 300)) %}API check failed after start: http={{ _land_api_after_start.status | default('n/a') }}
             {% else %}{% endif %}
 
+    - name: DEBUG LAND 启动结果
+      ansible.builtin.include_tasks: tasks/debug_start_snapshot.yml
+
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）
       run_once: true

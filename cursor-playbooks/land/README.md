@@ -81,6 +81,19 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 
 Each host writes `semaphore_callback_row`; localhost bulk phase sends `/devices/status/bulk` and TDengine row publish if configured.
 
+## Task log tags (`[DEBUG-LAND]`)
+
+| Tag | When |
+|-----|------|
+| `[DEBUG-LAND] exe_path` / `exists` | Patrol / redeploy: `win_stat` on `{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}` |
+| `[DEBUG-LAND] process_name` / `check=` | `Get-Process` result (`RUNNING\|pid=…` or `NOT_RUNNING`) |
+| `[DEBUG-LAND] api POST` / `http_status` / `response_body` | SyncLims `QueryStatus` from controller (`delegate_to: localhost`) |
+| `[DEBUG-LAND] callback …` | `semaphore_callback_row` before bulk PUT |
+| `[DEBUG-LAND] need_reconfigure` | `device_check_restart_redeploy.yml` gate only |
+| Stop play | Also prints graceful-stop script lines (`CLOSE_MAIN_WINDOW_SENT`, `POPUP_*`, …) |
+
+Bulk PUT lines remain `[DEBUG-API]` in `shared/tasks/semaphore_bulk_put_from_hostvars.yml`.
+
 `device_start.yml` / `device_restart.yml` / `device_check_restart_redeploy.yml` now use the same startup strategy as NEWARE:
 - check exe first (`{{ exe_path }}`); if missing, check/copy `{{ exe_dir }}\{{ zip_name }}.zip` then `Expand-Archive`
 - launch via **interactive scheduled task** (desktop logged-in user, RunLevel Highest), not plain `Start-Process` under WinRM session
