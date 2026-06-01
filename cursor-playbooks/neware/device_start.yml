@@ -8,6 +8,7 @@
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_profile_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_debug_tag: NEWARE
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
@@ -634,6 +635,10 @@
             {% endif %}
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+
+    - name: DEBUG NEWARE 启动结果
+      ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
+      when: semaphore_callback_row is defined
 
     - name: 汇总报告：批量执行结果汇总
       when: ansible_play_hosts_all is defined

@@ -23,6 +23,8 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/
 
 Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NEWARE also sets `sem_profile_tasks_dir` / `sem_profile_files_dir` for type-specific tasks (e.g. TDengine).
 
+**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-NEWARE]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
+
 ## Documentation
 
 - **NEWARE (detailed):** [`neware/README.md`](neware/README.md)

@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: SINEXCEL
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('sinexcel_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('sinexcel', true) }}"
@@ -175,6 +176,9 @@
             {% elif 'RUNNING' not in (_sinexcel_process_after_start.stdout | default('')) %}Start failed: process not running
             {% elif (sinexcel_start_check_api | bool) and not (((_sinexcel_api_after_start.status | default(0) | int) >= 200) and ((_sinexcel_api_after_start.status | default(0) | int) < 300)) %}API check failed after start: http={{ _sinexcel_api_after_start.status | default('n/a') }}
             {% else %}{% endif %}
+
+    - name: DEBUG SINEXCEL 启动结果
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

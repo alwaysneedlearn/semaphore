@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: LAND
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
@@ -178,7 +179,7 @@
             {% else %}{% endif %}
 
     - name: DEBUG LAND 启动结果
-      ansible.builtin.include_tasks: tasks/debug_start_snapshot.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

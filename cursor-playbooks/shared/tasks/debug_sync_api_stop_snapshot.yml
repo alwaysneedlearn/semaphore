@@ -1,0 +1,37 @@
+---
+# After stop. Play var: sem_debug_tag. Graceful: stop_graceful_result; force: _*_stop_result.
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（优雅停止脚本输出）"
+  ansible.builtin.debug:
+    msg: "{{ stop_graceful_result.stdout_lines | default(['(no stdout)']) }}"
+  when: stop_graceful_result is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（强制停止输出）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] force_stop_stdout={{ (_sem_dbg_force_stop.stdout | default('') | trim) }}"
+  when: _sem_dbg_force_stop is defined
+  vars:
+    _sem_dbg_force_stop: "{{ _land_stop_result | default(_sinexcel_stop_result | default(_nbt_stop_result)) }}"
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（进程与 API）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} verify_process={{ stop_verify_process_name | default(process_name | default('n/a')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] after_stop={{ (_sem_dbg_after_stop.stdout | default('') | trim) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_check_api={{ _sem_dbg_stop_check_api }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_after_stop.status | default('n/a') if (_sem_dbg_api_after_stop is defined) else 'skipped' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ ((_sem_dbg_api_after_stop.content | default('') | string) | truncate(1500, True)) if (_sem_dbg_api_after_stop is defined) else '' }}"
+  vars:
+    _sem_dbg_after_stop: "{{ _land_process_after_stop | default(_sinexcel_process_after_stop | default(_nbt_process_after_stop)) }}"
+    _sem_dbg_api_after_stop: "{{ _land_api_after_stop | default(_sinexcel_api_after_stop | default(_nbt_api_after_stop)) }}"
+    _sem_dbg_stop_check_api: "{{ land_stop_check_api | default(sinexcel_stop_check_api | default(nbt_stop_check_api | default(false))) }}"
+  when: _sem_dbg_after_stop is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（回调行预览）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
+  when: semaphore_callback_row is defined

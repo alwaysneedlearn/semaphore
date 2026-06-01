@@ -1,0 +1,22 @@
+---
+# NEWARE start/stop/restart summary (optional sem_debug_tag).
+
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 动作结果"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] host={{ inventory_hostname }} final_start_ok={{ final_start_ok | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] exe_path={{ exe_path | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] stop_stdout={{ (stop_result.stdout | default('') | trim) if (stop_result is defined) else 'n/a' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] host_failure_reason={{ host_failure_reason | default('') | trim }}"
+  when: >
+    final_start_ok is defined or need_reconfigure is defined or
+    stop_result is defined or (host_failure_reason is defined and (host_failure_reason | trim | length) > 0)
+
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 回调行预览"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
+  when: semaphore_callback_row is defined

@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: NBT
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('nbt_agent', true) }}"
     nbt_api_scheme: "{{ (lookup('env', 'NBT_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     nbt_api_port: "{{ ((lookup('env', 'NBT_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
@@ -82,6 +83,9 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'offline' if (not (nbt_stop_check_api | bool)) else ('online' if ((_nbt_api_after_stop.status | default(0) | int) >= 200 and (_nbt_api_after_stop.status | default(0) | int) < 300) else 'offline') }}"
           abnormal_reason: "{{ '' if 'NOT_RUNNING' in (_nbt_process_after_stop.stdout | default('')) else 'Stop failed: process still running' }}"
+
+    - name: DEBUG NBT 停止结果
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

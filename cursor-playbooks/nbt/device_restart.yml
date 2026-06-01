@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: NBT
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NBT', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('nbt_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('nbt', true) }}"
@@ -173,6 +174,9 @@
             {% elif 'RUNNING' not in (_nbt_process_after_restart.stdout | default('')) %}Restart failed: process not running
             {% elif not (((_nbt_api_after_restart.status | default(0) | int) >= 200) and ((_nbt_api_after_restart.status | default(0) | int) < 300)) %}API check failed after restart: http={{ _nbt_api_after_restart.status | default('n/a') }}
             {% else %}{% endif %}
+
+    - name: DEBUG NBT 重启结果
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

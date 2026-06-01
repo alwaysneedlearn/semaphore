@@ -6,8 +6,11 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: NBT
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NBT', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('nbt_agent.exe', true) }}"
+    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('nbt', true) }}"
+    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     nbt_api_scheme: "{{ (lookup('env', 'NBT_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     nbt_api_port: "{{ ((lookup('env', 'NBT_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
@@ -41,17 +44,25 @@
 
     - name: 检查 NBT 程序文件是否存在
       ansible.windows.win_stat:
-        path: "{{ exe_dir }}\\{{ exe_name }}"
+        path: "{{ exe_path }}"
       register: _nbt_exe_stat
       ignore_unreachable: true
 
     - name: 检查 NBT 进程状态
       ansible.windows.win_shell: |
         $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+        if ($null -ne $p) {
+          $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+          "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+        } else {
+          "NOT_RUNNING"
+        }
       register: _nbt_process_check
       changed_when: false
       ignore_unreachable: true
+
+    - name: DEBUG NBT 巡检前置
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
     - name: 查询 NBT API 状态
       ansible.builtin.uri:
@@ -77,10 +88,13 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if ((_nbt_api_status.status | default(0) | int) >= 200 and (_nbt_api_status.status | default(0) | int) < 300) else 'offline' }}"
           abnormal_reason: >-
-            {% if not (_nbt_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_dir }}\{{ exe_name }}
+            {% if not (_nbt_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_nbt_process_check.stdout | default('')) %}Process not running: {{ process_name }}
-            {% elif not (((_nbt_api_status.status | default(0) | int) >= 200) and ((_nbt_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _nbt_api_status.status | default('n/a') }}
+            {% elif not (((_nbt_api_status.status | default(0) | int) >= 200) and ((_nbt_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _nbt_api_status.status | default('n/a') }} body={{ (_nbt_api_status.content | default('') | string) | truncate(200, True) }}
             {% else %}{% endif %}
+
+    - name: DEBUG NBT 巡检结果
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

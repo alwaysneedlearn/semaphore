@@ -83,16 +83,9 @@ Each host writes `semaphore_callback_row`; localhost bulk phase sends `/devices/
 
 ## Task log tags (`[DEBUG-LAND]`)
 
-| Tag | When |
-|-----|------|
-| `[DEBUG-LAND] exe_path` / `exists` | Patrol / redeploy: `win_stat` on `{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}` |
-| `[DEBUG-LAND] process_name` / `check=` | `Get-Process` result (`RUNNING\|pid=…` or `NOT_RUNNING`) |
-| `[DEBUG-LAND] api POST` / `http_status` / `response_body` | SyncLims `QueryStatus` from controller (`delegate_to: localhost`) |
-| `[DEBUG-LAND] callback …` | `semaphore_callback_row` before bulk PUT |
-| `[DEBUG-LAND] need_reconfigure` | `device_check_restart_redeploy.yml` gate only |
-| Stop play | Also prints graceful-stop script lines (`CLOSE_MAIN_WINDOW_SENT`, `POPUP_*`, …) |
+Implemented via `../shared/tasks/debug_sync_api_*.yml` with play var `sem_debug_tag: LAND`. Search task output for `[DEBUG-LAND]` (exe path, process, SyncLims API, callback row; stop also prints graceful-stop script lines). Bulk PUT uses `[DEBUG-API]` in `semaphore_bulk_put_from_hostvars.yml`.
 
-Bulk PUT lines remain `[DEBUG-API]` in `shared/tasks/semaphore_bulk_put_from_hostvars.yml`.
+SINEXCEL and NBT use the same shared tasks with `sem_debug_tag: SINEXCEL` / `NBT`. NEWARE uses `[DEBUG-NEWARE]` in `neware/tasks/debug_*.yml`.
 
 `device_start.yml` / `device_restart.yml` / `device_check_restart_redeploy.yml` now use the same startup strategy as NEWARE:
 - check exe first (`{{ exe_path }}`); if missing, check/copy `{{ exe_dir }}\{{ zip_name }}.zip` then `Expand-Archive`

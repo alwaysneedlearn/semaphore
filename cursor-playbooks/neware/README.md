@@ -93,8 +93,9 @@ Add more local profile names as needed, e.g. `NEWARE,Administrator,Operator`.
 | `CFG_CHANGE|<path>|[<section>]|…` | **Only printed when a value really changes.** Flat keys: `key: <old> -> <new>` or `+ key=<new>` for inserts. JSON keys: one line per changed sub-key, e.g. `ReportApiSettings.EnableReportApiCall: false -> true` |
 | `CONFIG_MODIFIED` / `CONFIG_NOT_FOUND` / `CONFIG_MODIFY_ERROR` | Per-file outcome |
 | `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |
-| `[DEBUG-STOP-API]` | After **`device_stop.yml`** WinRM succeeds: **`POST`** to app status URL (same **`api_port`** / **`API_STATUS_CALL_TYPE`** as Patrol); bulk still forces **`api_status: offline`** |
-| `[DEBUG-API]` | HTTP status + **raw response body** for device HTTP API POSTs and for Semaphore `PUT …/devices/status/bulk` |
+| `[DEBUG-NEWARE]` | Patrol (`debug_patrol_snapshot.yml`): process, log gate, callback row; start/stop/restart (`debug_action_snapshot.yml`): `final_start_ok`, `need_reconfigure`, stop stdout |
+| `[DEBUG-NEWARE] stop_api` | After **`device_stop.yml`** WinRM succeeds: **`POST`** to app status URL (same **`api_port`** / **`API_STATUS_CALL_TYPE`**); bulk still forces **`api_status: offline`** |
+| `[DEBUG-API]` | HTTP status + **raw response body** for Semaphore `PUT …/devices/status/bulk` |
 
 The `重配执行：配置修改变更明细（仅打印实际变化与摘要）` task also prints **`[RECONFIG]`** lines for **`api_port`** and **`exe_path`**, then `stdout_lines` / `stderr`. After **`重配执行：检查程序文件是否存在`**, **`重配执行：EXE 检查与启动条件（诊断）`** prints the raw exe probe plus booleans for whether **`EXE_FOUND` / `EXE_NOT_FOUND`** appear in a normalized text form (so **`重配执行：启动程序`** skip vs run is obvious in the log). The `win_shell` script no longer emits `PATH_OK` / `JSON_OK` / `PLAN_*` / `FILE_READ` noise, so what you see is exactly: device IP/port defaults, per-file `RECONFIG_MODIFY_*=…` paths, any `CFG_CHANGE|…` lines (only on real value changes), `CONFIG_MODIFIED|<path>`, and the per-file `RECONFIG_CFG_RUN_SUMMARY`. **Do not** rely on an Ansible-side `select('match', ...)` filter here: older Ansibles can swallow every line silently if the `match` test resolves differently.
 

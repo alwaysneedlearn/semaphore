@@ -8,6 +8,7 @@
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_profile_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_debug_tag: NEWARE
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
     api_host: "{{ inventory_hostname }}"
@@ -60,9 +61,9 @@
         - name: DEBUG Stop 后 API 探测结果（成功也打印）
           ansible.builtin.debug:
             msg:
-              - "[DEBUG-STOP-API] POST url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
-              - "[DEBUG-STOP-API] http_status={{ stop_api_probe.status | default('n/a') }}"
-              - "[DEBUG-STOP-API] response_body={{ stop_api_probe.content | default('') }}"
+              - "[DEBUG-NEWARE] stop_api POST url=http://{{ api_host }}:{{ api_port }} CallType={{ api_status_call_type }}"
+              - "[DEBUG-NEWARE] stop_api http_status={{ stop_api_probe.status | default('n/a') }}"
+              - "[DEBUG-NEWARE] stop_api response_body={{ stop_api_probe.content | default('') }}"
           when: stop_api_probe is defined and not (stop_api_probe.skipped | default(false))
 
         - name: 登记 Semaphore 回调行
@@ -90,6 +91,10 @@
                 {% endif %}
           vars:
             _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+
+        - name: DEBUG NEWARE 停止结果
+          ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
+          when: semaphore_callback_row is defined
 
 - name: 写回 Semaphore 设备状态（独立 play，等 windows_hosts 全部登记回调行后再 bulk）
   hosts: localhost

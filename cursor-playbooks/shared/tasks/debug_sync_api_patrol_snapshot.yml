@@ -1,0 +1,40 @@
+---
+# SyncLims-style patrol (LAND / SINEXCEL / NBT). Play var: sem_debug_tag (e.g. LAND).
+# Registers: _{land|sinexcel|nbt}_exe_stat, _*_process_check, _*_api_status, optional semaphore_callback_row.
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（路径与进程）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} winrm_session_ok={{ _winrm_session_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_path={{ _sem_dbg_exe_path }} exists={{ _sem_dbg_exe_stat.stat.exists | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_name={{ process_name | default('n/a') }} check={{ (_sem_dbg_process.stdout | default('') | trim) if (_sem_dbg_process is defined) else 'skipped' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_unreachable={{ _sem_dbg_process.unreachable | default(false) if (_sem_dbg_process is defined) else 'n/a' }}"
+  vars:
+    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_exe_stat)) }}"
+    _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check)) }}"
+    _sem_dbg_exe_path: "{{ exe_path | default(exe_dir ~ '\\' ~ exe_name) }}"
+  when: _sem_dbg_exe_stat is defined or _sem_dbg_process is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（SyncLims API）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api POST {{ _sem_dbg_api_scheme }}://{{ _sem_dbg_target }}:{{ _sem_dbg_api_port }}{{ _sem_dbg_api_path }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ (_sem_dbg_api.content | default('') | string) | truncate(2000, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_json_ok={{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) }}"
+  vars:
+    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default(_nbt_api_status)) }}"
+    _sem_dbg_api_scheme: "{{ land_api_scheme | default(sinexcel_api_scheme | default(nbt_api_scheme | default('http'))) }}"
+    _sem_dbg_api_port: "{{ land_api_port | default(sinexcel_api_port | default(nbt_api_port | default(8080))) }}"
+    _sem_dbg_api_path: "{{ land_api_status_path | default(sinexcel_api_status_path | default(nbt_api_status_path | default('/SyncLims/QueryStatus'))) }}"
+    _sem_dbg_target: "{{ _land_target_host | default(_sinexcel_target_host | default(_nbt_target_host | default(inventory_hostname))) }}"
+  when: _sem_dbg_api is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（回调行预览）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback winrm_status={{ semaphore_callback_row.winrm_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
+  when: semaphore_callback_row is defined

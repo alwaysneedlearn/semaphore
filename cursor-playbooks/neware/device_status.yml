@@ -8,6 +8,7 @@
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_profile_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_debug_tag: NEWARE
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
@@ -46,6 +47,9 @@
         not (status.unreachable | default(false)) and
         status is defined and
         'stdout' in status
+
+    - name: DEBUG NEWARE 巡检（进程）
+      ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
 
     - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
       ansible.builtin.set_fact:
@@ -118,6 +122,10 @@
             {% else %}{% endif %}
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+
+    - name: DEBUG NEWARE 巡检（结果）
+      ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
+      when: not (status.unreachable | default(false))
 
   post_tasks:
     - name: 生成状态报告

@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: LAND
     exe_dir: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
@@ -142,13 +143,7 @@
           }}
 
     - name: DEBUG LAND 按需重部署判定
-      ansible.builtin.debug:
-        msg:
-          - "[DEBUG-LAND] need_reconfigure={{ _land_need_reconfigure | bool }}"
-          - "[DEBUG-LAND] gate exe_exists={{ (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)) }}"
-          - "[DEBUG-LAND] gate process={{ _land_process_check.stdout | default('n/a') if (_land_process_check is defined) else 'n/a' }}"
-          - "[DEBUG-LAND] gate api_http={{ _land_api_check.status | default('n/a') if (_land_api_check is defined) else 'n/a' }}"
-          - "[DEBUG-LAND] gate api_body={{ (_land_api_check.content | default('') | string | truncate(500, True)) if (_land_api_check is defined) else '' }}"
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_redeploy_gate_snapshot.yml"
 
     - name: 执行重启重部署（不健康时）
       when: _land_need_reconfigure | bool
@@ -232,7 +227,7 @@
             {% else %}{% endif %}
 
     - name: DEBUG LAND 重启重部署结果
-      ansible.builtin.include_tasks: tasks/debug_start_snapshot.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）

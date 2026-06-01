@@ -2,6 +2,8 @@
 
 Device type **NBT**: same layout as [sinexcel/README.md](../sinexcel/README.md) with NBT defaults.
 
+Task logs: search **`[DEBUG-NBT]`** (same shared debug tasks as LAND/SINEXCEL; `sem_debug_tag: NBT` in each play).
+
 ## Semaphore templates
 
 - `cursor-playbooks/nbt/device_status.yml`

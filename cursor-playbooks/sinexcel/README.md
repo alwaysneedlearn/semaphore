@@ -17,7 +17,10 @@ Set in each play:
 ```yaml
 sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
 sem_files_dir: "{{ playbook_dir }}/../shared/files"
+sem_debug_tag: SINEXCEL
 ```
+
+Task logs: search **`[DEBUG-SINEXCEL]`** (exe, process, SyncLims API, callback; see `shared/README.md`).
 
 ## Semaphore templates
 

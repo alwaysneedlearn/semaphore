@@ -1,0 +1,29 @@
+---
+# NEWARE patrol / health gate summary. Playbooks set sem_debug_tag: NEWARE (optional).
+
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（进程与路径）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] host={{ inventory_hostname }} winrm_session_ok={{ _winrm_session_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] exe_dir={{ exe_dir | default(exe_dir_preferred | default('n/a')) }} exe_name={{ exe_name | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] process_status={{ (status.stdout | default('') | trim) if (status is defined and 'stdout' in status) else 'n/a' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] process_unreachable={{ status.unreachable | default(false) if (status is defined) else 'n/a' }}"
+  when: status is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（日志健康）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_status_ok={{ log_status_ok | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_recent_minutes={{ log_health_recent_minutes | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_success_keyword={{ log_success_keyword | default('') | truncate(80, True) }}"
+  when: log_status_ok is defined or need_reconfigure is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（回调行预览）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback winrm_status={{ semaphore_callback_row.winrm_status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
+  when: semaphore_callback_row is defined

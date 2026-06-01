@@ -37,6 +37,19 @@ sem_tasks_dir: "{{ playbook_dir }}/shared/tasks"
 - NEWARE-only: log tail, BTSClient iconf, TDengine publish, `resolve_exe_dir_windows`, …
 - LAND-only: SyncLims API bodies, LH registry, zip layout, …
 
+## Debug task output (`[DEBUG-*]`)
+
+Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`) and include:
+
+| Task file | Used by |
+|-----------|---------|
+| `debug_sync_api_patrol_snapshot.yml` | Status patrol (before/after API + callback) |
+| `debug_sync_api_stop_snapshot.yml` | Stop (graceful script lines, process, optional API) |
+| `debug_sync_api_start_snapshot.yml` | Start / restart / redeploy |
+| `debug_sync_api_redeploy_gate_snapshot.yml` | `device_check_restart_redeploy` need_reconfigure gate |
+
+NEWARE uses `neware/tasks/debug_patrol_snapshot.yml` and `debug_action_snapshot.yml` (`[DEBUG-NEWARE]`). Semaphore bulk PUT still logs `[DEBUG-API]` in `semaphore_bulk_put_from_hostvars.yml`.
+
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 
 Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / play vars:

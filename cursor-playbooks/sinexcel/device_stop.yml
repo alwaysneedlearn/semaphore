@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: SINEXCEL
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('sinexcel_agent', true) }}"
     stop_graceful_process_name: "{{ (lookup('env', 'STOP_GRACEFUL_PROCESS_NAME') | default('', true) | trim) | default('LHBTS', true) }}"
     stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
@@ -81,6 +82,9 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'offline' if (not (sinexcel_stop_check_api | bool)) else ('online' if ((_sinexcel_api_after_stop.status | default(0) | int) >= 200 and (_sinexcel_api_after_stop.status | default(0) | int) < 300) else 'offline') }}"
           abnormal_reason: "{{ '' if 'NOT_RUNNING' in (_sinexcel_process_after_stop.stdout | default('')) else 'Stop failed: process still running' }}"
+
+    - name: DEBUG SINEXCEL 停止结果
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）
