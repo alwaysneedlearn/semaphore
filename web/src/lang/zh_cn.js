@@ -449,7 +449,10 @@ export default {
   deviceFiltersClear: '清除筛选',
   deviceBulkDone: '已完成 {count} 台设备的批量操作',
   devicePaginationSelectionHint:
-    '换页后仍保留已选设备；表头全选仅勾选当前页。',
+    '换页后仍保留已选设备；表头全选仅当前页；「全选筛选结果」勾选符合筛选的全部设备。',
+  deviceSelectAllFiltered: '全选筛选结果 ({count})',
+  deviceSelectAllFilteredDone: '已选中符合筛选的 {count} 台设备',
+  deviceSelectAllFilteredNone: '当前筛选条件下没有设备',
   deviceClearSelection: '清空已选',
   deviceSelectedCount: '已选 {count} 台',
   deviceSelectionCleared: '已清空 {count} 台设备的勾选',

@@ -339,6 +339,17 @@
             text
             small
             class="px-2"
+            :loading="selectAllFilteredLoading"
+            :disabled="totalDevices === 0 || devicesLoading || bulkLoading || selectAllFilteredLoading"
+            @click="selectAllMatchingFilters"
+          >
+            <v-icon left small>mdi-checkbox-multiple-marked</v-icon>
+            {{ $t('deviceSelectAllFiltered', { count: totalDevices }) }}
+          </v-btn>
+          <v-btn
+            text
+            small
+            class="px-2"
             :disabled="selectedDeviceIds.length === 0 || bulkLoading"
             @click="clearSelectedDevices"
           >
@@ -521,6 +532,7 @@ export default {
       },
       filterDebounceTimer: null,
       bulkLoading: false,
+      selectAllFilteredLoading: false,
       bulkDeleteDialog: false,
       bulkActionConfirmDialog: false,
       pendingBulkAction: null,
@@ -816,6 +828,80 @@ export default {
       return this.profileById[profileId] || '—';
     },
 
+    buildDeviceListQueryParams({ limit, offset, sortBy, sortDesc }) {
+      const params = {
+        limit,
+        offset,
+        sort: sortBy,
+        order: sortDesc ? 'desc' : 'asc',
+      };
+      if (this.filters.hostname) params.hostname = this.filters.hostname;
+      if (this.filters.ip) params.ip = this.filters.ip;
+      if (this.filters.deviceProfileId) {
+        params.device_profile_id = this.filters.deviceProfileId;
+      }
+      if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
+      if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
+      if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
+      if (this.filters.apiStatus) params.api_status = this.filters.apiStatus;
+      return params;
+    },
+
+    async fetchDeviceIdsMatchingFilters() {
+      const total = this.totalDevices || 0;
+      if (total <= 0) {
+        return [];
+      }
+      const opts = this.tableOptions || {};
+      const sortArr = opts.sortBy || ['hostname'];
+      const sortDescArr = opts.sortDesc || [false];
+      const sortBy = sortArr[0] || 'hostname';
+      const sortDesc = !!sortDescArr[0];
+      const cap = 10000;
+      const limit = Math.min(total, cap);
+      const params = this.buildDeviceListQueryParams({
+        limit,
+        offset: 0,
+        sortBy,
+        sortDesc,
+      });
+      const { data } = await axios.get(this.getItemsUrl(), { params });
+      const body = data || {};
+      return (body.devices || []).map((d) => d.id).filter((id) => id != null);
+    },
+
+    async selectAllMatchingFilters() {
+      if (!this.totalDevices) {
+        EventBus.$emit('i-snackbar', {
+          color: 'info',
+          text: this.$i18n.t('deviceSelectAllFilteredNone'),
+        });
+        return;
+      }
+      this.selectAllFilteredLoading = true;
+      try {
+        const ids = await this.fetchDeviceIdsMatchingFilters();
+        if (!ids.length) {
+          EventBus.$emit('i-snackbar', {
+            color: 'info',
+            text: this.$i18n.t('deviceSelectAllFilteredNone'),
+          });
+          return;
+        }
+        const merged = new Set(this.selectedDeviceIds);
+        ids.forEach((id) => merged.add(id));
+        this.selectedDeviceIds = [...merged];
+        EventBus.$emit('i-snackbar', {
+          color: 'success',
+          text: this.$i18n.t('deviceSelectAllFilteredDone', { count: ids.length }),
+        });
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.selectAllFilteredLoading = false;
+      }
+    },
+
     async loadItems() {
       this.devicesLoading = true;
       try {
@@ -828,21 +914,12 @@ export default {
         const sortBy = sortArr[0] || 'hostname';
         const sortDesc = !!sortDescArr[0];
 
-        const params = {
+        const params = this.buildDeviceListQueryParams({
           limit: itemsPerPage,
           offset,
-          sort: sortBy,
-          order: sortDesc ? 'desc' : 'asc',
-        };
-        if (this.filters.hostname) params.hostname = this.filters.hostname;
-        if (this.filters.ip) params.ip = this.filters.ip;
-        if (this.filters.deviceProfileId) {
-          params.device_profile_id = this.filters.deviceProfileId;
-        }
-        if (this.filters.deviceStatus) params.device_status = this.filters.deviceStatus;
-        if (this.filters.rdpStatus) params.rdp_status = this.filters.rdpStatus;
-        if (this.filters.winrmStatus) params.winrm_status = this.filters.winrmStatus;
-        if (this.filters.apiStatus) params.api_status = this.filters.apiStatus;
+          sortBy,
+          sortDesc,
+        });
 
         const [devicesRes, statsRes] = await Promise.all([
           axios.get(this.getItemsUrl(), { params }),

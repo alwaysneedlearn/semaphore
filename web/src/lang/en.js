@@ -523,7 +523,11 @@ export default {
   deviceFiltersClear: 'Clear filters',
   deviceBulkDone: 'Batch completed for {count} devices',
   devicePaginationSelectionHint:
-    'Selection is kept when you change pages. The header checkbox only selects rows on the current page.',
+    'Selection persists across pages. Header checkbox = current page only. '
+    + '"Select all filtered" selects every device matching the filters.',
+  deviceSelectAllFiltered: 'Select all filtered ({count})',
+  deviceSelectAllFilteredDone: 'Selected {count} device(s) matching filters',
+  deviceSelectAllFilteredNone: 'No devices match the current filters',
   deviceClearSelection: 'Clear selection',
   deviceSelectedCount: '{count} selected',
   deviceSelectionCleared: 'Cleared selection for {count} device(s)',
