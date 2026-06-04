@@ -1,0 +1,51 @@
+---
+# Resolve app_dir + exe_path under exe_dir (after resolve_exe_dir_windows.yml).
+# Tries APP_DIR, then APP_DIR_CANDIDATES (e.g. LHBTS,1), then zip_name, then auto-scan subdirs.
+# Requires: exe_dir, exe_name, app_dir, zip_name; deploy_sem_windows_helper_scripts for PS1.
+
+- name: 登记 APP_DIR 探测候选（去重有序）
+  ansible.builtin.set_fact:
+    _app_dir_candidates_env: "{{ (lookup('env', 'APP_DIR_CANDIDATES') | default('', true) | trim) }}"
+    _land_app_dir_try_list: >-
+      {{
+        (
+          ([app_dir] if (app_dir | default('') not in ['', '.']) else [])
+          + (
+            (_app_dir_candidates_env | split(','))
+            | map('trim') | reject('equalto', '') | list
+            if (_app_dir_candidates_env | length > 0) else []
+          )
+          + ([zip_name] if (zip_name | default('') not in ['', '.']) else [])
+        ) | unique | list
+      }}
+
+- name: 解析 APP_DIR 与 exe_path（候选列表 + 自动扫描）
+  environment:
+    SEMAPHORE_EXE_DIR: "{{ exe_dir }}"
+    SEMAPHORE_EXE_NAME: "{{ exe_name }}"
+    SEMAPHORE_APP_DIR_TRY: "{{ _land_app_dir_try_list | join(',') }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_resolve_land_app_dir_windows.ps1
+  register: _resolve_land_app_dir
+  changed_when: false
+
+- name: 登记 APP_DIR 解析行
+  ansible.builtin.set_fact:
+    _land_app_dir_line: "{{ (_resolve_land_app_dir.stdout_lines | default([]) | select('search', '^APP_DIR_RESOLVED=') | list | first) | default('APP_DIR_RESOLVED=', true) }}"
+    _land_exe_path_line: "{{ (_resolve_land_app_dir.stdout_lines | default([]) | select('search', '^EXE_PATH_RESOLVED=') | list | first) | default('EXE_PATH_RESOLVED=', true) }}"
+    _land_app_dir_source_line: "{{ (_resolve_land_app_dir.stdout_lines | default([]) | select('search', '^APP_DIR_SOURCE=') | list | first) | default('APP_DIR_SOURCE=not_found', true) }}"
+
+- name: 应用解析后的 APP_DIR 与 exe_path
+  ansible.builtin.set_fact:
+    app_dir: "{{ (_land_app_dir_line | regex_replace('^APP_DIR_RESOLVED=', '') | trim) | default(app_dir, true) }}"
+    exe_path: "{{ (_land_exe_path_line | regex_replace('^EXE_PATH_RESOLVED=', '') | trim) | default(exe_path, true) }}"
+  when: (_land_exe_path_line | regex_replace('^EXE_PATH_RESOLVED=', '') | trim) | length > 0
+
+- name: DEBUG LAND 安装路径解析
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-EXE_DIR] app_dir_try={{ _land_app_dir_try_list | default([]) }}"
+      - "[DEBUG-EXE_DIR] {{ _land_app_dir_source_line | default('APP_DIR_SOURCE=unknown') }}"
+      - "[DEBUG-EXE_DIR] app_dir={{ app_dir | default('n/a') }} exe_path={{ exe_path | default('n/a') }}"
+  when: _resolve_land_app_dir is defined
