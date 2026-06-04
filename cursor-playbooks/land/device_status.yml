@@ -12,7 +12,7 @@
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
-    app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else zip_name }}"
+    app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else 'LHBTS' }}"
     exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
@@ -34,15 +34,15 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
-    - name: 解析 APP_DIR 与 exe_path（LHBTS / 1 等候选）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_land_install_path_windows.yml"
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 探测安装路径与运行路径上的程序
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_install_exe_probe.yml"
+    - name: 检查 LAND 程序文件是否存在
+      ansible.windows.win_stat:
+        path: "{{ exe_path }}"
+      register: _land_exe_stat
       ignore_unreachable: true
 
     - name: 检查 LAND 进程状态
@@ -80,7 +80,7 @@
       ansible.builtin.set_fact:
         need_reconfigure: >-
           {{
-            (not (_land_has_executable | default(false) | bool))
+            (not (_land_exe_stat.stat.exists | default(false)))
             or ('RUNNING' not in (_land_process_check.stdout | default('')))
             or (not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)))
           }}
@@ -94,7 +94,7 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
-            {% if not (_land_has_executable | default(false) | bool) %}Executable not found: install={{ install_exe_path | default('n/a') }} runtime={{ exe_path | default('n/a') }}
+            {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_land_process_check.stdout | default('')) %}Process not running: {{ process_name }}
             {% elif not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _land_api_status.status | default('n/a') }} body={{ (_land_api_status.content | default('') | string) | truncate(200, True) }}
             {% else %}{% endif %}

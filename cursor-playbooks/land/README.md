@@ -23,14 +23,7 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
-**Install layout (runtime vs zip):** Playbooks distinguish two paths on the same `exe_dir` (e.g. `F:\`):
-
-| Path | Example | Use |
-|------|---------|-----|
-| **Install** (`APP_DIR`, `install_exe_path`) | `F:\LHBTS\LHBTS.exe` | Zip `Expand-Archive` target; after extract, **start/restart** uses this |
-| **Runtime** (`exe_path` while old copy runs) | `F:\1\LHBTS.exe` | Detected from **running process** or `APP_DIR_CANDIDATES` (e.g. `1,LHBTS`) |
-
-If only `F:\1\LHBTS.exe` exists, graceful stop still targets the running process; zip install runs when **`F:\LHBTS\LHBTS.exe` is missing**, then facts switch to the install path. Set `APP_DIR=LHBTS`, `APP_DIR_CANDIDATES=1,LHBTS`, `EXE_DIR=F:\`, `EXE_DIR_FALLBACK_DRIVES=F,D`.
+**Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`** → `D:\LHBTS\LHBTS.exe` or `F:\LHBTS\LHBTS.exe`). **`EXE_DIR`** may be `D:\` or `F:\`; use **`EXE_DIR_FALLBACK_DRIVES=D,F`** so the first existing drive is chosen. **`ZIP_NAME`** is only the zip file on the controller (`{{ exe_dir }}\{{ ZIP_NAME }}.zip`), not the install folder. Set `APP_DIR=.` if `LHBTS.exe` sits directly under `exe_dir`.
 
 ## Runner 部署（必做）
 
