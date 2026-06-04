@@ -594,6 +594,12 @@ export default {
         || f.apiStatus,
       );
     },
+    selectAllFilteredDisabled() {
+      return this.totalDevices === 0
+        || this.devicesLoading
+        || this.bulkLoading
+        || this.selectAllFilteredLoading;
+    },
   },
 
   watch: {
