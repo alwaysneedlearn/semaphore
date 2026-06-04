@@ -26,6 +26,7 @@
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
     land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
+    land_api_redeliver_path: "{{ (lookup('env', 'LAND_API_REDELIVER_PATH') | default('', true) | trim) | default('/SyncLims/Redeliver', true) }}"
     land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
     land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
@@ -127,7 +128,7 @@
     - name: 程序运行中：API 修改配置（停止前）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
       when:
-        - (merged_cfg | default({}) | length) > 0
+        - (merged_cfg.SystemConfig | default({}) | length) > 0
         - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
 
     - name: 优雅停止 LAND（重启前，与单独停止相同）
@@ -186,7 +187,16 @@
 
     - name: 启动后：API 修改配置（停止前失败时重试）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
-      when: (merged_cfg | default({}) | length) > 0
+      when: (merged_cfg.SystemConfig | default({}) | length) > 0
+
+    - name: 数据重传：API Redeliver（重启后进程与状态正常）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_redeliver.yml"
+      when:
+        - (merged_cfg.Redeliver | default({}) | length) > 0
+        - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+        - 'RUNNING' in (_land_process_after_restart.stdout | default(''))
+        - (_land_api_after_restart.status | default(0) | int) >= 200
+        - (_land_api_after_restart.status | default(0) | int) < 300
 
     - name: 登记 LAND 重启回调行
       ansible.builtin.set_fact:

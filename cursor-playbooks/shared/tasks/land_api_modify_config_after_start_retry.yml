@@ -7,7 +7,7 @@
   vars:
     land_modify_config_phase: after_start
   when:
-    - (merged_cfg | default({}) | length) > 0
+    - (merged_cfg.SystemConfig | default({}) | length) > 0
     - not (_land_modify_config_before_ok | default(false) | bool)
     - >-
       'RUNNING' in (_land_process_after_start.stdout | default('')) or
@@ -32,7 +32,7 @@
     msg:
       - "[DEBUG-LAND] modify_config phase=after_start skipped=before_stop_already_ok"
   when:
-    - (merged_cfg | default({}) | length) > 0
+    - (merged_cfg.SystemConfig | default({}) | length) > 0
     - _land_modify_config_before_ok | default(false) | bool
 
 - name: DEBUG LAND 启动后未重试改配置（进程或 API 未就绪）
@@ -42,6 +42,6 @@
       - "[DEBUG-LAND] process={{ (_land_process_after_start.stdout | default(_land_process_after_restart.stdout | default('')) | trim) }}"
       - "[DEBUG-LAND] api_http={{ _land_api_after_start.status | default(_land_api_after_restart.status | default('n/a')) }}"
   when:
-    - (merged_cfg | default({}) | length) > 0
+    - (merged_cfg.SystemConfig | default({}) | length) > 0
     - not (_land_modify_config_before_ok | default(false) | bool)
     - _land_api_modify_config_after is not defined

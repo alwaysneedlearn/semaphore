@@ -94,6 +94,9 @@
         Default configuration (devices of this type)
       </v-card-subtitle>
       <v-card-text>
+        <p class="text--secondary caption mb-2">
+          {{ $t('deviceConfigCategoryLandHint') }}
+        </p>
         <v-data-table
           :headers="defaultConfigHeaders"
           :items="defaultConfigItems"
@@ -110,6 +113,16 @@
           </template>
           <template v-slot:item.value="{ item }">
             <v-text-field v-model="item.value" hide-details dense outlined :disabled="saving" />
+          </template>
+          <template v-slot:item.remark="{ item }">
+            <v-text-field
+              v-model="item.remark"
+              hide-details
+              dense
+              outlined
+              :disabled="saving"
+              :placeholder="$t('deviceConfigRemarkPlaceholder')"
+            />
           </template>
           <template v-slot:item.actions="{ index }">
             <v-btn icon small @click="removeDefaultConfigRow(index)" :disabled="saving">
@@ -164,9 +177,10 @@ export default {
       saveError: null,
       defaultConfigItems: [],
       defaultConfigHeaders: [
-        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
-        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '30%' },
-        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '40%' },
+        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '18%' },
+        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '22%' },
+        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '28%' },
+        { text: this.$i18n.t('deviceConfigRemark'), value: 'remark', width: '27%' },
         { value: 'actions', sortable: false, width: '5%' },
       ],
       templateActions: [
@@ -232,13 +246,33 @@ export default {
       try {
         const parsed = JSON.parse(raw);
         const rows = [];
+        if (parsed && Array.isArray(parsed.items)) {
+          parsed.items.forEach((item) => {
+            const category = (item.category || '').trim();
+            const key = (item.key || '').trim();
+            if (!category || !key) {
+              return;
+            }
+            rows.push({
+              category,
+              key,
+              value: String(item.value == null ? '' : item.value),
+              remark: String(item.remark == null ? '' : item.remark),
+            });
+          });
+          return rows;
+        }
         Object.keys(parsed || {}).forEach((category) => {
+          if (category === 'items') {
+            return;
+          }
           const group = parsed[category] || {};
           Object.keys(group).forEach((key) => {
             rows.push({
               category,
               key,
               value: String(group[key] == null ? '' : group[key]),
+              remark: '',
             });
           });
         });
@@ -248,19 +282,21 @@ export default {
       }
     },
     buildDefaultConfigJson() {
-      const categorized = {};
+      const items = [];
       this.defaultConfigItems.forEach((item) => {
         const category = (item.category || '').trim();
         const key = (item.key || '').trim();
         if (!category || !key) {
           return;
         }
-        if (!categorized[category]) {
-          categorized[category] = {};
-        }
-        categorized[category][key] = item.value == null ? '' : String(item.value);
+        items.push({
+          category,
+          key,
+          value: item.value == null ? '' : String(item.value),
+          remark: item.remark == null ? '' : String(item.remark),
+        });
       });
-      return JSON.stringify(categorized);
+      return JSON.stringify({ items });
     },
     buildSavePayload() {
       const payload = { ...this.settings };
@@ -282,7 +318,9 @@ export default {
       return payload;
     },
     addDefaultConfigRow() {
-      this.defaultConfigItems.push({ category: 'SystemConfig', key: '', value: '' });
+      this.defaultConfigItems.push({
+        category: 'SystemConfig', key: '', value: '', remark: '',
+      });
     },
     removeDefaultConfigRow(index) {
       this.defaultConfigItems.splice(index, 1);

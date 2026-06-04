@@ -1,0 +1,9 @@
+---
+# Split merged_cfg by Semaphore category for LAND playbooks.
+# SystemConfig -> ModifyConfig body (flat keys under category)
+# Redeliver -> POST /SyncLims/Redeliver (startTime, endTime; token from land_api_token)
+
+- name: 拆分 LAND 配置分类
+  ansible.builtin.set_fact:
+    land_system_cfg_flat: "{{ merged_cfg.SystemConfig | default({}) }}"
+    land_redeliver_cfg: "{{ merged_cfg.Redeliver | default({}) }}"

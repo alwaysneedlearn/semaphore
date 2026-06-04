@@ -1,0 +1,61 @@
+---
+# POST Redeliver after restart when process+QueryStatus OK and valid startTime/endTime.
+# Play vars: land_redeliver_cfg, land_api_*, _land_target_host, land_api_redeliver_path
+
+- name: 准备 LAND 配置分类
+  ansible.builtin.include_tasks: land_prepare_merged_cfg.yml
+  when: land_redeliver_cfg is not defined
+
+- name: 校验 Redeliver 时间格式
+  ansible.builtin.set_fact:
+    _land_redeliver_start: "{{ land_redeliver_cfg.startTime | default('') | trim }}"
+    _land_redeliver_end: "{{ land_redeliver_cfg.endTime | default('') | trim }}"
+    _land_redeliver_time_pattern: '^\\d{4}-\\d{1,2}-\\d{1,2} \\d{1,2}:\\d{2}:\\d{2}$'
+    _land_redeliver_start_ok: >-
+      {{
+        (_land_redeliver_start | length > 0) and
+        (_land_redeliver_start | regex_search(_land_redeliver_time_pattern))
+      }}
+    _land_redeliver_end_ok: >-
+      {{
+        (_land_redeliver_end | length > 0) and
+        (_land_redeliver_end | regex_search(_land_redeliver_time_pattern))
+      }}
+
+- name: 数据重传：API Redeliver（重启后）
+  ansible.builtin.uri:
+    url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_redeliver_path }}"
+    method: POST
+    body_format: json
+    body:
+      token: "{{ land_api_token }}"
+      startTime: "{{ _land_redeliver_start }}"
+      endTime: "{{ _land_redeliver_end }}"
+    timeout: "{{ land_api_timeout }}"
+    validate_certs: "{{ land_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _land_api_redeliver
+  delegate_to: localhost
+  failed_when: false
+  when:
+    - _land_redeliver_start_ok | bool
+    - _land_redeliver_end_ok | bool
+
+- name: DEBUG LAND Redeliver 跳过（时间无效）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] redeliver skipped=invalid_time"
+      - "[DEBUG-LAND] redeliver startTime={{ _land_redeliver_start | default('') }} ok={{ _land_redeliver_start_ok | default(false) }}"
+      - "[DEBUG-LAND] redeliver endTime={{ _land_redeliver_end | default('') }} ok={{ _land_redeliver_end_ok | default(false) }}"
+  when: not (_land_redeliver_start_ok | default(false) | bool) or not (_land_redeliver_end_ok | default(false) | bool)
+
+- name: DEBUG LAND Redeliver 结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] redeliver url={{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_redeliver_path }}"
+      - "[DEBUG-LAND] redeliver http_status={{ _land_api_redeliver.status | default('skipped') }}"
+      - "[DEBUG-LAND] redeliver response_body={{ _land_api_redeliver.content | default('') | truncate(1500, True) }}"
+  when:
+    - _land_api_redeliver is defined
+    - not (_land_api_redeliver.skipped | default(false))

@@ -2,16 +2,16 @@
 # Single ModifyConfig POST. Sets phase facts for two-phase reconfig flow.
 # Vars: land_modify_config_phase (before_stop|after_start), merged_cfg, land_api_*, _land_target_host
 
-- name: 准备 LAND 平铺配置（若尚未平铺）
-  ansible.builtin.include_tasks: land_flatten_merged_cfg.yml
-  when: land_cfg_flat is not defined
+- name: 准备 LAND SystemConfig（ModifyConfig 仅用此分类）
+  ansible.builtin.include_tasks: land_prepare_merged_cfg.yml
+  when: land_system_cfg_flat is not defined
 
 - name: "API 修改配置（LAND，{{ land_modify_config_phase | default('attempt') }}）"
   ansible.builtin.uri:
     url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_modify_config_path }}"
     method: POST
     body_format: json
-    body: "{{ {'token': land_api_token} | combine(land_cfg_flat, recursive=True) }}"
+    body: "{{ {'token': land_api_token} | combine(land_system_cfg_flat, recursive=True) }}"
     timeout: "{{ land_api_timeout }}"
     validate_certs: "{{ land_api_verify_tls }}"
     return_content: true
@@ -19,7 +19,7 @@
   register: _land_modify_config_uri_raw
   delegate_to: localhost
   failed_when: false
-  when: (land_cfg_flat | default({}) | length) > 0
+  when: (land_system_cfg_flat | default({}) | length) > 0
 
 - name: 登记 ModifyConfig 结果（停止前）
   ansible.builtin.set_fact:
@@ -51,7 +51,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-LAND] modify_config phase={{ land_modify_config_phase | default('attempt') }}"
-      - "[DEBUG-LAND] modify_config flat_keys={{ land_cfg_flat | default({}) | dict2items | map(attribute='key') | list }}"
+      - "[DEBUG-LAND] modify_config category=SystemConfig keys={{ land_system_cfg_flat | default({}) | dict2items | map(attribute='key') | list }}"
       - "[DEBUG-LAND] modify_config http_status={{ _land_modify_config_uri_raw.status | default('skipped') }}"
       - "[DEBUG-LAND] modify_config response_body={{ _land_modify_config_uri_raw.content | default('') | truncate(1500, True) }}"
   when:

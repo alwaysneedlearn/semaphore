@@ -502,6 +502,10 @@ export default {
   deviceConfig: 'Configuration',
   deviceConfigPush: 'Apply configuration',
   deviceConfigHelp: 'Group devices configuration items into categories. They are passed to the configuration template as extra variables when applied.',
+  deviceConfigRemark: 'Remark',
+  deviceConfigRemarkPlaceholder: 'Description for this field (optional)',
+  deviceConfigCategoryLandHint:
+    'LAND: category SystemConfig → ModifyConfig; category Redeliver → data redeliver after restart (startTime/endTime like 2026-5-24 10:10:10).',
   deviceConfigCategory: 'Category',
   deviceConfigKey: 'Key',
   deviceConfigValue: 'Value',

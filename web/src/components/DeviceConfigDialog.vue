@@ -1,7 +1,7 @@
 <template>
   <v-dialog
     v-model="dialog"
-    :max-width="700"
+    :max-width="900"
     persistent
   >
     <v-card v-if="dialog">
@@ -48,6 +48,15 @@
               outlined
             />
           </template>
+          <template v-slot:item.remark="{ item }">
+            <v-text-field
+              v-model="item.remark"
+              hide-details
+              dense
+              outlined
+              :placeholder="$t('deviceConfigRemarkPlaceholder')"
+            />
+          </template>
           <template v-slot:item.actions="{ index }">
             <v-btn icon small @click="removeRow(index)">
               <v-icon>mdi-close</v-icon>
@@ -91,9 +100,10 @@ export default {
       saving: false,
       formError: null,
       headers: [
-        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '25%' },
-        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '30%' },
-        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '40%' },
+        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '18%' },
+        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '22%' },
+        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '28%' },
+        { text: this.$i18n.t('deviceConfigRemark'), value: 'remark', width: '27%' },
         { value: 'actions', sortable: false, width: '5%' },
       ],
     };
@@ -126,7 +136,7 @@ export default {
     },
 
     addRow() {
-      this.items.push({ category: 'default', key: '', value: '' });
+      this.items.push({ category: 'default', key: '', value: '', remark: '' });
     },
 
     removeRow(index) {
@@ -143,6 +153,7 @@ export default {
             category: (it.category || '').trim(),
             key: it.key.trim(),
             value: it.value || '',
+            remark: (it.remark || '').trim(),
           }));
         await axios.put(
           `/api/project/${this.projectId}/devices/${this.deviceId}/config`,

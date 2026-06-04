@@ -12,7 +12,7 @@
   vars:
     land_modify_config_phase: before_stop
   when:
-    - (merged_cfg | default({}) | length) > 0
+    - (merged_cfg.SystemConfig | default({}) | length) > 0
     - >-
       'RUNNING' in (_land_process_before_restart.stdout | default('')) or
       'RUNNING' in (_land_process_check.stdout | default(''))
@@ -22,7 +22,7 @@
     msg:
       - "[DEBUG-LAND] modify_config phase=before_stop skipped=process_not_running"
   when:
-    - (merged_cfg | default({}) | length) > 0
+    - (merged_cfg.SystemConfig | default({}) | length) > 0
     - >-
       'RUNNING' not in (_land_process_before_restart.stdout | default('')) and
       'RUNNING' not in (_land_process_check.stdout | default(''))

@@ -456,6 +456,7 @@ func PutDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		items[i].DeviceID = device.ID
 		items[i].Category = strings.TrimSpace(items[i].Category)
 		items[i].Key = strings.TrimSpace(items[i].Key)
+		items[i].Remark = strings.TrimSpace(items[i].Remark)
 	}
 
 	if err := helpers.Store(r).SetDeviceConfigItems(device.ProjectID, device.ID, items); err != nil {
@@ -1503,7 +1504,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
+	if defaultConfig := defaultConfigForPlaybook(settings.DefaultConfigJSON); defaultConfig != nil {
 		extraVars["default_config"] = defaultConfig
 	}
 
@@ -1630,9 +1631,9 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		extraVars := map[string]any{"devices": profilePayload}
-		if defaultConfig := parseDefaultDeviceConfigJSON(ps.DefaultConfigJSON); defaultConfig != nil {
+		if defaultConfig := defaultConfigForPlaybook(ps.DefaultConfigJSON); defaultConfig != nil {
 			extraVars["default_config"] = defaultConfig
-		} else if defaultConfig := parseDefaultDeviceConfigJSON(settings.DefaultConfigJSON); defaultConfig != nil {
+		} else if defaultConfig := defaultConfigForPlaybook(settings.DefaultConfigJSON); defaultConfig != nil {
 			extraVars["default_config"] = defaultConfig
 		}
 		if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {

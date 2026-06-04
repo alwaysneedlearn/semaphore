@@ -428,6 +428,10 @@ export default {
   deviceConfig: '配置',
   deviceConfigPush: '下发配置',
   deviceConfigHelp: '按分类组织设备配置项；下发配置时它们会作为 extra-vars 传给配置模板。',
+  deviceConfigRemark: '备注',
+  deviceConfigRemarkPlaceholder: '字段说明（可选）',
+  deviceConfigCategoryLandHint:
+    'LAND：分类 SystemConfig 用于 ModifyConfig；分类 Redeliver 用于重启后数据重传（需 startTime、endTime，格式如 2026-5-24 10:10:10）。',
   deviceConfigCategory: '分类',
   deviceConfigKey: '键',
   deviceConfigValue: '值',

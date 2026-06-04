@@ -176,7 +176,7 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
       when:
         - need_reconfigure | default(true) | bool
-        - (merged_cfg | default({}) | length) > 0
+        - (merged_cfg.SystemConfig | default({}) | length) > 0
         - 'RUNNING' in (_land_process_check.stdout | default(''))
 
     - name: 初始化停止前改配置结果（进程未运行，启动后再试）
@@ -184,7 +184,7 @@
         _land_modify_config_before_ok: false
       when:
         - need_reconfigure | default(true) | bool
-        - (merged_cfg | default({}) | length) > 0
+        - (merged_cfg.SystemConfig | default({}) | length) > 0
         - 'RUNNING' not in (_land_process_check.stdout | default(''))
 
     - name: 启动 LAND 程序（管理员交互式计划任务）
@@ -233,7 +233,7 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
       when:
         - need_reconfigure | default(true) | bool
-        - (merged_cfg | default({}) | length) > 0
+        - (merged_cfg.SystemConfig | default({}) | length) > 0
 
     - name: 无需重配时复用前置检查状态
       when: not (need_reconfigure | default(false) | bool)

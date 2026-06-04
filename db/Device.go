@@ -215,6 +215,7 @@ type DeviceConfigItem struct {
 	Category string `db:"category" json:"category"`
 	Key      string `db:"key" json:"key" binding:"required"`
 	Value    string `db:"value" json:"value"`
+	Remark   string `db:"remark" json:"remark"`
 }
 
 // ProjectDeviceSettings holds the per-project mapping of device actions to

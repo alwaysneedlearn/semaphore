@@ -443,9 +443,9 @@ func (d *SqlDb) SetDeviceConfigItems(projectID, deviceID int, items []db.DeviceC
 			continue
 		}
 		if _, err = d.execTx(tx,
-			"insert into project__device_config_item (device_id, category, `key`, value) "+
-				"values (?, ?, ?, ?)",
-			deviceID, it.Category, it.Key, it.Value,
+			"insert into project__device_config_item (device_id, category, `key`, value, remark) "+
+				"values (?, ?, ?, ?, ?)",
+			deviceID, it.Category, it.Key, it.Value, it.Remark,
 		); err != nil {
 			_ = tx.Rollback()
 			return err

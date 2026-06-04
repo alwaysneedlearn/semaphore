@@ -12,6 +12,8 @@ LAND device type uses API-first status/config with optional Windows process cont
 
 Start/restart flow now follows the NEWARE-style skeleton: pre-check health first, run reconfigure only when needed, then start+verify. LAND substitutes API-based steps for NEWARE file/log steps (health via `QueryStatus`, config via `ModifyConfig`).
 
+**ModifyConfig timing:** LAND only accepts config changes while the app is running. Playbooks call `POST …/ModifyConfig` **while the process is still running (before graceful stop on restart/redeploy)**, then after start/restart **retry once** if that attempt failed (`http_status` not 2xx, e.g. `-1` when the API was down) **and** process + `QueryStatus` are healthy. They do **not** POST ModifyConfig between stop and start (that always yields connection errors).
+
 All playbooks reuse shared WinRM/callback tasks from `../shared/tasks/` and helper scripts from `../shared/files/`. Each LAND play sets:
 
 ```yaml
@@ -106,7 +108,20 @@ SINEXCEL and NBT use the same shared tasks with `sem_debug_tag: SINEXCEL` / `NBT
 - Body:
   - `{"token":"landapi","startTime":"2026-5-24 10:10:10","endTime":"2026-5-26 10:10:10"}`
 
-3) Modify config
+3) Modify config (category **SystemConfig** only)
 - `POST http://<ip>:<port>{{ LAND_API_MODIFY_CONFIG_PATH }}`
-- Body: **flat JSON** at the root — `{"token":"landapi", "FieldA": "...", "FieldB": "..."}` (no `SystemConfig` wrapper).
-- Semaphore **device type / device config categories** are merged then **flattened** in `shared/tasks/land_flatten_merged_cfg.yml` (same key in two categories → later category wins). Use unique keys across categories or put overrides only on the device.
+- Body: **flat JSON** at the root — `{"token":"landapi", "FieldA": "...", "FieldB": "..."}` (keys from merged `SystemConfig` category; device overrides type default).
+
+4) Redeliver (category **Redeliver** only; **`device_restart.yml` only**)
+- After restart: process `RUNNING`, `QueryStatus` HTTP 2xx, valid `startTime` / `endTime` in category `Redeliver` (format `yyyy-M-d HH:mm:ss`, e.g. `2026-5-24 10:10:10`).
+- `POST http://<ip>:<port>{{ LAND_API_REDELIVER_PATH }}` with `token` from `LAND_API_TOKEN`, times from config.
+- Success response example: `{"code":200,"message":"success","seqNo":8,"data":true}`.
+
+**Config categories in Semaphore UI**
+
+| Category | Used by |
+|----------|---------|
+| `SystemConfig` | ModifyConfig (start / restart / redeploy while app running) |
+| `Redeliver` | Redeliver API (`device_restart.yml` after healthy restart only) |
+
+Each row supports an optional **remark** (description) in device list and device type default config.
