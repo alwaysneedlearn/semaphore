@@ -340,7 +340,7 @@
             small
             class="px-2"
             :loading="selectAllFilteredLoading"
-            :disabled="totalDevices === 0 || devicesLoading || bulkLoading || selectAllFilteredLoading"
+            :disabled="selectAllFilteredDisabled"
             @click="selectAllMatchingFilters"
           >
             <v-icon left small>mdi-checkbox-multiple-marked</v-icon>
@@ -834,7 +834,9 @@ export default {
       return this.profileById[profileId] || '—';
     },
 
-    buildDeviceListQueryParams({ limit, offset, sortBy, sortDesc }) {
+    buildDeviceListQueryParams({
+      limit, offset, sortBy, sortDesc,
+    }) {
       const params = {
         limit,
         offset,
