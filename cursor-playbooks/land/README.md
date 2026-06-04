@@ -23,7 +23,7 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
-**Install layout:** playbooks expect `{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}` (defaults `C:\Program Files\LAND\land\LHBTS.exe`). If `LHBTS.exe` sits directly under `EXE_DIR`, set `ZIP_NAME=.` or adjust `EXE_DIR` in the Variable Group. Older docs used `land_agent.exe`; typical sites only ship **`LHBTS.exe`** — do not configure a separate `land_agent` process.
+**Install layout:** executable path is `{{ EXE_DIR }}\{{ APP_DIR or ZIP_NAME }}\{{ EXE_NAME }}` (defaults `C:\Program Files\LAND\land\LHBTS.exe`). **`ZIP_NAME`** is only the zip **file** base name on the controller (`{{ ZIP_NAME }}.zip` copied to `{{ EXE_DIR }}\{{ ZIP_NAME }}.zip`). **`APP_DIR`** is the folder created under `EXE_DIR` after `Expand-Archive` when it differs from the zip name (example: `ZIP_NAME=LHBTS5.1.4.4`, `APP_DIR=LHBTS`, `EXE_DIR=D:\` → `D:\LHBTS\LHBTS.exe`). If unset, `APP_DIR` defaults to `ZIP_NAME`. If `LHBTS.exe` sits directly under `EXE_DIR`, set `APP_DIR=.` (or `ZIP_NAME=.`). Older docs used `land_agent.exe`; typical sites only ship **`LHBTS.exe`** — do not configure a separate `land_agent` process.
 
 ## Runner 部署（必做）
 
@@ -57,7 +57,8 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `EXE_DIR` | `C:\Program Files\LAND` | Preferred executable directory; drive falls back `preferred -> E: -> C:` |
 | `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Optional drive order override (comma/space separated), e.g. `D,E,C` |
 | `EXE_NAME` | `LHBTS.exe` | LAND executable file name (GUI + API on typical installs) |
-| `ZIP_NAME` | `land` | Package folder/zip base name |
+| `ZIP_NAME` | `land` | Zip file base name on controller (`{{ ZIP_NAME }}.zip`); not used for `exe_path` when `APP_DIR` is set |
+| `APP_DIR` | (same as `ZIP_NAME`) | Install folder under `EXE_DIR` after extract (e.g. `LHBTS` when zip is `LHBTS5.1.4.4.zip`) |
 | `ZIP_PATH` | `/root/neware/dbwb` | Controller-side zip source directory |
 | `EXE_ARGS` | empty | Optional executable arguments |
 | `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |
