@@ -136,7 +136,9 @@ export default {
     },
 
     addRow() {
-      this.items.push({ category: 'default', key: '', value: '', remark: '' });
+      this.items.push({
+        category: 'default', key: '', value: '', remark: '',
+      });
     },
 
     removeRow(index) {
