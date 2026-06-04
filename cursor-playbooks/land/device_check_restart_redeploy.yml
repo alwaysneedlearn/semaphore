@@ -134,7 +134,7 @@
         }
       register: _land_process_check
       changed_when: false
-      when: _land_exe_stat.stat.exists | default(false)
+      when: _land_has_executable | default(false) | bool
 
     - name: 前置检查：查询 LAND API 状态
       ansible.builtin.uri:
@@ -150,7 +150,7 @@
       register: _land_api_check
       delegate_to: localhost
       failed_when: false
-      when: _land_exe_stat.stat.exists | default(false)
+      when: _land_has_executable | default(false) | bool
 
     - name: 判定是否需要重启重部署
       ansible.builtin.set_fact:
