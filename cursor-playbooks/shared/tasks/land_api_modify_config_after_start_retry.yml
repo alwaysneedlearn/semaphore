@@ -6,26 +6,28 @@
   ansible.builtin.include_tasks: land_api_modify_config_attempt.yml
   vars:
     land_modify_config_phase: after_start
-  when:
-    - (merged_cfg.SystemConfig | default({}) | length) > 0
-    - not (_land_modify_config_before_ok | default(false) | bool)
-    - >-
-      'RUNNING' in (_land_process_after_start.stdout | default('')) or
-      'RUNNING' in (_land_process_after_restart.stdout | default(''))
-    - >-
+  when: >-
+    (merged_cfg.SystemConfig | default({}) | length) > 0
+    and not (_land_modify_config_before_ok | default(false) | bool)
+    and (
+      'RUNNING' in (_land_process_after_start.stdout | default(""))
+      or 'RUNNING' in (_land_process_after_restart.stdout | default(""))
+    )
+    and (
       (
-        (_land_api_after_start.status | default(0) | int) >= 200 and
-        (_land_api_after_start.status | default(0) | int) < 300
+        (_land_api_after_start.status | default(0) | int) >= 200
+        and (_land_api_after_start.status | default(0) | int) < 300
       ) or (
-        (_land_api_after_restart.status | default(0) | int) >= 200 and
-        (_land_api_after_restart.status | default(0) | int) < 300
+        (_land_api_after_restart.status | default(0) | int) >= 200
+        and (_land_api_after_restart.status | default(0) | int) < 300
       ) or (
-        not (land_start_check_api | default(true) | bool) and
-        (
-          'RUNNING' in (_land_process_after_start.stdout | default('')) or
-          'RUNNING' in (_land_process_after_restart.stdout | default(''))
+        not (land_start_check_api | default(true) | bool)
+        and (
+          'RUNNING' in (_land_process_after_start.stdout | default(""))
+          or 'RUNNING' in (_land_process_after_restart.stdout | default(""))
         )
       )
+    )
 
 - name: DEBUG LAND 启动后未重试改配置（停止前已成功）
   ansible.builtin.debug:

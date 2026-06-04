@@ -174,18 +174,18 @@
 
     - name: 程序运行中：API 修改配置（启动前，进程已在跑时）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
-      when:
-        - need_reconfigure | default(true) | bool
-        - (merged_cfg.SystemConfig | default({}) | length) > 0
-        - 'RUNNING' in (_land_process_check.stdout | default(''))
+      when: >-
+        (need_reconfigure | default(true) | bool)
+        and (merged_cfg.SystemConfig | default({}) | length) > 0
+        and 'RUNNING' in (_land_process_check.stdout | default(""))
 
     - name: 初始化停止前改配置结果（进程未运行，启动后再试）
       ansible.builtin.set_fact:
         _land_modify_config_before_ok: false
-      when:
-        - need_reconfigure | default(true) | bool
-        - (merged_cfg.SystemConfig | default({}) | length) > 0
-        - 'RUNNING' not in (_land_process_check.stdout | default(''))
+      when: >-
+        (need_reconfigure | default(true) | bool)
+        and (merged_cfg.SystemConfig | default({}) | length) > 0
+        and 'RUNNING' not in (_land_process_check.stdout | default(""))
 
     - name: 启动 LAND 程序（管理员交互式计划任务）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"

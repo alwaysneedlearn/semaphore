@@ -127,9 +127,9 @@
 
     - name: 程序运行中：API 修改配置（停止前）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
-      when:
-        - (merged_cfg.SystemConfig | default({}) | length) > 0
-        - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when: >-
+        (merged_cfg.SystemConfig | default({}) | length) > 0
+        and ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)))
 
     - name: 优雅停止 LAND（重启前，与单独停止相同）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
@@ -191,12 +191,12 @@
 
     - name: 数据重传：API Redeliver（重启后进程与状态正常）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_redeliver.yml"
-      when:
-        - (merged_cfg.Redeliver | default({}) | length) > 0
-        - (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
-        - 'RUNNING' in (_land_process_after_restart.stdout | default(''))
-        - (_land_api_after_restart.status | default(0) | int) >= 200
-        - (_land_api_after_restart.status | default(0) | int) < 300
+      when: >-
+        (merged_cfg.Redeliver | default({}) | length) > 0
+        and ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)))
+        and ('RUNNING' in (_land_process_after_restart.stdout | default("")))
+        and ((_land_api_after_restart.status | default(0) | int) >= 200)
+        and ((_land_api_after_restart.status | default(0) | int) < 300)
 
     - name: 登记 LAND 重启回调行
       ansible.builtin.set_fact:

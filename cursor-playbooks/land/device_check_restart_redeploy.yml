@@ -162,16 +162,16 @@
       block:
         - name: 程序运行中：API 修改配置（停止前）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
-          when:
-            - (merged_cfg.SystemConfig | default({}) | length) > 0
-            - 'RUNNING' in (_land_process_check.stdout | default(''))
+          when: >-
+            (merged_cfg.SystemConfig | default({}) | length) > 0
+            and 'RUNNING' in (_land_process_check.stdout | default(""))
 
         - name: 初始化停止前改配置结果（进程未运行，启动后再试）
           ansible.builtin.set_fact:
             _land_modify_config_before_ok: false
-          when:
-            - (merged_cfg.SystemConfig | default({}) | length) > 0
-            - 'RUNNING' not in (_land_process_check.stdout | default(''))
+          when: >-
+            (merged_cfg.SystemConfig | default({}) | length) > 0
+            and 'RUNNING' not in (_land_process_check.stdout | default(""))
 
         - name: 优雅停止 LAND（重部署前，与单独停止相同）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
