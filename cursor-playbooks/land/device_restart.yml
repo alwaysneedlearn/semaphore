@@ -55,23 +55,21 @@
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 检查 LAND 程序文件是否存在
-      ansible.windows.win_stat:
-        path: "{{ exe_path }}"
-      register: _land_exe_stat
+    - name: 探测安装路径与运行路径上的程序
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_install_exe_probe.yml"
 
     - name: 检查本地压缩包是否存在
       ansible.windows.win_shell: |
         if (Test-Path "{{ exe_dir }}\\{{ zip_name }}.zip") { "ZIP_FOUND" } else { "ZIP_NOT_FOUND" }
       register: zip_local_check_result
       changed_when: false
-      when: not (_land_exe_stat.stat.exists | default(false))
+      when: _land_needs_zip_install | default(false) | bool
 
     - name: 创建程序根目录
       ansible.builtin.win_file:
         path: "{{ exe_dir }}"
         state: directory
-      when: not (_land_exe_stat.stat.exists | default(false))
+      when: _land_needs_zip_install | default(false) | bool
 
     - name: 从服务器复制安装包
       ansible.builtin.win_copy:
@@ -79,7 +77,7 @@
         dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
       register: zip_copy_result
       when: >
-        not (_land_exe_stat.stat.exists | default(false)) and
+        (_land_needs_zip_install | default(false) | bool) and
         (zip_local_check_result is skipped or 'ZIP_NOT_FOUND' in (zip_local_check_result.stdout | default('')))
 
     - name: 解压前确保 LH 注册表项存在
@@ -98,7 +96,7 @@
             data: "0"
             type: string
             state: present
-      when: not (_land_exe_stat.stat.exists | default(false))
+      when: _land_needs_zip_install | default(false) | bool
 
     - name: 解压程序包
       ansible.windows.win_shell: |
@@ -114,12 +112,17 @@
       failed_when: >
         extract_result is defined and 'stdout' in extract_result and
         'EXTRACT_ERROR' in extract_result.stdout
-      when: not (_land_exe_stat.stat.exists | default(false))
+      when: _land_needs_zip_install | default(false) | bool
 
-    - name: 重新检查 LAND 程序文件是否存在
+    - name: 解压后切换到安装目录（如 F:\LHBTS）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_use_install_path_after_extract.yml"
+      when: _land_needs_zip_install | default(false) | bool
+
+    - name: 重新检查 LAND 安装目录程序
       ansible.windows.win_stat:
-        path: "{{ exe_path }}"
+        path: "{{ install_exe_path }}"
       register: _land_exe_stat_after_extract
+      when: _land_needs_zip_install | default(false) | bool
 
     - name: 重启前检查 LAND 进程（改配置须在运行态）
       ansible.windows.win_shell: |
@@ -127,17 +130,17 @@
         if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
       register: _land_process_before_restart
       changed_when: false
-      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when: _land_has_executable | default(false) | bool
 
     - name: 程序运行中：API 修改配置（停止前）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
       when: >-
         (merged_cfg.SystemConfig | default({}) | length) > 0
-        and ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)))
+        and (_land_has_executable | default(false) | bool)
 
     - name: 优雅停止 LAND（重启前，与单独停止相同）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
-      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when: (_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool)
 
     - name: 获取当前登录用户（用于交互式计划任务）
       ansible.windows.win_shell: |
@@ -162,7 +165,7 @@
 
     - name: 启动 LAND 程序（管理员交互式计划任务）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
-      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when: (_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool)
 
     - name: 重启后确认进程状态
       ansible.windows.win_shell: |
@@ -171,7 +174,7 @@
         if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
       register: _land_process_after_restart
       changed_when: false
-      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when: (_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool)
 
     - name: 重启后查询 LAND API 状态
       ansible.builtin.uri:
@@ -187,7 +190,7 @@
       register: _land_api_after_restart
       delegate_to: localhost
       failed_when: false
-      when: (_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))
+      when: (_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool)
 
     - name: 启动后：API 修改配置（停止前失败时重试）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
@@ -197,7 +200,7 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_redeliver.yml"
       when: >-
         (merged_cfg.Redeliver | default({}) | length) > 0
-        and ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false)))
+        and ((_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool))
         and ('RUNNING' in (_land_process_after_restart.stdout | default("")))
         and ((_land_api_after_restart.status | default(0) | int) >= 200)
         and ((_land_api_after_restart.status | default(0) | int) < 300)
@@ -207,11 +210,11 @@
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))) and ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if ((_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool)) and ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'offline' }}"
           abnormal_reason: >-
-            {% if not ((_land_exe_stat.stat.exists | default(false)) or (_land_exe_stat_after_extract.stat.exists | default(false))) %}Executable not found: {{ exe_path }}
+            {% if not ((_land_has_executable | default(false) | bool) or (_land_exe_stat_after_extract.stat.exists | default(false) | bool)) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_land_process_after_restart.stdout | default('')) %}Restart failed: process not running
             {% elif not (((_land_api_after_restart.status | default(0) | int) >= 200) and ((_land_api_after_restart.status | default(0) | int) < 300)) %}API check failed after restart: http={{ _land_api_after_restart.status | default('n/a') }}
             {% else %}{% endif %}

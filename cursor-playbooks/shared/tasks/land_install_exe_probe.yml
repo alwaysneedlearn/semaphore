@@ -1,0 +1,23 @@
+---
+# After resolve_land_install_path_windows.yml.
+# install_exe_path = zip target (e.g. F:\LHBTS\LHBTS.exe); exe_path = runtime (e.g. F:\1\...).
+
+- name: 检查 LAND 安装目录程序（解压目标 APP_DIR）
+  ansible.windows.win_stat:
+    path: "{{ install_exe_path }}"
+  register: _land_install_exe_stat
+
+- name: 检查 LAND 运行路径程序（旧目录或当前进程路径）
+  ansible.windows.win_stat:
+    path: "{{ exe_path }}"
+  register: _land_runtime_exe_stat
+  when: (exe_path | default('')) != (install_exe_path | default(''))
+
+- name: 登记 LAND 可执行文件是否已存在
+  ansible.builtin.set_fact:
+    _land_has_executable: >-
+      {{
+        (_land_install_exe_stat.stat.exists | default(false))
+        or (_land_runtime_exe_stat.stat.exists | default(false) if (_land_runtime_exe_stat is defined) else false)
+      }}
+    _land_needs_zip_install: "{{ not (_land_install_exe_stat.stat.exists | default(false)) }}"

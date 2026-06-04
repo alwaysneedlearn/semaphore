@@ -23,7 +23,14 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
-**Install layout:** after play start, tasks resolve **`exe_dir`** (drive: `EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES`, e.g. `D,F`) then **`app_dir` + `exe_path`** by probing `{{ exe_dir }}\{{ folder }}\{{ EXE_NAME }}` for each of `APP_DIR`, `APP_DIR_CANDIDATES` (e.g. `LHBTS,1`), then `ZIP_NAME`, then auto-scan subfolders of `exe_dir`. Example: `EXE_DIR=D:\`, `APP_DIR_CANDIDATES=LHBTS,1` → uses `D:\LHBTS\LHBTS.exe` if present, else `D:\1\LHBTS.exe`. **`ZIP_NAME`** is only the zip file on the controller (`{{ EXE_DIR }}\{{ ZIP_NAME }}.zip`). If `LHBTS.exe` sits directly under `exe_dir`, detection sets `APP_DIR=.`. Typical sites only ship **`LHBTS.exe`**.
+**Install layout (runtime vs zip):** Playbooks distinguish two paths on the same `exe_dir` (e.g. `F:\`):
+
+| Path | Example | Use |
+|------|---------|-----|
+| **Install** (`APP_DIR`, `install_exe_path`) | `F:\LHBTS\LHBTS.exe` | Zip `Expand-Archive` target; after extract, **start/restart** uses this |
+| **Runtime** (`exe_path` while old copy runs) | `F:\1\LHBTS.exe` | Detected from **running process** or `APP_DIR_CANDIDATES` (e.g. `1,LHBTS`) |
+
+If only `F:\1\LHBTS.exe` exists, graceful stop still targets the running process; zip install runs when **`F:\LHBTS\LHBTS.exe` is missing**, then facts switch to the install path. Set `APP_DIR=LHBTS`, `APP_DIR_CANDIDATES=1,LHBTS`, `EXE_DIR=F:\`, `EXE_DIR_FALLBACK_DRIVES=F,D`.
 
 ## Runner 部署（必做）
 

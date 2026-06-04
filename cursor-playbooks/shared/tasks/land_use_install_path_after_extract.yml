@@ -1,0 +1,14 @@
+---
+# After zip extract, start/verify against install layout (e.g. F:\LHBTS\LHBTS.exe not legacy F:\1\).
+
+- name: 解压后改用安装目录路径（APP_DIR）
+  ansible.builtin.set_fact:
+    app_dir: "{{ app_dir_install }}"
+    exe_path: "{{ install_exe_path }}"
+  when: install_exe_path is defined and (install_exe_path | length > 0)
+
+- name: DEBUG LAND 解压后路径
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-EXE_DIR] post_extract app_dir={{ app_dir }} exe_path={{ exe_path }}"
+  when: install_exe_path is defined and (install_exe_path | length > 0)

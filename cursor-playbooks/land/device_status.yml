@@ -41,10 +41,8 @@
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 检查 LAND 程序文件是否存在
-      ansible.windows.win_stat:
-        path: "{{ exe_path }}"
-      register: _land_exe_stat
+    - name: 探测安装路径与运行路径上的程序
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_install_exe_probe.yml"
       ignore_unreachable: true
 
     - name: 检查 LAND 进程状态
@@ -82,7 +80,7 @@
       ansible.builtin.set_fact:
         need_reconfigure: >-
           {{
-            (not (_land_exe_stat.stat.exists | default(false)))
+            (not (_land_has_executable | default(false) | bool))
             or ('RUNNING' not in (_land_process_check.stdout | default('')))
             or (not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)))
           }}
@@ -96,7 +94,7 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
-            {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
+            {% if not (_land_has_executable | default(false) | bool) %}Executable not found: install={{ install_exe_path | default('n/a') }} runtime={{ exe_path | default('n/a') }}
             {% elif 'RUNNING' not in (_land_process_check.stdout | default('')) %}Process not running: {{ process_name }}
             {% elif not (((_land_api_status.status | default(0) | int) >= 200) and ((_land_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _land_api_status.status | default('n/a') }} body={{ (_land_api_status.content | default('') | string) | truncate(200, True) }}
             {% else %}{% endif %}
