@@ -20,8 +20,12 @@
 
 - name: 登记解析后的 EXE 路径
   ansible.builtin.set_fact:
-    _install_subdir: "{{ app_dir | default(zip_name) }}"
-    exe_path: "{{ (exe_dir + '\\\\' + exe_name) if (_install_subdir in ['.', '']) else (exe_dir + '\\\\' + _install_subdir + '\\\\' + exe_name) }}"
+    exe_path: >-
+      {{
+        (exe_dir + '\\' + exe_name)
+        if ((app_dir | default(zip_name)) in ['.', ''])
+        else (exe_dir + '\\' + (app_dir | default(zip_name)) + '\\' + exe_name)
+      }}
   when: zip_name is defined and exe_name is defined
 
 - name: DEBUG 解析 EXE_DIR 盘符
