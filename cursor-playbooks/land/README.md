@@ -114,7 +114,8 @@ SINEXCEL and NBT use the same shared tasks with `sem_debug_tag: SINEXCEL` / `NBT
 - Body: **flat JSON** at the root — `{"token":"landapi", "FieldA": "...", "FieldB": "..."}` (keys from merged `SystemConfig` category; device overrides type default).
 
 4) Redeliver (category **Redeliver** only; **`device_restart.yml` only**)
-- After restart: process `RUNNING`, `QueryStatus` HTTP 2xx, valid `startTime` / `endTime` in category `Redeliver` (format `yyyy-M-d HH:mm:ss`, e.g. `2026-5-24 10:10:10`).
+- After restart: process `RUNNING`, `QueryStatus` HTTP 2xx, valid `startTime` / `endTime` in category `Redeliver`.
+- **Time format** (playbook regex): `yyyy-M-d HH:mm:ss` — year 4 digits; month/day/hour **1–2** digits (no zero-padding required); **minute and second must be two digits** (`10:10:10` OK, `10:1:10` invalid). Examples: `2026-5-24 10:10:10`, `2026-6-4 10:10:10`. Keys in config: `startTime`, `endTime` under category `Redeliver`.
 - `POST http://<ip>:<port>{{ LAND_API_REDELIVER_PATH }}` with `token` from `LAND_API_TOKEN`, times from config.
 - Success response example: `{"code":200,"message":"success","seqNo":8,"data":true}`.
 
