@@ -15,15 +15,17 @@
 
 - name: 校验 Redeliver 时间格式
   ansible.builtin.set_fact:
+    # Must be real booleans: Jinja (a and regex_search) returns the match string, and
+    # Ansible bool filter treats date-like strings (e.g. 2026-6-4 10:10:10) as false.
     _land_redeliver_start_ok: >-
       {{
-        (_land_redeliver_start | length > 0) and
-        (_land_redeliver_start | regex_search(_land_redeliver_time_pattern))
+        (_land_redeliver_start | default('') | trim | length > 0) and
+        ((_land_redeliver_start | regex_search(_land_redeliver_time_pattern) | default('', true) | length) > 0)
       }}
     _land_redeliver_end_ok: >-
       {{
-        (_land_redeliver_end | length > 0) and
-        (_land_redeliver_end | regex_search(_land_redeliver_time_pattern))
+        (_land_redeliver_end | default('') | trim | length > 0) and
+        ((_land_redeliver_end | regex_search(_land_redeliver_time_pattern) | default('', true) | length) > 0)
       }}
 
 - name: 数据重传：API Redeliver（重启后）
@@ -43,15 +45,15 @@
   delegate_to: localhost
   failed_when: false
   when:
-    - _land_redeliver_start_ok | bool
-    - _land_redeliver_end_ok | bool
+    - _land_redeliver_start_ok | default(false) | bool
+    - _land_redeliver_end_ok | default(false) | bool
 
 - name: DEBUG LAND Redeliver 跳过（时间无效）
   ansible.builtin.debug:
     msg:
       - "[DEBUG-LAND] redeliver skipped=invalid_time"
-      - "[DEBUG-LAND] redeliver startTime={{ _land_redeliver_start | default('') }} ok={{ _land_redeliver_start_ok | default(false) | string }}"
-      - "[DEBUG-LAND] redeliver endTime={{ _land_redeliver_end | default('') }} ok={{ _land_redeliver_end_ok | default(false) | string }}"
+      - "[DEBUG-LAND] redeliver startTime={{ _land_redeliver_start | default('') }} valid={{ _land_redeliver_start_ok | default(false) }}"
+      - "[DEBUG-LAND] redeliver endTime={{ _land_redeliver_end | default('') }} valid={{ _land_redeliver_end_ok | default(false) }}"
       - "[DEBUG-LAND] redeliver expected_format=yyyy-M-d HH:mm:ss (e.g. 2026-5-24 10:10:10; month/day/hour 1-2 digits, minute/second exactly 2 digits)"
   when: not (_land_redeliver_start_ok | default(false) | bool) or not (_land_redeliver_end_ok | default(false) | bool)
 
