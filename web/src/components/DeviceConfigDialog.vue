@@ -1,7 +1,7 @@
 <template>
   <v-dialog
     v-model="dialog"
-    :max-width="900"
+    :max-width="1000"
     persistent
   >
     <v-card v-if="dialog">
@@ -13,61 +13,14 @@
       <v-card-text>
         <v-alert v-if="formError" color="error" dense>{{ formError }}</v-alert>
 
-        <p class="text--secondary mb-2">{{ $t('deviceConfigHelp') }}</p>
-
-        <v-data-table
-          :headers="headers"
+        <DeviceConfigItemsEditor
           :items="items"
-          dense
-          hide-default-footer
-          :items-per-page="Number.MAX_VALUE"
-        >
-          <template v-slot:item.category="{ item }">
-            <v-text-field
-              v-model="item.category"
-              hide-details
-              dense
-              outlined
-              placeholder="default"
-            />
-          </template>
-          <template v-slot:item.key="{ item }">
-            <v-text-field
-              v-model="item.key"
-              hide-details
-              dense
-              outlined
-              :rules="[v => !!v || $t('keyIsRequired')]"
-            />
-          </template>
-          <template v-slot:item.value="{ item }">
-            <v-text-field
-              v-model="item.value"
-              hide-details
-              dense
-              outlined
-            />
-          </template>
-          <template v-slot:item.remark="{ item }">
-            <v-text-field
-              v-model="item.remark"
-              hide-details
-              dense
-              outlined
-              :placeholder="$t('deviceConfigRemarkPlaceholder')"
-            />
-          </template>
-          <template v-slot:item.actions="{ index }">
-            <v-btn icon small @click="removeRow(index)">
-              <v-icon>mdi-close</v-icon>
-            </v-btn>
-          </template>
-        </v-data-table>
-
-        <v-btn small text class="mt-2" @click="addRow">
-          <v-icon left>mdi-plus</v-icon>
-          {{ $t('deviceConfigAddRow') }}
-        </v-btn>
+          :disabled="saving"
+          layout="table"
+          :hint="$t('deviceConfigHelp')"
+          @add-row="addRow"
+          @remove-row="removeRow"
+        />
       </v-card-text>
 
       <v-card-actions>
@@ -85,8 +38,10 @@
 <script>
 import axios from 'axios';
 import { getErrorMessage } from '@/lib/error';
+import DeviceConfigItemsEditor from '@/components/DeviceConfigItemsEditor.vue';
 
 export default {
+  components: { DeviceConfigItemsEditor },
   props: {
     value: Boolean,
     projectId: [Number, String],
@@ -99,13 +54,6 @@ export default {
       items: [],
       saving: false,
       formError: null,
-      headers: [
-        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '18%' },
-        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '22%' },
-        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '28%' },
-        { text: this.$i18n.t('deviceConfigRemark'), value: 'remark', width: '27%' },
-        { value: 'actions', sortable: false, width: '5%' },
-      ],
     };
   },
 

@@ -1,6 +1,6 @@
 <template>
   <div v-if="items != null">
-    <v-dialog v-model="deviceProfilesDialog" :max-width="900" scrollable>
+    <v-dialog v-model="deviceProfilesDialog" :max-width="1140" scrollable>
       <v-card>
         <v-card-title>Device types (profiles)</v-card-title>
         <v-card-text>

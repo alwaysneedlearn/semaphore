@@ -4,6 +4,13 @@
       {{ saveError }}
     </v-alert>
 
+    <v-tabs v-model="settingsTab" class="profile-settings-editor__tabs mb-2" grow>
+      <v-tab>{{ $t('deviceTypeTabGeneral') }}</v-tab>
+      <v-tab>{{ $t('deviceTypeTabConfig') }}</v-tab>
+    </v-tabs>
+
+    <v-tabs-items v-model="settingsTab" class="profile-settings-editor__tab-items">
+      <v-tab-item>
     <v-card outlined class="mb-3">
       <v-card-subtitle class="pb-0 font-weight-medium">
         Playbook templates
@@ -88,54 +95,26 @@
         />
       </v-card-text>
     </v-card>
+      </v-tab-item>
 
-    <v-card outlined class="mb-3">
-      <v-card-subtitle class="pb-0 font-weight-medium">
-        Default configuration (devices of this type)
-      </v-card-subtitle>
-      <v-card-text>
-        <p class="text--secondary caption mb-2">
-          {{ $t('deviceConfigCategoryLandHint') }}
-        </p>
-        <v-data-table
-          :headers="defaultConfigHeaders"
-          :items="defaultConfigItems"
-          dense
-          hide-default-footer
-          :items-per-page="-1"
-          class="elevation-0"
-        >
-          <template v-slot:item.category="{ item }">
-            <v-text-field v-model="item.category" hide-details dense outlined :disabled="saving" />
-          </template>
-          <template v-slot:item.key="{ item }">
-            <v-text-field v-model="item.key" hide-details dense outlined :disabled="saving" />
-          </template>
-          <template v-slot:item.value="{ item }">
-            <v-text-field v-model="item.value" hide-details dense outlined :disabled="saving" />
-          </template>
-          <template v-slot:item.remark="{ item }">
-            <v-text-field
-              v-model="item.remark"
-              hide-details
-              dense
-              outlined
+      <v-tab-item>
+        <v-card outlined class="mb-3">
+          <v-card-subtitle class="pb-0 font-weight-medium">
+            {{ $t('deviceTypeTabConfig') }}
+          </v-card-subtitle>
+          <v-card-text>
+            <DeviceConfigItemsEditor
+              :items="defaultConfigItems"
               :disabled="saving"
-              :placeholder="$t('deviceConfigRemarkPlaceholder')"
+              layout="cards"
+              :hint="$t('deviceConfigCategoryLandHint')"
+              @add-row="addDefaultConfigRow"
+              @remove-row="removeDefaultConfigRow"
             />
-          </template>
-          <template v-slot:item.actions="{ index }">
-            <v-btn icon small @click="removeDefaultConfigRow(index)" :disabled="saving">
-              <v-icon>mdi-close</v-icon>
-            </v-btn>
-          </template>
-        </v-data-table>
-        <v-btn small text class="mt-2" @click="addDefaultConfigRow" :disabled="saving">
-          <v-icon left>mdi-plus</v-icon>
-          {{ $t('deviceConfigAddRow') }}
-        </v-btn>
-      </v-card-text>
-    </v-card>
+          </v-card-text>
+        </v-card>
+      </v-tab-item>
+    </v-tabs-items>
 
     <div class="profile-settings-editor__actions">
       <v-btn text small :disabled="saving" @click="loadSettings">
@@ -154,6 +133,7 @@
 import axios from 'axios';
 import EventBus from '@/event-bus';
 import { getErrorMessage } from '@/lib/error';
+import DeviceConfigItemsEditor from '@/components/DeviceConfigItemsEditor.vue';
 
 const TEMPLATE_ID_FIELDS = [
   'start_template_id',
@@ -164,6 +144,7 @@ const TEMPLATE_ID_FIELDS = [
 ];
 
 export default {
+  components: { DeviceConfigItemsEditor },
   props: {
     projectId: { type: Number, required: true },
     profileId: { type: Number, required: true },
@@ -173,16 +154,10 @@ export default {
       settings: {},
       templates: [],
       inventories: [],
+      settingsTab: 0,
       saving: false,
       saveError: null,
       defaultConfigItems: [],
-      defaultConfigHeaders: [
-        { text: this.$i18n.t('deviceConfigCategory'), value: 'category', width: '18%' },
-        { text: this.$i18n.t('deviceConfigKey'), value: 'key', width: '22%' },
-        { text: this.$i18n.t('deviceConfigValue'), value: 'value', width: '28%' },
-        { text: this.$i18n.t('deviceConfigRemark'), value: 'remark', width: '27%' },
-        { value: 'actions', sortable: false, width: '5%' },
-      ],
       templateActions: [
         { field: 'start_template_id', label: 'Start template' },
         { field: 'stop_template_id', label: 'Stop template' },
@@ -351,6 +326,14 @@ export default {
 </script>
 
 <style scoped>
+.profile-settings-editor__tabs >>> .v-tab {
+  font-size: 0.8125rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.profile-settings-editor__tab-items {
+  background: transparent;
+}
 .profile-settings-editor__actions {
   display: flex;
   justify-content: flex-end;
