@@ -1,5 +1,6 @@
 ---
-# Normalize ZIP_NAME (strip trailing .zip) and controller src path. Sets zip_filename, zip_src_controller.
+# LAND: ZIP_NAME is archive base without .zip (e.g. LHBTS5.1.4.4).
+# Sets zip_name (base), zip_filename (…zip), zip_src_controller (controller copy src).
 
 - name: 规范化 LAND 安装包文件名
   ansible.builtin.set_fact:

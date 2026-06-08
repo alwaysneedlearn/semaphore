@@ -10,7 +10,6 @@
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
-    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
     app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else 'LHBTS' }}"
     exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
@@ -32,6 +31,8 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - name: 规范化 LAND 安装包路径变量
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_prepare_zip_vars.yml"
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - name: 解析当前设备信息

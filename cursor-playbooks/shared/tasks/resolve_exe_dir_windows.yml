@@ -1,5 +1,6 @@
 ---
-# Resolve EXE_DIR drive like NEWARE: preferred drive first, then E, then C.
+# Resolve EXE_DIR drive like NEWARE: preferred drive first, then fallbacks.
+# LAND: set app_dir + EXE_DIR_FALLBACK_DRIVES (e.g. D,F); probes APP_DIR\EXE on each drive.
 # Requires deploy_sem_windows_helper_scripts.yml to have copied helper script.
 
 - name: 解析 EXE_DIR（盘符回退）
@@ -8,9 +9,12 @@
     SEMAPHORE_EXE_DIR_FALLBACK_DRIVES: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) }}"
     SEMAPHORE_EXE_PROBE_RELATIVE: >-
       {{
-        exe_name
-        if (app_dir | default('LHBTS')) in ['.', '']
-        else ((app_dir | default('LHBTS')) ~ '\\' ~ exe_name)
+        (
+          exe_name
+          if (app_dir | default('')) in ['.', '']
+          else (app_dir ~ '\\' ~ exe_name)
+        )
+        if (app_dir is defined) else ''
       }}
   ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
   register: _resolve_exe_dir
@@ -19,6 +23,7 @@
 - name: 登记 EXE_DIR 解析行
   ansible.builtin.set_fact:
     _exe_dir_resolved_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_DIR_RESOLVED=') | list | first) | default('EXE_DIR_RESOLVED=' + exe_dir_preferred, true) }}"
+    _exe_dir_choose_source_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_DIR_CHOOSE_SOURCE=') | list | first) | default('', true) }}"
 
 - name: 登记解析后的 EXE_DIR
   ansible.builtin.set_fact:
@@ -26,18 +31,20 @@
 
 - name: 登记解析后的 EXE 路径
   ansible.builtin.set_fact:
+    _path_app_dir: "{{ app_dir if (app_dir is defined) else (zip_name | default('')) }}"
     exe_path: >-
       {{
         (exe_dir + '\\' + exe_name)
-        if ((app_dir | default(zip_name)) in ['.', ''])
-        else (exe_dir + '\\' + (app_dir | default('LHBTS')) + '\\' + exe_name)
+        if (_path_app_dir in ['.', ''])
+        else (exe_dir + '\\' + _path_app_dir + '\\' + exe_name)
       }}
-  when: zip_name is defined and exe_name is defined
+  when: exe_name is defined
 
 - name: DEBUG 解析 EXE_DIR 盘符
   ansible.builtin.debug:
     msg:
       - "[DEBUG-EXE_DIR] preferred={{ exe_dir_preferred }}"
-      - "[DEBUG-EXE_DIR] resolved={{ exe_dir }}"
+      - "[DEBUG-EXE_DIR] resolved={{ exe_dir }} exe_path={{ exe_path | default('n/a') }}"
+      - "[DEBUG-EXE_DIR] {{ _exe_dir_choose_source_line | default('') }}"
       - "[DEBUG-EXE_DIR] win_shell={{ _resolve_exe_dir.stdout_lines | default([]) }}"
   when: _resolve_exe_dir is defined

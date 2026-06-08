@@ -23,7 +23,7 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
-**Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`** → `D:\LHBTS\LHBTS.exe` or `F:\LHBTS\LHBTS.exe`). **`EXE_DIR`** may be `D:\` or `F:\`; use **`EXE_DIR_FALLBACK_DRIVES=D,F`** so the first existing drive is chosen. **`ZIP_NAME`** is only the zip file on the controller (`{{ exe_dir }}\{{ ZIP_NAME }}.zip`), not the install folder. Set `APP_DIR=.` if `LHBTS.exe` sits directly under `exe_dir`.
+**Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`**). **`EXE_DIR`** use `D:\` or `F:\` (not `D:` alone — or rely on script mapping `D:` → `D:\`). **`EXE_DIR_FALLBACK_DRIVES=D,F`**: probes `LHBTS\LHBTS.exe` on each drive before picking the first existing disk. **`ZIP_NAME`** = archive base **without** `.zip` (e.g. `LHBTS5.1.4.4`); controller file = `{{ ZIP_PATH }}/LHBTS5.1.4.4.zip`, target on host = `{{ exe_dir }}\LHBTS5.1.4.4.zip`. **`APP_DIR`** is the unzip folder (`LHBTS`), not `ZIP_NAME`.
 
 ## Runner 部署（必做）
 
@@ -58,7 +58,7 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Drive try order when preferred disk missing, e.g. **`D,F,E,C`** for D or F installs |
 | `APP_DIR` | `LHBTS` | Install folder under `exe_dir` (unzip creates `{{ exe_dir }}\LHBTS\`) |
 | `EXE_NAME` | `LHBTS.exe` | LAND executable file name (GUI + API on typical installs) |
-| `ZIP_NAME` | `land` | Zip base name on controller (`LHBTS5.1.4.4` or `LHBTS5.1.4.4.zip` — playbook strips duplicate `.zip`) |
+| `ZIP_NAME` | `land` | Zip base name **without** `.zip` (e.g. `LHBTS5.1.4.4`); legacy values ending in `.zip` are stripped once |
 | `ZIP_PATH` | `/root/neware/dbwb` | Controller directory **or** full path to `.zip` file |
 | `EXE_ARGS` | empty | Optional executable arguments |
 | `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |

@@ -13,6 +13,9 @@ if ($preferred -match '^([A-Za-z])\s*:?\s*(.*)$') {
   $rest = $matches[2].Trim()
   if ($rest.Length -gt 0) {
     $suffix = $(if ($rest.StartsWith('\')) { $rest } else { '\' + $rest })
+  } else {
+    # EXE_DIR=D: or F: — install at drive root (e.g. D:\LHBTS\), not \Program Files\DeviceApp
+    $suffix = '\'
   }
 } elseif ($preferred.Length -gt 0) {
   $suffix = $(if ($preferred.StartsWith('\')) { $preferred } else { '\' + $preferred })

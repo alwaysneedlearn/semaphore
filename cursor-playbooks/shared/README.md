@@ -19,7 +19,7 @@ sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
 sem_files_dir: "{{ playbook_dir }}/../shared/files"
 ```
 
-SyncLims-style types (LAND/SINEXCEL/NBT) also use `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1` to resolve `EXE_DIR` drive. You can configure fallback order from Variable Group with `EXE_DIR_FALLBACK_DRIVES` (examples: `D,E,C` or `E,C,D`). If unset, default is: preferred drive from `EXE_DIR`, then `E:`, then `C:`.
+SyncLims-style types (LAND/SINEXCEL/NBT) use `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1`. Set `EXE_DIR_FALLBACK_DRIVES` (e.g. `D,F`) for drive order. **LAND** also sets play var `app_dir` — the script probes `{{ app_dir }}\{{ EXE_NAME }}` (and the install folder) on each candidate drive before falling back to the first existing disk letter. `EXE_DIR=D:\` / `F:\` map to drive root; `EXE_DIR=D:` is treated as `D:\`. LAND zip copy uses `tasks/land_prepare_zip_vars.yml` (`ZIP_NAME` without `.zip`).
 
 NEWARE (and any type with extra `sem_*.ps1` / TDengine) also sets:
 
