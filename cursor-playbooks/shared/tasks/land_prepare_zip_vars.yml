@@ -1,0 +1,18 @@
+---
+# Normalize ZIP_NAME (strip trailing .zip) and controller src path. Sets zip_filename, zip_src_controller.
+
+- name: 规范化 LAND 安装包文件名
+  ansible.builtin.set_fact:
+    _zip_name_raw: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('land', true) }}"
+    _zip_path_raw: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+
+- name: 登记 LAND zip 路径变量
+  ansible.builtin.set_fact:
+    zip_name: "{{ _zip_name_raw | regex_replace('(?i)\\.zip$', '') }}"
+    zip_filename: "{{ (_zip_name_raw | regex_replace('(?i)\\.zip$', '')) ~ '.zip' }}"
+    zip_src_controller: >-
+      {{
+        _zip_path_raw
+        if (_zip_path_raw is match('(?i).*\\.zip$'))
+        else (_zip_path_raw | regex_replace('/$', '') ~ '/' ~ ((_zip_name_raw | regex_replace('(?i)\\.zip$', '')) ~ '.zip'))
+      }}

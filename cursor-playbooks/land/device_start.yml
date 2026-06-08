@@ -41,6 +41,8 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - name: 规范化 LAND 安装包路径变量
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_prepare_zip_vars.yml"
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - name: 解析当前设备信息
@@ -55,7 +57,7 @@
 
     - name: 检查本地压缩包是否存在
       ansible.windows.win_shell: |
-        if (Test-Path "{{ exe_dir }}\\{{ zip_name }}.zip") {
+        if (Test-Path "{{ exe_dir }}\\{{ zip_filename }}") {
           Write-Output "ZIP_FOUND"
         } else {
           Write-Output "ZIP_NOT_FOUND"
@@ -72,8 +74,8 @@
 
     - name: 从服务器复制安装包
       ansible.builtin.win_copy:
-        src: "{{ zip_path }}/{{ zip_name }}.zip"
-        dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
+        src: "{{ zip_src_controller }}"
+        dest: "{{ exe_dir }}\\{{ zip_filename }}"
       register: zip_copy_result
       when: >
         not (_land_exe_stat.stat.exists | default(false)) and
@@ -99,7 +101,7 @@
 
     - name: 解压程序包
       ansible.windows.win_shell: |
-        $zipPath = "{{ exe_dir }}\\{{ zip_name }}.zip"
+        $zipPath = "{{ exe_dir }}\\{{ zip_filename }}"
         $destDir = "{{ exe_dir }}"
         try {
           Expand-Archive -Path $zipPath -DestinationPath $destDir -Force

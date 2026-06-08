@@ -6,6 +6,12 @@
   environment:
     SEMAPHORE_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
     SEMAPHORE_EXE_DIR_FALLBACK_DRIVES: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) }}"
+    SEMAPHORE_EXE_PROBE_RELATIVE: >-
+      {{
+        exe_name
+        if (app_dir | default('LHBTS')) in ['.', '']
+        else ((app_dir | default('LHBTS')) ~ '\\' ~ exe_name)
+      }}
   ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
   register: _resolve_exe_dir
   changed_when: false
@@ -24,7 +30,7 @@
       {{
         (exe_dir + '\\' + exe_name)
         if ((app_dir | default(zip_name)) in ['.', ''])
-        else (exe_dir + '\\' + (app_dir | default(zip_name)) + '\\' + exe_name)
+        else (exe_dir + '\\' + (app_dir | default('LHBTS')) + '\\' + exe_name)
       }}
   when: zip_name is defined and exe_name is defined
 

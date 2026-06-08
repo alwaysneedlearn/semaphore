@@ -56,11 +56,10 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 |---|---|---|
 | `EXE_DIR` | `C:\Program Files\LAND` | Preferred root (e.g. `D:\` or `F:\`); drive letter resolved first |
 | `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Drive try order when preferred disk missing, e.g. **`D,F,E,C`** for D or F installs |
-| `APP_DIR` | (same as `ZIP_NAME`) | First install folder to try under `EXE_DIR` (e.g. `LHBTS` or `1`) |
-| `APP_DIR_CANDIDATES` | empty | Extra folders to try in order, e.g. **`LHBTS,1`** (merged with `APP_DIR`, deduped) |
+| `APP_DIR` | `LHBTS` | Install folder under `exe_dir` (unzip creates `{{ exe_dir }}\LHBTS\`) |
 | `EXE_NAME` | `LHBTS.exe` | LAND executable file name (GUI + API on typical installs) |
-| `ZIP_NAME` | `land` | Zip file base name on controller (`{{ ZIP_NAME }}.zip`); not used for `exe_path` when `APP_DIR` is set |
-| `ZIP_PATH` | `/root/neware/dbwb` | Controller-side zip source directory |
+| `ZIP_NAME` | `land` | Zip base name on controller (`LHBTS5.1.4.4` or `LHBTS5.1.4.4.zip` — playbook strips duplicate `.zip`) |
+| `ZIP_PATH` | `/root/neware/dbwb` | Controller directory **or** full path to `.zip` file |
 | `EXE_ARGS` | empty | Optional executable arguments |
 | `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |
 | `LAND_API_SCHEME` | `http` | API scheme (`http`/`https`) |
@@ -95,7 +94,7 @@ Implemented via `../shared/tasks/debug_sync_api_*.yml` with play var `sem_debug_
 SINEXCEL and NBT use the same shared tasks with `sem_debug_tag: SINEXCEL` / `NBT`. NEWARE uses `[DEBUG-NEWARE]` in `neware/tasks/debug_*.yml`.
 
 `device_start.yml` / `device_restart.yml` / `device_check_restart_redeploy.yml` now use the same startup strategy as NEWARE:
-- check exe first (`{{ exe_path }}`); if missing, check/copy `{{ exe_dir }}\{{ zip_name }}.zip` then `Expand-Archive`
+- check exe first (`{{ exe_path }}`); if missing, check/copy `{{ exe_dir }}\{{ zip_filename }}` then `Expand-Archive`
 - launch via **interactive scheduled task** (desktop logged-in user, RunLevel Highest), not plain `Start-Process` under WinRM session
 
 ## LAND API examples (from Postman collection)
