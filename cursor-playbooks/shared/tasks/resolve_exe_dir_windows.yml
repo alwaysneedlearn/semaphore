@@ -31,12 +31,15 @@
 
 - name: 登记解析后的 EXE 路径
   ansible.builtin.set_fact:
-    _path_app_dir: "{{ app_dir if (app_dir is defined) else (zip_name | default('')) }}"
     exe_path: >-
       {{
         (exe_dir + '\\' + exe_name)
-        if (_path_app_dir in ['.', ''])
-        else (exe_dir + '\\' + _path_app_dir + '\\' + exe_name)
+        if ((app_dir if (app_dir is defined) else (zip_name | default(''))) in ['.', ''])
+        else (
+          exe_dir + '\\'
+          + (app_dir if (app_dir is defined) else (zip_name | default('')))
+          + '\\' + exe_name
+        )
       }}
   when: exe_name is defined
 
