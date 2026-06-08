@@ -156,6 +156,46 @@ Wrap **collect**, **resolve EXE_DIR**, **log health check** in blocks with **`ig
 
 ---
 
+## `set_fact` gotchas (repeat offenders — LAND 2026)
+
+Ansible evaluates **all keys in one `set_fact` task in one pass**. A key defined in the same task is **not visible** to another key in that task → runtime **`undefined variable`**.
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| Same-task cross-ref: `_x: "…"` then `y: "{{ _x }}"` in one `set_fact` | `'_path_app_dir' is undefined`, `'_install_subdir' is undefined`, `'_land_redeliver_start' is undefined` | **Split into two tasks**, or **inline** the expression in `y` (no intermediate key) |
+| `when:` as YAML **list** with `'RUNNING' in (x \| default(''))` | YAML parse: `did not find expected '-'` | Use **`when: >-`** single scalar + `default("")` (double quotes inside Jinja) |
+| `(nonempty) and (regex_search(...))` stored as ok flag | Value is **match string** (e.g. `2026-6-4 10:10:10`), not `true` | Compare **`(regex_search(...) \| default('', true) \| length) > 0`** for real booleans |
+| `ok_var \| bool` when `ok_var` is a date/time string | Always **false** (`bool` only treats `true`/`yes`/`1`/…) | Store explicit boolean (length check above), not match text |
+| Regex in YAML single quotes: `'^\\d{4}-…'` | Stored as literal `\`+`d` → dates never match | Use **`'^\d{4}-…'`** (one backslash before `d` in single-quoted YAML) |
+
+**Safe pattern (two tasks):**
+
+```yaml
+- name: Parse fields
+  ansible.builtin.set_fact:
+    _land_redeliver_start: "{{ cfg.startTime | default('') | trim }}"
+
+- name: Validate
+  ansible.builtin.set_fact:
+    _land_redeliver_start_ok: >-
+      {{ (_land_redeliver_start | length > 0) and
+         ((_land_redeliver_start | regex_search(_land_redeliver_time_pattern) | default('', true) | length) > 0) }}
+```
+
+**Safe pattern (inline exe_path — one task):**
+
+```yaml
+- ansible.builtin.set_fact:
+    exe_path: >-
+      {{ (exe_dir + '\\' + exe_name)
+         if (app_dir in ['.', ''])
+         else (exe_dir + '\\' + app_dir + '\\' + exe_name) }}
+```
+
+Before committing LAND/shared task edits, grep: `set_fact:` blocks with **two or more keys** where a later value references an earlier key name.
+
+---
+
 ## Jinja / boolean gotchas
 
 | Mistake | Fix |
