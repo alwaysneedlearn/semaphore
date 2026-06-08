@@ -6,7 +6,8 @@ description: >
   device_start.yml, WinRM tasks, semaphore_callback_row, PUT /devices/status/bulk, win_ping UNREACHABLE,
   include_tasks/delegate_to errors, or runner playbooks at /root/playbook/. Triggers on "cursor-playbooks",
   "playbook 编写", "WinRM ping", "checking 不更新", "TaskInclude delegate_to", "semaphore bulk callback",
-  "ignore_unreachable", "clear_host_errors", or Ansible + Semaphore device template work in this repo.
+  "ignore_unreachable", "clear_host_errors", "set_fact undefined", "did not find expected '-' indicator",
+  "_path_app_dir is undefined", "Redeliver invalid_time", or Ansible + Semaphore device template work in this repo.
 ---
 
 # Semaphore UI — cursor-playbooks authoring skill
