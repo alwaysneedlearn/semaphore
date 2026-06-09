@@ -1,0 +1,7 @@
+---
+# Split merged_cfg by Semaphore category for NBT playbooks.
+# ResetData -> GET /ResetData?StartDate=&EndDate=
+
+- name: 拆分 NBT 配置分类
+  ansible.builtin.set_fact:
+    nbt_reset_data_cfg: "{{ merged_cfg.ResetData | default({}) }}"

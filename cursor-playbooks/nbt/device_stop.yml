@@ -8,20 +8,12 @@
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: NBT
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('nbt_agent', true) }}"
-    nbt_api_scheme: "{{ (lookup('env', 'NBT_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
-    nbt_api_port: "{{ ((lookup('env', 'NBT_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
-    nbt_api_status_path: "{{ (lookup('env', 'NBT_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
-    nbt_api_timeout: "{{ ((lookup('env', 'NBT_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
-    nbt_api_token: "{{ (lookup('env', 'NBT_API_TOKEN') | default('', true) | trim) | default('nbtapi', true) }}"
-    nbt_api_verify_tls: "{{ ((lookup('env', 'NBT_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
-    nbt_stop_check_api: "{{ ((lookup('env', 'NBT_STOP_CHECK_API') | default('', true) | trim) | default('false', true)) | bool }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('nbt.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('8080', true) | int }}{% endif %}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
@@ -58,21 +50,14 @@
       register: _nbt_process_after_stop
       changed_when: false
 
-    - name: 停止后查询 NBT API 状态（可选）
-      ansible.builtin.uri:
-        url: "{{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_status_path }}"
-        method: POST
-        body_format: json
-        body:
-          token: "{{ nbt_api_token }}"
-        timeout: "{{ nbt_api_timeout }}"
-        validate_certs: "{{ nbt_api_verify_tls }}"
-        return_content: true
-        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-      register: _nbt_api_after_stop
-      delegate_to: localhost
-      failed_when: false
+    - name: 停止后查询 NBT 心跳（可选 DEBUG）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
       when: nbt_stop_check_api | bool
+
+    - name: 停止后心跳结果供 DEBUG 复用
+      ansible.builtin.set_fact:
+        _nbt_api_after_stop: "{{ _nbt_heartbeat }}"
+      when: nbt_stop_check_api | bool and _nbt_heartbeat is defined
 
     - name: 登记 NBT 停止回调行
       ansible.builtin.set_fact:

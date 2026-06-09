@@ -27,12 +27,13 @@
       {% else %}skipped{% endif %}
   when: _sem_dbg_exe_stat is defined
 
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims API）"
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims / NBT 心跳 API）"
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_check_enabled={{ _sem_dbg_start_check_api }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_status }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ _sem_dbg_api_body | truncate(2000, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat_ok={{ nbt_heartbeat_ok | default('n/a') }} last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }}"
   vars:
     _sem_dbg_start_check_api: "{{ land_start_check_api | default(sinexcel_start_check_api | default(nbt_start_check_api | default(false))) }}"
     _sem_dbg_api_status: >-

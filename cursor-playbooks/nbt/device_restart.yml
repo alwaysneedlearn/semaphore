@@ -17,19 +17,12 @@
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
-    nbt_api_scheme: "{{ (lookup('env', 'NBT_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
-    nbt_api_port: "{{ ((lookup('env', 'NBT_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
-    nbt_api_status_path: "{{ (lookup('env', 'NBT_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
-    nbt_api_timeout: "{{ ((lookup('env', 'NBT_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
-    nbt_api_token: "{{ (lookup('env', 'NBT_API_TOKEN') | default('', true) | trim) | default('nbtapi', true) }}"
-    nbt_api_verify_tls: "{{ ((lookup('env', 'NBT_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('nbt.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('8080', true) | int }}{% endif %}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
@@ -148,34 +141,35 @@
       changed_when: false
       when: (_nbt_exe_stat.stat.exists | default(false)) or (_nbt_exe_stat_after_extract.stat.exists | default(false))
 
-    - name: 重启后查询 NBT API 状态
-      ansible.builtin.uri:
-        url: "{{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_status_path }}"
-        method: POST
-        body_format: json
-        body:
-          token: "{{ nbt_api_token }}"
-        timeout: "{{ nbt_api_timeout }}"
-        validate_certs: "{{ nbt_api_verify_tls }}"
-        return_content: true
-        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-      register: _nbt_api_after_restart
-      delegate_to: localhost
-      failed_when: false
+    - name: 重启后查询 NBT 心跳
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
       when: (_nbt_exe_stat.stat.exists | default(false)) or (_nbt_exe_stat_after_extract.stat.exists | default(false))
+
+    - name: 重启后心跳结果供 DEBUG 复用
+      ansible.builtin.set_fact:
+        _nbt_api_after_restart: "{{ _nbt_heartbeat }}"
+      when: _nbt_heartbeat is defined and not (_nbt_heartbeat.skipped | default(false))
+
+    - name: 数据重传：API ResetData（重启后进程与心跳正常）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_reset_data.yml"
+      when: >-
+        (merged_cfg.ResetData | default({}) | length) > 0
+        and ((_nbt_exe_stat.stat.exists | default(false)) or (_nbt_exe_stat_after_extract.stat.exists | default(false)))
+        and ('RUNNING' in (_nbt_process_after_restart.stdout | default('')))
+        and (nbt_heartbeat_ok | default(false) | bool)
 
     - name: 登记 NBT 重启回调行
       ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ((_nbt_exe_stat.stat.exists | default(false)) or (_nbt_exe_stat_after_extract.stat.exists | default(false))) and ('RUNNING' in (_nbt_process_after_restart.stdout | default(''))) and ((_nbt_api_after_restart.status | default(0) | int) >= 200 and (_nbt_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if ((_nbt_exe_stat.stat.exists | default(false)) or (_nbt_exe_stat_after_extract.stat.exists | default(false))) and ('RUNNING' in (_nbt_process_after_restart.stdout | default(''))) and (nbt_heartbeat_ok | default(false) | bool) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if ((_nbt_api_after_restart.status | default(0) | int) >= 200 and (_nbt_api_after_restart.status | default(0) | int) < 300) else 'offline' }}"
+          api_status: "{{ 'online' if (nbt_heartbeat_ok | default(false) | bool) else 'offline' }}"
           abnormal_reason: >-
             {% if not ((_nbt_exe_stat.stat.exists | default(false)) or (_nbt_exe_stat_after_extract.stat.exists | default(false))) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_nbt_process_after_restart.stdout | default('')) %}Restart failed: process not running
-            {% elif not (((_nbt_api_after_restart.status | default(0) | int) >= 200) and ((_nbt_api_after_restart.status | default(0) | int) < 300)) %}API check failed after restart: http={{ _nbt_api_after_restart.status | default('n/a') }}
+            {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat check failed after restart: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }}
             {% else %}{% endif %}
 
     - name: DEBUG NBT 重启结果

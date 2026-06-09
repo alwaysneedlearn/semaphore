@@ -1,0 +1,62 @@
+---
+# GET /ResetData?StartDate=&EndDate= after healthy restart.
+# Play vars: nbt_reset_data_cfg or merged_cfg.ResetData, nbt_api_reset_data_path, _nbt_target_host.
+
+- name: 准备 NBT 配置分类
+  ansible.builtin.include_tasks: nbt_prepare_merged_cfg.yml
+  when: nbt_reset_data_cfg is not defined
+
+- name: 解析 ResetData 日期字段
+  ansible.builtin.set_fact:
+    _nbt_reset_start: "{{ nbt_reset_data_cfg.StartDate | default('') | trim }}"
+    _nbt_reset_end: "{{ nbt_reset_data_cfg.EndDate | default('') | trim }}"
+    _nbt_reset_date_pattern: '^\d{4}-\d{1,2}-\d{1,2}$'
+
+- name: 校验 ResetData 日期格式
+  ansible.builtin.set_fact:
+    _nbt_reset_start_ok: >-
+      {{
+        (_nbt_reset_start | default('') | trim | length > 0) and
+        ((_nbt_reset_start | regex_search(_nbt_reset_date_pattern) | default('', true) | length) > 0)
+      }}
+    _nbt_reset_end_ok: >-
+      {{
+        (_nbt_reset_end | default('') | trim | length > 0) and
+        ((_nbt_reset_end | regex_search(_nbt_reset_date_pattern) | default('', true) | length) > 0)
+      }}
+
+- name: 数据重传：API ResetData（重启后）
+  ansible.builtin.uri:
+    url: >-
+      {{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_reset_data_path }}?StartDate={{ _nbt_reset_start | urlencode }}&EndDate={{ _nbt_reset_end | urlencode }}
+    method: GET
+    timeout: "{{ nbt_api_timeout }}"
+    validate_certs: "{{ nbt_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _nbt_api_reset_data
+  delegate_to: localhost
+  failed_when: false
+  when:
+    - _nbt_reset_start_ok | default(false) | bool
+    - _nbt_reset_end_ok | default(false) | bool
+
+- name: DEBUG NBT ResetData 跳过（日期无效）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data skipped=invalid_date"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data StartDate={{ _nbt_reset_start | default('') }} valid={{ _nbt_reset_start_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data EndDate={{ _nbt_reset_end | default('') }} valid={{ _nbt_reset_end_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data expected_format=yyyy-M-d (e.g. 2026-6-1)"
+  when: not (_nbt_reset_start_ok | default(false) | bool) or not (_nbt_reset_end_ok | default(false) | bool)
+
+- name: DEBUG NBT ResetData 结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data url={{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_reset_data_path }}?StartDate={{ _nbt_reset_start }}&EndDate={{ _nbt_reset_end }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data http_status={{ _nbt_api_reset_data.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data response_body={{ _nbt_api_reset_data.content | default('') | truncate(1500, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data IsSuccess={{ (_nbt_api_reset_data.content | default('{}') | from_json).IsSuccess | default('n/a') }}"
+  when:
+    - _nbt_api_reset_data is defined
+    - not (_nbt_api_reset_data.skipped | default(false))

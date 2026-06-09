@@ -23,22 +23,37 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ (_sem_dbg_api.content | default('') | string) | truncate(2000, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_json_ok={{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) }}"
   vars:
-    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default(_nbt_api_status)) }}"
-    _sem_dbg_api_scheme: "{{ land_api_scheme | default(sinexcel_api_scheme | default(nbt_api_scheme | default('http'))) }}"
-    _sem_dbg_api_port: "{{ land_api_port | default(sinexcel_api_port | default(nbt_api_port | default(8080))) }}"
-    _sem_dbg_api_path: "{{ land_api_status_path | default(sinexcel_api_status_path | default(nbt_api_status_path | default('/SyncLims/QueryStatus'))) }}"
-    _sem_dbg_target: "{{ _land_target_host | default(_sinexcel_target_host | default(_nbt_target_host | default(inventory_hostname))) }}"
-  when: _sem_dbg_api is defined
+    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default({})) }}"
+    _sem_dbg_api_scheme: "{{ land_api_scheme | default(sinexcel_api_scheme | default('http')) }}"
+    _sem_dbg_api_port: "{{ land_api_port | default(sinexcel_api_port | default(8080)) }}"
+    _sem_dbg_api_path: "{{ land_api_status_path | default(sinexcel_api_status_path | default('/SyncLims/QueryStatus')) }}"
+    _sem_dbg_target: "{{ _land_target_host | default(_sinexcel_target_host | default(inventory_hostname)) }}"
+  when: >
+    (_land_api_status is defined or _sinexcel_api_status is defined) and
+    not (_nbt_heartbeat is defined)
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（NBT 心跳 API）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat GET {{ nbt_api_scheme | default('http') }}://{{ _nbt_target_host | default(inventory_hostname) }}:{{ nbt_api_port | default(8885) }}{{ nbt_api_heartbeat_path | default('/SendStatus') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat http_status={{ _nbt_heartbeat.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat last_send={{ nbt_heartbeat_last_send | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat ok={{ nbt_heartbeat_ok | default(false) }}"
+  when: _nbt_heartbeat is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（健康判定）"
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_status_ok={{ _sem_dbg_api_ok }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ need_reconfigure | default(_nbt_need_reconfigure | default('n/a')) }}"
   vars:
-    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default(_nbt_api_status)) }}"
-    _sem_dbg_api_ok: "{{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) if (_sem_dbg_api is defined) else 'n/a' }}"
-  when: _sem_dbg_api is defined or need_reconfigure is defined
+    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default(_nbt_api_status | default({}))) }}"
+    _sem_dbg_api_ok: >-
+      {% if _nbt_heartbeat is defined %}{{ nbt_heartbeat_ok | default(false) }}
+      {% elif _sem_dbg_api is defined %}{{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) }}
+      {% else %}n/a{% endif %}
+  when: _sem_dbg_api is defined or _nbt_heartbeat is defined or need_reconfigure is defined or _nbt_need_reconfigure is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（回调行预览）"
   ansible.builtin.debug:
