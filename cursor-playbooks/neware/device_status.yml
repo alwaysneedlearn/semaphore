@@ -77,24 +77,25 @@
         'stdout' in status and
         'NOT_RUNNING' in status.stdout
 
-    - name: 状态判断：日志健康检查与综合判定
+    - name: 状态判断：数据上报状态（API 优先，日志关键字回退）
       when: >
         status is defined and
         'stdout' in status and
         'NOT_RUNNING' not in status.stdout
       block:
-        - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
-
-        - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+        - ansible.builtin.include_tasks: tasks/health_gate_upload_status_api_then_log.yml
+          vars:
+            neware_health_gate_context: patrol
 
         - name: 输出综合判断结果（含程序状态）
           ansible.builtin.debug:
             msg: >
               [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
+              api_upload_started={{ api_upload_started | default('n/a') }} |
               日志_OK={{ log_status_ok | default('n/a') }} |
               异常/需关注={{ need_reconfigure }}
 
-    # 不传 rdp_status（**Probe** 维护 RDP TCP）。api_status：进程在跑且日志关键字命中 → online；否则 offline。
+    # 不传 rdp_status（**Probe** 维护 RDP TCP）。api_status：进程在跑且 API ExecResultData==3 或日志回退 OK → online。
     - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
       when: not (status.unreachable | default(false))
       ansible.builtin.set_fact:
@@ -118,7 +119,7 @@
           abnormal_reason: >-
             {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
             {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
-            {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: log keyword missing or not recent (need reconfigure)
+            {% elif need_reconfigure is defined and need_reconfigure | bool %}Health check: API ExecResultData!=3 and log keyword fallback failed (need reconfigure)
             {% else %}{% endif %}
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"

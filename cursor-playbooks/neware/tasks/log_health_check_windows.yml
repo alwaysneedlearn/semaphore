@@ -1,5 +1,5 @@
 ---
-# 进程在跑时：在最新 NWReport_DBWB*.log 中按时间窗查找上传成功关键字（无 HTTP API）
+# 进程在跑时：在最新 NWReport_DBWB*.log 中按时间窗查找上传成功关键字（API ExecResultData!=3 时回退）
 # 变量：exe_dir, zip_name, log_health_recent_minutes；可选 log_health_use_tail + log_health_tail_lines
 # 可选 log_health_keyword（默认 LOG_SUCCESS_KEYWORD / 本轮通道状态上传成功）
 # 输出 register：log_check_result（FOUND_KEYWORD | NO_KEYWORD | NO_LOGS_FOUND）

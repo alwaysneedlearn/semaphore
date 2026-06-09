@@ -106,14 +106,15 @@
             msg: "[程序状态] {{ check_result.stdout | trim }}"
           when: check_result is defined and 'stdout' in check_result
 
-        - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
-
-        - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+        - ansible.builtin.include_tasks: tasks/health_gate_upload_status_api_then_log.yml
+          vars:
+            neware_health_gate_context: start_pre_gate
 
         - name: 状态判断：输出综合判断结果（含程序状态）
           ansible.builtin.debug:
             msg: >
               [综合判断] 程序状态={{ check_result.stdout | trim | regex_search('^[^|]+') }} |
+              api_upload_started={{ api_upload_started | default('n/a') }} |
               日志_OK={{ log_status_ok | default('n/a') }} |
               需要重配={{ need_reconfigure }}
 

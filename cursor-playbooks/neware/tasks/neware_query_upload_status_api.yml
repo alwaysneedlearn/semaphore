@@ -1,0 +1,87 @@
+---
+# POST 查询 NEWARE BTSClient 数据上报状态（根路径 HTTP API，CallType=API_STATUS_CALL_TYPE）。
+# 需要 play/group vars：api_host、api_port；可选 api_status_*、export_*、neware_api_query_context。
+# 产出：api_upload_status_result、api_upload_exec_result_data、api_upload_status_ok、api_upload_started
+
+- name: 数据上报状态：登记 API 查询参数
+  ansible.builtin.set_fact:
+    _neware_api_status_call_type: "{{ api_status_call_type | default(((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int) | int }}"
+    _neware_api_timeout_seconds: "{{ api_timeout_seconds | default(((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int) | int }}"
+    _neware_api_status_retries: "{{ api_status_retries | default(((lookup('env', 'API_STATUS_RETRIES') | default('', true) | trim) | default('3', true)) | int) | int }}"
+    _neware_api_status_retry_delay: "{{ api_status_retry_delay | default(((lookup('env', 'API_STATUS_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int) | int }}"
+    _neware_api_expected_response_code: "{{ api_expected_response_code | default(((lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
+    _neware_api_expected_exec_success_code: "{{ api_expected_exec_success_code | default(((lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
+    _neware_export_upload_started: "{{ export_started | default(((lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true)) | int) | int }}"
+
+- name: 数据上报状态：调用 API 查询（含失败重试）
+  ansible.builtin.uri:
+    url: "http://{{ api_host }}:{{ api_port }}"
+    method: POST
+    body_format: json
+    body:
+      CallType: "{{ _neware_api_status_call_type | int }}"
+    headers:
+      Content-Type: "application/json; charset=utf-8"
+    return_content: true
+    timeout: "{{ _neware_api_timeout_seconds | int }}"
+  register: api_upload_status_result
+  delegate_to: localhost
+  failed_when: false
+  until: >
+    api_upload_status_result is defined and
+    (api_upload_status_result.status | default(0) | int) == 200 and
+    ((api_upload_status_result.content | default('') | trim) | length) > 0 and
+    ((api_upload_status_result.content | from_json).ResponeResultCode | default(-1) | int == _neware_api_expected_response_code | int) and
+    ((api_upload_status_result.content | from_json).ExecResultCode | default(-1) | int == _neware_api_expected_exec_success_code | int)
+  retries: "{{ _neware_api_status_retries | int }}"
+  delay: "{{ _neware_api_status_retry_delay | int }}"
+
+- name: 数据上报状态：解析 API 响应信封
+  ansible.builtin.set_fact:
+    api_upload_status_ok: >-
+      {{
+        api_upload_status_result is defined and
+        (api_upload_status_result.status | default(0) | int) == 200 and
+        ((api_upload_status_result.content | from_json).ResponeResultCode | default(-1) | int == _neware_api_expected_response_code | int) and
+        ((api_upload_status_result.content | from_json).ExecResultCode | default(-1) | int == _neware_api_expected_exec_success_code | int)
+      }}
+  failed_when: false
+
+- name: 数据上报状态：解析 ExecResultData
+  ansible.builtin.set_fact:
+    api_upload_exec_result_data: "{{ (api_upload_status_result.content | from_json).ExecResultData | default(-1) | int }}"
+  when: api_upload_status_ok | default(false) | bool
+  failed_when: false
+
+- name: 数据上报状态：ExecResultData 解析失败时登记
+  ansible.builtin.set_fact:
+    api_upload_exec_result_data: -1
+  when: not (api_upload_status_ok | default(false) | bool)
+
+- name: 数据上报状态：判定数据上报已启动（ExecResultData==3）
+  ansible.builtin.set_fact:
+    api_upload_started: true
+  when: >
+    (api_upload_status_ok | default(false) | bool) and
+    (api_upload_exec_result_data | default(-1) | int) == (_neware_export_upload_started | int)
+
+- name: 数据上报状态：未达上报已启动
+  ansible.builtin.set_fact:
+    api_upload_started: false
+  when: >
+    not (
+      (api_upload_status_ok | default(false) | bool) and
+      (api_upload_exec_result_data | default(-1) | int) == (_neware_export_upload_started | int)
+    )
+
+- name: DEBUG 数据上报状态 API 请求与响应
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api context={{ neware_api_query_context | default('health') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api POST url=http://{{ api_host }}:{{ api_port }} CallType={{ _neware_api_status_call_type }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api retries_cfg={{ _neware_api_status_retries }} delay_s={{ _neware_api_status_retry_delay }} attempts={{ api_upload_status_result.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api http_status={{ api_upload_status_result.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api response_body={{ api_upload_status_result.content | default('') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api envelope_ok={{ api_upload_status_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api ExecResultData={{ api_upload_exec_result_data | default('n/a') }} (1=程序已启动 2=上报启动中 3=上报已启动; healthy={{ _neware_export_upload_started }})"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api upload_started={{ api_upload_started | default(false) }} skip_log_fallback={{ api_upload_started | default(false) }}"

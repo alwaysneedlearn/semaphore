@@ -1,5 +1,5 @@
 ---
-# 进程已在跑：仅据日志健康检查登记 need_reconfigure / log_status_ok（无状态 API）
+# 进程已在跑：据日志健康检查登记 need_reconfigure / log_status_ok（API 未达 3 时由 health_gate_upload_status_api_then_log 调用）
 # 依赖：log_check_result（由 log_health_check_windows.yml 产生）
 # 使用 YAML 字面量 true/false，避免 set_fact: "{{ false }}" 变成字符串 "False" 在 when 里误判为真
 

@@ -6,6 +6,7 @@
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] host={{ inventory_hostname }} final_start_ok={{ final_start_ok | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] api_upload_started={{ api_upload_started | default('n/a') }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] exe_path={{ exe_path | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] stop_stdout={{ (stop_result.stdout | default('') | trim) if (stop_result is defined) else 'n/a' }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] host_failure_reason={{ host_failure_reason | default('') | trim }}"
