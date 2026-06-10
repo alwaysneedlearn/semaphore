@@ -48,6 +48,13 @@
       :device-name="configDeviceName"
       @saved="loadItems"
     />
+
+    <DeviceWinrmConsoleDialog
+      v-model="winrmDialog"
+      :project-id="projectId"
+      :device="winrmDevice"
+      @device-updated="onWinrmDeviceUpdated"
+    />
     <v-dialog v-model="reasonDialog" max-width="700">
       <v-card>
         <v-card-title>
@@ -435,6 +442,13 @@
           >
             <v-icon>mdi-radar</v-icon>
           </v-btn>
+          <v-btn
+            v-if="showWinrmConsole(item)"
+            :title="$t('deviceWinrmConsole')"
+            @click="openWinrmConsole(item)"
+          >
+            <v-icon>mdi-console</v-icon>
+          </v-btn>
           <v-menu offset-y>
             <template v-slot:activator="{ on, attrs }">
               <v-btn :title="$t('deviceActions')" v-bind="attrs" v-on="on">
@@ -491,6 +505,7 @@ import EventBus from '@/event-bus';
 import ItemListPageBase from '@/components/ItemListPageBase';
 import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
+import DeviceWinrmConsoleDialog from '@/components/DeviceWinrmConsoleDialog.vue';
 import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 import { getErrorMessage } from '@/lib/error';
 
@@ -499,6 +514,7 @@ export default {
   components: {
     DeviceForm,
     DeviceConfigDialog,
+    DeviceWinrmConsoleDialog,
     DeviceProfilesForm,
   },
 
@@ -513,6 +529,8 @@ export default {
       configDialog: false,
       configDeviceId: null,
       configDeviceName: '',
+      winrmDialog: false,
+      winrmDevice: null,
       reasonDialog: false,
       reasonError: '',
       reasonDeviceHostname: '',
@@ -1055,6 +1073,29 @@ export default {
       this.configDeviceId = device.id;
       this.configDeviceName = device.hostname;
       this.configDialog = true;
+    },
+    showWinrmConsole(device) {
+      if (!device || !device.ip_address) {
+        return false;
+      }
+      const conn = (device.ansible_connection || 'winrm').toLowerCase();
+      return conn === 'winrm';
+    },
+    openWinrmConsole(device) {
+      this.winrmDevice = { ...device };
+      this.winrmDialog = true;
+    },
+    onWinrmDeviceUpdated(device) {
+      if (!device || !this.items) {
+        return;
+      }
+      const idx = this.items.findIndex((d) => d.id === device.id);
+      if (idx >= 0) {
+        this.$set(this.items, idx, { ...this.items[idx], ...device });
+      }
+      if (this.winrmDevice && this.winrmDevice.id === device.id) {
+        this.winrmDevice = { ...this.winrmDevice, ...device };
+      }
     },
     async openReasonDialog(device) {
       this.reasonDialog = true;

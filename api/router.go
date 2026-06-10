@@ -447,6 +447,12 @@ func Route(
 	projectDeviceManagement.HandleFunc("/{device_id}/config", projects.PutDeviceConfig).Methods("PUT")
 	projectDeviceManagement.HandleFunc("/{device_id}/probe", projects.ProbeDevice).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/action", projects.RunDeviceAction).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/winrm/connection-preview", projects.GetDeviceWinRMConnectionPreview).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec", projects.ExecDeviceWinRMCommand).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.GetDeviceWinRMExecLogs).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.ClearDeviceWinRMExecLogs).Methods("DELETE")
+	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs/batch", projects.DeleteDeviceWinRMExecLogsBatch).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs/{log_id}", projects.DeleteDeviceWinRMExecLog).Methods("DELETE")
 
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.GetTerraformInventoryAliases).Methods("GET", "HEAD")
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.AddTerraformInventoryAlias).Methods("POST")

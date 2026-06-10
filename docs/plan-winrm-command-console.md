@@ -298,17 +298,19 @@ GET /api/project/{project_id}/devices/{device_id}/winrm/connection-preview?crede
 
 ### Phase 1 — MVP（建议 1 个 PR）
 
-- [ ] `ResolveDeviceWinRMExecCredentials` + WinRM exec 服务（PowerShell only）
-- [ ] `POST .../winrm/exec` + 路由
-- [ ] `DeviceWinrmConsoleDialog.vue` + Devices 入口
-- [ ] 示例命令 chips（进程/端口/目录）
-- [ ] i18n zh/en
-- [ ] 单元测试：凭据解析、错误码；集成测试可选（mock WinRM）
+- [x] `ResolveDeviceWinRMExecCredentials` + WinRM exec 服务（PowerShell / cmd）
+- [x] `POST .../winrm/exec` + 路由
+- [x] `GET .../winrm/exec-logs` + `DELETE` 单条 / `POST .../batch` 批量 / `DELETE` 清空
+- [x] `project__device_winrm_exec_log` 审计表（v2.18.24）
+- [x] `DeviceWinrmConsoleDialog.vue` + Devices 入口（仅 winrm 连接设备）
+- [x] 示例命令 chips（进程/端口/目录/服务/磁盘）
+- [x] i18n zh/en
+- [x] 单元测试：凭据解析
 
 ### Phase 2 — 体验与安全
 
-- [ ] `GET .../winrm/connection-preview`
-- [ ] 审计表 + 项目设置页「允许 WinRM 命令」开关
+- [x] `GET .../winrm/connection-preview`
+- [ ] 项目设置页「允许 WinRM 命令」开关
 - [ ] 输出复制、命令历史（仅当前会话 localStorage，不上传）
 - [ ] 更多示例（服务、磁盘、query user）
 
@@ -346,7 +348,7 @@ GET /api/project/{project_id}/devices/{device_id}/winrm/connection-preview?crede
 | # | 问题 | 结论 |
 |---|------|------|
 | 1 | RDP 用户为空时是否禁止选「RDP 凭据对」 | **是** — `rdp_user` 为空则单选禁用 |
-| 2 | 命令执行审计记在哪里 | **待定** — 见 §8.1 |
+| 2 | 命令执行审计记在哪里 | **B — 数据库** `project__device_winrm_exec_log`；支持 **单删 / 批量删 / 清空** |
 | 3 | 是否允许写操作类命令 | **允许** — 执行前 **风险提示确认框**（MVP 不做命令黑名单） |
 | 4 | 入口是否仅 Windows 设备类型 | **是** — 按 `device_profile` 过滤，非 Windows 不显示按钮 |
 | 5 | 执行前是否自动 Probe | **是** — 打开/执行前 `POST /devices/{id}/probe` 刷新 `winrm_status`；离线默认阻止，可勾选「仍要尝试」 |
@@ -362,7 +364,7 @@ GET /api/project/{project_id}/devices/{device_id}/winrm/connection-preview?crede
 
 **推荐路径：** Phase 1 用 **A**，Phase 2 补 **B**（与 §5 Phase 2「审计表」一致）。若你们有强合规要求，可直接选 **B** 与 MVP 同 PR 交付。
 
-**请确认：** 首版选 **A** 还是 **B**？
+**已确认：** 首版选 **B**，并在 WinRM 对话框「执行记录」区提供删除操作（单条、勾选批量、清空全部）。
 
 ---
 

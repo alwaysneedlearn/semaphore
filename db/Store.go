@@ -322,6 +322,12 @@ type DeviceManager interface {
 	UpsertDevicesByIPAddress(projectID int, devices []Device) ([]Device, error)
 	GetDeviceStatusCallbackLogs(projectID int, deviceID int, limit int) ([]DeviceStatusCallbackLog, error)
 	CreateDeviceStatusCallbackLog(log DeviceStatusCallbackLog) (DeviceStatusCallbackLog, error)
+
+	GetDeviceWinRMExecLogs(projectID, deviceID, limit, offset int) (DeviceWinRMExecLogList, error)
+	CreateDeviceWinRMExecLog(log DeviceWinRMExecLog) (DeviceWinRMExecLog, error)
+	DeleteDeviceWinRMExecLog(projectID, deviceID, logID int) error
+	DeleteDeviceWinRMExecLogs(projectID, deviceID int, logIDs []int) (int, error)
+	ClearDeviceWinRMExecLogs(projectID, deviceID int) (int, error)
 	DeleteDevice(projectID, deviceID int) error
 	GetDeviceStats(projectID int) (DeviceStats, error)
 
