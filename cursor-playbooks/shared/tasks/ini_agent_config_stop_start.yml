@@ -1,0 +1,72 @@
+---
+# SINEXCEL/NBT: INI config → stop → start → optional heartbeat/API check.
+# Vars: sem_profile_tasks_dir, process_name, nbt_start_check_api (NBT), sinexcel_start_check_api (SINEXCEL)
+
+- name: 写入 INI 设备配置
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/apply_neware_style_device_config_files.yml"
+
+- name: 强制停止进程（重启前）
+  ansible.windows.win_shell: |
+    Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    "STOP_OK"
+  register: _ini_agent_stop
+  changed_when: false
+  when: ini_agent_force_stop | default(true) | bool
+
+- name: 优雅停止（重启前）
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
+  when: not (ini_agent_force_stop | default(true) | bool)
+
+- name: 获取当前登录用户
+  ansible.windows.win_shell: |
+    $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+        if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+      } |
+      Where-Object { $_ } |
+      Select-Object -First 1
+    if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
+  register: get_username_result
+  changed_when: false
+
+- name: 规范化启动用户
+  ansible.builtin.set_fact:
+    _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+- name: 启动程序
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
+
+- name: 启动后确认进程状态
+  ansible.windows.win_shell: |
+    $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+  register: _ini_agent_process_after
+  changed_when: false
+
+- name: NBT 启动后心跳检查
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
+  when: nbt_start_check_api | default(false) | bool
+
+- name: NBT ResetData（仅 restart）
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_reset_data.yml"
+  when: >
+    (nbt_include_reset_data | default(false) | bool)
+    and (merged_cfg.ResetData | default({}) | length > 0)
+    and (nbt_heartbeat_ok | default(false) | bool)
+
+- name: SINEXCEL 启动后 API 检查
+  ansible.builtin.uri:
+    url: "{{ sinexcel_api_scheme }}://{{ _agent_target_host }}:{{ sinexcel_api_port }}{{ sinexcel_api_status_path }}"
+    method: POST
+    body_format: json
+    body:
+      token: "{{ sinexcel_api_token }}"
+    timeout: "{{ sinexcel_api_timeout }}"
+    validate_certs: "{{ sinexcel_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+  register: _sinexcel_api_after
+  delegate_to: localhost
+  failed_when: false
+  when: sinexcel_start_check_api | default(false) | bool

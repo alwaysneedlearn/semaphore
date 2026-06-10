@@ -424,6 +424,8 @@ export default {
   deviceStart: '启动',
   deviceStop: '停止',
   deviceRestart: '重启',
+  deviceRedeploy: '重新部署',
+  deviceCheckRestartTemplate: '巡检重启模板',
   deviceStatusCheck: '检查状态',
   deviceConfig: '配置',
   deviceConfigPush: '下发配置',

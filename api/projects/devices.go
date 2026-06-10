@@ -1469,7 +1469,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 
 	switch body.Action {
 	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
-		db.DeviceActionStatus:
+		db.DeviceActionRedeploy, db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Unsupported device action",
@@ -1508,7 +1508,8 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		extraVars["default_config"] = defaultConfig
 	}
 
-	if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
+	if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart ||
+		body.Action == db.DeviceActionRedeploy {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
 		if err != nil {
 			helpers.WriteError(w, err)
@@ -1542,7 +1543,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 	switch body.Action {
 	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
-		db.DeviceActionStatus:
+		db.DeviceActionRedeploy, db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Unsupported device action",
@@ -1636,7 +1637,8 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		} else if defaultConfig := defaultConfigForPlaybook(settings.DefaultConfigJSON); defaultConfig != nil {
 			extraVars["default_config"] = defaultConfig
 		}
-		if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart {
+		if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart ||
+			body.Action == db.DeviceActionRedeploy {
 			configByHostname := map[string]map[string]map[string]string{}
 			configsByHost := map[string]map[string]map[string]string{}
 			for _, d := range devs {

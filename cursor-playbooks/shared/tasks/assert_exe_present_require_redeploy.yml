@@ -1,0 +1,24 @@
+---
+# Fail with redeploy hint when exe_path is missing (start/restart must not copy zip).
+
+- name: 检查程序文件是否存在
+  ansible.windows.win_stat:
+    path: "{{ exe_path }}"
+  register: _assert_exe_stat
+
+- name: 程序不存在：登记 unhealthy 并跳过后续步骤
+  when: not (_assert_exe_stat.stat.exists | default(false))
+  block:
+    - name: 登记需重新部署回调行
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
+          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
+          device_status: unhealthy
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: offline
+          abnormal_reason: "Executable not found: {{ exe_path }} — 请先执行重新部署 (redeploy)"
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+
+    - ansible.builtin.meta: end_host

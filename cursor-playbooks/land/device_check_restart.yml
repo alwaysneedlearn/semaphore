@@ -1,5 +1,5 @@
 ---
-- name: LAND 重启程序（写配置，无制品下发）
+- name: LAND 巡检重启（不健康仅 restart）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -13,22 +13,19 @@
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
     app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else 'LHBTS' }}"
     exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
-    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
-    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
-    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
-    stop_graceful_process_name: "{{ (lookup('env', 'STOP_GRACEFUL_PROCESS_NAME') | default('', true) | trim) | default(process_name, true) }}"
-    stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
+    stop_graceful_process_name: "{{ process_name }}"
+    stop_popup_wait_seconds: 2
     stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
-    stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
-    stop_verify_process_name: "{{ (lookup('env', 'STOP_VERIFY_PROCESS_NAME') | default('', true) | trim) | default(stop_graceful_process_name, true) }}"
+    stop_force_after_graceful: true
+    stop_verify_process_name: "{{ process_name }}"
+    land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
+    land_api_redeliver_path: "{{ (lookup('env', 'LAND_API_REDELIVER_PATH') | default('', true) | trim) | default('/SyncLims/Redeliver', true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
-    land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
-    land_api_redeliver_path: "{{ (lookup('env', 'LAND_API_REDELIVER_PATH') | default('', true) | trim) | default('/SyncLims/Redeliver', true) }}"
-    land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
+    land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
@@ -46,23 +43,61 @@
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
+    - ansible.windows.win_stat:
+        path: "{{ exe_path }}"
+      register: _land_exe_stat
+
+    - ansible.windows.win_shell: |
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+      register: _land_process_check
+      changed_when: false
+      when: _land_exe_stat.stat.exists | default(false)
+
+    - ansible.builtin.uri:
+        url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
+        method: POST
+        body_format: json
+        body:
+          token: "{{ land_api_token }}"
+        timeout: "{{ land_api_timeout }}"
+        validate_certs: "{{ land_api_verify_tls }}"
+        return_content: true
+        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+      register: _land_api_check
+      delegate_to: localhost
+      failed_when: false
+      when: _land_exe_stat.stat.exists | default(false)
+
+    - ansible.builtin.set_fact:
+        _land_need_reconfigure: >-
+          {{
+            (not (_land_exe_stat.stat.exists | default(false)))
+            or ('RUNNING' not in (_land_process_check.stdout | default('')))
+            or (not (((_land_api_check.status | default(0) | int) >= 200) and ((_land_api_check.status | default(0) | int) < 300)))
+          }}
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
+      when: _land_need_reconfigure | bool
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_config_stop_start.yml"
+      when: _land_need_reconfigure | bool
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'offline' }}"
-          abnormal_reason: >-
-            {% if 'RUNNING' not in (_land_process_after_restart.stdout | default('')) %}Restart failed: process not running
-            {% elif not (((_land_api_after_restart.status | default(0) | int) >= 200) and ((_land_api_after_restart.status | default(0) | int) < 300)) %}API check failed after restart: http={{ _land_api_after_restart.status | default('n/a') }}
-            {% else %}{% endif %}
-
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
+          device_status: >-
+            {% if _land_need_reconfigure | bool %}
+            {{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}
+            {% else %}healthy{% endif %}
+          winrm_status: online
+          api_status: >-
+            {% if _land_need_reconfigure | bool %}
+            {{ 'online' if ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'offline' }}
+            {% else %}online{% endif %}
+          abnormal_reason: ""
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost

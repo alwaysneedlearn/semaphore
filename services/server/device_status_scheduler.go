@@ -133,8 +133,8 @@ func (s *DeviceStatusScheduler) refreshProfile(ps db.ProjectDeviceProfileSetting
 	}
 
 	templateID := ps.StatusTemplateID
-	if ps.CheckRestartRedeployTemplateID != nil && *ps.CheckRestartRedeployTemplateID > 0 {
-		templateID = ps.CheckRestartRedeployTemplateID
+	if ps.CheckRestartTemplateID != nil && *ps.CheckRestartTemplateID > 0 {
+		templateID = ps.CheckRestartTemplateID
 	}
 	if templateID == nil || *templateID == 0 || len(profileDevices) == 0 {
 		return

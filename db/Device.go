@@ -45,6 +45,7 @@ const (
 	DeviceActionStart    DeviceAction = "start"
 	DeviceActionStop     DeviceAction = "stop"
 	DeviceActionRestart  DeviceAction = "restart"
+	DeviceActionRedeploy DeviceAction = "redeploy"
 	DeviceActionStatus   DeviceAction = "status"
 	DeviceActionConfig   DeviceAction = "config"
 )

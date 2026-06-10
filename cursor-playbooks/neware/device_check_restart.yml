@@ -1,7 +1,7 @@
 ---
-- name: NEWARE 重启程序（写配置，无制品下发）
+- name: NEWARE 巡检重启（健康则跳过；不健康仅 restart，无 redeploy/zip）
   hosts: windows_hosts
-  gather_facts: no
+  gather_facts: false
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
@@ -35,6 +35,8 @@
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
     log_read_retries: "{{ ((lookup('env', 'LOG_READ_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
     log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
+    log_health_tail_lines: "{{ ((lookup('env', 'LOG_HEALTH_TAIL_LINES') | default('', true) | trim) | default('8000', true)) | int }}"
+    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
 
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
@@ -53,24 +55,58 @@
     - ansible.builtin.meta: end_host
       when: check_result.unreachable | default(false)
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
+    - ansible.builtin.set_fact:
+        need_reconfigure: true
+      when: >
+        check_result is defined and 'stdout' in check_result and
+        'NOT_RUNNING' in check_result.stdout
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_refresh_midplay.yml"
+      when: >
+        _winrm_session_ok | default(false) | bool and
+        check_result is defined and 'stdout' in check_result and
+        'NOT_RUNNING' not in check_result.stdout
+      vars:
+        winrm_refresh_label: "WinRM 中途建连（状态/日志判断前）"
+
+    - when: >
+        check_result is defined and 'stdout' in check_result and
+        'NOT_RUNNING' not in check_result.stdout
+      block:
+        - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
+          vars:
+            log_health_use_tail: true
+        - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+          vars:
+            log_health_use_tail: true
 
     - ansible.builtin.set_fact:
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
+      when: need_reconfigure | default(false) | bool
+
     - block:
         - ansible.builtin.include_tasks: tasks/neware_config_start_verify.yml
+      when: need_reconfigure | default(false) | bool
       rescue:
         - ansible.builtin.set_fact:
-            host_failure_reason: "{{ (ansible_failed_result.msg | default('restart failed')) | string }}"
+            host_failure_reason: "{{ (ansible_failed_result.msg | default('check-restart failed')) | string }}"
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
           ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (final_start_ok | default(false) | bool) else 'unhealthy') }}"
-          api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if (final_start_ok | default(false) | bool) else 'offline') }}"
+          device_status: >-
+            {% if host_failure_reason is defined %}unhealthy
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(false) | bool) %}unhealthy
+            {% elif need_reconfigure | default(false) | bool and (final_start_ok | default(false) | bool) %}healthy
+            {% else %}healthy{% endif %}
+          api_status: >-
+            {% if host_failure_reason is defined %}offline
+            {% elif need_reconfigure | default(false) | bool and not (final_start_ok | default(false) | bool) %}offline
+            {% else %}online{% endif %}
           winrm_status: online
           abnormal_reason: "{{ host_failure_reason | default('') }}"
       vars:

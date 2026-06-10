@@ -37,7 +37,8 @@ type ProjectDeviceProfileSettings struct {
 	StopTemplateID     *int `db:"stop_template_id" json:"stop_template_id,omitempty"`
 	RestartTemplateID  *int `db:"restart_template_id" json:"restart_template_id,omitempty"`
 	StatusTemplateID   *int `db:"status_template_id" json:"status_template_id,omitempty"`
-	CheckRestartRedeployTemplateID *int `db:"check_restart_redeploy_template_id" json:"check_restart_redeploy_template_id,omitempty"`
+	RedeployTemplateID *int `db:"redeploy_template_id" json:"redeploy_template_id,omitempty"`
+	CheckRestartTemplateID *int `db:"check_restart_template_id" json:"check_restart_template_id,omitempty"`
 	ConfigTemplateID   *int `db:"config_template_id" json:"config_template_id,omitempty"`
 
 	DefaultInventoryID                      *int   `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
@@ -66,6 +67,8 @@ func (s ProjectDeviceProfileSettings) TemplateIDForAction(action DeviceAction) *
 		return s.StopTemplateID
 	case DeviceActionRestart:
 		return s.RestartTemplateID
+	case DeviceActionRedeploy:
+		return s.RedeployTemplateID
 	case DeviceActionStatus:
 		return s.StatusTemplateID
 	}

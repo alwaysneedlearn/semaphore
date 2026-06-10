@@ -41,7 +41,7 @@
       </v-card-subtitle>
       <v-card-text>
         <p class="text--secondary caption mb-3">
-          When interval &gt; 0, Semaphore runs the check-restart-redeploy template on a timer
+          When interval &gt; 0, Semaphore runs the check-restart template on a timer
           (falls back to Status / Patrol template if not set).
         </p>
         <v-row dense>
@@ -60,11 +60,11 @@
           </v-col>
           <v-col cols="12" sm="6">
             <v-autocomplete
-              v-model="settings.check_restart_redeploy_template_id"
+              v-model="settings.check_restart_template_id"
               :items="templates"
               item-value="id"
               item-text="name"
-              label="Check-restart-redeploy template"
+              :label="$t('deviceCheckRestartTemplate')"
               clearable
               outlined
               dense
@@ -140,7 +140,8 @@ const TEMPLATE_ID_FIELDS = [
   'stop_template_id',
   'restart_template_id',
   'status_template_id',
-  'check_restart_redeploy_template_id',
+  'redeploy_template_id',
+  'check_restart_template_id',
 ];
 
 export default {
@@ -162,6 +163,7 @@ export default {
         { field: 'start_template_id', label: 'Start template' },
         { field: 'stop_template_id', label: 'Stop template' },
         { field: 'restart_template_id', label: 'Restart template' },
+        { field: 'redeploy_template_id', label: 'Redeploy template' },
         { field: 'status_template_id', label: 'Status / Patrol template' },
       ],
     };

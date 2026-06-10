@@ -1,0 +1,88 @@
+---
+# Ensure install package on target Windows host. Copy from controller only when zip missing on target.
+# Play vars: redeploy_zip_dest, redeploy_zip_src, redeploy_extract_dest, exe_path
+# Optional: redeploy_land_registry (bool) — set LH registry keys before extract (LAND).
+
+- name: 重新部署：检查目标机程序是否存在
+  ansible.windows.win_stat:
+    path: "{{ exe_path }}"
+  register: _redeploy_exe_stat
+
+- name: 重新部署：检查目标机压缩包是否存在
+  ansible.windows.win_shell: |
+    if (Test-Path "{{ redeploy_zip_dest }}") {
+      Write-Output "ZIP_FOUND"
+    } else {
+      Write-Output "ZIP_NOT_FOUND"
+    }
+  register: _redeploy_zip_local_check
+  changed_when: false
+  when: not (_redeploy_exe_stat.stat.exists | default(false))
+
+- name: 重新部署：创建程序根目录
+  ansible.builtin.win_file:
+    path: "{{ redeploy_extract_dest }}"
+    state: directory
+  when: not (_redeploy_exe_stat.stat.exists | default(false))
+
+- name: 重新部署：从控制器复制安装包（目标机无 zip 时）
+  ansible.builtin.win_copy:
+    src: "{{ redeploy_zip_src }}"
+    dest: "{{ redeploy_zip_dest }}"
+  register: _redeploy_zip_copy
+  when: >
+    not (_redeploy_exe_stat.stat.exists | default(false)) and
+    'ZIP_NOT_FOUND' in (_redeploy_zip_local_check.stdout | default(''))
+
+- name: 重新部署：跳过复制（目标机已有压缩包）
+  ansible.builtin.debug:
+    msg: "[重新部署] 目标机已存在压缩包，跳过复制: {{ redeploy_zip_dest }}"
+  when: >
+    not (_redeploy_exe_stat.stat.exists | default(false)) and
+    'ZIP_FOUND' in (_redeploy_zip_local_check.stdout | default(''))
+
+- name: 重新部署：解压前确保 LH 注册表项存在（LAND）
+  when:
+    - redeploy_land_registry | default(false) | bool
+    - not (_redeploy_exe_stat.stat.exists | default(false))
+  block:
+    - name: 确保 HKCU\Software\LH\ProjectFlag 存在
+      ansible.windows.win_regedit:
+        path: HKCU:\SOFTWARE\LH
+        name: ProjectFlag
+        data: ""
+        type: string
+        state: present
+    - name: 确保 HKCU\Software\LH\ProjectType 存在
+      ansible.windows.win_regedit:
+        path: HKCU:\SOFTWARE\LH
+        name: ProjectType
+        data: "0"
+        type: string
+        state: present
+
+- name: 重新部署：解压程序包
+  ansible.windows.win_shell: |
+    $zipPath = "{{ redeploy_zip_dest }}"
+    $destDir = "{{ redeploy_extract_dest }}"
+    try {
+      Expand-Archive -Path $zipPath -DestinationPath $destDir -Force
+      Write-Output "EXTRACT_OK"
+    } catch {
+      Write-Output "EXTRACT_ERROR:$($_.Exception.Message)"
+    }
+  register: _redeploy_extract
+  failed_when: >
+    _redeploy_extract is defined and 'stdout' in _redeploy_extract and
+    'EXTRACT_ERROR' in _redeploy_extract.stdout
+  when: not (_redeploy_exe_stat.stat.exists | default(false))
+
+- name: 重新部署：解压后再次检查程序文件
+  ansible.windows.win_stat:
+    path: "{{ exe_path }}"
+  register: _redeploy_exe_stat_after
+
+- name: 重新部署：程序文件仍不存在则失败
+  ansible.builtin.fail:
+    msg: "Executable not found after redeploy package step: {{ exe_path }}"
+  when: not ((_redeploy_exe_stat.stat.exists | default(false)) or (_redeploy_exe_stat_after.stat.exists | default(false)))

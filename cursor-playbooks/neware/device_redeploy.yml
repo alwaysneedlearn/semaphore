@@ -1,5 +1,5 @@
 ---
-- name: NEWARE 重启程序（写配置，无制品下发）
+- name: NEWARE 重新部署（目标机 zip 检查 → 条件复制 → 配置 → 启停验证）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -15,6 +15,9 @@
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}.exe"
     zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+    redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
+    redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}.zip"
+    redeploy_extract_dest: "{{ exe_dir }}"
     exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('NWReport_DBWB.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
@@ -44,16 +47,13 @@
         - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
       ignore_unreachable: true
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
+
     - block:
         - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
         - ansible.builtin.set_fact:
             check_result: "{{ _sem_process_status }}"
       ignore_unreachable: true
-
-    - ansible.builtin.meta: end_host
-      when: check_result.unreachable | default(false)
-
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
 
     - ansible.builtin.set_fact:
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
@@ -62,7 +62,7 @@
         - ansible.builtin.include_tasks: tasks/neware_config_start_verify.yml
       rescue:
         - ansible.builtin.set_fact:
-            host_failure_reason: "{{ (ansible_failed_result.msg | default('restart failed')) | string }}"
+            host_failure_reason: "{{ (ansible_failed_result.msg | default('redeploy failed')) | string }}"
 
   post_tasks:
     - ansible.builtin.set_fact:

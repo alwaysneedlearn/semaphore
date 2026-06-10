@@ -498,6 +498,8 @@ export default {
   deviceStart: 'Start',
   deviceStop: 'Stop',
   deviceRestart: 'Restart',
+  deviceRedeploy: 'Redeploy',
+  deviceCheckRestartTemplate: 'Check-restart template',
   deviceStatusCheck: 'Check status',
   deviceConfig: 'Configuration',
   deviceConfigPush: 'Apply configuration',

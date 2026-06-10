@@ -1,5 +1,5 @@
 ---
-- name: SINEXCEL 启动程序（每次写配置，无制品下发）
+- name: SINEXCEL 巡检重启
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -12,21 +12,17 @@
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('sinexcel_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('sinexcel', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
-    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
-    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
-    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     stop_graceful_process_name: "{{ process_name }}"
+    sinexcel_start_check_api: true
     sinexcel_api_scheme: "{{ (lookup('env', 'SINEXCEL_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     sinexcel_api_port: "{{ ((lookup('env', 'SINEXCEL_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     sinexcel_api_status_path: "{{ (lookup('env', 'SINEXCEL_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
     sinexcel_api_timeout: "{{ ((lookup('env', 'SINEXCEL_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     sinexcel_api_token: "{{ (lookup('env', 'SINEXCEL_API_TOKEN') | default('', true) | trim) | default('sinexcelapi', true) }}"
     sinexcel_api_verify_tls: "{{ ((lookup('env', 'SINEXCEL_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
-    sinexcel_start_check_api: "{{ ((lookup('env', 'SINEXCEL_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('sinexcel.iconf', true) }}"
-    api_host: "{{ inventory_hostname }}"
     merged_cfg: "{{ default_config | default({}) | combine(((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
     merged_system_config: "{{ (default_config | default({}).SystemConfig | default({})) | combine((merged_cfg.SystemConfig | default({})), recursive=True) }}"
@@ -43,20 +39,55 @@
         _sinexcel_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _agent_target_host: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
 
+    - ansible.windows.win_stat:
+        path: "{{ exe_path }}"
+      register: _sinexcel_exe_stat
+
+    - ansible.windows.win_shell: |
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+      register: _sinexcel_process_check
+      changed_when: false
+      when: _sinexcel_exe_stat.stat.exists | default(false)
+
+    - ansible.builtin.uri:
+        url: "{{ sinexcel_api_scheme }}://{{ _agent_target_host }}:{{ sinexcel_api_port }}{{ sinexcel_api_status_path }}"
+        method: POST
+        body_format: json
+        body:
+          token: "{{ sinexcel_api_token }}"
+        timeout: "{{ sinexcel_api_timeout }}"
+        validate_certs: "{{ sinexcel_api_verify_tls }}"
+        return_content: true
+        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+      register: _sinexcel_api_check
+      delegate_to: localhost
+      failed_when: false
+      when: _sinexcel_exe_stat.stat.exists | default(false)
+
+    - ansible.builtin.set_fact:
+        _sinexcel_need_reconfigure: >-
+          {{
+            (not (_sinexcel_exe_stat.stat.exists | default(false)))
+            or ('RUNNING' not in (_sinexcel_process_check.stdout | default('')))
+            or (not (((_sinexcel_api_check.status | default(0) | int) >= 200) and ((_sinexcel_api_check.status | default(0) | int) < 300)))
+          }}
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
+      when: _sinexcel_need_reconfigure | bool
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/ini_agent_config_stop_start.yml"
+      when: _sinexcel_need_reconfigure | bool
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
           ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and ((not (sinexcel_start_check_api | bool)) or ((_sinexcel_api_after.status | default(0) | int) >= 200 and (_sinexcel_api_after.status | default(0) | int) < 300)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if not (_sinexcel_need_reconfigure | bool) else 'healthy' }}"
           winrm_status: online
-          api_status: "{{ 'online' if ((not (sinexcel_start_check_api | bool)) or ((_sinexcel_api_after.status | default(0) | int) >= 200 and (_sinexcel_api_after.status | default(0) | int) < 300)) else 'offline' }}"
+          api_status: online
           abnormal_reason: ""
-
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost

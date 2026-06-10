@@ -1,12 +1,13 @@
 ---
-- name: LAND 重启程序（写配置，无制品下发）
+- name: LAND 重新部署
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: LAND
-    land_include_redeliver: true
+    land_include_redeliver: false
+    redeploy_land_registry: true
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('LHBTS.exe', true) }}"
@@ -26,7 +27,6 @@
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
     land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
-    land_api_redeliver_path: "{{ (lookup('env', 'LAND_API_REDELIVER_PATH') | default('', true) | trim) | default('/SyncLims/Redeliver', true) }}"
     land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
     land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
@@ -41,12 +41,16 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_prepare_zip_vars.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - ansible.builtin.set_fact:
+        redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_filename }}"
+        redeploy_zip_src: "{{ zip_src_controller }}"
+        redeploy_extract_dest: "{{ exe_dir }}"
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_config_stop_start.yml"
 
   post_tasks:
@@ -55,12 +59,9 @@
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          winrm_status: online
           api_status: "{{ 'online' if ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'offline' }}"
-          abnormal_reason: >-
-            {% if 'RUNNING' not in (_land_process_after_restart.stdout | default('')) %}Restart failed: process not running
-            {% elif not (((_land_api_after_restart.status | default(0) | int) >= 200) and ((_land_api_after_restart.status | default(0) | int) < 300)) %}API check failed after restart: http={{ _land_api_after_restart.status | default('n/a') }}
-            {% else %}{% endif %}
+          abnormal_reason: ""
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
