@@ -126,7 +126,7 @@ Playbooks with bulk callback (**not** `device_discovery.yml`) must ensure **each
 |-------|--------|
 | `device_status` | `healthy` / `unhealthy` — **never** use `unknown` for WinRM-down (use **`unhealthy`**) |
 | `winrm_status` | `online` if WinRM used for the success path; **`offline`** on ping/collect/log unreachable |
-| `api_status` | Patrol/start/restart: **log/process gate**, not HTTP status API; `online` when `need_reconfigure` is false or `final_start_ok`; stop → **`offline`** always |
+| `api_status` | Patrol/start/restart: **BTSClient upload-status API** (`ExecResultData==3`) preferred, **log keyword fallback**; `online` when `need_reconfigure` is false or `final_start_ok`; stop → **`offline`** always |
 | `rdp_status` | **Omit** in patrol/start/restart/stop — RDP is **Probe** / discovery only |
 | `abnormal_reason` | Human-readable; distinguish **ping failed** vs **collect unreachable** vs **log check unreachable** |
 | `hostname`, `ip` | From `_semaphore_device_rows` match on `inventory_hostname` |
@@ -243,7 +243,7 @@ cursor-playbooks/
   README.md
   device_discovery.yml   # Project-level discovery (not under neware/)
   neware/                # NEWARE Windows hosts (current production tree)
-    device_status.yml    # Patrol — no app HTTP API for api_status
+    device_status.yml    # Patrol — upload-status API first, log fallback
     device_start.yml
     device_restart.yml
     device_stop.yml
@@ -267,7 +267,7 @@ cursor-playbooks/
 - **Env defaults:** `lookup('env', 'VAR')` with trim; empty env → playbook default (see README table).
 - **Scripts:** one **`win_copy`** of `files/` → `C:\Windows\Temp\`, not per-task copy.
 - **Health gate:** process running + recent log line matching **`LOG_SUCCESS_KEYWORD`** (`LOG_HEALTH_RECENT_MINUTES`; check_restart may use tail mode).
-- **Start verify:** no start/status HTTP API in verify; `final_start_ok` = script `VERIFY_OK` + process poll + log poll; log baseline **before** starting EXE.
+- **Start verify:** `final_start_ok` = `VERIFY_OK` + process poll + upload-status API (`ExecResultData==3` skips log poll) or log poll; log baseline **before** starting EXE.
 
 ---
 

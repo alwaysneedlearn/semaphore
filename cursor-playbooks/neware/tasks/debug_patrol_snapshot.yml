@@ -10,14 +10,18 @@
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] process_unreachable={{ status.unreachable | default(false) if (status is defined) else 'n/a' }}"
   when: status is defined
 
-- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（日志健康）"
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（数据上报 / 日志健康）"
   ansible.builtin.debug:
     msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] api_upload_started={{ api_upload_started | default('n/a') }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_health_via_api={{ upload_health_via_api | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_status_ok={{ log_status_ok | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_recent_minutes={{ log_health_recent_minutes | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_success_keyword={{ log_success_keyword | default('') | truncate(80, True) }}"
-  when: log_status_ok is defined or need_reconfigure is defined
+  when: >
+    log_status_ok is defined or need_reconfigure is defined or
+    api_upload_started is defined or api_upload_exec_result_data is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（回调行预览）"
   ansible.builtin.debug:

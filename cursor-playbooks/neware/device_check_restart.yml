@@ -73,12 +73,19 @@
         check_result is defined and 'stdout' in check_result and
         'NOT_RUNNING' not in check_result.stdout
       block:
-        - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
+        - ansible.builtin.include_tasks: tasks/health_gate_upload_status_api_then_log.yml
           vars:
+            neware_health_gate_context: check_restart_pre_gate
             log_health_use_tail: true
-        - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
-          vars:
-            log_health_use_tail: true
+
+        - name: 状态判断：输出综合判断结果（含程序状态）
+          ansible.builtin.debug:
+            msg: >
+              [综合判断] 程序状态={{ check_result.stdout | trim | regex_search('^[^|]+') }} |
+              api_upload_started={{ api_upload_started | default('n/a') }} |
+              日志_OK={{ log_status_ok | default('n/a') }} |
+              Tail行数={{ log_health_tail_lines }} |
+              需要重配={{ need_reconfigure }}
 
     - ansible.builtin.set_fact:
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
