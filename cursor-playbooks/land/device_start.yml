@@ -22,7 +22,6 @@
     stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
     stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
     stop_verify_process_name: "{{ (lookup('env', 'STOP_VERIFY_PROCESS_NAME') | default('', true) | trim) | default(stop_graceful_process_name, true) }}"
-    land_api_modify_config_path: "{{ (lookup('env', 'LAND_API_MODIFY_CONFIG_PATH') | default('', true) | trim) | default('/SyncLims/ModifyConfig', true) }}"
     land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
     land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
     land_api_status_path: "{{ (lookup('env', 'LAND_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"

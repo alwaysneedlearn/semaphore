@@ -13,12 +13,19 @@
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('nbt_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('nbt', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
+    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
+    process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('nbt.iconf', true) }}"
-    process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
-    merged_cfg: "{{ default_config | default({}) | combine(((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)), recursive=True) }}"
+    api_host: "{{ inventory_hostname }}"
+    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
-    merged_system_config: "{{ (default_config | default({}).SystemConfig | default({})) | combine((merged_cfg.SystemConfig | default({})), recursive=True) }}"
+    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -30,7 +37,9 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - ansible.builtin.set_fact:
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _agent_target_host: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+
+    - ansible.builtin.set_fact:
+        _nbt_target_host: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
 
     - ansible.windows.win_stat:
         path: "{{ exe_path }}"
@@ -65,9 +74,15 @@
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if not (_nbt_need_reconfigure | bool) else ('healthy' if (nbt_heartbeat_ok | default(false) | bool) else 'unhealthy') }}"
+          device_status: >-
+            {% if not (_nbt_need_reconfigure | bool) %}healthy
+            {% elif ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and (nbt_heartbeat_ok | default(false) | bool) %}healthy
+            {% else %}unhealthy{% endif %}
           winrm_status: online
-          api_status: "{{ 'online' if not (_nbt_need_reconfigure | bool) or (nbt_heartbeat_ok | default(false) | bool) else 'offline' }}"
+          api_status: >-
+            {% if not (_nbt_need_reconfigure | bool) %}online
+            {% elif (nbt_heartbeat_ok | default(false) | bool) %}online
+            {% else %}offline{% endif %}
           abnormal_reason: ""
 
 - name: 写回 Semaphore 设备状态
