@@ -46,10 +46,11 @@
 `Devices.vue` 行操作区增加按钮（建议图标 `mdi-console`）：
 
 - 标题：`WinRM 命令` / `WinRM console`
+- **显示条件：** 仅 **Windows 类** `device_profile` 显示入口（Linux/其它类型不出现按钮）。
 - 禁用条件（灰显 + tooltip）：
-  - `winrm_status === 'offline'` 且用户未勾选「仍要尝试」
+  - `winrm_status === 'offline'` 且用户未勾选「仍要尝试」（打开对话框时会先 **Probe** 刷新状态）
   - 设备无 IP
-  - 所选凭据对解析后 user 为空
+  - 所选凭据对解析后 user 为空（**RDP 模式** 且 `rdp_user` 为空 → 单选禁用，不可选）
 
 可选：设备编辑页 `DeviceForm.vue` 底部「测试 WinRM 命令」链接，打开同一对话框。
 
