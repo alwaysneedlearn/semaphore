@@ -3,6 +3,8 @@
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
+  vars_files:
+    - vars/kafka_api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: SINEXCEL
@@ -30,6 +32,7 @@
     api_host: "{{ inventory_hostname }}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     sinexcel_start_check_api: "{{ ((lookup('env', 'SINEXCEL_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
+    sinexcel_include_retransmit: false
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
@@ -51,16 +54,16 @@
         _agent_target_host: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/ini_agent_config_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_config_stop_start.yml"
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
           ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and ((not (sinexcel_start_check_api | bool)) or ((_sinexcel_api_after.status | default(0) | int) >= 200 and (_sinexcel_api_after.status | default(0) | int) < 300)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: online
-          api_status: "{{ 'online' if ((not (sinexcel_start_check_api | bool)) or ((_sinexcel_api_after.status | default(0) | int) >= 200 and (_sinexcel_api_after.status | default(0) | int) < 300)) else 'offline' }}"
+          api_status: "{{ 'online' if ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: ""
 
 - name: 写回 Semaphore 设备状态

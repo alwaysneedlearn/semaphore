@@ -3,6 +3,8 @@
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
+  vars_files:
+    - vars/kafka_api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
@@ -13,12 +15,7 @@
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('sinexcel', true) }}"
     exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
-    sinexcel_api_scheme: "{{ (lookup('env', 'SINEXCEL_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
-    sinexcel_api_port: "{{ ((lookup('env', 'SINEXCEL_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
-    sinexcel_api_status_path: "{{ (lookup('env', 'SINEXCEL_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
-    sinexcel_api_timeout: "{{ ((lookup('env', 'SINEXCEL_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
-    sinexcel_api_token: "{{ (lookup('env', 'SINEXCEL_API_TOKEN') | default('', true) | trim) | default('sinexcelapi', true) }}"
-    sinexcel_api_verify_tls: "{{ ((lookup('env', 'SINEXCEL_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
+    sinexcel_start_check_api: true
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -45,7 +42,10 @@
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _sinexcel_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _sinexcel_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+
+    - name: 解析 API 目标主机
+      ansible.builtin.set_fact:
+        _sinexcel_target_host: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
 
     - name: 检查 SINEXCEL 程序文件是否存在
       ansible.windows.win_stat:
@@ -69,20 +69,15 @@
     - name: DEBUG SINEXCEL 巡检前置
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
-    - name: 查询 SINEXCEL API 状态
-      ansible.builtin.uri:
-        url: "{{ sinexcel_api_scheme }}://{{ _sinexcel_target_host }}:{{ sinexcel_api_port }}{{ sinexcel_api_status_path }}"
-        method: POST
-        body_format: json
-        body:
-          token: "{{ sinexcel_api_token }}"
-        timeout: "{{ sinexcel_api_timeout }}"
-        validate_certs: "{{ sinexcel_api_verify_tls }}"
-        return_content: true
-        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-      register: _sinexcel_api_status
-      delegate_to: localhost
-      failed_when: false
+    - name: 查询 SINEXCEL Kafka 配置（健康判定）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_kafka_query_config.yml"
+      vars:
+        sinexcel_kafka_register_api_after: false
+
+    - name: 兼容巡检 DEBUG（SyncLims 寄存器别名）
+      ansible.builtin.set_fact:
+        _sinexcel_api_status: "{{ _sinexcel_kafka_query_raw | default({}) }}"
+      when: _sinexcel_kafka_query_raw is defined
 
     - name: 状态判断：综合判定是否需要重配
       ansible.builtin.set_fact:
@@ -90,7 +85,7 @@
           {{
             (not (_sinexcel_exe_stat.stat.exists | default(false)))
             or ('RUNNING' not in (_sinexcel_process_check.stdout | default('')))
-            or (not (((_sinexcel_api_status.status | default(0) | int) >= 200) and ((_sinexcel_api_status.status | default(0) | int) < 300)))
+            or (not (_sinexcel_kafka_api_ok | default(false) | bool))
           }}
 
     - name: 组装 SINEXCEL 状态回调行
@@ -104,7 +99,7 @@
           abnormal_reason: >-
             {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_sinexcel_process_check.stdout | default('')) %}Process not running: {{ process_name }}
-            {% elif not (((_sinexcel_api_status.status | default(0) | int) >= 200) and ((_sinexcel_api_status.status | default(0) | int) < 300)) %}API status failed: http={{ _sinexcel_api_status.status | default('n/a') }} body={{ (_sinexcel_api_status.content | default('') | string) | truncate(200, True) }}
+            {% elif not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled: EnableFlowInfoExtendedSqlite!=true result={{ _sinexcel_kafka_result_text | default('n/a') }}
             {% else %}{% endif %}
 
     - name: DEBUG SINEXCEL 巡检结果

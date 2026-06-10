@@ -3,6 +3,8 @@
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
+  vars_files:
+    - vars/kafka_api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: SINEXCEL
@@ -19,12 +21,7 @@
     stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
     stop_verify_process_name: "{{ process_name }}"
     sinexcel_start_check_api: true
-    sinexcel_api_scheme: "{{ (lookup('env', 'SINEXCEL_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
-    sinexcel_api_port: "{{ ((lookup('env', 'SINEXCEL_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
-    sinexcel_api_status_path: "{{ (lookup('env', 'SINEXCEL_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
-    sinexcel_api_timeout: "{{ ((lookup('env', 'SINEXCEL_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
-    sinexcel_api_token: "{{ (lookup('env', 'SINEXCEL_API_TOKEN') | default('', true) | trim) | default('sinexcelapi', true) }}"
-    sinexcel_api_verify_tls: "{{ ((lookup('env', 'SINEXCEL_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
+    sinexcel_include_retransmit: false
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('sinexcel.iconf', true) }}"
     exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
@@ -63,19 +60,9 @@
       changed_when: false
       when: _sinexcel_exe_stat.stat.exists | default(false)
 
-    - ansible.builtin.uri:
-        url: "{{ sinexcel_api_scheme }}://{{ _agent_target_host }}:{{ sinexcel_api_port }}{{ sinexcel_api_status_path }}"
-        method: POST
-        body_format: json
-        body:
-          token: "{{ sinexcel_api_token }}"
-        timeout: "{{ sinexcel_api_timeout }}"
-        validate_certs: "{{ sinexcel_api_verify_tls }}"
-        return_content: true
-        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-      register: _sinexcel_api_check
-      delegate_to: localhost
-      failed_when: false
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_kafka_query_config.yml"
+      vars:
+        sinexcel_kafka_register_api_after: false
       when: _sinexcel_exe_stat.stat.exists | default(false)
 
     - ansible.builtin.set_fact:
@@ -83,13 +70,16 @@
           {{
             (not (_sinexcel_exe_stat.stat.exists | default(false)))
             or ('RUNNING' not in (_sinexcel_process_check.stdout | default('')))
-            or (not (((_sinexcel_api_check.status | default(0) | int) >= 200) and ((_sinexcel_api_check.status | default(0) | int) < 300)))
+            or (
+              (sinexcel_start_check_api | default(true) | bool)
+              and not (_sinexcel_kafka_api_ok | default(false) | bool)
+            )
           }}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
       when: _sinexcel_need_reconfigure | bool
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/ini_agent_config_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_config_stop_start.yml"
       when: _sinexcel_need_reconfigure | bool
 
   post_tasks:
@@ -99,12 +89,12 @@
           ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
             {% if not (_sinexcel_need_reconfigure | bool) %}healthy
-            {% elif ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and (((_sinexcel_api_after.status | default(0) | int) >= 200) and ((_sinexcel_api_after.status | default(0) | int) < 300)) %}healthy
+            {% elif ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and (_sinexcel_kafka_api_ok | default(false) | bool) %}healthy
             {% else %}unhealthy{% endif %}
           winrm_status: online
           api_status: >-
             {% if not (_sinexcel_need_reconfigure | bool) %}online
-            {% elif ((_sinexcel_api_after.status | default(0) | int) >= 200) and ((_sinexcel_api_after.status | default(0) | int) < 300) %}online
+            {% elif (_sinexcel_kafka_api_ok | default(false) | bool) %}online
             {% else %}offline{% endif %}
           abnormal_reason: ""
 

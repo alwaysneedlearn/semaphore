@@ -1,0 +1,3 @@
+---
+# Include from play vars_files; resolves per-host api_port with env fallbacks.
+sinexcel_kafka_api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'SINEXCEL_KAFKA_API_PORT') | default('', true) | trim) | default((lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int) }}{% endif %}"

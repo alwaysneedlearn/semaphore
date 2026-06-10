@@ -1,0 +1,14 @@
+---
+# Split merged_cfg for SINEXCEL Kafka playbooks (LAND-style categories).
+# KafkaConfig -> POST /kafka/SetConfig (topic/addrs fields)
+# Retransmit -> QueryHistory time range + batch /kafka/Retransmit by FlowId
+
+- name: 拆分 SINEXCEL 配置分类
+  ansible.builtin.set_fact:
+    sinexcel_kafka_cfg_flat: >-
+      {{
+        merged_cfg.KafkaConfig | default({})
+        if (merged_cfg.KafkaConfig | default({}) | length) > 0
+        else merged_cfg.SystemConfig | default({})
+      }}
+    sinexcel_retransmit_cfg: "{{ merged_cfg.Retransmit | default({}) }}"

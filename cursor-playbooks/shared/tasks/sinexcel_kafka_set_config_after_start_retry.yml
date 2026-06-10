@@ -1,0 +1,18 @@
+---
+# Retry SetConfig after start when before_stop failed/skipped and process is up.
+
+- name: 准备 SINEXCEL KafkaConfig 分类
+  ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
+  when: sinexcel_kafka_cfg_flat is not defined
+
+- name: 启动后：Kafka SetConfig（停止前失败或未尝试时重试）
+  ansible.builtin.include_tasks: sinexcel_kafka_set_config_attempt.yml
+  vars:
+    sinexcel_kafka_set_phase: after_start
+  when: >-
+    (sinexcel_kafka_cfg_flat | default({}) | length) > 0
+    and not (_sinexcel_kafka_set_before_ok | default(false) | bool)
+    and (
+      'RUNNING' in (_ini_agent_process_after.stdout | default(''))
+      or 'RUNNING' in (_sinexcel_process_after_restart.stdout | default(''))
+    )

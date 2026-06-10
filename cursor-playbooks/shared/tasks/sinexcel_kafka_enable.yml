@@ -1,0 +1,74 @@
+---
+# POST /kafka/IsEnable — turn on EnableFlowInfoExtendedSqlite.
+# Var sinexcel_kafka_enable_phase: before_stop | after_start
+
+- name: 解析 Kafka 启用开关目标值
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_enable_target: >-
+      {{
+        sinexcel_kafka_cfg_flat.EnableFlowInfoExtendedSqlite
+        | default(sinexcel_kafka_enable_default | default(true))
+        | bool
+      }}
+  when: sinexcel_kafka_cfg_flat is defined
+
+- name: 解析 Kafka 启用开关目标值（默认 true）
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_enable_target: "{{ sinexcel_kafka_enable_default | default(true) | bool }}"
+  when: sinexcel_kafka_cfg_flat is not defined
+
+- name: "Kafka IsEnable（{{ sinexcel_kafka_enable_phase | default('attempt') }}）"
+  ansible.builtin.uri:
+    url: >-
+      {{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_is_enable_path }}
+    method: POST
+    body_format: json
+    body:
+      EnableFlowInfoExtendedSqlite: "{{ _sinexcel_kafka_enable_target | bool }}"
+    timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
+    validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _sinexcel_kafka_enable_raw
+  delegate_to: localhost
+  failed_when: false
+  when: _sinexcel_kafka_enable_target | default(true) | bool
+  vars:
+    _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+
+- name: 登记 IsEnable 结果（停止前）
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_enable_before_ok: >-
+      {{
+        (_sinexcel_kafka_enable_raw.status | default(-1) | int) >= 200 and
+        (_sinexcel_kafka_enable_raw.status | default(-1) | int) < 300 and
+        ('成功' in ((_sinexcel_kafka_enable_raw.content | default('{}') | from_json).Result | default('') | string))
+      }}
+  when:
+    - sinexcel_kafka_enable_phase | default('') == 'before_stop'
+    - _sinexcel_kafka_enable_raw is defined
+    - not (_sinexcel_kafka_enable_raw.skipped | default(false))
+
+- name: 登记 IsEnable 结果（启动后）
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_enable_after_ok: >-
+      {{
+        (_sinexcel_kafka_enable_raw.status | default(-1) | int) >= 200 and
+        (_sinexcel_kafka_enable_raw.status | default(-1) | int) < 300 and
+        ('成功' in ((_sinexcel_kafka_enable_raw.content | default('{}') | from_json).Result | default('') | string))
+      }}
+  when:
+    - sinexcel_kafka_enable_phase | default('') == 'after_start'
+    - _sinexcel_kafka_enable_raw is defined
+    - not (_sinexcel_kafka_enable_raw.skipped | default(false))
+
+- name: DEBUG SINEXCEL Kafka IsEnable
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] kafka_enable phase={{ sinexcel_kafka_enable_phase | default('attempt') }}"
+      - "[DEBUG-SINEXCEL] kafka_enable target={{ _sinexcel_kafka_enable_target | default(true) }}"
+      - "[DEBUG-SINEXCEL] kafka_enable http={{ _sinexcel_kafka_enable_raw.status | default('skipped') }}"
+      - "[DEBUG-SINEXCEL] kafka_enable body={{ _sinexcel_kafka_enable_raw.content | default('') | truncate(800, True) }}"
+  when:
+    - _sinexcel_kafka_enable_raw is defined
+    - not (_sinexcel_kafka_enable_raw.skipped | default(false))

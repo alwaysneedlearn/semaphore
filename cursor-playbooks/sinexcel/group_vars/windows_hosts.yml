@@ -3,3 +3,14 @@ ansible_winrm_connection_timeout: 25
 ansible_winrm_operation_timeout_sec: 20
 ansible_winrm_read_timeout_sec: 30
 ansible_winrm_server_cert_validation: ignore
+
+# SINEXCEL Kafka HTTP API (Postman: /kafka/* on agent API port, default 9002)
+sinexcel_kafka_api_scheme: "http"
+sinexcel_kafka_query_config_path: "/kafka/QueryConfig"
+sinexcel_kafka_set_config_path: "/kafka/SetConfig"
+sinexcel_kafka_is_enable_path: "/kafka/IsEnable"
+sinexcel_kafka_query_history_path: "/kafka/QueryHistory"
+sinexcel_kafka_retransmit_path: "/kafka/Retransmit"
+sinexcel_kafka_timeout: 15
+sinexcel_kafka_verify_tls: false
+sinexcel_retransmit_only_missing: true

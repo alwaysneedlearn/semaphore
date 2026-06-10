@@ -1,0 +1,75 @@
+---
+# POST /kafka/SetConfig with KafkaConfig category (exclude EnableFlowInfoExtendedSqlite).
+# Vars: sinexcel_kafka_set_phase (before_stop|after_start), sinexcel_kafka_cfg_flat
+
+- name: 准备 SINEXCEL KafkaConfig 分类
+  ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
+  when: sinexcel_kafka_cfg_flat is not defined
+
+- name: 初始化 SetConfig 请求体
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_set_body: {}
+  when: (sinexcel_kafka_cfg_flat | default({}) | length) > 0
+
+- name: 组装 SetConfig 请求体（排除 IsEnable 字段）
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_set_body: "{{ _sinexcel_kafka_set_body | combine({item.key: item.value}) }}"
+  loop: "{{ sinexcel_kafka_cfg_flat | dict2items | rejectattr('key', 'equalto', 'EnableFlowInfoExtendedSqlite') | list }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: (sinexcel_kafka_cfg_flat | default({}) | length) > 0
+
+- name: "Kafka SetConfig（{{ sinexcel_kafka_set_phase | default('attempt') }}）"
+  ansible.builtin.uri:
+    url: >-
+      {{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_set_config_path }}
+    method: POST
+    body_format: json
+    body: "{{ _sinexcel_kafka_set_body }}"
+    timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
+    validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _sinexcel_kafka_set_raw
+  delegate_to: localhost
+  failed_when: false
+  when: (_sinexcel_kafka_set_body | default({}) | length) > 0
+  vars:
+    _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+
+- name: 登记 SetConfig 结果（停止前）
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_set_before_ok: >-
+      {{
+        (_sinexcel_kafka_set_raw.status | default(-1) | int) >= 200 and
+        (_sinexcel_kafka_set_raw.status | default(-1) | int) < 300 and
+        ('成功' in ((_sinexcel_kafka_set_raw.content | default('{}') | from_json).Result | default('') | string))
+      }}
+  when:
+    - sinexcel_kafka_set_phase | default('') == 'before_stop'
+    - _sinexcel_kafka_set_raw is defined
+    - not (_sinexcel_kafka_set_raw.skipped | default(false))
+
+- name: 登记 SetConfig 结果（启动后）
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_set_after_ok: >-
+      {{
+        (_sinexcel_kafka_set_raw.status | default(-1) | int) >= 200 and
+        (_sinexcel_kafka_set_raw.status | default(-1) | int) < 300 and
+        ('成功' in ((_sinexcel_kafka_set_raw.content | default('{}') | from_json).Result | default('') | string))
+      }}
+  when:
+    - sinexcel_kafka_set_phase | default('') == 'after_start'
+    - _sinexcel_kafka_set_raw is defined
+    - not (_sinexcel_kafka_set_raw.skipped | default(false))
+
+- name: DEBUG SINEXCEL Kafka SetConfig
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] kafka_set phase={{ sinexcel_kafka_set_phase | default('attempt') }}"
+      - "[DEBUG-SINEXCEL] kafka_set keys={{ _sinexcel_kafka_set_body | default({}) | dict2items | map(attribute='key') | list }}"
+      - "[DEBUG-SINEXCEL] kafka_set http={{ _sinexcel_kafka_set_raw.status | default('skipped') }}"
+      - "[DEBUG-SINEXCEL] kafka_set body={{ _sinexcel_kafka_set_raw.content | default('') | truncate(1500, True) }}"
+  when:
+    - _sinexcel_kafka_set_raw is defined
+    - not (_sinexcel_kafka_set_raw.skipped | default(false))

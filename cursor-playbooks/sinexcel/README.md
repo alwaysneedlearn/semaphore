@@ -1,54 +1,46 @@
 # SINEXCEL playbooks (`cursor-playbooks/sinexcel/`)
 
-Device type **SINEXCEL**: LAND-style lifecycle (process + optional HTTP API) with **NEWARE-style INI config** on start/restart (via `../neware/tasks/apply_neware_style_device_config_files.yml`).
+Device type **SINEXCEL**: LAND-style lifecycle (Kafka HTTP API + optional retransmit) with **NEWARE-style INI config** on start/restart.
 
 ## Playbooks
 
 | File | Purpose |
 |------|---------|
-| `device_status.yml` | Exe + process + API check, bulk callback |
-| `device_start.yml` | Config files (NEWARE) + zip/deploy + interactive task start |
+| `device_status.yml` | Exe + process + **Kafka QueryConfig** (`EnableFlowInfoExtendedSqlite`), bulk callback |
+| `device_start.yml` | INI + **SetConfig / IsEnable** + start (no retransmit) |
+| `device_restart.yml` | Same + **QueryHistory + batch Retransmit** when `Retransmit` category set |
+| `device_redeploy.yml` | Zip deploy + config/start (no retransmit) |
+| `device_check_restart.yml` | Unhealthy gate via Kafka QueryConfig; restart only when needed |
 | `device_stop.yml` | Force stop process |
-| `device_restart.yml` | Stop + redeploy + config + start |
-| `device_check_restart_redeploy.yml` | Restart only when unhealthy (bind as **check_restart_redeploy** template) |
 
-Set in each play:
+Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
-```yaml
-sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-sem_files_dir: "{{ playbook_dir }}/../shared/files"
-sem_debug_tag: SINEXCEL
-```
+## Kafka API (agent HTTP, default port **9002**)
 
-Task logs: search **`[DEBUG-SINEXCEL]`** (exe, process, SyncLims API, callback; see `shared/README.md`).
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /kafka/QueryConfig` | Patrol/health: `Msg.EnableFlowInfoExtendedSqlite == true` |
+| `POST /kafka/SetConfig` | Apply **KafkaConfig** category (addrs, topics) |
+| `POST /kafka/IsEnable` | `{"EnableFlowInfoExtendedSqlite": true}` |
+| `POST /kafka/QueryHistory` | `StartTime` / `EndTime` → history rows with `FlowId` |
+| `POST /kafka/Retransmit` | Batch `[{"FlowId":"..."}, ...]` (restart only) |
 
-## Semaphore templates
+## Semaphore config categories (like LAND)
 
-Example paths:
-
-- `cursor-playbooks/sinexcel/device_status.yml`
-- `cursor-playbooks/sinexcel/device_start.yml`
-- …
+| Category | Used by |
+|----------|---------|
+| `KafkaConfig` | `SetConfig` body (`KafkaAddrs`, `KafkaTopic*`, …). Falls back to `SystemConfig` if empty. |
+| `Retransmit` | `StartTime`, `EndTime` — format `yyyy/MM/dd HH:mm:ss.SSS` (e.g. `2026/06/08 00:00:00.000`). Restart queries history then retransmits **UploadExist=false** rows by default. |
 
 ## Variable Group (examples)
 
 | Variable | Default | Notes |
 |----------|---------|--------|
-| `EXE_DIR` | `C:\Program Files\SINEXCEL` | Preferred install root; drive fallback `preferred -> E: -> C:` |
-| `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Optional drive order override (comma/space separated), e.g. `E,C,D` |
-| `EXE_NAME` | `sinexcel_agent.exe` | |
-| `ZIP_NAME` | `sinexcel` | Subfolder under `EXE_DIR` |
-| `ZIP_PATH` | `/root/sinexcel/pkg` | Controller zip directory |
-| `CONFIG_FILE_NAME` | `sinexcel.iconf` | Template on controller under `ZIP_PATH` |
-| `RECONFIG_CLIENT_REL_PATH` | `Documents\SINEXCEL\BTSClient` | User/Public INI directory |
-| `RECONFIG_CONFIG_FALLBACK_USERS` | `SINEXCEL,Administrator` | |
-| `SINEXCEL_API_*` | See `device_status.yml` | Same pattern as LAND SyncLims-style API |
-| `API_PORT` | `8080` | Written into INI `ReportApiSettings.ServerPort` |
-| `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | Graceful stop (`CloseMainWindow`) |
-| `STOP_VERIFY_PROCESS_NAME` | `sinexcel_agent` | Verify process stopped |
-| `STOP_POPUP_WAIT_SECONDS` | `2` | Wait for confirmation dialog |
-| `STOP_POPUP_KEYWORD` | `警告` | Dialog title keyword |
-| `STOP_FORCE_AFTER_GRACEFUL` | `true` | Force kill if still running |
+| `API_PORT` / device `api_port` | `9002` | Kafka API port |
+| `SINEXCEL_KAFKA_API_PORT` | — | Override env port |
+| `SINEXCEL_START_CHECK_API` | `true` | Require Kafka enabled after start |
+| `SINEXCEL_KAFKA_*_PATH` | `/kafka/...` | See `group_vars/windows_hosts.yml` |
+| `EXE_DIR`, `ZIP_NAME`, … | See playbooks | Same as before |
 
 ## Extra-vars
 
