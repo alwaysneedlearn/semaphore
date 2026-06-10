@@ -36,7 +36,7 @@
           ansible.builtin.debug:
             msg: >-
               [STOP] {{ inventory_hostname }} ->
-              {{ stop_result.stdout | default(stop_result.msg | default('NO_OUTPUT')) | trim }}
+              {{ stop_display_result | default(stop_result.stdout | default(stop_result.msg | default('NO_OUTPUT'))) | trim }}
           when: stop_result is defined and not (stop_result.unreachable | default(false))
 
       ignore_unreachable: true
@@ -82,7 +82,7 @@
                 {% if stop_result is not defined %}No task result
                 {% elif stop_result.unreachable | default(false) %}{{ 'WinRM unreachable: ' ~ (stop_result.msg | default('') | trim) }}
                 {% elif stop_result is failed %}{{ (stop_result.stdout | default('') | trim) or (stop_result.msg | default('stop failed')) }}
-                {% elif stop_verify_result is defined and 'NOT_RUNNING' in (stop_verify_result.stdout | default('')) and ('STOP_FAILED' in stop_result.stdout | default('') or 'STOP_ERROR' in stop_result.stdout | default('')) %}Stop failed initially but process verified not running
+                {% elif stop_effective_ok | default(false) | bool and stop_verify_result is defined and 'NOT_RUNNING' in (stop_verify_result.stdout | default('')) %}Stop OK (verified not running; initial={{ stop_result.stdout | default('') | trim }})
                 {% elif 'STOP_ERROR' in stop_result.stdout | default('') %}{{ stop_result.stdout | trim }}
                 {% elif 'STOP_FAILED' in stop_result.stdout | default('') %}{{ stop_result.stdout | trim }}
                 {% elif 'NOT_RUNNING' in stop_result.stdout | default('') %}Process was not running (already stopped)

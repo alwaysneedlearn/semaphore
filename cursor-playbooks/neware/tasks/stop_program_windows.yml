@@ -51,6 +51,30 @@
     not (stop_verify_result.unreachable | default(false)) and
     'NOT_RUNNING' in (stop_verify_result.stdout | default(''))
 
+- name: 停止程序：登记有效停止（初次报错或失败但复核已退出）
+  ansible.builtin.set_fact:
+    stop_effective_ok: true
+    stop_display_result: >-
+      STOP_OK|VERIFY_NOT_RUNNING|initial={{ stop_result.stdout | default('') | trim }}
+  when: >
+    stop_verify_result is defined and
+    not (stop_verify_result.unreachable | default(false)) and
+    'NOT_RUNNING' in (stop_verify_result.stdout | default(''))
+
+- name: 停止程序：登记有效停止（初次即成功）
+  ansible.builtin.set_fact:
+    stop_effective_ok: true
+    stop_display_result: "{{ stop_result.stdout | default('') | trim }}"
+  when: >
+    stop_effective_ok is not defined and
+    stop_result is defined and
+    not (stop_result.unreachable | default(false)) and
+    (
+      'STOPPED' in (stop_result.stdout | default('')) or
+      'STOPPED_BY_TASKKILL' in (stop_result.stdout | default('')) or
+      'NOT_RUNNING' in (stop_result.stdout | default(''))
+    )
+
 - name: 停止程序：失败（复核进程仍在运行）
   ansible.builtin.fail:
     msg: >-

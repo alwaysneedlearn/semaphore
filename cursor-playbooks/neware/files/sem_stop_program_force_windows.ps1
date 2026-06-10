@@ -34,5 +34,12 @@ try {
   }
   Write-Output 'STOP_FAILED'
 } catch {
+  # Race: process may exit between discovery and Stop-Process ("not found" is OK if gone).
+  Start-Sleep -Seconds 1
+  $afterErr = Get-SemaphoreAliveProcess -ProcessName $name -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes
+  if (-not $afterErr) {
+    Write-Output 'STOPPED'
+    exit 0
+  }
   Write-Output "STOP_ERROR:$($_.Exception.Message)"
 }
