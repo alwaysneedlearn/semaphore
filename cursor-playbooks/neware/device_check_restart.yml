@@ -52,8 +52,27 @@
             check_result: "{{ _sem_process_status }}"
       ignore_unreachable: true
 
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
+          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
+          device_status: unhealthy
+          api_status: offline
+          winrm_status: offline
+          abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
+      vars:
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+      when: check_result is defined and (check_result.unreachable | default(false))
+
     - ansible.builtin.meta: end_host
-      when: check_result.unreachable | default(false)
+      when: check_result is defined and (check_result.unreachable | default(false))
+
+    - ansible.builtin.set_fact:
+        host_failure_reason: "Process status collection failed"
+      when: check_result is not defined
+
+    - ansible.builtin.meta: end_host
+      when: check_result is not defined
 
     - ansible.builtin.set_fact:
         need_reconfigure: true
@@ -116,10 +135,12 @@
             {% else %}online{% endif %}
           winrm_status: online
           abnormal_reason: "{{ host_failure_reason | default('') }}"
+      when: semaphore_callback_row is not defined
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
     - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
+      when: semaphore_callback_row is defined
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost

@@ -13,6 +13,9 @@
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
     app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else 'LHBTS' }}"
     exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
+    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     stop_graceful_process_name: "{{ process_name }}"
     stop_popup_wait_seconds: 2
@@ -41,7 +44,9 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - ansible.builtin.set_fact:
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+
+    - ansible.builtin.set_fact:
+        _land_target_host: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
 
     - ansible.windows.win_stat:
         path: "{{ exe_path }}"

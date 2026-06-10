@@ -47,8 +47,12 @@
         redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_filename }}"
         redeploy_zip_src: "{{ zip_src_controller }}"
         redeploy_extract_dest: "{{ exe_dir }}"
+
+    - ansible.builtin.set_fact:
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+
+    - ansible.builtin.set_fact:
+        _land_target_host: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_config_stop_start.yml"
