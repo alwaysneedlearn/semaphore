@@ -1,6 +1,14 @@
 ---
 # After stop. Play var: sem_debug_tag. Graceful: stop_graceful_result; force: _*_stop_result.
 
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（弹窗参数）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_popup_keyword={{ stop_popup_keyword | default('') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_popup_wait_seconds={{ stop_popup_wait_seconds | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_popup_match_mode={{ stop_popup_match_mode | default('title_or_content') }}"
+  when: stop_popup_keyword is defined or stop_popup_match_mode is defined
+
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（优雅停止脚本输出）"
   ansible.builtin.debug:
     msg: "{{ stop_graceful_result.stdout_lines | default(['(no stdout)']) }}"

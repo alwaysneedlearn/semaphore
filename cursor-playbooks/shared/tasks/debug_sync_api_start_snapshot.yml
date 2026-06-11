@@ -20,12 +20,26 @@
       {% elif _nbt_process_after_start is defined %}{{ _nbt_process_after_start.stdout | default('') }}
       {% elif _land_process_after_restart is defined %}{{ _land_process_after_restart.stdout | default('') }}
       {% elif _sinexcel_process_after_restart is defined %}{{ _sinexcel_process_after_restart.stdout | default('') }}
+      {% elif _ini_agent_process_after is defined %}{{ _ini_agent_process_after.stdout | default('') }}
       {% elif _nbt_process_after_restart is defined %}{{ _nbt_process_after_restart.stdout | default('') }}
       {% elif _land_process_check is defined %}{{ _land_process_check.stdout | default('') }}
       {% elif _sinexcel_process_check is defined %}{{ _sinexcel_process_check.stdout | default('') }}
       {% elif _nbt_process_check is defined %}{{ _nbt_process_check.stdout | default('') }}
       {% else %}skipped{% endif %}
   when: _sem_dbg_exe_stat is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（交互启动与弹窗）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] profile_user={{ _reconfig_profile_user | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_keyword={{ start_popup_keyword | default('') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_wait_seconds={{ start_popup_wait_seconds | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_match_mode={{ start_popup_match_mode | default('title_or_content') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_script_stdout={{ (relaunch_result.stdout | default('') | string | trim) | truncate(3000, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_confirmed={{ 'POPUP_CONFIRMED' in (relaunch_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_not_found={{ 'POPUP_NOT_FOUND' in (relaunch_result.stdout | default('')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_verify_ok={{ 'VERIFY_OK' in (relaunch_result.stdout | default('')) }}"
+  when: relaunch_result is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（API）"
   ansible.builtin.debug:

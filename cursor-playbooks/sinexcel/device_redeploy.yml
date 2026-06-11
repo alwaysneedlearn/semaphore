@@ -73,6 +73,8 @@
           api_status: "{{ 'online' if ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: ""
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
+
 - name: 写回 Semaphore 设备状态
   hosts: localhost
   gather_facts: false

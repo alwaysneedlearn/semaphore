@@ -72,6 +72,8 @@
             {% elif (sinexcel_start_check_api | bool) and not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled (EnableFlowInfoExtendedSqlite!=true)
             {% else %}{% endif %}
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
+
 - name: 写回 Semaphore 设备状态
   hosts: localhost
   gather_facts: false

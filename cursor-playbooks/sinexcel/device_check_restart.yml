@@ -105,6 +105,9 @@
             {% else %}offline{% endif %}
           abnormal_reason: ""
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
+      when: _sinexcel_need_reconfigure | bool
+
 - name: 写回 Semaphore 设备状态
   hosts: localhost
   gather_facts: false
