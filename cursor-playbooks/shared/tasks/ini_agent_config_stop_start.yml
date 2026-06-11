@@ -1,6 +1,6 @@
 ---
-# SINEXCEL/NBT: INI config → stop → start → optional heartbeat/API check.
-# Vars: sem_profile_tasks_dir, process_name, nbt_start_check_api (NBT), sinexcel_start_check_api (SINEXCEL)
+# SINEXCEL: INI config → stop → start → optional API check. (NBT uses nbt_service_stop_start.yml.)
+# Vars: sem_profile_tasks_dir, process_name, sinexcel_start_check_api (SINEXCEL)
 
 - name: 写入 INI 设备配置
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/apply_neware_style_device_config_files.yml"
@@ -43,17 +43,6 @@
     if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
   register: _ini_agent_process_after
   changed_when: false
-
-- name: NBT 启动后心跳检查
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
-  when: nbt_start_check_api | default(false) | bool
-
-- name: NBT ResetData（仅 restart）
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_reset_data.yml"
-  when: >
-    (nbt_include_reset_data | default(false) | bool)
-    and (merged_cfg.ResetData | default({}) | length > 0)
-    and (nbt_heartbeat_ok | default(false) | bool)
 
 - name: SINEXCEL 启动后 API 检查
   ansible.builtin.uri:

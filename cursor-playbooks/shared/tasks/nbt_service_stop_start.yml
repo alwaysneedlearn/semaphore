@@ -1,0 +1,29 @@
+---
+# NBT: Windows service stop/start (no INI). Vars: nbt_service_stop_first, nbt_start_check_api,
+# nbt_include_reset_data, merged_cfg, _nbt_target_host.
+
+- name: DEBUG NBT 服务模式（无 INI 写配置）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-NBT] NBT_SERVICE_CTRL_REV=1"
+      - "[DEBUG-NBT] service_name={{ nbt_service_name }}"
+      - "[DEBUG-NBT] stop_first={{ nbt_service_stop_first | default(true) }}"
+  when: sem_debug_tag | default('') == 'NBT'
+
+- name: 停止 NBT Windows 服务（重启前）
+  ansible.builtin.include_tasks: nbt_windows_service_stop.yml
+  when: nbt_service_stop_first | default(true) | bool
+
+- name: 启动 NBT Windows 服务
+  ansible.builtin.include_tasks: nbt_windows_service_start.yml
+
+- name: NBT 启动后心跳检查
+  ansible.builtin.include_tasks: nbt_api_heartbeat_check.yml
+  when: nbt_start_check_api | default(false) | bool
+
+- name: NBT ResetData（仅 restart）
+  ansible.builtin.include_tasks: nbt_api_reset_data.yml
+  when: >
+    (nbt_include_reset_data | default(false) | bool)
+    and (merged_cfg.ResetData | default({}) | length > 0)
+    and (nbt_heartbeat_ok | default(false) | bool)

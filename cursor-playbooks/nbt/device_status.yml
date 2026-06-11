@@ -19,15 +19,6 @@
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
-    sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
-    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('nbt.iconf', true) }}"
-    api_host: "{{ inventory_hostname }}"
-    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
-    default_cfg: "{{ default_config | default({}) }}"
-    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
-    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
-    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
-    merged_cfg_json: "{{ merged_cfg | to_json }}"
 
   tasks:
     - name: WinRM 建连（含重试）
@@ -49,18 +40,14 @@
       register: _nbt_exe_stat
       ignore_unreachable: true
 
-    - name: 检查 NBT 进程状态
-      ansible.windows.win_shell: |
-        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -ne $p) {
-          $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
-          "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
-        } else {
-          "NOT_RUNNING"
-        }
-      register: _nbt_process_check
-      changed_when: false
+    - name: 检查 NBT Windows 服务状态
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
       ignore_unreachable: true
+
+    - name: 兼容 DEBUG 任务变量（服务状态）
+      ansible.builtin.set_fact:
+        _nbt_process_check: "{{ _nbt_service_status }}"
+      when: _nbt_service_status is defined
 
     - name: DEBUG NBT 巡检前置
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
@@ -73,7 +60,7 @@
         need_reconfigure: >-
           {{
             (not (_nbt_exe_stat.stat.exists | default(false)))
-            or ('RUNNING' not in (_nbt_process_check.stdout | default('')))
+            or ('RUNNING' not in (_nbt_service_status.stdout | default('')))
             or not (nbt_heartbeat_ok | default(false) | bool)
           }}
 
@@ -87,7 +74,7 @@
           api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
             {% if not (_nbt_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
-            {% elif 'RUNNING' not in (_nbt_process_check.stdout | default('')) %}Process not running: {{ process_name }}
+            {% elif 'RUNNING' not in (_nbt_service_status.stdout | default('')) %}Service not running: {{ nbt_service_name }} ({{ _nbt_service_status.stdout | default('') | trim }})
             {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
             {% else %}{% endif %}
 

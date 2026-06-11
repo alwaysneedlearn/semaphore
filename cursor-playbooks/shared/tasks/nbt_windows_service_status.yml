@@ -1,0 +1,23 @@
+---
+# Query NBT Windows service. Sets _nbt_service_status (stdout RUNNING|NOT_RUNNING|NOT_FOUND).
+
+- name: 查询 NBT Windows 服务状态
+  ansible.windows.win_shell: |
+    $name = '{{ nbt_service_name }}'
+    $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
+    if ($null -eq $svc) {
+      "NOT_FOUND|name=$name"
+    } elseif ($svc.Status -eq 'Running') {
+      "RUNNING|name=$name|status=$($svc.Status)|display=$($svc.DisplayName)"
+    } else {
+      "NOT_RUNNING|name=$name|status=$($svc.Status)|display=$($svc.DisplayName)"
+    }
+  register: _nbt_service_status
+  changed_when: false
+
+- name: DEBUG NBT 服务状态
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-NBT] service_name={{ nbt_service_name }}"
+      - "[DEBUG-NBT] service_status={{ _nbt_service_status.stdout | default('') | trim }}"
+  when: sem_debug_tag | default('') == 'NBT'

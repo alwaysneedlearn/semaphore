@@ -1,70 +1,33 @@
 ---
-- name: NBT 停止程序
+- name: NBT 停止服务
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: NBT
-    _exe_name_default: nbt_agent.exe
-    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
-    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
-    exe_name: "{{ _exe_name_base ~ '.exe' }}"
-    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
-    sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
-    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('nbt.iconf', true) }}"
-    api_host: "{{ inventory_hostname }}"
-    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
-    default_cfg: "{{ default_config | default({}) }}"
-    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
-    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
-    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
-    merged_cfg_json: "{{ merged_cfg | to_json }}"
 
   tasks:
-    - name: WinRM 建连（含重试）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - name: WinRM 未连通则不再执行本主机后续步骤
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - name: 解析当前设备信息
-      ansible.builtin.set_fact:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+    - ansible.builtin.set_fact:
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 强制停止 NBT 进程
-      ansible.windows.win_shell: |
-        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue
-        if ($null -ne $p) {
-          $p | Stop-Process -Force -ErrorAction SilentlyContinue
-          "STOPPED"
-        } else {
-          "ALREADY_STOPPED"
-        }
-      register: _nbt_stop_result
-      changed_when: "'STOPPED' in (_nbt_stop_result.stdout | default(''))"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_stop.yml"
 
-    - name: 确认 NBT 进程已停止
-      ansible.windows.win_shell: |
-        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -eq $p) { "NOT_RUNNING" } else { "RUNNING" }
-      register: _nbt_process_after_stop
-      changed_when: false
-
-    - name: 停止后查询 NBT 心跳（可选 DEBUG）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
       when: nbt_stop_check_api | bool
 
-    - name: 停止后心跳结果供 DEBUG 复用
-      ansible.builtin.set_fact:
+    - ansible.builtin.set_fact:
         _nbt_api_after_stop: "{{ _nbt_heartbeat }}"
       when: nbt_stop_check_api | bool and _nbt_heartbeat is defined
 
-    - name: 登记 NBT 停止回调行
-      ansible.builtin.set_fact:
+    - ansible.builtin.set_fact:
+        _nbt_process_after_stop: "{{ _nbt_service_status }}"
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
@@ -72,16 +35,13 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: offline
           abnormal_reason: >-
-            {% set _proc = (_nbt_process_after_stop.stdout | default('') | trim) %}
-            {% set _grace = (stop_graceful_result.stdout | default('') | trim) if (stop_graceful_result is defined) else '' %}
-            {% if 'NOT_RUNNING' in _proc %}Stop completed; process not running
-            {% elif 'STOP_TASK_NO_OUTPUT' in _grace %}Graceful stop produced no log (check scheduled task / helper on desktop); process still running
-            {% elif 'POPUP_NOT_FOUND' in _grace %}Confirm popup not found (minimized/hidden window?); process still running
-            {% elif 'STILL_RUNNING' in _grace or 'RUNNING' in _proc %}Stop failed: process still running
-            {% else %}Stop failed: {{ _proc or _grace or 'unknown' }}{% endif %}
+            {% set _svc = (_nbt_service_status.stdout | default('') | trim) %}
+            {% if 'NOT_FOUND' in _svc %}Service not found: {{ nbt_service_name }}
+            {% elif 'NOT_RUNNING' in _svc or 'Stopped' in _svc %}Stop completed; service not running
+            {% elif 'RUNNING' in _svc %}Stop failed: service still running ({{ _svc }})
+            {% else %}Stop failed: {{ _svc or 'unknown' }}{% endif %}
 
-    - name: DEBUG NBT 停止结果
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）
@@ -89,12 +49,11 @@
       delegate_to: localhost
       block:
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+
 - name: 写回 Semaphore 设备状态（独立 play）
   hosts: localhost
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
   tasks:
-    - name: 执行 bulk 回调
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

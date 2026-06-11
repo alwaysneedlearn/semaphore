@@ -1,4 +1,7 @@
 ---
+# NBT Windows service (Start-Service / Stop-Service via win_service)
+nbt_service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('nbt_agent', true) }}"
+
 # NBT agent HTTP API (GET heartbeat + reset data)
 nbt_api_scheme: "{{ (lookup('env', 'NBT_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
 nbt_api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'NBT_API_PORT') | default('', true) | trim) | default('8885', true) | int }}{% endif %}"

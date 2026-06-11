@@ -90,17 +90,21 @@ SEMAPHORE_API_TOKEN=<token>
 
 ### NBT
 
+NBT 为 **Windows 服务**启停，**不写 INI**。Start / Stop / Restart 使用 `win_service`（`NBT_SERVICE_NAME`）。
+
 ```env
+NBT_SERVICE_NAME=nbt_agent
+NBT_API_PORT=8885
+SEMAPHORE_API_TOKEN=<token>
+# 仅 Status / Redeploy 需要路径：
 EXE_NAME=nbt_agent.exe
 ZIP_NAME=nbt
 EXE_DIR=C:\Program Files\NBT
 EXE_DIR_FALLBACK_DRIVES=D,E,C
-CONFIG_FILE_NAME=nbt.iconf
-API_PORT=9002
-SEMAPHORE_API_TOKEN=<token>
+ZIP_PATH=/root/nbt/pkg
 ```
 
-路径：`{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}`。详见 [`nbt/README.md`](nbt/README.md)。
+详见 [`nbt/README.md`](nbt/README.md)。
 
 ### NEWARE
 

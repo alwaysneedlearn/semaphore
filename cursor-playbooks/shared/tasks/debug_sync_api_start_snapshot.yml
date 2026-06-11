@@ -10,6 +10,8 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] profile_user={{ _reconfig_profile_user | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ _sem_dbg_need_reconfigure | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_check={{ _sem_dbg_process_out | trim }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_name={{ nbt_service_name | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_status={{ _nbt_service_status.stdout | default('n/a') if (_nbt_service_status is defined) else 'n/a' }}"
   vars:
     _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_exe_stat)) }}"
     _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_nbt_exe_stat_after_extract)) }}"
@@ -21,12 +23,13 @@
       {% elif _land_process_after_restart is defined %}{{ _land_process_after_restart.stdout | default('') }}
       {% elif _sinexcel_process_after_restart is defined %}{{ _sinexcel_process_after_restart.stdout | default('') }}
       {% elif _ini_agent_process_after is defined %}{{ _ini_agent_process_after.stdout | default('') }}
+      {% elif _nbt_service_status is defined %}{{ _nbt_service_status.stdout | default('') }}
       {% elif _nbt_process_after_restart is defined %}{{ _nbt_process_after_restart.stdout | default('') }}
       {% elif _land_process_check is defined %}{{ _land_process_check.stdout | default('') }}
       {% elif _sinexcel_process_check is defined %}{{ _sinexcel_process_check.stdout | default('') }}
       {% elif _nbt_process_check is defined %}{{ _nbt_process_check.stdout | default('') }}
       {% else %}skipped{% endif %}
-  when: _sem_dbg_exe_stat is defined
+  when: _sem_dbg_exe_stat is defined or _nbt_service_status is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（交互启动与弹窗）"
   ansible.builtin.debug:

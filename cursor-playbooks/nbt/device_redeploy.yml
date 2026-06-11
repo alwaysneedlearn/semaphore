@@ -1,12 +1,12 @@
 ---
-- name: NBT 重新部署
+- name: NBT 重新部署（制品 + 服务重启，无 INI 写配置）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: NBT
-    ini_agent_force_stop: true
+    nbt_service_stop_first: true
     nbt_include_reset_data: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NBT', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
@@ -20,43 +20,30 @@
     redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
     redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}.zip"
     redeploy_extract_dest: "{{ exe_dir }}"
-    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
-    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
-    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
-    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
-    sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
-    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('nbt.iconf', true) }}"
-    api_host: "{{ inventory_hostname }}"
-    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
-    default_cfg: "{{ default_config | default({}) }}"
-    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
-    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
-    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
-    merged_cfg_json: "{{ merged_cfg | to_json }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - ansible.builtin.set_fact:
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-
-    - ansible.builtin.set_fact:
-        _nbt_target_host: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+        _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/ini_agent_config_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_service_stop_start.yml"
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and ((not (nbt_start_check_api | bool)) or (nbt_heartbeat_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if ('RUNNING' in (_nbt_service_status.stdout | default(''))) and ((not (nbt_start_check_api | bool)) or (nbt_heartbeat_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: online
           api_status: "{{ 'online' if ((not (nbt_start_check_api | bool)) or (nbt_heartbeat_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: ""

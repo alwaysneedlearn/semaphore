@@ -1,0 +1,11 @@
+---
+# Stop NBT Windows service. Vars: nbt_service_name.
+
+- name: 停止 NBT Windows 服务
+  ansible.windows.win_service:
+    name: "{{ nbt_service_name }}"
+    state: stopped
+  register: _nbt_service_stop_action
+
+- name: 确认 NBT 服务已停止
+  ansible.builtin.include_tasks: nbt_windows_service_status.yml
