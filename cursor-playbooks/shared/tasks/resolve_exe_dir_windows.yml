@@ -21,6 +21,9 @@
         )
         if (app_dir is defined) else ''
       }}
+    SEMAPHORE_EXE_SCAN_LATEST: "{{ (exe_scan_latest | default(false) | bool) | string | lower }}"
+    SEMAPHORE_EXE_SCAN_MAX_DEPTH: "{{ exe_scan_max_depth | default(2) | string }}"
+    SEMAPHORE_EXE_SCAN_NAME: "{{ exe_name | default('', true) }}"
   ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
   register: _resolve_exe_dir
   changed_when: false
@@ -28,11 +31,20 @@
 - name: 登记 EXE_DIR 解析行
   ansible.builtin.set_fact:
     _exe_dir_resolved_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_DIR_RESOLVED=') | list | first) | default('EXE_DIR_RESOLVED=' + exe_dir_preferred, true) }}"
+    _exe_path_resolved_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_PATH_RESOLVED=') | list | first) | default('', true) }}"
     _exe_dir_choose_source_line: "{{ (_resolve_exe_dir.stdout_lines | default([]) | select('search', 'EXE_DIR_CHOOSE_SOURCE=') | list | first) | default('', true) }}"
 
 - name: 登记解析后的 EXE_DIR
   ansible.builtin.set_fact:
     exe_dir: "{{ (_exe_dir_resolved_line | regex_replace('^EXE_DIR_RESOLVED=', '') | trim) }}"
+
+- name: 登记扫描到的 EXE 完整路径（按盘符浅层遍历最新 mtime）
+  ansible.builtin.set_fact:
+    exe_path: "{{ (_exe_path_resolved_line | regex_replace('^EXE_PATH_RESOLVED=', '') | trim) }}"
+    exe_dir: "{{ (_exe_dir_resolved_line | regex_replace('^EXE_DIR_RESOLVED=', '') | trim) }}"
+  when:
+    - (_exe_path_resolved_line | default('', true) | trim) | length > 0
+    - (exe_path_override | default('', true) | trim) | length == 0
 
 - name: 登记解析后的 EXE 路径
   ansible.builtin.set_fact:
@@ -49,6 +61,7 @@
   when:
     - exe_name is defined
     - (exe_path_override | default('', true) | trim) | length == 0
+    - (_exe_path_resolved_line | default('', true) | trim) | length == 0
 
 - name: 应用每设备完整 EXE 路径覆盖
   ansible.builtin.set_fact:

@@ -41,10 +41,16 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `ExeDir` | `D:\Program Files\SINEXCEL` 或 `D:` | 安装根目录（配合盘符探测） |
 | `AppDir` | `sinexcel` | 子目录（默认 = `ZIP_NAME`） |
 | `ExeDirFallbackDrives` | `D,F,C` | 仅该设备盘符探测顺序 |
+| `ExeScanLatest` | `true` / `false` | 是否按盘符浅层扫描取 **mtime 最新** 的 `EXE_NAME`（默认 SINEXCEL 开启） |
+| `ExeScanMaxDepth` | `2` | 从盘符根目录向下最多遍历目录层数 |
 
 配置入口：**设备 → 配置**，或 **设备类型 → 默认配置**（`default_config` / `configs_by_host`）。
 
-解析顺序：`设备 Install` → `类型默认 Install` → 变量组 `EXE_DIR` → playbook 默认 → **`resolve_exe_dir_windows`** 按盘符探测已有 `exe` 目录。
+解析顺序：`设备 Install` → `类型默认 Install` → 变量组 → playbook 默认 → **`resolve_exe_dir_windows`**：
+
+1. **`EXE_SCAN_LATEST=true`（SINEXCEL 默认）**：在每个候选盘符 `D:\`、`E:\`… 下最多 **2 层**目录查找 `EXE_NAME`，取 **LastWriteTime 最新** 的文件 → `EXE_PATH_RESOLVED`  
+2. 否则按固定相对路径 `AppDir\ExeName` 探测（LAND 方式）  
+3. 仍未命中则盘符回退
 
 ## Variable Group (examples)
 

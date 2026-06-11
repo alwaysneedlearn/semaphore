@@ -39,6 +39,18 @@
         )
       }}
     exe_path_override: "{{ (_merged_install.ExePath | default('', true) | trim) }}"
+    exe_scan_latest: >-
+      {{
+        (_merged_install.ExeScanLatest | default('', true) | string | lower) in ['true', '1', 'yes']
+        if ((_merged_install.ExeScanLatest | default('', true) | string | trim) | length > 0)
+        else (exe_scan_latest | default(false) | bool)
+      }}
+    exe_scan_max_depth: >-
+      {{
+        (_merged_install.ExeScanMaxDepth | default('', true) | trim | int)
+        if ((_merged_install.ExeScanMaxDepth | default('', true) | trim) | length > 0)
+        else (exe_scan_max_depth | default(2) | int)
+      }}
 
 - name: DEBUG 设备安装路径（每设备）
   ansible.builtin.debug:

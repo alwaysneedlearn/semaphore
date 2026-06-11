@@ -67,10 +67,108 @@ $probeRel = [string]$env:SEMAPHORE_EXE_PROBE_RELATIVE
 if ($null -eq $probeRel) { $probeRel = '' }
 $probeRel = $probeRel.Trim().TrimStart('\')
 
-# Prefer drive where install path already exists (e.g. F:\LHBTS\LHBTS.exe when D:\ has no folder).
+$scanLatest = $false
+$scanLatestRaw = [string]$env:SEMAPHORE_EXE_SCAN_LATEST
+if (-not [string]::IsNullOrWhiteSpace($scanLatestRaw)) {
+  $scanLatest = $scanLatestRaw -match '^(?i:true|1|yes)$'
+}
+$scanName = [string]$env:SEMAPHORE_EXE_SCAN_NAME
+if ($null -eq $scanName) { $scanName = '' }
+$scanName = $scanName.Trim()
+if ($scanName.Length -eq 0 -and $probeRel.Length -gt 0) {
+  $scanName = Split-Path -Leaf $probeRel
+}
+$scanMaxDepth = 2
+$scanDepthRaw = [string]$env:SEMAPHORE_EXE_SCAN_MAX_DEPTH
+if (-not [string]::IsNullOrWhiteSpace($scanDepthRaw)) {
+  [int]::TryParse($scanDepthRaw, [ref]$scanMaxDepth) | Out-Null
+}
+if ($scanMaxDepth -lt 0) { $scanMaxDepth = 0 }
+if ($scanMaxDepth -gt 5) { $scanMaxDepth = 5 }
+
+$skipDirNames = @(
+  '$Recycle.Bin', 'System Volume Information', 'Recovery', 'Windows',
+  'ProgramData', 'PerfLogs', 'Config.Msi'
+)
+
+function Search-NewestExeUnder {
+  param(
+    [string]$RootDir,
+    [string]$ExeFileName,
+    [int]$MaxDirDepth,
+    [int]$CurrentDepth
+  )
+  $best = $null
+  if (-not (Test-Path -LiteralPath $RootDir)) { return $null }
+  try {
+    $files = @(Get-ChildItem -LiteralPath $RootDir -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -ieq $ExeFileName })
+    foreach ($f in $files) {
+      if ($null -eq $best -or $f.LastWriteTime -gt $best.LastWriteTime) {
+        $best = $f
+      }
+    }
+    if ($CurrentDepth -ge $MaxDirDepth) { return $best }
+    $dirs = @(Get-ChildItem -LiteralPath $RootDir -Directory -ErrorAction SilentlyContinue)
+    foreach ($d in $dirs) {
+      if ($skipDirNames -contains $d.Name) { continue }
+      $found = Search-NewestExeUnder -RootDir $d.FullName -ExeFileName $ExeFileName `
+        -MaxDirDepth $MaxDirDepth -CurrentDepth ($CurrentDepth + 1)
+      if ($null -ne $found -and ($null -eq $best -or $found.LastWriteTime -gt $best.LastWriteTime)) {
+        $best = $found
+      }
+    }
+  } catch {
+    # ignore permission errors on shallow scan
+  }
+  return $best
+}
+
+function Find-NewestExeAcrossDrives {
+  param(
+    [System.Collections.Generic.List[string]]$DriveLetters,
+    [string]$ExeFileName,
+    [int]$MaxDirDepth
+  )
+  $globalBest = $null
+  $globalDrive = ''
+  foreach ($L in $DriveLetters) {
+    if (-not (Test-DriveRootExists $L)) { continue }
+    $root = $L.TrimEnd(':') + ':\'
+    $localBest = Search-NewestExeUnder -RootDir $root -ExeFileName $ExeFileName `
+      -MaxDirDepth $MaxDirDepth -CurrentDepth 0
+    if ($null -eq $localBest) { continue }
+    Write-Output ("EXE_SCAN_DRIVE|$L|newest=$($localBest.FullName)|mtime=$($localBest.LastWriteTime.ToString('o'))")
+    if ($null -eq $globalBest -or $localBest.LastWriteTime -gt $globalBest.LastWriteTime) {
+      $globalBest = $localBest
+      $globalDrive = $L.TrimEnd(':').ToUpperInvariant()
+    }
+  }
+  return @{ File = $globalBest; Drive = $globalDrive }
+}
+
+$resolvedExePath = ''
 $chosen = ''
 $chooseSource = 'drive_root'
-if ($probeRel.Length -gt 0) {
+
+if ($scanLatest -and $scanName.Length -gt 0) {
+  $scanResult = Find-NewestExeAcrossDrives -DriveLetters $candidates -ExeFileName $scanName -MaxDirDepth $scanMaxDepth
+  if ($null -ne $scanResult.File) {
+    $resolvedExePath = $scanResult.File.FullName
+    $chosen = $scanResult.Drive
+    $chooseSource = 'scan_latest'
+    Write-Output ("EXE_PATH_RESOLVED=$resolvedExePath")
+    Write-Output ("EXE_SCAN_WINNER|drive=$chosen|mtime=$($scanResult.File.LastWriteTime.ToString('o'))")
+  } else {
+    Write-Output "EXE_SCAN_MISS|name=$scanName|max_depth=$scanMaxDepth"
+  }
+}
+
+# Prefer drive where install path already exists (e.g. F:\LHBTS\LHBTS.exe when D:\ has no folder).
+if ($chosen.Length -eq 0) {
+  $chooseSource = 'drive_root'
+}
+if ($chosen.Length -eq 0 -and $probeRel.Length -gt 0) {
   foreach ($L in $candidates) {
     if (-not (Test-DriveRootExists $L)) { continue }
     $root = $L + ':' + $suffix
@@ -115,7 +213,14 @@ if ($chosen.Length -eq 0) {
   $chooseSource = 'fallback_c'
 }
 
-$resolved = $chosen + ':' + $suffix
+if ($chooseSource -eq 'scan_latest' -and $resolvedExePath.Length -gt 0) {
+  $resolved = [System.IO.Path]::GetDirectoryName($resolvedExePath)
+  if ([string]::IsNullOrWhiteSpace($resolved)) {
+    $resolved = $chosen + ':' + $suffix
+  }
+} else {
+  $resolved = $chosen + ':' + $suffix
+}
 Write-Output "EXE_DIR_RESOLVED=$resolved"
 Write-Output "EXE_DIR_REQUESTED=$reqLetter"
 Write-Output "EXE_DIR_CHOSEN=$chosen"
