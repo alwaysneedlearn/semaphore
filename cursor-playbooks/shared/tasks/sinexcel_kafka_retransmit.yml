@@ -9,20 +9,22 @@
   ansible.builtin.set_fact:
     _sinexcel_retransmit_start: "{{ sinexcel_retransmit_cfg.StartTime | default(sinexcel_retransmit_cfg.startTime | default('')) | trim }}"
     _sinexcel_retransmit_end: "{{ sinexcel_retransmit_cfg.EndTime | default(sinexcel_retransmit_cfg.endTime | default('')) | trim }}"
-    _sinexcel_retransmit_time_pattern: '^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,3})?$'
 
-- name: 校验 Retransmit 时间格式
+- name: 校验 Retransmit 时间非空
   ansible.builtin.set_fact:
-    _sinexcel_retransmit_start_ok: >-
-      {{
-        (_sinexcel_retransmit_start | default('') | trim | length > 0) and
-        ((_sinexcel_retransmit_start | regex_search(_sinexcel_retransmit_time_pattern) | default('', true) | length) > 0)
-      }}
-    _sinexcel_retransmit_end_ok: >-
-      {{
-        (_sinexcel_retransmit_end | default('') | trim | length > 0) and
-        ((_sinexcel_retransmit_end | regex_search(_sinexcel_retransmit_time_pattern) | default('', true) | length) > 0)
-      }}
+    _sinexcel_retransmit_start_ok: "{{ (_sinexcel_retransmit_start | default('') | trim | length) > 0 }}"
+    _sinexcel_retransmit_end_ok: "{{ (_sinexcel_retransmit_end | default('') | trim | length) > 0 }}"
+
+- name: DEBUG SINEXCEL QueryHistory 请求
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] QueryHistory url={{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_history_path }}"
+      - "[DEBUG-SINEXCEL] QueryHistory request={{ {'StartTime': _sinexcel_retransmit_start, 'EndTime': _sinexcel_retransmit_end} | to_json }}"
+  when:
+    - _sinexcel_retransmit_start_ok | default(false) | bool
+    - _sinexcel_retransmit_end_ok | default(false) | bool
+  vars:
+    _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
 
 - name: 查询历史数据（Kafka QueryHistory）
   ansible.builtin.uri:
@@ -45,6 +47,15 @@
     - _sinexcel_retransmit_end_ok | default(false) | bool
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+
+- name: DEBUG SINEXCEL QueryHistory 响应
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] QueryHistory http={{ _sinexcel_kafka_history_raw.status | default('n/a') }}"
+      - "[DEBUG-SINEXCEL] QueryHistory response={{ _sinexcel_kafka_history_raw.content | default('') | truncate(3000, True) }}"
+  when:
+    - _sinexcel_kafka_history_raw is defined
+    - not (_sinexcel_kafka_history_raw.skipped | default(false))
 
 - name: 解析 QueryHistory 响应信封
   ansible.builtin.set_fact:
@@ -88,6 +99,17 @@
     label: "{{ item.FlowId | default('n/a') }}"
   when: _sinexcel_retransmit_flow_items is defined
 
+- name: DEBUG SINEXCEL Retransmit 请求
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] Retransmit url={{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_retransmit_path }}"
+      - "[DEBUG-SINEXCEL] Retransmit request={{ _sinexcel_retransmit_body | to_json }}"
+  when:
+    - _sinexcel_retransmit_body is defined
+    - (_sinexcel_retransmit_body | length) > 0
+  vars:
+    _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+
 - name: 批量重传历史数据（Kafka Retransmit）
   ansible.builtin.uri:
     url: >-
@@ -108,31 +130,34 @@
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
 
-- name: DEBUG SINEXCEL Retransmit 跳过（时间无效）
+- name: DEBUG SINEXCEL Retransmit 跳过（时间为空）
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] retransmit skipped=invalid_time"
-      - "[DEBUG-SINEXCEL] retransmit StartTime={{ _sinexcel_retransmit_start | default('') }} valid={{ _sinexcel_retransmit_start_ok | default(false) }}"
-      - "[DEBUG-SINEXCEL] retransmit EndTime={{ _sinexcel_retransmit_end | default('') }} valid={{ _sinexcel_retransmit_end_ok | default(false) }}"
-      - "[DEBUG-SINEXCEL] retransmit expected_format=yyyy/MM/dd HH:mm:ss.SSS (e.g. 2026/06/08 00:00:00.000)"
+      - "[DEBUG-SINEXCEL] retransmit skipped=empty_time"
+      - "[DEBUG-SINEXCEL] retransmit StartTime={{ _sinexcel_retransmit_start | default('') }} ok={{ _sinexcel_retransmit_start_ok | default(false) }}"
+      - "[DEBUG-SINEXCEL] retransmit EndTime={{ _sinexcel_retransmit_end | default('') }} ok={{ _sinexcel_retransmit_end_ok | default(false) }}"
   when: not (_sinexcel_retransmit_start_ok | default(false) | bool) or not (_sinexcel_retransmit_end_ok | default(false) | bool)
 
 - name: DEBUG SINEXCEL Retransmit 跳过（无 FlowId）
   ansible.builtin.debug:
     msg:
       - "[DEBUG-SINEXCEL] retransmit skipped=no_flow_ids"
-      - "[DEBUG-SINEXCEL] retransmit history_rows={{ _sinexcel_kafka_history_rows | default([]) | length }}"
-      - "[DEBUG-SINEXCEL] retransmit only_missing={{ sinexcel_retransmit_only_missing | default(true) }}"
+      - "[DEBUG-SINEXCEL] QueryHistory http={{ _sinexcel_kafka_history_raw.status | default('skipped') }}"
+      - "[DEBUG-SINEXCEL] history_rows={{ _sinexcel_kafka_history_rows | default([]) | length }}"
+      - "[DEBUG-SINEXCEL] flow_items_after_filter={{ _sinexcel_retransmit_flow_items | default([]) | length }}"
+      - "[DEBUG-SINEXCEL] only_missing={{ sinexcel_retransmit_only_missing | default(true) }}"
+      - "[DEBUG-SINEXCEL] hint={{ 'no_history_rows' if (_sinexcel_kafka_history_rows | default([]) | length) == 0 else 'all_rows_already_uploaded_or_filtered' }}"
   when:
-    - _sinexcel_kafka_history_rows is defined
+    - _sinexcel_retransmit_start_ok | default(false) | bool
+    - _sinexcel_retransmit_end_ok | default(false) | bool
     - (_sinexcel_retransmit_body | default([]) | length) == 0
 
-- name: DEBUG SINEXCEL Retransmit 结果
+- name: DEBUG SINEXCEL Retransmit 响应
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] retransmit flow_count={{ _sinexcel_retransmit_body | default([]) | length }}"
-      - "[DEBUG-SINEXCEL] retransmit http={{ _sinexcel_kafka_retransmit_raw.status | default('skipped') }}"
-      - "[DEBUG-SINEXCEL] retransmit body={{ _sinexcel_kafka_retransmit_raw.content | default('') | truncate(1500, True) }}"
+      - "[DEBUG-SINEXCEL] Retransmit http={{ _sinexcel_kafka_retransmit_raw.status | default('skipped') }}"
+      - "[DEBUG-SINEXCEL] Retransmit response={{ _sinexcel_kafka_retransmit_raw.content | default('') | truncate(3000, True) }}"
+      - "[DEBUG-SINEXCEL] Retransmit flow_count={{ _sinexcel_retransmit_body | default([]) | length }}"
   when:
     - _sinexcel_kafka_retransmit_raw is defined
     - not (_sinexcel_kafka_retransmit_raw.skipped | default(false))

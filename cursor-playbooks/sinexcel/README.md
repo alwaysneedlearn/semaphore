@@ -59,7 +59,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | Category | Used by |
 |----------|---------|
 | `KafkaConfig` | **仅**此分类参与 `POST /kafka/SetConfig`（**不会**回落 `SystemConfig`，避免误发 `IsHisDataFromFirst` 等无关字段） |
-| `Retransmit` | `StartTime`, `EndTime` — format `yyyy/MM/dd HH:mm:ss.SSS` (e.g. `2026/06/08 00:00:00.000`). Restart queries history then retransmits **UploadExist=false** rows by default. |
+| `Retransmit` | `StartTime`, `EndTime` — **原样传给 API**（仅 trim），常见如 `2024-01-01 00:00:00` 或 `2026/01/01 00:00:00.000`。Restart 先 QueryHistory，再对 **UploadExist=false** 行批量 Retransmit（默认）。 |
 | **`Install`** (or **`Paths`**) | **可选**：仅极个别机台扫描仍找不到 exe 时覆盖路径（日常用变量组即可） |
 
 ### EXE 路径：变量组为主（推荐）
