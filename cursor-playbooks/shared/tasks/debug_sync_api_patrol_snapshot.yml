@@ -1,18 +1,24 @@
 ---
 # Patrol debug: LAND (SyncLims), SINEXCEL (agent HTTP API), NBT (heartbeat). Play var: sem_debug_tag.
 
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（路径与进程）"
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（路径与服务/进程）"
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} winrm_session_ok={{ _winrm_session_ok | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_path={{ _sem_dbg_exe_path }} exists={{ _sem_dbg_exe_stat.stat.exists | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_name={{ process_name | default('n/a') }} check={{ (_sem_dbg_process.stdout | default('') | trim) if (_sem_dbg_process is defined) else 'skipped' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] install_path={{ _sem_dbg_install_path }} exists={{ _sem_dbg_path_stat.stat.exists | default(false) if (_sem_dbg_path_stat is defined) else false }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_name={{ service_name | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_or_process_check={{ (_sem_dbg_process.stdout | default('') | trim) if (_sem_dbg_process is defined) else 'skipped' }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_name={{ process_name | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_unreachable={{ _sem_dbg_process.unreachable | default(false) if (_sem_dbg_process is defined) else 'n/a' }}"
   vars:
-    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat)) }}"
-    _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check)) }}"
-    _sem_dbg_exe_path: "{{ service_path | default(exe_path | default([exe_dir, exe_name] | join('\\\\'))) }}"
-  when: _sem_dbg_exe_stat is defined or _sem_dbg_process is defined
+    _sem_dbg_path_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat, true), true) }}"
+    _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check | default(_nbt_service_status, true), true), true) }}"
+    _sem_dbg_install_path: >-
+      {% if service_path is defined and (service_path | string | trim) | length > 0 %}{{ service_path }}
+      {% elif exe_path is defined %}{{ exe_path }}
+      {% elif exe_dir is defined and exe_name is defined %}{{ exe_dir }}\{{ exe_name }}
+      {% else %}n/a{% endif %}
+  when: _sem_dbg_path_stat is defined or _sem_dbg_process is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（API）"
   ansible.builtin.debug:

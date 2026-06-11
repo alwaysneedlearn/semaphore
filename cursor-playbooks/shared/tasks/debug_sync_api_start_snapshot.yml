@@ -4,7 +4,7 @@
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（路径与进程）"
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} install_path={{ service_path | default(exe_path | default('n/a')) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} install_path={{ _sem_dbg_install_path }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_exists_initial={{ _sem_dbg_exe_stat.stat.exists | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_exists_after_extract={{ _sem_dbg_exe_after.stat.exists | default('n/a') if (_sem_dbg_exe_after is defined) else 'n/a' }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] profile_user={{ _reconfig_profile_user | default('n/a') }}"
@@ -13,7 +13,12 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_name={{ service_name | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_status={{ _nbt_service_status.stdout | default('n/a') if (_nbt_service_status is defined) else 'n/a' }}"
   vars:
-    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat)) }}"
+    _sem_dbg_install_path: >-
+      {% if service_path is defined and (service_path | string | trim) | length > 0 %}{{ service_path }}
+      {% elif exe_path is defined %}{{ exe_path }}
+      {% elif exe_dir is defined and exe_name is defined %}{{ exe_dir }}\{{ exe_name }}
+      {% else %}n/a{% endif %}
+    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat, true), true) }}"
     _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_redeploy_exe_stat_after)) }}"
     _sem_dbg_need_reconfigure: "{{ _land_need_reconfigure | default(_sinexcel_need_reconfigure | default(_nbt_need_reconfigure)) }}"
     _sem_dbg_process_out: >-
