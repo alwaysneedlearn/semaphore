@@ -1,0 +1,11 @@
+# Reusable EXE_NAME / PROCESS_NAME normalization (include from play `vars:` via copy-paste block).
+# Set `_exe_name_default` first (per device type), then these four keys:
+#
+#   _exe_name_default: sinexcel_agent.exe   # example
+#   _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
+#   _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
+#   exe_name: "{{ _exe_name_base ~ '.exe' }}"
+#   process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
+#
+# EXE_NAME in Variable Group: prefer WITH `.exe` (disk file name). Bare name (e.g. `uu`) still works.
+# PROCESS_NAME: optional override; never include `.exe` (Get-Process name). If unset, derived from EXE_NAME.

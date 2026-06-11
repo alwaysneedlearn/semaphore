@@ -9,11 +9,14 @@
     sem_profile_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_debug_tag: NEWARE
-    exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('uu', true) }}"
+    _exe_name_default: uu.exe
+    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\.exe$', '') }}"
+    exe_name: "{{ _exe_name_base ~ '.exe' }}"
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
-    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}.exe"
+    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
     zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
     redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
     redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}.zip"

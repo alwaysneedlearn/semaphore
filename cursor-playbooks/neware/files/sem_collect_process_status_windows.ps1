@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 $name = [string]$env:EXE_NAME
 if ([string]::IsNullOrWhiteSpace($name)) { $name = 'uu' }
+$name = $name -replace '(?i)\.exe$', ''
 
 $t = Get-SemaphoreProcessAliveThresholds
 $alive = Get-SemaphoreAliveProcess -ProcessName $name -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes

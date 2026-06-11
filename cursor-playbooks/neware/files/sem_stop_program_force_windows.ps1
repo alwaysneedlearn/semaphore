@@ -3,6 +3,8 @@ $ErrorActionPreference = 'Stop'
 
 $name = [string]$env:EXE_NAME
 if ([string]::IsNullOrWhiteSpace($name)) { $name = 'uu' }
+# EXE_NAME may be disk name (uu.exe); Get-Process uses base name without extension.
+$name = $name -replace '(?i)\.exe$', ''
 
 $t = Get-SemaphoreProcessAliveThresholds
 $proc = Get-SemaphoreAliveProcess -ProcessName $name -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes

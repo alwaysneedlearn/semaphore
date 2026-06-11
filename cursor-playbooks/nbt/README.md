@@ -35,7 +35,7 @@ Shared tasks: `../shared/tasks/nbt_api_heartbeat_check.yml`, `nbt_api_reset_data
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EXE_DIR` | `C:\Program Files\NBT` | Install root (drive fallback via shared `resolve_exe_dir_windows`) |
-| `EXE_NAME` | `nbt_agent.exe` | Executable |
+| `EXE_NAME` | `nbt_agent.exe` | 磁盘文件名（**推荐带 `.exe`**）；见 [`../VARIABLE_GROUPS.md`](../VARIABLE_GROUPS.md) |
 | `ZIP_NAME` / `ZIP_PATH` | `nbt` / `/root/nbt/pkg` | Install zip |
 | `CONFIG_FILE_NAME` | `nbt.iconf` | NEWARE-style INI config |
 | `NBT_API_PORT` | **8885** | Agent API port (device `api_port` overrides) |

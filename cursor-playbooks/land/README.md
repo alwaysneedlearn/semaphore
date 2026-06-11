@@ -52,6 +52,8 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 
 ## Variable Group ENV
 
+变量组总览见 [`../VARIABLE_GROUPS.md`](../VARIABLE_GROUPS.md)。**`EXE_NAME` 推荐带 `.exe`**。
+
 | Variable | Default | Description |
 |---|---|---|
 | `EXE_DIR` | `C:\Program Files\LAND` | Preferred root (e.g. `D:\` or `F:\`); drive letter resolved first |

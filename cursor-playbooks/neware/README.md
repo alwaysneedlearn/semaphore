@@ -14,7 +14,7 @@ Play-level defaults use **`lookup('env', 'VAR')`**: if the Variable Group / temp
 - **`device_restart.yml`**: same start-verify as **`device_start`** (`tasks/start_verify_after_reconfig.yml`).
 - **`device_check_restart_redeploy.yml`**: **API-first pre-gate** (Tail log fallback) like **`device_start`**. If process **not** running → **`need_reconfigure: true`** immediately.
 - **`device_status.yml` (Patrol)**: process + **API-first upload health**; **`healthy`** / **`api_status: online`** when **`need_reconfigure` is false** (API **`ExecResultData==3`** or log fallback OK).
-- **`device_stop.yml`**: `EXE_NAME`.
+- **`device_stop.yml`**: `EXE_NAME`（推荐 `uu.exe`；旧值 `uu` 仍兼容）。见 [`../VARIABLE_GROUPS.md`](../VARIABLE_GROUPS.md)。
 
 Callback task env: see table above (`SEMAPHORE_*`). `tasks/semaphore_bulk_put_from_hostvars.yml` uses the same **empty-env → default** rule for `SEMAPHORE_URL`.
 

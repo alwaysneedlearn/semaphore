@@ -27,6 +27,7 @@ Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NE
 
 ## Documentation
 
+- **Variable Groups (all device types):** [`VARIABLE_GROUPS.md`](VARIABLE_GROUPS.md)
 - **NEWARE (detailed):** [`neware/README.md`](neware/README.md)
 - **LAND:** [`land/README.md`](land/README.md)
 - **SINEXCEL:** [`sinexcel/README.md`](sinexcel/README.md)

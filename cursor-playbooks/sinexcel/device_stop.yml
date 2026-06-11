@@ -7,8 +7,12 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: SINEXCEL
-    process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default('sinexcel_agent', true) }}"
-    stop_graceful_process_name: "{{ (lookup('env', 'STOP_GRACEFUL_PROCESS_NAME') | default('', true) | trim) | default(process_name, true) }}"
+    _exe_name_default: sinexcel_agent.exe
+    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\.exe$', '') }}"
+    exe_name: "{{ _exe_name_base ~ '.exe' }}"
+    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\.exe$', '')) | default(_exe_name_base, true) }}"
+    stop_graceful_process_name: "{{ ((lookup('env', 'STOP_GRACEFUL_PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(process_name, true) }}"
     stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
     stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
     stop_popup_match_mode: "{{ (lookup('env', 'STOP_POPUP_MATCH_MODE') | default('', true) | trim) | default('title_or_content', true) }}"
