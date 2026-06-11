@@ -20,6 +20,17 @@ grep PREPARE_DEVICE_EXE_PATHS_REV shared/tasks/prepare_device_exe_paths.yml
 
 重跑巡检后，任务日志里应出现 **`[DEBUG-INSTALL] PREPARE_DEVICE_EXE_PATHS_REV=3`**。若看不到，模板 Playbook 路径是否指向该目录下的 `sinexcel/device_status.yml`。
 
+**Restart 仍出现「写入 INI 设备配置」/ `apply_neware_style_device_config_files.yml` 时**：runner 文件未更新。在 runner 上：
+
+```bash
+cd /root/playbook
+git pull origin develop
+grep -n '写入 INI' shared/tasks/sinexcel_config_stop_start.yml   # 应无输出
+grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
+```
+
+重跑 Restart 后日志里应有 **`[DEBUG-SINEXCEL] SINEXCEL_CONFIG_STOP_START_REV=4`** 和 **`ini_reconfig=disabled`**，且**不应**再出现 `reconfig_copy_and_patch_config.yml` / `Documents\NEWARE\BTSClient\sinexcel.iconf`。
+
 ## Playbooks
 
 | File | Purpose |
