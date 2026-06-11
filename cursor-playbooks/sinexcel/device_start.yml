@@ -19,6 +19,8 @@
     process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     stop_graceful_process_name: "{{ process_name }}"
+    start_popup_wait_seconds: "{{ ((lookup('env', 'START_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('3', true)) | int }}"
+    start_popup_keyword: "{{ (lookup('env', 'START_POPUP_KEYWORD') | default('', true) | trim) | default('提示', true) }}"
     sinexcel_start_check_api: "{{ ((lookup('env', 'SINEXCEL_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
     sinexcel_include_retransmit: false
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"

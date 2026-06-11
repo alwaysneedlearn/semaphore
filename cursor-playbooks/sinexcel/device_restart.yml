@@ -18,6 +18,8 @@
     stop_graceful_process_name: "{{ process_name }}"
     stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
     stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
+    start_popup_wait_seconds: "{{ ((lookup('env', 'START_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('3', true)) | int }}"
+    start_popup_keyword: "{{ (lookup('env', 'START_POPUP_KEYWORD') | default('', true) | trim) | default('提示', true) }}"
     stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
     stop_verify_process_name: "{{ process_name }}"
     sinexcel_start_check_api: "{{ ((lookup('env', 'SINEXCEL_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"

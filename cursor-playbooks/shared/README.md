@@ -7,7 +7,7 @@ Tasks, helper scripts, and group vars used by **all** device profiles (`neware/`
 | Path | Purpose |
 |------|---------|
 | `tasks/` | WinRM connect/retry, Semaphore bulk/discovery callbacks, interactive EXE start, deploy helper scripts |
-| `files/` | Generic `sem_*.ps1` (process alive, scheduled-task start, graceful stop + popup confirm) |
+| `files/` | Generic `sem_*.ps1` (process alive, scheduled-task start, start/stop popup confirm) |
 | `group_vars/windows_hosts.yml` | WinRM timeouts (copy or mirror under each profile dir for Ansible) |
 
 ## Required play vars
@@ -66,6 +66,17 @@ Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / 
 | `STOP_TASK_TIMEOUT_SECONDS` | `45` | Interactive scheduled-stop wait timeout |
 
 The graceful stop task runs in the logged-in desktop user's interactive session (scheduled task), not the WinRM service session.
+
+### Start popup confirm (SINEXCEL default)
+
+After the interactive scheduled task launches the EXE, `sem_reconfig_start_program_windows.ps1` can dismiss a **start** dialog before process verify:
+
+| Variable | Default (SINEXCEL) | Notes |
+|----------|-------------------|--------|
+| `START_POPUP_KEYWORD` | `提示` | Window title substring; sends Enter in desktop user's session |
+| `START_POPUP_WAIT_SECONDS` | `3` | Wait before first popup scan |
+
+Set `START_POPUP_KEYWORD` empty to disable (other device types). Log lines: `START_POPUP_TASK`, `POPUP_CONFIRMED`, `POPUP_NOT_FOUND`.
 
 **Restart / redeploy:** `land/device_restart.yml`, `land/device_check_restart_redeploy.yml` (and SINEXCEL equivalents) include `stop_program_graceful_before_reconfig.yml` before ModifyConfig + start — same behavior as `device_stop.yml`, not `Stop-Process -Force`.
 

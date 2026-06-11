@@ -41,6 +41,9 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `SINEXCEL_START_CHECK_API` | `true` | Require Kafka enabled after start |
 | `SINEXCEL_KAFKA_*_PATH` | `/kafka/...` | See `group_vars/windows_hosts.yml` |
 | `EXE_DIR`, `ZIP_NAME`, … | See playbooks | Same as before |
+| `START_POPUP_KEYWORD` | `提示` | After interactive start, auto-confirm desktop popup (title contains keyword; Enter). Requires RDP/desktop session for profile user. |
+| `START_POPUP_WAIT_SECONDS` | `3` | Seconds to wait before scanning for start popup |
+| `STOP_POPUP_KEYWORD` | `警告` | Graceful stop confirmation popup (see shared README) |
 
 ## Extra-vars
 

@@ -13,6 +13,8 @@
     SEMAPHORE_RESTART_DELAY: "{{ restart_delay | string }}"
     SEMAPHORE_PROCESS_VERIFY_POLL_SECONDS: "{{ process_verify_poll_seconds | default(5) | string }}"
     SEMAPHORE_TASK_NAME: "Start-{{ exe_name }}"
+    SEMAPHORE_START_POPUP_KEYWORD: "{{ start_popup_keyword | default('', true) }}"
+    SEMAPHORE_START_POPUP_WAIT_SECONDS: "{{ start_popup_wait_seconds | default(2) | string }}"
   ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_reconfig_start_program_windows.ps1
   register: relaunch_result
   failed_when: >
