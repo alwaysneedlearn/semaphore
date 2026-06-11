@@ -30,16 +30,6 @@
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
-    sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
-    config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('sinexcel.iconf', true) }}"
-    api_host: "{{ inventory_hostname }}"
-    api_port: "{{ sinexcel_kafka_api_port }}"
-    his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
-    default_cfg: "{{ default_config | default({}) }}"
-    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
-    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
-    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
-    merged_cfg_json: "{{ merged_cfg | to_json }}"
 
   tasks:
     - name: WinRM 建连（含重试）

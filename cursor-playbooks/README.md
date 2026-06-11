@@ -9,7 +9,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, start/
 | **`shared/`** | WinRM, bulk/discovery callbacks, generic helper scripts — see [`shared/README.md`](shared/README.md) |
 | **`neware/`** | NEWARE playbooks (`device_*.yml`), NEWARE-only `tasks/` + `files/` |
 | **`land/`** | LAND playbooks and LAND-only logic |
-| **`sinexcel/`** | SINEXCEL (LAND lifecycle + NEWARE INI config on start/restart) |
+| **`sinexcel/`** | SINEXCEL (LAND lifecycle + HTTP API config; no INI) |
 | **`nbt/`** | NBT (same pattern as sinexcel) |
 | **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 

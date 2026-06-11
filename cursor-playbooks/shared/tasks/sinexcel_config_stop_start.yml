@@ -1,6 +1,6 @@
 ---
-# SINEXCEL: Kafka SetConfig/IsEnable (while running) → INI → stop → start → QueryConfig → retry → Retransmit.
-# Like LAND land_config_stop_start.yml + NEWARE INI. Play vars: merged_cfg, process_name, sinexcel_kafka_*.
+# SINEXCEL: Kafka SetConfig/IsEnable (while running) → stop → start (+ start popup) → QueryConfig → retry → Retransmit.
+# 不写 INI；配置仅经 HTTP API（KafkaConfig / SetConfig）。Play vars: merged_cfg, process_name, sinexcel_kafka_*.
 
 - name: 准备 SINEXCEL 配置分类
   ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
@@ -22,9 +22,6 @@
   when: >-
     'RUNNING' in (_sinexcel_process_before_restart.stdout | default(''))
     or 'RUNNING' in (_sinexcel_process_check.stdout | default(''))
-
-- name: 写入 INI 设备配置
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/apply_neware_style_device_config_files.yml"
 
 - name: 强制停止进程（重启前）
   ansible.windows.win_shell: |

@@ -1,6 +1,6 @@
 # SINEXCEL playbooks (`cursor-playbooks/sinexcel/`)
 
-Device type **SINEXCEL**: LAND-style lifecycle (Kafka HTTP API + optional retransmit) with **NEWARE-style INI config** on start/restart.
+Device type **SINEXCEL**: LAND-style lifecycle — 配置经 **HTTP API**（`SetConfig` / `IsEnable` / `QueryConfig`），**不写 INI**；start/restart 通过计划任务启动 exe 并可选 **启动弹窗确认**。
 
 ## Runner 同步（报错 `_app_from_cfg is undefined` 时必做）
 
@@ -25,9 +25,9 @@ grep PREPARE_DEVICE_EXE_PATHS_REV shared/tasks/prepare_device_exe_paths.yml
 | File | Purpose |
 |------|---------|
 | `device_status.yml` | Exe + process + **Kafka QueryConfig** (`EnableFlowInfoExtendedSqlite`), bulk callback |
-| `device_start.yml` | INI + **SetConfig / IsEnable** + start (no retransmit) |
-| `device_restart.yml` | Same + **QueryHistory + batch Retransmit** when `Retransmit` category set |
-| `device_redeploy.yml` | Zip deploy + config/start (no retransmit) |
+| `device_start.yml` | **SetConfig / IsEnable** + 交互启动（含弹窗确认） |
+| `device_restart.yml` | Same + **QueryHistory + Retransmit**（`Retransmit` 分类） |
+| `device_redeploy.yml` | 仅 **zip 下发** + API 启停（无 INI） |
 | `device_check_restart.yml` | Unhealthy gate via Kafka QueryConfig; restart only when needed |
 | `device_stop.yml` | Force stop process |
 
@@ -107,20 +107,18 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `SINEXCEL_API_PORT` | — | Agent HTTP API 端口（优先于 `API_PORT`） |
 | `API_PORT` / 设备 `api_port` | `9002` | API 端口回退 |
 
-### Start / Restart / Check-restart（写 INI + API）
+### Start / Restart / Check-restart（HTTP API + 交互启动）
 
 | Variable | Default | 用于 |
 |----------|---------|------|
-| `CONFIG_FILE_NAME` | `sinexcel.iconf` | 目标机上已有 INI 文件名（仅合并 patch，不从控制器复制） |
-| `RECONFIG_CLIENT_REL_PATH` | `Documents\NEWARE\BTSClient`（任务内默认） | **建议在 VG 设为** `Documents\SINEXCEL\BTSClient` |
 | `SINEXCEL_API_PORT` / `API_PORT` | `9002` | SetConfig / QueryConfig 等 HTTP API |
 | `SINEXCEL_START_CHECK_API` | `true` | 启动后要求 `EnableFlowInfoExtendedSqlite=true` |
 | `EXE_ARGS` | 空 | 启动参数 |
 | `RESTART_DELAY` | `30` | 启动前等待（秒） |
 | `PROCESS_VERIFY_POLL_SECONDS` | `5` | 进程确认轮询 |
-| `HIS_DATA_FROM_TIME` | 空 | INI 合并可选字段 |
-| `START_POPUP_KEYWORD` | `提示` | 交互启动后自动点弹窗 |
+| `START_POPUP_KEYWORD` | `提示` | 启动后自动确认桌面弹窗（`sem_reconfig_start_program_windows.ps1`） |
 | `START_POPUP_WAIT_SECONDS` | `3` | 等弹窗出现 |
+| `START_POPUP_MATCH_MODE` | `title_or_content` | 弹窗标题/正文匹配 |
 | `STOP_POPUP_KEYWORD` | `警告` | 优雅停止确认 |
 | `STOP_POPUP_MATCH_MODE` | `title_or_content` | 无标题弹窗用正文匹配 |
 | `STOP_POPUP_WAIT_SECONDS` | `2` | 停前等弹窗 |
