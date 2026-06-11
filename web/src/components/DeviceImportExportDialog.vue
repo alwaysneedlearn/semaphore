@@ -136,6 +136,21 @@ function parseCSVLine(line) {
   return out;
 }
 
+function normalizeImportRow(row) {
+  const out = { ...row };
+  const intFields = ['rdp_port', 'ansible_port', 'api_port', 'device_profile_id'];
+  intFields.forEach((f) => {
+    if (out[f] == null || out[f] === '') {
+      return;
+    }
+    const n = parseInt(out[f], 10);
+    if (Number.isFinite(n)) {
+      out[f] = n;
+    }
+  });
+  return out;
+}
+
 function parseCSV(text) {
   const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim() !== '');
   if (!lines.length) {
@@ -152,21 +167,6 @@ function parseCSV(text) {
     rows.push(normalizeImportRow(row));
   }
   return rows;
-}
-
-function normalizeImportRow(row) {
-  const out = { ...row };
-  const intFields = ['rdp_port', 'ansible_port', 'api_port', 'device_profile_id'];
-  intFields.forEach((f) => {
-    if (out[f] == null || out[f] === '') {
-      return;
-    }
-    const n = parseInt(out[f], 10);
-    if (Number.isFinite(n)) {
-      out[f] = n;
-    }
-  });
-  return out;
 }
 
 function parseImportPayload(text, filename) {
