@@ -84,11 +84,6 @@
       vars:
         sinexcel_kafka_register_api_after: false
 
-    - name: 兼容巡检 DEBUG（SyncLims 寄存器别名）
-      ansible.builtin.set_fact:
-        _sinexcel_api_status: "{{ _sinexcel_kafka_query_raw | default({}) }}"
-      when: _sinexcel_kafka_query_raw is defined
-
     - name: 状态判断：综合判定是否需要重配
       ansible.builtin.set_fact:
         need_reconfigure: >-

@@ -62,6 +62,7 @@ EXE_DIR_FALLBACK_DRIVES=D,E,C
 EXE_SCAN_LATEST=true
 EXE_SCAN_MAX_DEPTH=2
 ZIP_NAME=sinexcel
+SINEXCEL_KAFKA_API_PORT=9002
 API_PORT=9002
 START_POPUP_KEYWORD=提示
 STOP_POPUP_KEYWORD=警告
@@ -70,6 +71,8 @@ SEMAPHORE_API_TOKEN=<token>
 ```
 
 **不必**为每台机单独配 `Install`：playbook 在 `D:\`、`E:\`… 上按 `EXE_DIR_FALLBACK_DRIVES` 浅层扫描 `EXE_NAME`（`EXE_SCAN_LATEST=true`），取 mtime 最新路径。仅极个别例外机台才用可选 **`Install.ExePath`** 覆盖。详见 [`sinexcel/README.md`](sinexcel/README.md)。
+
+**端口勿混用**：巡检/启动健康检查走 **Kafka**（`POST …/kafka/QueryConfig`），端口解析顺序为 **设备 `api_port` → `SINEXCEL_KAFKA_API_PORT` → `API_PORT` → 9002**。`SINEXCEL_API_PORT`（默认 8080）只用于 **Stop** 模板里可选的 SyncLims `QueryStatus` 探测，不参与 Kafka 巡检。
 
 ### NBT
 

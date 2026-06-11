@@ -85,8 +85,9 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 | Variable | Default | Notes |
 |----------|---------|--------|
-| `API_PORT` / device `api_port` | `9002` | Kafka API port |
-| `SINEXCEL_KAFKA_API_PORT` | — | Override env port |
+| `SINEXCEL_KAFKA_API_PORT` | — | **Kafka** API 端口（优先于 `API_PORT`） |
+| `API_PORT` / device `api_port` | `9002` | Kafka 端口回退（设备 `api_port` 最高） |
+| `SINEXCEL_API_PORT` | `8080` | **仅 Stop 模板**可选 SyncLims `QueryStatus` 探测，**不是** Kafka 巡检端口 |
 | `SINEXCEL_START_CHECK_API` | `true` | Require Kafka enabled after start |
 | `SINEXCEL_KAFKA_*_PATH` | `/kafka/...` | See `group_vars/windows_hosts.yml` |
 | `EXE_DIR` | `C:\Program Files\SINEXCEL` | 首选根目录（配合盘符回退 + 扫描） |

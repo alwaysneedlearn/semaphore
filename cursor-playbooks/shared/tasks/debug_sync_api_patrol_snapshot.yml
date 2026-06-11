@@ -1,6 +1,6 @@
 ---
-# SyncLims-style patrol (LAND / SINEXCEL / NBT). Play var: sem_debug_tag (e.g. LAND).
-# Registers: _{land|sinexcel|nbt}_exe_stat, _*_process_check, _*_api_status, optional semaphore_callback_row.
+# Patrol debug: LAND (SyncLims), SINEXCEL (Kafka), NBT (heartbeat). Play var: sem_debug_tag.
+# Registers: _{land|sinexcel|nbt}_exe_stat, _*_process_check; SINEXCEL uses _sinexcel_kafka_*.
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（路径与进程）"
   ansible.builtin.debug:
@@ -15,22 +15,27 @@
     _sem_dbg_exe_path: "{{ exe_path | default([exe_dir, exe_name] | join('\\\\')) }}"
   when: _sem_dbg_exe_stat is defined or _sem_dbg_process is defined
 
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（Kafka API）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka POST {{ sinexcel_kafka_api_scheme | default('http') }}://{{ _sem_dbg_kafka_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path | default('/kafka/QueryConfig') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka http_status={{ _sinexcel_kafka_query_raw.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka result={{ _sinexcel_kafka_result_text | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka response_body={{ (_sinexcel_kafka_query_raw.content | default('') | string) | truncate(2000, True) }}"
+  vars:
+    _sem_dbg_kafka_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+  when: _sinexcel_kafka_query_raw is defined
+
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（SyncLims API）"
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api POST {{ _sem_dbg_api_scheme }}://{{ _sem_dbg_target }}:{{ _sem_dbg_api_port }}{{ _sem_dbg_api_path }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api.status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ (_sem_dbg_api.content | default('') | string) | truncate(2000, True) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_json_ok={{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) }}"
-  vars:
-    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default({})) }}"
-    _sem_dbg_api_scheme: "{{ land_api_scheme | default(sinexcel_api_scheme | default('http')) }}"
-    _sem_dbg_api_port: "{{ land_api_port | default(sinexcel_api_port | default(8080)) }}"
-    _sem_dbg_api_path: "{{ land_api_status_path | default(sinexcel_api_status_path | default('/SyncLims/QueryStatus')) }}"
-    _sem_dbg_target: "{{ _land_target_host | default(_sinexcel_target_host | default(inventory_hostname)) }}"
-  when: >
-    (_land_api_status is defined or _sinexcel_api_status is defined) and
-    not (_nbt_heartbeat is defined)
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api POST {{ land_api_scheme | default('http') }}://{{ _land_target_host | default(inventory_hostname) }}:{{ land_api_port | default(8080) }}{{ land_api_status_path | default('/SyncLims/QueryStatus') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _land_api_status.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ (_land_api_status.content | default('') | string) | truncate(2000, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_json_ok={{ ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) }}"
+  when: _land_api_status is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（NBT 心跳 API）"
   ansible.builtin.debug:
@@ -40,7 +45,9 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat last_send={{ nbt_heartbeat_last_send | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat ok={{ nbt_heartbeat_ok | default(false) }}"
-  when: _nbt_heartbeat is defined
+  when:
+    - (sem_debug_tag | default('')) == 'NBT'
+    - _nbt_heartbeat is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（健康判定）"
   ansible.builtin.debug:
@@ -48,12 +55,14 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_status_ok={{ _sem_dbg_api_ok }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ need_reconfigure | default(_nbt_need_reconfigure | default('n/a')) }}"
   vars:
-    _sem_dbg_api: "{{ _land_api_status | default(_sinexcel_api_status | default(_nbt_api_status | default({}))) }}"
     _sem_dbg_api_ok: >-
-      {% if _nbt_heartbeat is defined %}{{ nbt_heartbeat_ok | default(false) }}
-      {% elif _sem_dbg_api is defined %}{{ ((_sem_dbg_api.status | default(0) | int) >= 200 and (_sem_dbg_api.status | default(0) | int) < 300) }}
+      {% if _sinexcel_kafka_api_ok is defined %}{{ _sinexcel_kafka_api_ok | default(false) }}
+      {% elif _nbt_heartbeat is defined %}{{ nbt_heartbeat_ok | default(false) }}
+      {% elif _land_api_status is defined %}{{ ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) }}
       {% else %}n/a{% endif %}
-  when: _sem_dbg_api is defined or _nbt_heartbeat is defined or need_reconfigure is defined or _nbt_need_reconfigure is defined
+  when: >
+    _sinexcel_kafka_api_ok is defined or _nbt_heartbeat is defined or _land_api_status is defined or
+    need_reconfigure is defined or _nbt_need_reconfigure is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（回调行预览）"
   ansible.builtin.debug:
