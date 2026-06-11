@@ -7,8 +7,9 @@ Semaphore **变量组**通过模板绑定的 **Environment** 注入 Ansible `loo
 | 原则 | 说明 |
 |------|------|
 | **一类型一组** | LAND / SINEXCEL / NBT / NEWARE 各建 **独立变量组**，绑定到该类型的 Status / Start / Stop / Restart / Redeploy 模板。不要混用跨类型默认值。 |
-| **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退顺序。 |
-| **每台机不同放设备配置** | 安装路径用设备 **配置** 的 **`Install`** / **`Paths`**（`ExeDir`、`ExePath`、`AppDir`…），不要写进 VG。见 [`sinexcel/README.md`](sinexcel/README.md#install--paths-keys-per-device-or-type-default)。 |
+| **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退、浅层扫描（SINEXCEL）。 |
+| **SINEXCEL 安装路径** | **变量组即可**：`EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 在各盘符下自动找最新 exe，**不必**逐台配 `Install.ExeDir` / `ExePath`。 |
+| **Install（可选）** | 仅当某台机无法被盘符扫描覆盖时，才在设备/类型配置里写 **`Install`** / **`Paths`** 覆盖。见 [`sinexcel/README.md`](sinexcel/README.md)。 |
 | **回调 Token** | `SEMAPHORE_API_TOKEN`（必填才能 bulk 回调）；可选 `SEMAPHORE_URL`（默认 `http://127.0.0.1:3000`）。 |
 
 ## `EXE_NAME` 要不要加 `.exe`？
@@ -68,7 +69,7 @@ STOP_POPUP_MATCH_MODE=title_or_content
 SEMAPHORE_API_TOKEN=<token>
 ```
 
-每台安装目录不同 → 设备配置 **`Install.ExeDir`** / **`Install.ExePath`**，不要写进 VG。详见 [`sinexcel/README.md`](sinexcel/README.md)。
+**不必**为每台机单独配 `Install`：playbook 在 `D:\`、`E:\`… 上按 `EXE_DIR_FALLBACK_DRIVES` 浅层扫描 `EXE_NAME`（`EXE_SCAN_LATEST=true`），取 mtime 最新路径。仅极个别例外机台才用可选 **`Install.ExePath`** 覆盖。详见 [`sinexcel/README.md`](sinexcel/README.md)。
 
 ### NBT
 
@@ -109,9 +110,9 @@ SEMAPHORE_API_TOKEN=<token>
 
 ## 不要放进变量组的内容
 
-- 单台机器的 `ExeDir` / `ExePath`（用设备 **Install** 配置）  
 - `semaphore_project_id`（Semaphore 任务 extra-vars 自动注入）  
-- 每台不同的 `api_port`（用设备字段 `api_port` 或 `API_PORT` 默认）
+- 每台不同的 `api_port`（用设备字段 `api_port` 或 `API_PORT` 默认）  
+- 单台例外路径（可选 **Install**，一般 SINEXCEL 用不到）
 
 ## Playbook 内规范化片段
 

@@ -28,7 +28,7 @@ sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
 sem_files_dir: "{{ playbook_dir }}/../shared/files"
 ```
 
-SyncLims-style types (LAND/SINEXCEL/NBT) use `tasks/prepare_device_exe_paths.yml` (per-host **Install** / **Paths** config) + `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1`. Set `EXE_DIR_FALLBACK_DRIVES` (e.g. `D,F`) for drive order. **LAND** and **SINEXCEL** set play var `app_dir` — the script probes `{{ app_dir }}\{{ EXE_NAME }}` (and the install folder) on each candidate drive before falling back to the first existing disk letter. `EXE_DIR=D:\` / `F:\` map to drive root; `EXE_DIR=D:` is treated as `D:\`. Per-device overrides: `Install.ExeDir`, `Install.AppDir`, `Install.ExePath`, `Install.ExeDirFallbackDrives`, `Install.ExeScanLatest`, `Install.ExeScanMaxDepth` (see `prepare_device_exe_paths.yml`). **SINEXCEL** defaults `EXE_SCAN_LATEST=true`: on each candidate drive, shallow scan (max depth 2) for `EXE_NAME` and pick newest `LastWriteTime` (`EXE_DIR_CHOOSE_SOURCE=scan_latest`). LAND zip copy uses `tasks/land_prepare_zip_vars.yml` (`ZIP_NAME` without `.zip`).
+SyncLims-style types (LAND/SINEXCEL/NBT) use `tasks/prepare_device_exe_paths.yml` + `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1`. **SINEXCEL**：变量组 `EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 即可在各盘符浅层扫描最新 exe，**不必**逐台 `Install.ExeDir`（`Install` 仅作可选覆盖，见 `prepare_device_exe_paths.yml`）。**LAND** / 固定布局类型：脚本在各盘符探测 `app_dir\EXE_NAME`；`EXE_DIR=D:\` / `F:\` 为盘根，`EXE_DIR=D:` → `D:\`。LAND zip：`tasks/land_prepare_zip_vars.yml`（`ZIP_NAME` 无 `.zip` 后缀）。
 
 NEWARE (and any type with extra `sem_*.ps1` / TDengine) also sets:
 

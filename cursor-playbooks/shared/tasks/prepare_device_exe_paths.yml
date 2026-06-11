@@ -28,7 +28,7 @@
     _play_exe_scan_latest: "{{ exe_scan_latest | default(false) | bool }}"
     _play_exe_scan_max_depth: "{{ exe_scan_max_depth | default(2) | int }}"
 
-- name: 应用每设备 EXE_DIR（Install.ExeDir 或 play 默认）
+- name: 应用 EXE_DIR（可选 Install 覆盖，否则变量组/play 默认）
   ansible.builtin.set_fact:
     exe_dir_preferred: >-
       {{
@@ -37,7 +37,7 @@
         else _play_exe_dir_preferred
       }}
 
-- name: 应用每设备 AppDir（Install.AppDir 或 play 默认）
+- name: 应用 AppDir（可选 Install 覆盖，否则变量组/play 默认）
   ansible.builtin.set_fact:
     app_dir: >-
       {{
@@ -59,7 +59,7 @@
         )
       }}
 
-- name: 应用每设备完整 EXE 路径覆盖（Install.ExePath）
+- name: 应用完整 EXE 路径覆盖（可选 Install.ExePath，一般留空走扫描）
   ansible.builtin.set_fact:
     exe_path_override: "{{ (_merged_install.ExePath | default('', true) | trim) }}"
 

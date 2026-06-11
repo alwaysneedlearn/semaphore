@@ -49,26 +49,35 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 |----------|---------|
 | `KafkaConfig` | `SetConfig` body (`KafkaAddrs`, `KafkaTopic*`, …). Falls back to `SystemConfig` if empty. |
 | `Retransmit` | `StartTime`, `EndTime` — format `yyyy/MM/dd HH:mm:ss.SSS` (e.g. `2026/06/08 00:00:00.000`). Restart queries history then retransmits **UploadExist=false** rows by default. |
-| **`Install`** (or **`Paths`**) | **Per-device EXE 目录**（变量组无法统一时用这个） |
+| **`Install`** (or **`Paths`**) | **可选**：仅极个别机台扫描仍找不到 exe 时覆盖路径（日常用变量组即可） |
 
-### `Install` / `Paths` keys (per device or type default)
+### EXE 路径：变量组为主（推荐）
 
-| Key | Example | Priority |
-|-----|---------|----------|
-| `ExePath` | `F:\Apps\sinexcel\sinexcel_agent.exe` | 最高：完整路径，跳过拼接 |
-| `ExeDir` | `D:\Program Files\SINEXCEL` 或 `D:` | 安装根目录（配合盘符探测） |
-| `AppDir` | `sinexcel` | 子目录（默认 = `ZIP_NAME`） |
-| `ExeDirFallbackDrives` | `D,F,C` | 仅该设备盘符探测顺序 |
-| `ExeScanLatest` | `true` / `false` | 是否按盘符浅层扫描取 **mtime 最新** 的 `EXE_NAME`（默认 SINEXCEL 开启） |
-| `ExeScanMaxDepth` | `2` | 从盘符根目录向下最多遍历目录层数 |
+全项目统一在 **变量组** 配置即可，**不需要**逐台维护 `Install.ExeDir` / `Install.ExePath`：
 
-配置入口：**设备 → 配置**，或 **设备类型 → 默认配置**（`default_config` / `configs_by_host`）。
+| Variable Group | 作用 |
+|----------------|------|
+| `EXE_NAME` | 要查找的 exe 文件名（如 `sinexcel_agent.exe`） |
+| `EXE_DIR` | 首选安装根（盘符探测起点） |
+| `EXE_DIR_FALLBACK_DRIVES` | 盘符尝试顺序，如 `D,E,C` |
+| `EXE_SCAN_LATEST` | `true`（默认）：各盘符下浅层扫描，取 **mtime 最新** 的 `EXE_NAME` |
+| `EXE_SCAN_MAX_DEPTH` | 扫描深度，默认 `2` |
+| `APP_DIR` | 可选；未开扫描时用于 `AppDir\ExeName` 固定路径探测 |
 
-解析顺序：`设备 Install` → `类型默认 Install` → 变量组 → playbook 默认 → **`resolve_exe_dir_windows`**：
+解析流程（`resolve_exe_dir_windows` + `sem_resolve_exe_dir_windows.ps1`）：
 
-1. **`EXE_SCAN_LATEST=true`（SINEXCEL 默认）**：在每个候选盘符 `D:\`、`E:\`… 下最多 **2 层**目录查找 `EXE_NAME`，取 **LastWriteTime 最新** 的文件 → `EXE_PATH_RESOLVED`  
-2. 否则按固定相对路径 `AppDir\ExeName` 探测（LAND 方式）  
-3. 仍未命中则盘符回退
+1. **`EXE_SCAN_LATEST=true`**：在每个候选盘符下最多 **N 层**目录找 `EXE_NAME`，取最新文件 → `EXE_PATH_RESOLVED`  
+2. 否则按 `AppDir\ExeName` 在各盘符探测（LAND 方式）  
+3. 盘符回退；仍无则巡检报 `Executable not found`
+
+### `Install` / `Paths`（可选覆盖）
+
+仅当变量组 + 扫描仍无法定位某台机时使用。配置入口：**设备 → 配置** 或 **设备类型 → 默认配置**。
+
+| Key | Example | 说明 |
+|-----|---------|------|
+| `ExePath` | `F:\Apps\sinexcel\sinexcel_agent.exe` | 完整路径，跳过扫描 |
+| `ExeDir` / `AppDir` / `ExeDirFallbackDrives` / `ExeScanLatest` / `ExeScanMaxDepth` | 同变量组语义 | 覆盖该主机或类型的 VG 默认 |
 
 ## Variable Group (examples)
 
@@ -80,8 +89,8 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `SINEXCEL_KAFKA_API_PORT` | — | Override env port |
 | `SINEXCEL_START_CHECK_API` | `true` | Require Kafka enabled after start |
 | `SINEXCEL_KAFKA_*_PATH` | `/kafka/...` | See `group_vars/windows_hosts.yml` |
-| `EXE_DIR` | `C:\Program Files\SINEXCEL` | 全项目默认；**每台机不同请用 Install.ExeDir** |
-| `EXE_DIR_FALLBACK_DRIVES` | `D,E,C` | 盘符回退顺序（可被 Install.ExeDirFallbackDrives 覆盖） |
+| `EXE_DIR` | `C:\Program Files\SINEXCEL` | 首选根目录（配合盘符回退 + 扫描） |
+| `EXE_DIR_FALLBACK_DRIVES` | `D,E,C` | 盘符尝试顺序 |
 | `EXE_SCAN_LATEST` | `true` | 按盘符浅层扫描最新 exe（见上） |
 | `EXE_SCAN_MAX_DEPTH` | `2` | 扫描最大目录深度 |
 | `APP_DIR` | — | 子目录，默认 `sinexcel`（`ZIP_NAME`） |
