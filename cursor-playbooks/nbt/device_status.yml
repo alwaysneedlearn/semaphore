@@ -1,5 +1,5 @@
 ---
-- name: NBT 状态巡检（API + 进程）
+- name: NBT 状态巡检（服务 + 心跳 API）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -42,7 +42,6 @@
 
     - name: 检查 NBT Windows 服务状态
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
-      ignore_unreachable: true
 
     - name: 兼容 DEBUG 任务变量（服务状态）
       ansible.builtin.set_fact:

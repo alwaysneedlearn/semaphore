@@ -14,6 +14,8 @@
     }
   register: _nbt_service_status
   changed_when: false
+  ignore_unreachable: true
+  failed_when: false
 
 - name: DEBUG NBT 服务状态
   ansible.builtin.debug:
