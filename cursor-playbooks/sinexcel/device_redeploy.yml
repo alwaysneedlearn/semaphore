@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars_files:
     - vars/kafka_api_port.yml
+    - vars/ini_config.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: SINEXCEL
@@ -22,7 +23,6 @@
     exe_scan_latest: "{{ ((lookup('env', 'EXE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
     exe_scan_max_depth: "{{ ((lookup('env', 'EXE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('2', true)) | int }}"
     exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
-    zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/sinexcel/pkg', true) }}"
     redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
     redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}.zip"
     redeploy_extract_dest: "{{ exe_dir }}"

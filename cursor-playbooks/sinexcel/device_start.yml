@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars_files:
     - vars/kafka_api_port.yml
+    - vars/ini_config.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: SINEXCEL

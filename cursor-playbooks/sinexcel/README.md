@@ -79,28 +79,80 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `ExePath` | `F:\Apps\sinexcel\sinexcel_agent.exe` | 完整路径，跳过扫描 |
 | `ExeDir` / `AppDir` / `ExeDirFallbackDrives` / `ExeScanLatest` / `ExeScanMaxDepth` | 同变量组语义 | 覆盖该主机或类型的 VG 默认 |
 
-## Variable Group (examples)
+## Variable Group（环境变量一览）
 
-完整说明见 [`../VARIABLE_GROUPS.md`](../VARIABLE_GROUPS.md)。**`EXE_NAME` 推荐带 `.exe`**（如 `sinexcel_agent.exe`）；写 `sinexcel_agent` 也会自动规范化。
+完整示例见 [`../VARIABLE_GROUPS.md`](../VARIABLE_GROUPS.md)。规则：**变量组非空优先**，否则用下表默认值（playbook 内 `lookup('env', …)`）。
 
-| Variable | Default | Notes |
-|----------|---------|--------|
-| `API_PORT` / device `api_port` | `9002` | Kafka API port |
-| `SINEXCEL_KAFKA_API_PORT` | — | Override env port |
-| `SINEXCEL_START_CHECK_API` | `true` | Require Kafka enabled after start |
-| `SINEXCEL_KAFKA_*_PATH` | `/kafka/...` | See `group_vars/windows_hosts.yml` |
-| `EXE_DIR` | `C:\Program Files\SINEXCEL` | 首选根目录（配合盘符回退 + 扫描） |
-| `EXE_DIR_FALLBACK_DRIVES` | `D,E,C` | 盘符尝试顺序 |
-| `EXE_SCAN_LATEST` | `true` | 按盘符浅层扫描最新 exe（见上） |
-| `EXE_SCAN_MAX_DEPTH` | `2` | 扫描最大目录深度 |
-| `APP_DIR` | — | 子目录，默认 `sinexcel`（`ZIP_NAME`） |
-| `EXE_NAME` | `sinexcel_agent.exe` | 磁盘文件名（带 `.exe`）；`PROCESS_NAME` 可选覆盖进程名（无后缀） |
-| `ZIP_NAME`, … | See playbooks | Same as before |
-| `START_POPUP_KEYWORD` | `提示` | After interactive start, auto-confirm desktop popup (title contains keyword; Enter). Requires RDP/desktop session for profile user. |
-| `START_POPUP_WAIT_SECONDS` | `3` | Seconds to wait before scanning for start popup |
-| `STOP_POPUP_KEYWORD` | `警告` | Stop confirm: match dialog **content** when title is empty (`title_or_content` default) |
-| `STOP_POPUP_MATCH_MODE` | `title_or_content` | Set `content` if only body text contains the keyword |
-| `STOP_GRACEFUL_PROCESS_NAME` | 从 `EXE_NAME` 推导 | 实际 agent 进程名（如 `sinexcel_agent`），不要填 `LHBTS` |
+**`EXE_NAME` 推荐带 `.exe`**（如 `sinexcel_agent.exe`）；未设 `PROCESS_NAME` 时从 `EXE_NAME` 自动推导进程名。
+
+### 全模板通用
+
+| Variable | Default | 用于 |
+|----------|---------|------|
+| `SEMAPHORE_API_TOKEN` | — | bulk 回调（Status 等必填） |
+| `SEMAPHORE_URL` | `http://127.0.0.1:3000` | 回调基址（控制器非本机时） |
+| `EXE_NAME` | `sinexcel_agent.exe` | 扫描 / 路径 / 进程名 |
+| `PROCESS_NAME` | 从 `EXE_NAME` 推导 | `Get-Process`、优雅停止 |
+| `EXE_DIR` | `C:\Program Files\SINEXCEL` | 首选安装根 |
+| `EXE_DIR_FALLBACK_DRIVES` | `D,E,C` | 盘符回退顺序 |
+| `EXE_SCAN_LATEST` | `true` | 各盘浅层扫描最新 exe |
+| `EXE_SCAN_MAX_DEPTH` | `2` | 扫描深度 |
+| `APP_DIR` | `sinexcel`（同 `ZIP_NAME`） | 未开扫描时的子目录 |
+| `ZIP_NAME` | `sinexcel` | 子目录名；Redeploy 的 zip 基名 |
+
+### Status（`device_status.yml`）
+
+| Variable | Default | 用于 |
+|----------|---------|------|
+| `SINEXCEL_KAFKA_API_PORT` | — | Kafka 端口（优先于 `API_PORT`） |
+| `API_PORT` / 设备 `api_port` | `9002` | Kafka 端口回退 |
+
+### Start / Restart / Check-restart / Redeploy（写 INI + Kafka）
+
+| Variable | Default | 用于 |
+|----------|---------|------|
+| `ZIP_PATH` | `/root/sinexcel/pkg` | **Ansible 控制器**上 INI 模板目录；须有 `{{ CONFIG_FILE_NAME }}` |
+| `CONFIG_FILE_NAME` | `sinexcel.iconf` | 模板文件名 → 复制到用户 `Documents\…\BTSClient\` |
+| `RECONFIG_CLIENT_REL_PATH` | `Documents\NEWARE\BTSClient`（任务内默认） | **SINEXCEL 建议在 VG 设为** `Documents\SINEXCEL\BTSClient` |
+| `SINEXCEL_KAFKA_API_PORT` / `API_PORT` | `9002` | Kafka SetConfig / QueryConfig |
+| `SINEXCEL_START_CHECK_API` | `true` | 启动后要求 `EnableFlowInfoExtendedSqlite=true` |
+| `EXE_ARGS` | 空 | 启动参数 |
+| `RESTART_DELAY` | `30` | 启动前等待（秒） |
+| `PROCESS_VERIFY_POLL_SECONDS` | `5` | 进程确认轮询 |
+| `HIS_DATA_FROM_TIME` | 空 | INI 合并可选字段 |
+| `START_POPUP_KEYWORD` | `提示` | 交互启动后自动点弹窗 |
+| `START_POPUP_WAIT_SECONDS` | `3` | 等弹窗出现 |
+| `STOP_POPUP_KEYWORD` | `警告` | 优雅停止确认 |
+| `STOP_POPUP_MATCH_MODE` | `title_or_content` | 无标题弹窗用正文匹配 |
+| `STOP_POPUP_WAIT_SECONDS` | `2` | 停前等弹窗 |
+| `STOP_FORCE_AFTER_GRACEFUL` | `true` | 优雅停失败后强杀 |
+
+Redeploy 另需控制器上 `{{ ZIP_PATH }}/{{ ZIP_NAME }}.zip`（默认 `/root/sinexcel/pkg/sinexcel.zip`）。
+
+### Stop（`device_stop.yml`）
+
+| Variable | Default | 用于 |
+|----------|---------|------|
+| `SINEXCEL_API_PORT` | `8080` | **可选** SyncLims `QueryStatus`（**不是** Kafka） |
+| `SINEXCEL_API_SCHEME` | `http` | 同上 |
+| `SINEXCEL_API_STATUS_PATH` | `/SyncLims/QueryStatus` | 同上 |
+| `SINEXCEL_API_TOKEN` | `sinexcelapi` | 同上 |
+| `SINEXCEL_API_TIMEOUT` | `8` | 同上 |
+| `SINEXCEL_API_VERIFY_TLS` | `true` | 同上 |
+| `SINEXCEL_STOP_CHECK_API` | `false` | 停后是否调 API |
+| `STOP_GRACEFUL_PROCESS_NAME` | 同 `process_name` | 勿填错类型进程名 |
+
+### Kafka 路径（一般不用改）
+
+见 `group_vars/windows_hosts.yml`：`/kafka/QueryConfig`、`SetConfig`、`IsEnable`、`QueryHistory`、`Retransmit`。
+
+### 常见报错：`zip_path is undefined`
+
+Start/Restart 会 include `apply_neware_style_device_config_files.yml`，需要 play 变量 `zip_path`（来自 `vars/ini_config.yml` → 环境变量 `ZIP_PATH`）。在 **runner** 上确认：
+
+```bash
+ls -la /root/sinexcel/pkg/sinexcel.iconf   # 或你 VG 里的 ZIP_PATH + CONFIG_FILE_NAME
+```
 
 ## Extra-vars
 

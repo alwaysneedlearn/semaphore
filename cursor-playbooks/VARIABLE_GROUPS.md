@@ -55,19 +55,36 @@ SEMAPHORE_API_TOKEN=<token>
 ### SINEXCEL
 
 ```env
+# 路径与进程
 EXE_NAME=sinexcel_agent.exe
 APP_DIR=sinexcel
 EXE_DIR=C:\Program Files\SINEXCEL
 EXE_DIR_FALLBACK_DRIVES=D,E,C
 EXE_SCAN_LATEST=true
 EXE_SCAN_MAX_DEPTH=2
+# Start / Restart / Redeploy：INI 模板在 Ansible 控制器上
+ZIP_PATH=/root/sinexcel/pkg
+CONFIG_FILE_NAME=sinexcel.iconf
+RECONFIG_CLIENT_REL_PATH=Documents\SINEXCEL\BTSClient
 ZIP_NAME=sinexcel
+# Kafka（巡检 / 启动健康）
+SINEXCEL_KAFKA_API_PORT=9002
 API_PORT=9002
+SINEXCEL_START_CHECK_API=true
+# 弹窗（优雅停 / 交互启动）
 START_POPUP_KEYWORD=提示
+START_POPUP_WAIT_SECONDS=3
 STOP_POPUP_KEYWORD=警告
 STOP_POPUP_MATCH_MODE=title_or_content
+STOP_POPUP_WAIT_SECONDS=2
+STOP_FORCE_AFTER_GRACEFUL=true
+# 回调
 SEMAPHORE_API_TOKEN=<token>
 ```
+
+**Start / Restart 必填（控制器）**：`ZIP_PATH` 目录下须有 `{{ CONFIG_FILE_NAME }}`（默认 `/root/sinexcel/pkg/sinexcel.iconf`），供写 INI 时复制模板。未设 `ZIP_PATH` 会用 playbook 默认 `/root/sinexcel/pkg`。
+
+**端口勿混用**：巡检/启动健康检查走 **Kafka**（`POST …/kafka/QueryConfig`），端口顺序为 **设备 `api_port` → `SINEXCEL_KAFKA_API_PORT` → `API_PORT` → 9002**。`SINEXCEL_API_PORT`（默认 8080）只用于 **Stop** 模板里可选的 SyncLims `QueryStatus`，不参与 Kafka。
 
 **不必**为每台机单独配 `Install`：playbook 在 `D:\`、`E:\`… 上按 `EXE_DIR_FALLBACK_DRIVES` 浅层扫描 `EXE_NAME`（`EXE_SCAN_LATEST=true`），取 mtime 最新路径。仅极个别例外机台才用可选 **`Install.ExePath`** 覆盖。详见 [`sinexcel/README.md`](sinexcel/README.md)。
 
