@@ -21,11 +21,10 @@
         if ((_merged_install.ExeDir | default('', true) | trim) | length > 0)
         else (exe_dir_preferred | default('C:\\Program Files\\SINEXCEL', true))
       }}
-    _app_from_cfg: "{{ (_merged_install.AppDir | default('', true) | trim) }}"
     app_dir: >-
       {{
-        _app_from_cfg
-        if (_app_from_cfg | length > 0)
+        (_merged_install.AppDir | default('', true) | trim)
+        if ((_merged_install.AppDir | default('', true) | trim) | length > 0)
         else (app_dir | default(zip_name | default('sinexcel', true), true))
       }}
     exe_dir_fallback_drives: >-
