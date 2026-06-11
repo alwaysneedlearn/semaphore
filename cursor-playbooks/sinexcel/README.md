@@ -58,7 +58,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 | Category | Used by |
 |----------|---------|
-| `KafkaConfig` | `SetConfig` body (`KafkaAddrs`, `KafkaTopic*`, …). Falls back to `SystemConfig` if empty. |
+| `KafkaConfig` | **仅**此分类参与 `POST /kafka/SetConfig`（**不会**回落 `SystemConfig`，避免误发 `IsHisDataFromFirst` 等无关字段） |
 | `Retransmit` | `StartTime`, `EndTime` — format `yyyy/MM/dd HH:mm:ss.SSS` (e.g. `2026/06/08 00:00:00.000`). Restart queries history then retransmits **UploadExist=false** rows by default. |
 | **`Install`** (or **`Paths`**) | **可选**：仅极个别机台扫描仍找不到 exe 时覆盖路径（日常用变量组即可） |
 
@@ -162,5 +162,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 ## Extra-vars
 
-Bulk: `devices`, `configs_by_host`, `default_config`  
-Single: `device`, `config`
+Bulk: `devices`, `configs_by_host`, `default_config`（设备类型 **默认配置**）  
+Single: `device`, `config`（单台配置）；`default_config` 来自 **项目级** Devices 设置（非仅设备类型）
+
+若日志出现未配置的 Kafka 键（如 `IsHisDataFromFirst`），在 Semaphore 查：**设备类型 → 配置**、**项目 Devices 默认配置**、**单台设备 → 配置**，分类是否为 `SystemConfig`（旧逻辑会误当作 Kafka 下发；现已仅读 `KafkaConfig`）。Restart 后看 `[DEBUG-SINEXCEL] kafka_setconfig_keys`。
