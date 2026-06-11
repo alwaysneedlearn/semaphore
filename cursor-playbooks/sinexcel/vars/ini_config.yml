@@ -1,4 +1,0 @@
----
-# Controller path to INI template (start/restart write config via apply_neware_style_device_config_files).
-# Runner must have {{ zip_path }}/{{ config_file_name }} (e.g. /root/sinexcel/pkg/sinexcel.iconf).
-zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/sinexcel/pkg', true) }}"

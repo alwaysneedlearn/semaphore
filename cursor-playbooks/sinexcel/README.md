@@ -33,7 +33,7 @@ grep PREPARE_DEVICE_EXE_PATHS_REV shared/tasks/prepare_device_exe_paths.yml
 
 Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
-## Kafka API (agent HTTP, default port **9002**)
+## Agent HTTP API（默认端口 **9002**，变量组 `SINEXCEL_API_PORT`）
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -104,17 +104,16 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 | Variable | Default | 用于 |
 |----------|---------|------|
-| `SINEXCEL_KAFKA_API_PORT` | — | Kafka 端口（优先于 `API_PORT`） |
-| `API_PORT` / 设备 `api_port` | `9002` | Kafka 端口回退 |
+| `SINEXCEL_API_PORT` | — | Agent HTTP API 端口（优先于 `API_PORT`） |
+| `API_PORT` / 设备 `api_port` | `9002` | API 端口回退 |
 
-### Start / Restart / Check-restart / Redeploy（写 INI + Kafka）
+### Start / Restart / Check-restart（写 INI + API）
 
 | Variable | Default | 用于 |
 |----------|---------|------|
-| `ZIP_PATH` | `/root/sinexcel/pkg` | **Ansible 控制器**上 INI 模板目录；须有 `{{ CONFIG_FILE_NAME }}` |
-| `CONFIG_FILE_NAME` | `sinexcel.iconf` | 模板文件名 → 复制到用户 `Documents\…\BTSClient\` |
-| `RECONFIG_CLIENT_REL_PATH` | `Documents\NEWARE\BTSClient`（任务内默认） | **SINEXCEL 建议在 VG 设为** `Documents\SINEXCEL\BTSClient` |
-| `SINEXCEL_KAFKA_API_PORT` / `API_PORT` | `9002` | Kafka SetConfig / QueryConfig |
+| `CONFIG_FILE_NAME` | `sinexcel.iconf` | 目标机上已有 INI 文件名（仅合并 patch，不从控制器复制） |
+| `RECONFIG_CLIENT_REL_PATH` | `Documents\NEWARE\BTSClient`（任务内默认） | **建议在 VG 设为** `Documents\SINEXCEL\BTSClient` |
+| `SINEXCEL_API_PORT` / `API_PORT` | `9002` | SetConfig / QueryConfig 等 HTTP API |
 | `SINEXCEL_START_CHECK_API` | `true` | 启动后要求 `EnableFlowInfoExtendedSqlite=true` |
 | `EXE_ARGS` | 空 | 启动参数 |
 | `RESTART_DELAY` | `30` | 启动前等待（秒） |
@@ -127,13 +126,19 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `STOP_POPUP_WAIT_SECONDS` | `2` | 停前等弹窗 |
 | `STOP_FORCE_AFTER_GRACEFUL` | `true` | 优雅停失败后强杀 |
 
-Redeploy 另需控制器上 `{{ ZIP_PATH }}/{{ ZIP_NAME }}.zip`（默认 `/root/sinexcel/pkg/sinexcel.zip`）。
+### Redeploy（`device_redeploy.yml`）
+
+| Variable | Default | 用于 |
+|----------|---------|------|
+| `ZIP_PATH` | `/root/sinexcel/pkg` | **仅 Redeploy**：控制器上 `{{ ZIP_NAME }}.zip` 所在目录 |
+
+控制器上须有：`/root/sinexcel/pkg/sinexcel.zip`（或自定义 `ZIP_PATH` / `ZIP_NAME`）。
 
 ### Stop（`device_stop.yml`）
 
 | Variable | Default | 用于 |
 |----------|---------|------|
-| `SINEXCEL_API_PORT` | `8080` | **可选** SyncLims `QueryStatus`（**不是** Kafka） |
+| `SINEXCEL_API_PORT` | `9002`（同 API 端口链） | 停后可选 API 探测（默认路径 `/SyncLims/QueryStatus`） |
 | `SINEXCEL_API_SCHEME` | `http` | 同上 |
 | `SINEXCEL_API_STATUS_PATH` | `/SyncLims/QueryStatus` | 同上 |
 | `SINEXCEL_API_TOKEN` | `sinexcelapi` | 同上 |
@@ -142,17 +147,9 @@ Redeploy 另需控制器上 `{{ ZIP_PATH }}/{{ ZIP_NAME }}.zip`（默认 `/root/
 | `SINEXCEL_STOP_CHECK_API` | `false` | 停后是否调 API |
 | `STOP_GRACEFUL_PROCESS_NAME` | 同 `process_name` | 勿填错类型进程名 |
 
-### Kafka 路径（一般不用改）
+### API 路径（一般不用改）
 
 见 `group_vars/windows_hosts.yml`：`/kafka/QueryConfig`、`SetConfig`、`IsEnable`、`QueryHistory`、`Retransmit`。
-
-### 常见报错：`zip_path is undefined`
-
-Start/Restart 会 include `apply_neware_style_device_config_files.yml`，需要 play 变量 `zip_path`（来自 `vars/ini_config.yml` → 环境变量 `ZIP_PATH`）。在 **runner** 上确认：
-
-```bash
-ls -la /root/sinexcel/pkg/sinexcel.iconf   # 或你 VG 里的 ZIP_PATH + CONFIG_FILE_NAME
-```
 
 ## Extra-vars
 

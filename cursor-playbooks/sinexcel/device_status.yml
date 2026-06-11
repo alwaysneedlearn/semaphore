@@ -4,7 +4,7 @@
   gather_facts: no
   max_fail_percentage: 100
   vars_files:
-    - vars/kafka_api_port.yml
+    - vars/api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
@@ -30,7 +30,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('sinexcel.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('8080', true) | int }}{% endif %}"
+    api_port: "{{ sinexcel_kafka_api_port }}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
@@ -83,11 +83,6 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_kafka_query_config.yml"
       vars:
         sinexcel_kafka_register_api_after: false
-
-    - name: 兼容巡检 DEBUG（SyncLims 寄存器别名）
-      ansible.builtin.set_fact:
-        _sinexcel_api_status: "{{ _sinexcel_kafka_query_raw | default({}) }}"
-      when: _sinexcel_kafka_query_raw is defined
 
     - name: 状态判断：综合判定是否需要重配
       ansible.builtin.set_fact:

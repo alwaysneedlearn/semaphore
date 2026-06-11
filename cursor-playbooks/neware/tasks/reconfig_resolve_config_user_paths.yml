@@ -6,10 +6,15 @@
   ansible.builtin.set_fact:
     _reconfig_client_rel_path: "{{ (lookup('env', 'RECONFIG_CLIENT_REL_PATH') | default('', true) | trim) | default('Documents\\NEWARE\\BTSClient', true) }}"
 
-- name: 重配执行：登记 Public 与 zip 源路径
+- name: 重配执行：登记 Public 与目标配置文件路径
   ansible.builtin.set_fact:
     _reconfig_public_cfg_file: "C:\\Users\\Public\\{{ _reconfig_client_rel_path }}\\{{ config_file_name }}"
+
+- name: 重配执行：登记控制器 INI 模板源路径
+  ansible.builtin.set_fact:
     _reconfig_cfg_src: "{{ zip_path }}/{{ config_file_name }}"
+  when: >-
+    (reconfig_copy_ini_template if (reconfig_copy_ini_template is defined) else (zip_path is defined)) | bool
 
 - name: 重配执行：派生 BTSClient 与配置文件完整路径
   ansible.builtin.set_fact:

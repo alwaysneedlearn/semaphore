@@ -1,8 +1,9 @@
 ---
 # NEWARE-style device INI config: resolve user paths, copy template from controller, merge Semaphore config.
 # Set Variable Group RECONFIG_CLIENT_REL_PATH per device type (e.g. Documents\SINEXCEL\BTSClient).
-# Play must define: config_file_name, zip_path, merged_cfg_json, merged_system_config, api_host, api_port,
-# his_data_from_time (optional), default_cfg/device_cfg or merged_cfg.
+# Play must define: config_file_name, merged_cfg_json, merged_system_config, api_host, api_port,
+# his_data_from_time (optional). Set reconfig_copy_ini_template=true and zip_path only when copying
+# controller-side INI template (NEWARE); SINEXCEL start/restart patch on-device INI only.
 
 - ansible.builtin.include_tasks: reconfig_prepare_profile_user.yml
 - ansible.builtin.include_tasks: reconfig_resolve_config_user_paths.yml

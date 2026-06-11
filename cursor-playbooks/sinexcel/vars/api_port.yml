@@ -1,0 +1,4 @@
+---
+# SINEXCEL agent HTTP API port (QueryConfig, SetConfig, …). Env: SINEXCEL_API_PORT → API_PORT → 9002.
+# Legacy SINEXCEL_KAFKA_API_PORT is still accepted if SINEXCEL_API_PORT is empty.
+sinexcel_kafka_api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% set _p = (lookup('env', 'SINEXCEL_API_PORT') | default('', true) | trim) %}{% set _legacy = (lookup('env', 'SINEXCEL_KAFKA_API_PORT') | default('', true) | trim) %}{% if (hp | int) > 0 %}{{ hp | int }}{% elif (_p | length) > 0 %}{{ _p | int }}{% elif (_legacy | length) > 0 %}{{ _legacy | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int }}{% endif %}"

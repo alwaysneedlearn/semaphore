@@ -62,7 +62,7 @@
     _sinexcel_kafka_enabled: false
   when: _sinexcel_kafka_config_parsed is not defined
 
-- name: 登记 Kafka API 健康（QueryConfig + EnableFlowInfoExtendedSqlite）
+- name: 登记 API 健康（QueryConfig + EnableFlowInfoExtendedSqlite）
   ansible.builtin.set_fact:
     _sinexcel_kafka_api_ok: >-
       {{
@@ -78,9 +78,9 @@
 - name: DEBUG SINEXCEL Kafka QueryConfig
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] kafka_query url={{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path }}"
-      - "[DEBUG-SINEXCEL] kafka_query http={{ _sinexcel_kafka_query_raw.status | default('n/a') }} result={{ _sinexcel_kafka_result_text | default('n/a') }}"
-      - "[DEBUG-SINEXCEL] kafka_query EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
-      - "[DEBUG-SINEXCEL] kafka_query api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
+      - "[DEBUG-SINEXCEL] api_query url={{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path }}"
+      - "[DEBUG-SINEXCEL] api_query http={{ _sinexcel_kafka_query_raw.status | default('n/a') }} result={{ _sinexcel_kafka_result_text | default('n/a') }}"
+      - "[DEBUG-SINEXCEL] api_query EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
+      - "[DEBUG-SINEXCEL] api_query api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"

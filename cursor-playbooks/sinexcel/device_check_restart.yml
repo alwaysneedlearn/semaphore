@@ -4,9 +4,9 @@
   gather_facts: no
   max_fail_percentage: 100
   vars_files:
-    - vars/kafka_api_port.yml
-    - vars/ini_config.yml
+    - vars/api_port.yml
   vars:
+    reconfig_copy_ini_template: false
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: SINEXCEL
     ini_agent_force_stop: false
@@ -40,6 +40,7 @@
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     api_host: "{{ inventory_hostname }}"
+    api_port: "{{ sinexcel_kafka_api_port }}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"

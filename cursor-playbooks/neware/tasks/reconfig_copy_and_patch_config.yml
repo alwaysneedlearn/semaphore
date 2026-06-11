@@ -13,17 +13,21 @@
     path: "C:\\Users\\Public\\{{ _reconfig_client_rel_path }}"
     state: directory
 
-- name: 重配执行：从服务器复制配置文件（当前用户）
+- name: 重配执行：从控制器复制 INI 模板（当前用户）
   ansible.builtin.win_copy:
     src: "{{ _reconfig_cfg_src }}"
     dest: "{{ _reconfig_user_cfg_file }}"
   register: config_copy_result_user
+  when: >-
+    (reconfig_copy_ini_template if (reconfig_copy_ini_template is defined) else (zip_path is defined)) | bool
 
-- name: 重配执行：从服务器复制配置文件（Public用户）
+- name: 重配执行：从控制器复制 INI 模板（Public用户）
   ansible.builtin.win_copy:
     src: "{{ _reconfig_cfg_src }}"
     dest: "{{ _reconfig_public_cfg_file }}"
   register: config_copy_result_public
+  when: >-
+    (reconfig_copy_ini_template if (reconfig_copy_ini_template is defined) else (zip_path is defined)) | bool
 
 - name: 重配执行：修改配置文件
   win_shell: |

@@ -3,6 +3,8 @@
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
+  vars_files:
+    - vars/api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
@@ -19,7 +21,7 @@
     stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
     stop_verify_process_name: "{{ (lookup('env', 'STOP_VERIFY_PROCESS_NAME') | default('', true) | trim) | default(process_name, true) }}"
     sinexcel_api_scheme: "{{ (lookup('env', 'SINEXCEL_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
-    sinexcel_api_port: "{{ ((lookup('env', 'SINEXCEL_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
+    sinexcel_api_port: "{{ sinexcel_kafka_api_port }}"
     sinexcel_api_status_path: "{{ (lookup('env', 'SINEXCEL_API_STATUS_PATH') | default('', true) | trim) | default('/SyncLims/QueryStatus', true) }}"
     sinexcel_api_timeout: "{{ ((lookup('env', 'SINEXCEL_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
     sinexcel_api_token: "{{ (lookup('env', 'SINEXCEL_API_TOKEN') | default('', true) | trim) | default('sinexcelapi', true) }}"
@@ -31,7 +33,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('sinexcel.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
-    api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('8080', true) | int }}{% endif %}"
+    api_port: "{{ sinexcel_kafka_api_port }}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"

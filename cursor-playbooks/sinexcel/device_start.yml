@@ -4,9 +4,9 @@
   gather_facts: no
   max_fail_percentage: 100
   vars_files:
-    - vars/kafka_api_port.yml
-    - vars/ini_config.yml
+    - vars/api_port.yml
   vars:
+    reconfig_copy_ini_template: false
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_debug_tag: SINEXCEL
     ini_agent_force_stop: false
@@ -35,6 +35,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/../neware/tasks"
     config_file_name: "{{ (lookup('env', 'CONFIG_FILE_NAME') | default('', true) | trim) | default('sinexcel.iconf', true) }}"
     api_host: "{{ inventory_hostname }}"
+    api_port: "{{ sinexcel_kafka_api_port }}"
     default_cfg: "{{ default_config | default({}) }}"
     device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"

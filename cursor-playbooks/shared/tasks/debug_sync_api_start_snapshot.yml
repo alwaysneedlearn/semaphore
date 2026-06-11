@@ -27,6 +27,21 @@
       {% else %}skipped{% endif %}
   when: _sem_dbg_exe_stat is defined
 
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（API）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_check_enabled={{ sinexcel_start_check_api | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api POST {{ sinexcel_kafka_api_scheme | default('http') }}://{{ _sem_dbg_api_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path | default('/kafka/QueryConfig') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_raw.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api result={{ _sinexcel_kafka_result_text | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ (_sem_dbg_api_raw.content | default('') | string) | truncate(2000, True) }}"
+  vars:
+    _sem_dbg_api_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+    _sem_dbg_api_raw: "{{ _sinexcel_kafka_query_raw | default(_sinexcel_api_after) }}"
+  when: _sem_dbg_api_raw is defined
+
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims / NBT 心跳 API）"
   ansible.builtin.debug:
     msg:
@@ -61,7 +76,8 @@
   when: >
     _land_api_after_start is defined or _sinexcel_api_after_start is defined or _nbt_api_after_start is defined or
     _land_api_after_restart is defined or _sinexcel_api_after_restart is defined or _nbt_api_after_restart is defined or
-    _land_api_check is defined or _sinexcel_api_check is defined or _nbt_api_check is defined
+    _land_api_check is defined or _sinexcel_api_check is defined or _nbt_api_check is defined or
+    nbt_heartbeat_ok is defined or nbt_heartbeat_last_send is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（回调行预览）"
   ansible.builtin.debug:
