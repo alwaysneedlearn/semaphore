@@ -2,6 +2,24 @@
 
 Device type **SINEXCEL**: LAND-style lifecycle (Kafka HTTP API + optional retransmit) with **NEWARE-style INI config** on start/restart.
 
+## Runner 同步（报错 `_app_from_cfg is undefined` 时必做）
+
+日志里若仍是 **`_app_from_cfg`** 或 **`prepare_device_exe_paths.yml` 第 16 行** 为「应用每设备 EXE 目录」，说明 **Ansible 控制器上的文件不是当前 `develop`**（与 Semaphore UI 无关）。
+
+在 **跑任务的 runner** 上：
+
+```bash
+cd /root/playbook   # 或你的 cursor-playbooks 根目录
+git fetch origin develop
+git checkout develop
+git pull origin develop
+grep -n '_app_from_cfg' shared/tasks/prepare_device_exe_paths.yml
+# 应无输出；且应有 PREPARE_DEVICE_EXE_PATHS_REV=3
+grep PREPARE_DEVICE_EXE_PATHS_REV shared/tasks/prepare_device_exe_paths.yml
+```
+
+重跑巡检后，任务日志里应出现 **`[DEBUG-INSTALL] PREPARE_DEVICE_EXE_PATHS_REV=3`**。若看不到，模板 Playbook 路径是否指向该目录下的 `sinexcel/device_status.yml`。
+
 ## Playbooks
 
 | File | Purpose |

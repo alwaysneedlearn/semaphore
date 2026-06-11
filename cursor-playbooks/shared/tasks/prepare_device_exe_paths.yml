@@ -4,7 +4,12 @@
 # Requires play vars: device_cfg, default_cfg; optional zip_name, exe_name, app_dir, exe_dir_preferred.
 # Sets: exe_dir_preferred, app_dir, exe_dir_fallback_drives, exe_path_override (full path, optional).
 #
-# set_fact: never reference another key defined in the same task (use snapshot task below).
+# Rev 3: one fact per set_fact task (no same-task cross-refs). Log marker: PREPARE_DEVICE_EXE_PATHS_REV=3
+
+- name: DEBUG prepare_device_exe_paths 版本（runner 应看到 rev=3）
+  ansible.builtin.debug:
+    msg: "[DEBUG-INSTALL] PREPARE_DEVICE_EXE_PATHS_REV=3"
+    verbosity: 0
 
 - name: 读取设备安装路径配置分类
   ansible.builtin.set_fact:
@@ -15,7 +20,7 @@
   ansible.builtin.set_fact:
     _merged_install: "{{ _default_install_cfg | combine(_install_cfg, recursive=True) }}"
 
-- name: 快照 play 默认安装路径（供覆盖回退，避免 set_fact 自引用）
+- name: 快照 play 默认安装路径（供覆盖回退）
   ansible.builtin.set_fact:
     _play_exe_dir_preferred: "{{ exe_dir_preferred | default('C:\\Program Files\\SINEXCEL', true) }}"
     _play_app_dir: "{{ app_dir | default(zip_name | default('sinexcel', true), true) }}"
@@ -23,7 +28,7 @@
     _play_exe_scan_latest: "{{ exe_scan_latest | default(false) | bool }}"
     _play_exe_scan_max_depth: "{{ exe_scan_max_depth | default(2) | int }}"
 
-- name: 应用每设备 EXE 目录与盘符回退
+- name: 应用每设备 EXE_DIR（Install.ExeDir 或 play 默认）
   ansible.builtin.set_fact:
     exe_dir_preferred: >-
       {{
@@ -31,12 +36,18 @@
         if ((_merged_install.ExeDir | default('', true) | trim) | length > 0)
         else _play_exe_dir_preferred
       }}
+
+- name: 应用每设备 AppDir（Install.AppDir 或 play 默认）
+  ansible.builtin.set_fact:
     app_dir: >-
       {{
         (_merged_install.AppDir | default('', true) | trim)
         if ((_merged_install.AppDir | default('', true) | trim) | length > 0)
         else _play_app_dir
       }}
+
+- name: 应用每设备盘符回退顺序
+  ansible.builtin.set_fact:
     exe_dir_fallback_drives: >-
       {{
         (_merged_install.ExeDirFallbackDrives | default('', true) | trim)
@@ -47,13 +58,22 @@
           else _play_exe_dir_fallback_drives
         )
       }}
+
+- name: 应用每设备完整 EXE 路径覆盖（Install.ExePath）
+  ansible.builtin.set_fact:
     exe_path_override: "{{ (_merged_install.ExePath | default('', true) | trim) }}"
+
+- name: 应用每设备 EXE 浅层扫描开关
+  ansible.builtin.set_fact:
     exe_scan_latest: >-
       {{
         (_merged_install.ExeScanLatest | default('', true) | string | lower) in ['true', '1', 'yes']
         if ((_merged_install.ExeScanLatest | default('', true) | string | trim) | length > 0)
         else _play_exe_scan_latest
       }}
+
+- name: 应用每设备 EXE 扫描深度
+  ansible.builtin.set_fact:
     exe_scan_max_depth: >-
       {{
         (_merged_install.ExeScanMaxDepth | default('', true) | trim | int)
