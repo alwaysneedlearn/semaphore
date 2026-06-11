@@ -10,6 +10,15 @@ Tasks, helper scripts, and group vars used by **all** device profiles (`neware/`
 | `files/` | Generic `sem_*.ps1` (process alive, scheduled-task start, start/stop popup confirm) |
 | `group_vars/windows_hosts.yml` | WinRM timeouts (copy or mirror under each profile dir for Ansible) |
 
+## Ansible `set_fact` gotcha
+
+In a **single** `set_fact` task (without `loop`), one key **must not** reference another key defined in the **same** task — Ansible evaluates all values before writing facts (`_app_from_cfg is undefined`). Safe patterns:
+
+- Split into two tasks, or use a prior **snapshot** task (see `prepare_device_exe_paths.yml` → `_play_*` facts).
+- `loop` + `var: "{{ var | default([]) + [item] }}"` is fine (each iteration sees the previous value).
+
+CI helper: `python3 cursor-playbooks/scripts/check_set_fact_self_refs.py`
+
 ## Required play vars
 
 Each device-type playbook should set:
