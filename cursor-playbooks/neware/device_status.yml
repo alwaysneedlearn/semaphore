@@ -12,7 +12,7 @@
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     _exe_name_default: uu.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
-    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\.exe$', '') }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
     exe_name: "{{ _exe_name_base ~ '.exe' }}"
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"

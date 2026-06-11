@@ -125,4 +125,6 @@ exe_name: "{{ _exe_name_base ~ '.exe' }}"
 process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
 ```
 
+（YAML 双引号内 Jinja 正则须写成 `'(?i)\\.exe$'`，不能写 `'(?i)\.exe$'`，否则 Ansible 报 `unknown escape character`。）
+
 参考：[`shared/vars/exe_name_from_env.yml`](shared/vars/exe_name_from_env.yml)。

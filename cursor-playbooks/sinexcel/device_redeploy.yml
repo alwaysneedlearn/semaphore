@@ -13,7 +13,7 @@
     exe_dir: "{{ exe_dir_preferred }}"
     _exe_name_default: sinexcel_agent.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
-    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\.exe$', '') }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
     exe_name: "{{ _exe_name_base ~ '.exe' }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('sinexcel', true) }}"
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
@@ -26,7 +26,7 @@
     redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
     redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}.zip"
     redeploy_extract_dest: "{{ exe_dir }}"
-    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\.exe$', '')) | default(_exe_name_base, true) }}"
+    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
     stop_graceful_process_name: "{{ process_name }}"
     stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
     stop_popup_keyword: "{{ (lookup('env', 'STOP_POPUP_KEYWORD') | default('', true) | trim) | default('警告', true) }}"
