@@ -1,24 +1,150 @@
 ---
-# Requires play vars: config_file_name, zip_path, sem_profile_tasks_dir (optional, for logging only).
-# Sets _reconfig_profile_user for reconfig_resolve_config_user_paths.yml.
+# Resolves interactive desktop user + profile/config INI paths in one WinRM round-trip.
+# Sets: _reconfig_profile_user, _reconfig_profile_dir_exists, _reconfig_config_user,
+#       _reconfig_config_user_source, _reconfig_fallback_checked, _reconfig_profile_dir_check
 
-- name: 重配执行：获取当前用户名
+- name: 重配执行：解析 Profile 用户与配置目录（单次 WinRM）
   ansible.windows.win_shell: |
-    $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
-      ForEach-Object {
-        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
-        if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
-      } |
-      Where-Object { $_ } |
-      Select-Object -First 1
-    if ($explorerUser) {
-      Write-Output $explorerUser
-    } else {
-      Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+    $ErrorActionPreference = 'Continue'
+
+    function Normalize-LocalUserName {
+      param([string]$Raw)
+      if ([string]::IsNullOrWhiteSpace($Raw)) { return '' }
+      $u = $Raw.Trim()
+      if ($u -match '\\') { $u = ($u -split '\\')[-1] }
+      $u = $u -replace '[\\/:*?"<>|]', ''
+      return $u.Trim()
     }
-  register: get_username_result
+
+    function Get-InteractiveProfileUser {
+      param([string]$FallbackUser)
+      try {
+        $cs = Get-CimInstance Win32_ComputerSystem -Property UserName -ErrorAction Stop
+        $u = Normalize-LocalUserName $cs.UserName
+        if ($u) { return $u }
+      } catch {}
+      try {
+        $proc = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+        if ($proc) {
+          $o = Invoke-CimMethod -InputObject $proc -MethodName GetOwner -ErrorAction SilentlyContinue
+          if ($o -and $o.ReturnValue -eq 0 -and $o.User) {
+            $u = Normalize-LocalUserName $o.User
+            if ($u) { return $u }
+          }
+        }
+      } catch {}
+      return (Normalize-LocalUserName $FallbackUser)
+    }
+
+    $fallbackAnsible = [string]$env:RECONFIG_ANSIBLE_USER
+    if ([string]::IsNullOrWhiteSpace($fallbackAnsible)) { $fallbackAnsible = 'Administrator' }
+
+    $profileUser = Get-InteractiveProfileUser -FallbackUser $fallbackAnsible
+    if ([string]::IsNullOrWhiteSpace($profileUser)) { $profileUser = 'Administrator' }
+
+    $profileDir = "C:\Users\$profileUser"
+    $profileExists = Test-Path -LiteralPath $profileDir
+
+    $configUser = $profileUser
+    $configSource = 'detected_profile_user'
+    $fallbackChecked = ''
+
+    if (-not $profileExists) {
+      $raw = [string]$env:RECONFIG_CONFIG_FALLBACK_USERS
+      if ([string]::IsNullOrWhiteSpace($raw)) { $raw = 'NEWARE,Administrator' }
+      $users = [System.Collections.Generic.List[string]]::new()
+      foreach ($part in ($raw -split '[,;]')) {
+        $u = Normalize-LocalUserName $part
+        if ($u -and -not $users.Contains($u)) { [void]$users.Add($u) }
+      }
+      if ($users.Count -eq 0) {
+        [void]$users.Add('NEWARE')
+        [void]$users.Add('Administrator')
+      }
+      $checked = [System.Collections.Generic.List[string]]::new()
+      $found = $false
+      foreach ($u in $users) {
+        [void]$checked.Add($u)
+        if (Test-Path -LiteralPath "C:\Users\$u") {
+          $configUser = $u
+          $configSource = 'fallback_first_existing'
+          $found = $true
+          break
+        }
+      }
+      $fallbackChecked = ($checked -join ',')
+      if (-not $found) {
+        $configUser = $users[0]
+        $configSource = 'fallback_none_exist_use_first'
+      }
+    }
+
+    Write-Output "PROFILE_USER=$profileUser"
+    Write-Output "PROFILE_DIR_EXISTS=$($profileExists.ToString().ToLower())"
+    Write-Output "CONFIG_USER=$configUser"
+    Write-Output "CONFIG_USER_SOURCE=$configSource"
+    Write-Output "FALLBACK_CHECKED=$fallbackChecked"
+  environment:
+    RECONFIG_ANSIBLE_USER: "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
+    RECONFIG_CONFIG_FALLBACK_USERS: >-
+      {{
+        (
+          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim)
+          | regex_replace('[;\\s]+', ',')
+        )
+        if ((lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim) | length > 0)
+        else (
+          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USER') | default('', true) | trim)
+          | default('NEWARE,Administrator', true)
+        )
+      }}
+  register: _reconfig_profile_resolve
   changed_when: false
 
-- name: 重配执行：规范化配置文件路径变量（profile 用户）
+- name: 重配执行：登记 Profile 与配置用户 facts
   ansible.builtin.set_fact:
-    _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+    _reconfig_profile_user: >-
+      {{
+        (
+          (_reconfig_profile_resolve.stdout_lines | default([]) | select('match', '^PROFILE_USER=') | list | first | default(''))
+          | regex_replace('^PROFILE_USER=', '')
+          | trim
+        )
+        | default(hostvars[inventory_hostname].ansible_user | default('Administrator'), true)
+      }}
+    _reconfig_profile_dir_exists: "{{ 'PROFILE_DIR_EXISTS=true' in (_reconfig_profile_resolve.stdout | default('')) }}"
+    _reconfig_profile_dir_check:
+      stdout: "{{ 'PROFILE_DIR_EXISTS=yes' if ('PROFILE_DIR_EXISTS=true' in (_reconfig_profile_resolve.stdout | default(''))) else 'PROFILE_DIR_EXISTS=no' }}"
+    _reconfig_config_user: >-
+      {{
+        (
+          (_reconfig_profile_resolve.stdout_lines | default([]) | select('match', '^CONFIG_USER=') | list | first | default(''))
+          | regex_replace('^CONFIG_USER=', '')
+          | trim
+        )
+        | default(hostvars[inventory_hostname].ansible_user | default('Administrator'), true)
+      }}
+    _reconfig_config_user_source: >-
+      {{
+        (
+          (_reconfig_profile_resolve.stdout_lines | default([]) | select('match', '^CONFIG_USER_SOURCE=') | list | first | default(''))
+          | regex_replace('^CONFIG_USER_SOURCE=', '')
+          | trim
+        )
+        | default('detected_profile_user', true)
+      }}
+    _reconfig_fallback_checked: >-
+      {{
+        (
+          (_reconfig_profile_resolve.stdout_lines | default([]) | select('match', '^FALLBACK_CHECKED=') | list | first | default(''))
+          | regex_replace('^FALLBACK_CHECKED=', '')
+          | trim
+        )
+      }}
+
+- name: 重配执行：DEBUG Profile 用户解析
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }} profile_dir_exists={{ _reconfig_profile_dir_exists }}"
+      - "[DEBUG-重配-用户] config_user={{ _reconfig_config_user }} source={{ _reconfig_config_user_source }} fallback_checked={{ _reconfig_fallback_checked | default('') }}"

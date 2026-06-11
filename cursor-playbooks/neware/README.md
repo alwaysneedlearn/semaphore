@@ -79,7 +79,7 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 
 | Prefix / marker | Meaning |
 |-----------------|--------|
-| `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved profile user and INI paths after username detection (`device_start` / `device_restart`). **`config_user`** may differ from **`profile_user`**: if `C:\Users\<profile_user>` does not exist, playbook tries **`RECONFIG_CONFIG_FALLBACK_USERS`** in order (default **`NEWARE,Administrator`**) and picks the **first** name whose `C:\Users\<name>` exists (`tasks/reconfig_resolve_config_user_paths.yml`). Interactive exe start still uses **`_reconfig_profile_user`**. |
+| `[DEBUG-重配-用户]` / `[DEBUG-重配-路径]` | Resolved in **one** `win_shell` (`tasks/reconfig_prepare_profile_user.yml`): fast `Win32_ComputerSystem.UserName`, else **first** `explorer.exe` only (not every explorer + `GetOwner`). **`config_user`** may differ from **`profile_user`** via **`RECONFIG_CONFIG_FALLBACK_USERS`** (default **`NEWARE,Administrator`**). Interactive start still uses **`_reconfig_profile_user`**. If logs used to stall at「检测 Profile 用户目录是否存在」, update playbooks — that task was removed (merged into prepare). |
 
 **Variable Group — config path fallbacks when profile folder missing**
 

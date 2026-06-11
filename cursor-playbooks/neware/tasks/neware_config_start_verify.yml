@@ -20,26 +20,7 @@
   ansible.builtin.include_tasks: log_poll_record_baseline_before_start_api.yml
   when: log_path is defined
 
-- name: 获取当前登录用户（交互式计划任务）
-  ansible.windows.win_shell: |
-    $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
-      ForEach-Object {
-        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
-        if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
-      } |
-      Where-Object { $_ } |
-      Select-Object -First 1
-    if ($explorerUser) {
-      Write-Output $explorerUser
-    } else {
-      Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
-    }
-  register: get_username_result
-  changed_when: false
-
-- name: 规范化启动用户
-  ansible.builtin.set_fact:
-    _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+# _reconfig_profile_user 已在 apply_neware_style_device_config_files → reconfig_prepare_profile_user 中解析
 
 - name: 启动程序
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
