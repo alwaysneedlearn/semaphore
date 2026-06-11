@@ -1,9 +1,10 @@
-# Confirm a desktop popup by sending Enter to windows whose title contains a keyword.
-# Used from interactive scheduled tasks (start/stop helpers).
+# Confirm a desktop popup by title and/or child control text (content keyword).
 param(
   [string]$PopupKeywordArg = '',
   [int]$PopupWaitSecondsArg = -1,
-  [string]$LogFileArg = ''
+  [string]$LogFileArg = '',
+  [string]$ProcessNameArg = '',
+  [string]$MatchModeArg = ''
 )
 
 function Write-PopupLine {
@@ -44,77 +45,39 @@ if ([string]::IsNullOrWhiteSpace($keyword)) {
   exit 0
 }
 
+$procName = $ProcessNameArg
+if ([string]::IsNullOrWhiteSpace($procName)) {
+  $procName = [string]$env:POPUP_PROCESS_NAME
+}
+
+$matchMode = $MatchModeArg
+if ([string]::IsNullOrWhiteSpace($matchMode)) {
+  $matchMode = [string]$env:POPUP_MATCH_MODE
+}
+if ([string]::IsNullOrWhiteSpace($matchMode)) {
+  $matchMode = 'title_or_content'
+}
+
 Start-Sleep -Seconds $waitSec
 
-if (-not ([System.Management.Automation.PSTypeName]'SemaphoreEnterKeySender').Type) {
-  Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Collections.Generic;
-
-public class SemaphoreEnterKeySender {
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    public static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool IsIconic(IntPtr hWnd);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-    public const uint WM_KEYDOWN = 0x0100;
-    public const int VK_RETURN = 0x0D;
-    public const int SW_RESTORE = 9;
-
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    public static List<string> SendEnterByKeyword(string keyword, bool includeHidden) {
-        var matchedTitles = new List<string>();
-        EnumWindows((hWnd, lParam) => {
-            StringBuilder sb = new StringBuilder(256);
-            GetWindowText(hWnd, sb, sb.Capacity);
-            string title = sb.ToString();
-            if (string.IsNullOrEmpty(title) || !title.Contains(keyword)) {
-                return true;
-            }
-            bool visible = IsWindowVisible(hWnd);
-            bool iconic = IsIconic(hWnd);
-            if (!visible && !includeHidden) {
-                return true;
-            }
-            if (iconic || !visible) {
-                ShowWindow(hWnd, SW_RESTORE);
-            }
-            PostMessage(hWnd, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
-            matchedTitles.Add(title + (iconic ? "|minimized=1" : ""));
-            return true;
-        }, IntPtr.Zero);
-        return matchedTitles;
-    }
+$helperPath = Join-Path $PSScriptRoot 'sem_win32_popup_helper.ps1'
+if (-not (Test-Path -LiteralPath $helperPath)) {
+  $helperPath = 'C:\Windows\Temp\sem_win32_popup_helper.ps1'
 }
-"@
+if (-not (Test-Path -LiteralPath $helperPath)) {
+  Write-PopupLine "POPUP_HELPER_MISSING|path=$helperPath"
+  exit 0
 }
+. $helperPath
 
-$matched = [SemaphoreEnterKeySender]::SendEnterByKeyword($keyword, $false)
-if ($matched.Count -eq 0) {
-  $matched = [SemaphoreEnterKeySender]::SendEnterByKeyword($keyword, $true)
-}
+Write-PopupLine "POPUP_SCAN|keyword=$keyword|match_mode=$matchMode|process=$procName"
+$matched = Invoke-SemaphorePopupConfirm -Keyword $keyword -ProcessName $procName -MatchMode $matchMode
 if ($matched.Count -gt 0) {
   foreach ($t in $matched) {
-    Write-PopupLine "POPUP_CONFIRMED|keyword=$keyword|title=$t"
+    Write-PopupLine "POPUP_CONFIRMED|keyword=$keyword|match=$t"
   }
 } else {
-  Write-PopupLine "POPUP_NOT_FOUND|keyword=$keyword|hint=minimized_or_hidden_popup_may_need_manual_confirm"
+  Write-PopupLine "POPUP_NOT_FOUND|keyword=$keyword|match_mode=$matchMode|hint=no_title_popup_try_content_keyword_or_check_process"
 }
 
 exit 0

@@ -33,6 +33,10 @@ if (-not [string]::IsNullOrWhiteSpace($startPopupWaitRaw)) {
   [int]::TryParse($startPopupWaitRaw, [ref]$startPopupWaitSec) | Out-Null
 }
 if ($startPopupWaitSec -lt 0) { $startPopupWaitSec = 0 }
+$startPopupMatchMode = [string]$env:SEMAPHORE_START_POPUP_MATCH_MODE
+if ($null -eq $startPopupMatchMode) { $startPopupMatchMode = '' }
+$startPopupMatchMode = $startPopupMatchMode.Trim()
+if ($startPopupMatchMode.Length -eq 0) { $startPopupMatchMode = 'title_or_content' }
 
 if ($envProcName.Length -gt 0 -and $envProcName -ne $procName) {
   Write-Output "RECONFIG_PROC_NAME_HINT=exe_file=$procName|EXE_NAME=$envProcName"
@@ -83,7 +87,9 @@ function Invoke-InteractiveStartPopupConfirm {
   param(
     [string]$ProfileUser,
     [string]$Keyword,
-    [int]$WaitSec
+    [int]$WaitSec,
+    [string]$ProcessName = '',
+    [string]$MatchMode = 'title_or_content'
   )
   if ([string]::IsNullOrWhiteSpace($Keyword)) {
     return $false
@@ -101,7 +107,9 @@ function Invoke-InteractiveStartPopupConfirm {
     '-File', "`"$helper`"",
     '-PopupKeywordArg', $Keyword,
     '-PopupWaitSecondsArg', $WaitSec,
-    '-LogFileArg', "`"$logFile`""
+    '-LogFileArg', "`"$logFile`"",
+    '-ProcessNameArg', $ProcessName,
+    '-MatchModeArg', $MatchMode
   )
   $psArgs = $psArgList -join ' '
   try {
@@ -152,7 +160,8 @@ function Wait-ExeProcess {
     [string]$LiteralPath,
     [string]$ProfileUser,
     [string]$PopupKeyword,
-    [int]$PopupWaitSec
+    [int]$PopupWaitSec,
+    [string]$PopupMatchMode = 'title_or_content'
   )
   $deadline = (Get-Date).AddSeconds($TotalSeconds)
   $attempt = 0
@@ -162,7 +171,7 @@ function Wait-ExeProcess {
     $found = Test-ExeProcessRunning -Name $Name -LiteralPath $LiteralPath
     if ($found) {
       if ($popupKeywordSet -and ($attempt -eq 1 -or ($attempt % 2) -eq 0)) {
-        [void](Invoke-InteractiveStartPopupConfirm -ProfileUser $ProfileUser -Keyword $PopupKeyword -WaitSec $PopupWaitSec)
+        [void](Invoke-InteractiveStartPopupConfirm -ProfileUser $ProfileUser -Keyword $PopupKeyword -WaitSec $PopupWaitSec -ProcessName $Name -MatchMode $PopupMatchMode)
         Start-Sleep -Seconds 1
         $found = Test-ExeProcessRunning -Name $Name -LiteralPath $LiteralPath
       }
@@ -172,7 +181,7 @@ function Wait-ExeProcess {
       }
     }
     if ($popupKeywordSet -and (($attempt % 2) -eq 1)) {
-      [void](Invoke-InteractiveStartPopupConfirm -ProfileUser $ProfileUser -Keyword $PopupKeyword -WaitSec $PopupWaitSec)
+      [void](Invoke-InteractiveStartPopupConfirm -ProfileUser $ProfileUser -Keyword $PopupKeyword -WaitSec $PopupWaitSec -ProcessName $Name -MatchMode $PopupMatchMode)
     }
     Write-Output "VERIFY_POLL|attempt=$attempt|found=false|waited=$((Get-Date))"
     if ((Get-Date) -ge $deadline) { break }
@@ -219,7 +228,7 @@ try {
     Start-Sleep -Seconds 2
   }
   if ($startPopupKeyword.Length -gt 0) {
-    [void](Invoke-InteractiveStartPopupConfirm -ProfileUser $profileUser -Keyword $startPopupKeyword -WaitSec $startPopupWaitSec)
+    [void](Invoke-InteractiveStartPopupConfirm -ProfileUser $profileUser -Keyword $startPopupKeyword -WaitSec $startPopupWaitSec -ProcessName $procName -MatchMode $startPopupMatchMode)
   }
   $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName
   $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
@@ -228,7 +237,7 @@ try {
     Write-Output "RECONFIG_TASK_HINT|code=0x800710E0|meaning=操作员或系统管理员拒绝了请求|likely=用户未在交互桌面登录或UAC策略拒绝"
   }
 
-  $verify = Wait-ExeProcess -TotalSeconds $waitSeconds -IntervalSeconds $pollSeconds -Name $procName -LiteralPath $startExe -ProfileUser $profileUser -PopupKeyword $startPopupKeyword -PopupWaitSec $startPopupWaitSec
+  $verify = Wait-ExeProcess -TotalSeconds $waitSeconds -IntervalSeconds $pollSeconds -Name $procName -LiteralPath $startExe -ProfileUser $profileUser -PopupKeyword $startPopupKeyword -PopupWaitSec $startPopupWaitSec -PopupMatchMode $startPopupMatchMode
   if ($verify) {
     Write-Output "VERIFY_OK|PID:$($verify.Id)|method=scheduled_task_interactive|user=$profileUser"
     exit 0

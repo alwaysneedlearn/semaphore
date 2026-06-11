@@ -31,6 +31,11 @@ if ($null -eq $verifyName) { $verifyName = '' }
 $verifyName = $verifyName.Trim()
 if ($verifyName.Length -eq 0) { $verifyName = $procName }
 
+$popupMatchMode = [string]$env:STOP_POPUP_MATCH_MODE
+if ($null -eq $popupMatchMode) { $popupMatchMode = '' }
+$popupMatchMode = $popupMatchMode.Trim()
+if ($popupMatchMode.Length -eq 0) { $popupMatchMode = 'title_or_content' }
+
 $profileUser = [string]$env:SEMAPHORE_PROFILE_USER
 if ($null -eq $profileUser) { $profileUser = '' }
 $profileUser = $profileUser.Trim()
@@ -104,7 +109,8 @@ $psArgList = @(
   '-PopupWaitSecondsArg', $waitSec,
   '-ForceAfterArg', $forceRaw,
   '-VerifyNameArg', $verifyName,
-  '-LogFileArg', "`"$outFile`""
+  '-LogFileArg', "`"$outFile`"",
+  '-PopupMatchModeArg', $popupMatchMode
 )
 $psArgs = $psArgList -join ' '
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs

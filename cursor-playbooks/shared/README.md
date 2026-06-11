@@ -61,7 +61,8 @@ Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / 
 | `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | `Get-Process` + `CloseMainWindow` |
 | `STOP_VERIFY_PROCESS_NAME` | same as `PROCESS_NAME` | Final running check |
 | `STOP_POPUP_WAIT_SECONDS` | `2` | Sleep before sending Enter |
-| `STOP_POPUP_KEYWORD` | `警告` | Visible window title substring |
+| `STOP_POPUP_KEYWORD` | `警告` | Match in window **title** and/or **dialog content** (child control text) |
+| `STOP_POPUP_MATCH_MODE` | `title_or_content` | `title` \| `content` \| `title_or_content` — use `content` when popup has no title (SINEXCEL) |
 | `STOP_FORCE_AFTER_GRACEFUL` | `true` | Force kill if still running |
 | `STOP_TASK_TIMEOUT_SECONDS` | `45` | Interactive scheduled-stop wait timeout |
 
