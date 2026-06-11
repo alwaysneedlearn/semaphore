@@ -59,33 +59,34 @@
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims / NBT 心跳 API）"
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_check_enabled={{ _sem_dbg_start_check_api }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_status }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ _sem_dbg_api_body | truncate(2000, True) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] heartbeat_ok={{ nbt_heartbeat_ok | default('n/a') }} last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka_check_enabled={{ sinexcel_start_check_api | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka POST {{ sinexcel_kafka_api_scheme | default('http') }}://{{ _sem_dbg_kafka_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path | default('/kafka/QueryConfig') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka http_status={{ _sem_dbg_kafka_raw.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka result={{ _sinexcel_kafka_result_text | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka response_body={{ (_sem_dbg_kafka_raw.content | default('') | string) | truncate(2000, True) }}"
   vars:
-    _sem_dbg_start_check_api: "{{ land_start_check_api | default(sinexcel_start_check_api | default(nbt_start_check_api | default(false))) }}"
-    _sem_dbg_api_status: >-
+    _sem_dbg_kafka_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+    _sem_dbg_kafka_raw: "{{ _sinexcel_kafka_query_raw | default(_sinexcel_api_after) }}"
+  when: _sem_dbg_kafka_raw is defined
+
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims API）"
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_check_enabled={{ land_start_check_api | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_land_api_status }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ _sem_dbg_land_api_body | truncate(2000, True) }}"
+  vars:
+    _sem_dbg_land_api_status: >-
       {% if _land_api_after_start is defined %}{{ _land_api_after_start.status | default('n/a') }}
-      {% elif _sinexcel_api_after_start is defined %}{{ _sinexcel_api_after_start.status | default('n/a') }}
-      {% elif _nbt_api_after_start is defined %}{{ _nbt_api_after_start.status | default('n/a') }}
       {% elif _land_api_after_restart is defined %}{{ _land_api_after_restart.status | default('n/a') }}
-      {% elif _sinexcel_api_after_restart is defined %}{{ _sinexcel_api_after_restart.status | default('n/a') }}
-      {% elif _nbt_api_after_restart is defined %}{{ _nbt_api_after_restart.status | default('n/a') }}
       {% elif _land_api_check is defined %}{{ _land_api_check.status | default('n/a') }}
-      {% elif _sinexcel_api_check is defined %}{{ _sinexcel_api_check.status | default('n/a') }}
-      {% elif _nbt_api_check is defined %}{{ _nbt_api_check.status | default('n/a') }}
       {% else %}skipped{% endif %}
-    _sem_dbg_api_body: >-
+    _sem_dbg_land_api_body: >-
       {% if _land_api_after_start is defined %}{{ _land_api_after_start.content | default('') | string }}
-      {% elif _sinexcel_api_after_start is defined %}{{ _sinexcel_api_after_start.content | default('') | string }}
-      {% elif _nbt_api_after_start is defined %}{{ _nbt_api_after_start.content | default('') | string }}
       {% elif _land_api_after_restart is defined %}{{ _land_api_after_restart.content | default('') | string }}
-      {% elif _sinexcel_api_after_restart is defined %}{{ _sinexcel_api_after_restart.content | default('') | string }}
-      {% elif _nbt_api_after_restart is defined %}{{ _nbt_api_after_restart.content | default('') | string }}
       {% elif _land_api_check is defined %}{{ _land_api_check.content | default('') | string }}
-      {% elif _sinexcel_api_check is defined %}{{ _sinexcel_api_check.content | default('') | string }}
-      {% elif _nbt_api_check is defined %}{{ _nbt_api_check.content | default('') | string }}
       {% else %}{% endif %}
   when: >
     _land_api_after_start is defined or _sinexcel_api_after_start is defined or _nbt_api_after_start is defined or
