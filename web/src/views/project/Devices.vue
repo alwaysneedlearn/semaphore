@@ -55,6 +55,13 @@
       :device="winrmDevice"
       @device-updated="onWinrmDeviceUpdated"
     />
+
+    <DeviceImportExportDialog
+      v-model="importExportDialog"
+      :project-id="projectId"
+      :selected-device-ids="selectedDeviceIds"
+      @imported="loadItems"
+    />
     <v-dialog v-model="reasonDialog" max-width="700">
       <v-card>
         <v-card-title>
@@ -88,6 +95,15 @@
       <v-app-bar-nav-icon @click="showDrawer()"></v-app-bar-nav-icon>
       <v-toolbar-title>{{ $t('devices') }}</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn
+        v-if="can(USER_PERMISSIONS.manageProjectResources)"
+        text
+        class="mr-2"
+        @click="importExportDialog = true"
+      >
+        <v-icon left>mdi-swap-vertical</v-icon>
+        {{ $t('deviceImportExport') }}
+      </v-btn>
       <v-btn
         v-if="can(USER_PERMISSIONS.manageProjectResources)"
         text
@@ -507,6 +523,7 @@ import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
 import DeviceWinrmConsoleDialog from '@/components/DeviceWinrmConsoleDialog.vue';
 import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
+import DeviceImportExportDialog from '@/components/DeviceImportExportDialog.vue';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
@@ -516,6 +533,7 @@ export default {
     DeviceConfigDialog,
     DeviceWinrmConsoleDialog,
     DeviceProfilesForm,
+    DeviceImportExportDialog,
   },
 
   data() {
@@ -525,6 +543,7 @@ export default {
       },
       patrolling: false,
       deviceProfilesDialog: false,
+      importExportDialog: false,
       busyId: null,
       configDialog: false,
       configDeviceId: null,

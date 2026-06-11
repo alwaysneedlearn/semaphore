@@ -424,6 +424,8 @@ func Route(
 	projectUserAPI.Path("/devices/discovery/results").HandlerFunc(projects.PutDeviceDiscoveryResults).Methods("PUT")
 	projectUserAPI.Path("/devices/discovery/host").HandlerFunc(projects.PatchDeviceDiscoveryHost).Methods("PATCH")
 	projectUserAPI.Path("/devices/discovery/import").HandlerFunc(projects.ImportDiscoveredDevices).Methods("POST")
+	projectUserAPI.Path("/devices/export").HandlerFunc(projects.ExportDevices).Methods("GET", "HEAD")
+	projectUserAPI.Path("/devices/import").HandlerFunc(projects.ImportDevices).Methods("POST")
 	projectUserAPI.Path("/devices/patrol").HandlerFunc(projects.RunPatrolForAllDevices).Methods("POST")
 	projectUserAPI.Path("/devices/actions/bulk").HandlerFunc(projects.RunBulkDeviceAction).Methods("POST")
 	projectUserAPI.Path("/devices/status/bulk").HandlerFunc(projects.BulkUpdateDeviceStatus).Methods("PUT")

@@ -304,6 +304,63 @@ func (d *BoltDb) UpsertDevicesFromDiscoveryImport(projectID int, devices []db.De
 	return saved, nil
 }
 
+func (d *BoltDb) UpsertDevicesFromBulkImport(projectID int, devices []db.Device) ([]db.Device, error) {
+	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		return nil, err
+	}
+	byIP := map[string]db.Device{}
+	for _, dev := range existing {
+		if ip := strings.TrimSpace(dev.IPAddress); ip != "" {
+			byIP[ip] = dev
+		}
+	}
+	var saved []db.Device
+	for _, dev := range devices {
+		ip := strings.TrimSpace(dev.IPAddress)
+		if ip == "" {
+			continue
+		}
+		dev.IPAddress = ip
+		if old, ok := byIP[ip]; ok {
+			old.IPAddress = ip
+			if strings.TrimSpace(dev.Hostname) != "" {
+				old.Hostname = strings.TrimSpace(dev.Hostname)
+				old.Name = old.Hostname
+			}
+			if dev.DeviceProfileID > 0 {
+				old.DeviceProfileID = dev.DeviceProfileID
+			}
+			db.MergeDeviceCredentialsOnUpsert(&old, dev)
+			db.MergeDevicePortsOnUpsert(&old, dev)
+			old.AnsibleConnection = dev.AnsibleConnection
+			old.AnsibleWinRMTransport = dev.AnsibleWinRMTransport
+			old.AnsibleWinRMScheme = dev.AnsibleWinRMScheme
+			old.AnsibleWinRMServerCertValidation = dev.AnsibleWinRMServerCertValidation
+			now := tz.Now()
+			old.LastUpdated = &now
+			if err = d.UpdateDevice(old); err != nil {
+				return nil, err
+			}
+			byIP[ip] = old
+			saved = append(saved, old)
+		} else {
+			dev.ProjectID = projectID
+			if strings.TrimSpace(dev.Hostname) == "" {
+				dev.Hostname = ip
+			}
+			dev.Name = dev.Hostname
+			created, cErr := d.CreateDevice(dev)
+			if cErr != nil {
+				return nil, cErr
+			}
+			byIP[ip] = created
+			saved = append(saved, created)
+		}
+	}
+	return saved, nil
+}
+
 func (d *BoltDb) UpsertDevicesByIPAddress(projectID int, devices []db.Device) ([]db.Device, error) {
 	existing, err := d.GetDevices(projectID, db.RetrieveQueryParams{}, nil)
 	if err != nil {

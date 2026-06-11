@@ -491,6 +491,26 @@ export default {
   deviceDiscoveryLoaded: 'Loaded {count} discovered devices from task output.',
   deviceImportSelected: 'Import selected devices',
   deviceImportSaved: '{count} devices saved',
+  deviceImportExport: 'Import / Export',
+  deviceImportExportTitle: 'Import / Export devices',
+  deviceExport: 'Export',
+  deviceImport: 'Import',
+  deviceExportHelp:
+    'Export fields shown in the device edit form (IP, hostname, type, RDP/WinRM/API connection). Passwords are included.',
+  deviceExportAll: 'All devices in project',
+  deviceExportSelected: 'Selected devices ({count})',
+  deviceExportDone: 'Export file downloaded.',
+  deviceImportHelp:
+    'Upload JSON (export format) or CSV with the same columns. Rows match by ip_address; existing devices are updated.',
+  deviceImportFile: 'JSON or CSV file',
+  deviceImportDefaultProfileKey: 'Default profile key (optional)',
+  deviceImportDefaultProfileKeyHint:
+    'Used when a row has no profile_key. Example: NEWARE, SINEXCEL, LAND.',
+  deviceImportPreviewCount: '{count} row(s) ready to import',
+  deviceImportPreviewTruncated: 'Showing first 50 of {count} rows.',
+  deviceImportEmpty: 'No device rows found in file.',
+  deviceImportResult:
+    'Saved {saved} device(s): {created} created, {updated} updated. {errors} row error(s).',
   deviceProbe: 'Probe',
   deviceProbeTooltip:
     'Probe: TCP reachability on this device\'s RDP port, WinRM (Ansible) port, and configured API port only—not login or full application health.',

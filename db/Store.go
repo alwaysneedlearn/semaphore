@@ -358,6 +358,7 @@ type DeviceManager interface {
 	ClearDiscoveredHosts(projectID int) (int, error)
 	UpdateDiscoveredHostHostname(projectID int, ipAddress, hostname string) error
 	UpsertDevicesFromDiscoveryImport(projectID int, devices []Device) ([]Device, error)
+	UpsertDevicesFromBulkImport(projectID int, devices []Device) ([]Device, error)
 }
 
 // RepositoryManager handles repository-related operations

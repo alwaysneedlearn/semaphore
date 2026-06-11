@@ -417,6 +417,26 @@ export default {
   deviceDiscoveryLoaded: '已从任务输出加载 {count} 台发现设备。',
   deviceImportSelected: '导入选中设备',
   deviceImportSaved: '已保存 {count} 台设备',
+  deviceImportExport: '导入 / 导出',
+  deviceImportExportTitle: '设备批量导入 / 导出',
+  deviceExport: '导出',
+  deviceImport: '导入',
+  deviceExportHelp:
+    '导出「编辑设备」表单中的字段（IP、主机名、类型、RDP/WinRM/API 连接等），包含密码。',
+  deviceExportAll: '导出本项目全部设备',
+  deviceExportSelected: '导出已选设备（{count}）',
+  deviceExportDone: '导出文件已下载。',
+  deviceImportHelp:
+    '上传 JSON（导出格式）或相同列名的 CSV。按 ip_address 匹配；已存在则更新。',
+  deviceImportFile: 'JSON 或 CSV 文件',
+  deviceImportDefaultProfileKey: '默认设备类型键（可选）',
+  deviceImportDefaultProfileKeyHint:
+    '当某行未填写 profile_key 时使用。例如 NEWARE、SINEXCEL、LAND。',
+  deviceImportPreviewCount: '共 {count} 行待导入',
+  deviceImportPreviewTruncated: '仅预览前 50 行，共 {count} 行。',
+  deviceImportEmpty: '文件中未找到设备数据。',
+  deviceImportResult:
+    '已保存 {saved} 台：新建 {created}，更新 {updated}。{errors} 行有误。',
   deviceProbe: '探测',
   deviceProbeTooltip:
     '探测：仅检测该设备配置的 RDP、WinRM（Ansible）与 API 端口的 TCP 是否可达；不含登录验证与完整业务健康检查。',

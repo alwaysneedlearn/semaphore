@@ -78,6 +78,25 @@ type Device struct {
 	Created                          time.Time    `db:"created" json:"created" backup:"-"`
 }
 
+// DeviceBulkExportRow is the portable import/export shape (device edit form fields).
+type DeviceBulkExportRow struct {
+	IPAddress                        string `json:"ip_address"`
+	Hostname                         string `json:"hostname"`
+	ProfileKey                       string `json:"profile_key"`
+	DeviceProfileID                  int    `json:"device_profile_id,omitempty"`
+	RDPUser                          string `json:"rdp_user"`
+	RDPPassword                      string `json:"rdp_password"`
+	RDPPort                          int    `json:"rdp_port"`
+	AnsibleUser                      string `json:"ansible_user"`
+	AnsiblePassword                  string `json:"ansible_password"`
+	AnsibleConnection                string `json:"ansible_connection"`
+	AnsibleWinRMTransport            string `json:"ansible_winrm_transport"`
+	AnsibleWinRMScheme               string `json:"ansible_winrm_scheme"`
+	AnsiblePort                      int    `json:"ansible_port"`
+	APIPort                          int    `json:"api_port"`
+	AnsibleWinRMServerCertValidation string `json:"ansible_winrm_server_cert_validation"`
+}
+
 // DeviceListFilter narrows the device list for API pagination (substring match for text fields).
 type DeviceListFilter struct {
 	HostnameSubstring string
