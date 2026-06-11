@@ -1,0 +1,51 @@
+---
+# Per-host EXE install paths when Variable Group EXE_DIR is not enough.
+# Priority: device config (Install/Paths) > type default_config > env > play defaults.
+# Requires play vars: device_cfg, default_cfg; optional zip_name, exe_name, app_dir, exe_dir_preferred.
+# Sets: exe_dir_preferred, app_dir, exe_dir_fallback_drives, exe_path_override (full path, optional).
+
+- name: 读取设备安装路径配置分类
+  ansible.builtin.set_fact:
+    _install_cfg: "{{ device_cfg.Install | default(device_cfg.Paths | default({})) }}"
+    _default_install_cfg: "{{ default_cfg.Install | default(default_cfg.Paths | default({})) }}"
+
+- name: 合并安装路径（设备覆盖类型默认）
+  ansible.builtin.set_fact:
+    _merged_install: "{{ _default_install_cfg | combine(_install_cfg, recursive=True) }}"
+
+- name: 应用每设备 EXE 目录与盘符回退
+  ansible.builtin.set_fact:
+    exe_dir_preferred: >-
+      {{
+        (_merged_install.ExeDir | default('', true) | trim)
+        if ((_merged_install.ExeDir | default('', true) | trim) | length > 0)
+        else (exe_dir_preferred | default('C:\\Program Files\\SINEXCEL', true))
+      }}
+    _app_from_cfg: "{{ (_merged_install.AppDir | default('', true) | trim) }}"
+    app_dir: >-
+      {{
+        _app_from_cfg
+        if (_app_from_cfg | length > 0)
+        else (app_dir | default(zip_name | default('sinexcel', true), true))
+      }}
+    exe_dir_fallback_drives: >-
+      {{
+        (_merged_install.ExeDirFallbackDrives | default('', true) | trim)
+        if ((_merged_install.ExeDirFallbackDrives | default('', true) | trim) | length > 0)
+        else (
+          (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim)
+          if ((lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) | length > 0)
+          else (exe_dir_fallback_drives | default('D,E,C', true))
+        )
+      }}
+    exe_path_override: "{{ (_merged_install.ExePath | default('', true) | trim) }}"
+
+- name: DEBUG 设备安装路径（每设备）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-INSTALL] host={{ inventory_hostname }}"
+      - "[DEBUG-INSTALL] exe_dir_preferred={{ exe_dir_preferred }}"
+      - "[DEBUG-INSTALL] app_dir={{ app_dir }}"
+      - "[DEBUG-INSTALL] fallback_drives={{ exe_dir_fallback_drives }}"
+      - "[DEBUG-INSTALL] exe_path_override={{ exe_path_override | default('', true) }}"
+  when: _merged_install is defined

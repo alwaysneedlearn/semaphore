@@ -6,7 +6,12 @@
 - name: 解析 EXE_DIR（盘符回退）
   environment:
     SEMAPHORE_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
-    SEMAPHORE_EXE_DIR_FALLBACK_DRIVES: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) }}"
+    SEMAPHORE_EXE_DIR_FALLBACK_DRIVES: >-
+      {{
+        (exe_dir_fallback_drives | default('', true) | trim)
+        if ((exe_dir_fallback_drives | default('', true) | trim) | length > 0)
+        else (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim)
+      }}
     SEMAPHORE_EXE_PROBE_RELATIVE: >-
       {{
         (
@@ -41,7 +46,15 @@
           + '\\' + exe_name
         )
       }}
-  when: exe_name is defined
+  when:
+    - exe_name is defined
+    - (exe_path_override | default('', true) | trim) | length == 0
+
+- name: 应用每设备完整 EXE 路径覆盖
+  ansible.builtin.set_fact:
+    exe_path: "{{ exe_path_override }}"
+    exe_dir: "{{ exe_path_override | regex_replace('\\\\[^\\\\]+$', '') }}"
+  when: (exe_path_override | default('', true) | trim) | length > 0
 
 - name: DEBUG 解析 EXE_DIR 盘符
   ansible.builtin.debug:

@@ -13,7 +13,10 @@
     exe_dir: "{{ exe_dir_preferred }}"
     exe_name: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) | default('sinexcel_agent.exe', true) }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('sinexcel', true) }}"
-    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
+    _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
+    app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else zip_name }}"
+    exe_dir_fallback_drives: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) | default('D,E,C', true) }}"
+    exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
     process_name: "{{ (lookup('env', 'PROCESS_NAME') | default('', true) | trim) | default((exe_name | regex_replace('\\.exe$', '')), true) }}"
     sinexcel_start_check_api: true
     _devices_from_extra: "{{ devices | default([]) }}"
@@ -37,6 +40,8 @@
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - name: 解析每设备安装路径
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/prepare_device_exe_paths.yml"
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - name: 解析当前设备信息
