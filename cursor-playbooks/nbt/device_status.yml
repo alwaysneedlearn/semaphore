@@ -7,64 +7,42 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: NBT
-    exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\NBT', true) }}"
-    exe_dir: "{{ exe_dir_preferred }}"
-    _exe_name_default: nbt_agent.exe
-    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
-    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
-    exe_name: "{{ _exe_name_base ~ '.exe' }}"
-    zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('nbt', true) }}"
-    exe_path: "{{ exe_dir }}\\{{ zip_name }}\\{{ exe_name }}"
-    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - name: WinRM 建连（含重试）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - name: WinRM 未连通则不再执行本主机后续步骤
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - name: 部署 Windows 启动辅助脚本
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - name: 解析 EXE_DIR（盘符回退）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
-    - name: 解析当前设备信息
-      ansible.builtin.set_fact:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+    - ansible.builtin.set_fact:
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 检查 NBT 程序文件是否存在
+    - name: 检查 NBT 服务安装路径是否存在
       ansible.windows.win_stat:
-        path: "{{ exe_path }}"
-      register: _nbt_exe_stat
+        path: "{{ service_path }}"
+      register: _nbt_service_path_stat
       ignore_unreachable: true
 
-    - name: 检查 NBT Windows 服务状态
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
 
-    - name: 兼容 DEBUG 任务变量（服务状态）
-      ansible.builtin.set_fact:
+    - ansible.builtin.set_fact:
         _nbt_process_check: "{{ _nbt_service_status }}"
       when: _nbt_service_status is defined
 
-    - name: DEBUG NBT 巡检前置
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
-    - name: 查询 NBT 心跳（上次发数据时间）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
 
-    - name: 状态判断：综合判定是否需要重配
-      ansible.builtin.set_fact:
+    - ansible.builtin.set_fact:
         need_reconfigure: >-
           {{
-            (not (_nbt_exe_stat.stat.exists | default(false)))
+            (not (_nbt_service_path_stat.stat.exists | default(false)))
             or ('RUNNING' not in (_nbt_service_status.stdout | default('')))
             or not (nbt_heartbeat_ok | default(false) | bool)
           }}
 
-    - name: 组装 NBT 状态回调行
-      ansible.builtin.set_fact:
+    - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
@@ -72,13 +50,12 @@
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
-            {% if not (_nbt_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
-            {% elif 'RUNNING' not in (_nbt_service_status.stdout | default('')) %}Service not running: {{ nbt_service_name }} ({{ _nbt_service_status.stdout | default('') | trim }})
+            {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service path not found: {{ service_path }}
+            {% elif 'RUNNING' not in (_nbt_service_status.stdout | default('')) %}Service not running: {{ service_name }} ({{ _nbt_service_status.stdout | default('') | trim }})
             {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
             {% else %}{% endif %}
 
-    - name: DEBUG NBT 巡检结果
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
   post_tasks:
     - name: 写回 Semaphore 设备状态（post_tasks）
@@ -86,6 +63,7 @@
       delegate_to: localhost
       block:
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+
 - name: 写回 Semaphore 设备状态（独立 play）
   hosts: localhost
   gather_facts: false
@@ -93,5 +71,4 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
   tasks:
-    - name: 执行 bulk 回调
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

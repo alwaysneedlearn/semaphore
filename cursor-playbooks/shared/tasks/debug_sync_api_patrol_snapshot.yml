@@ -9,9 +9,9 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_name={{ process_name | default('n/a') }} check={{ (_sem_dbg_process.stdout | default('') | trim) if (_sem_dbg_process is defined) else 'skipped' }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_unreachable={{ _sem_dbg_process.unreachable | default(false) if (_sem_dbg_process is defined) else 'n/a' }}"
   vars:
-    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_exe_stat)) }}"
+    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat)) }}"
     _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check)) }}"
-    _sem_dbg_exe_path: "{{ exe_path | default([exe_dir, exe_name] | join('\\\\')) }}"
+    _sem_dbg_exe_path: "{{ service_path | default(exe_path | default([exe_dir, exe_name] | join('\\\\'))) }}"
   when: _sem_dbg_exe_stat is defined or _sem_dbg_process is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 巡检（API）"

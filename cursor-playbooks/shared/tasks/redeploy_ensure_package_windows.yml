@@ -1,11 +1,12 @@
 ---
 # Ensure install package on target Windows host. Copy from controller only when zip missing on target.
-# Play vars: redeploy_zip_dest, redeploy_zip_src, redeploy_extract_dest, exe_path
+# Play vars: redeploy_zip_dest, redeploy_zip_src, redeploy_extract_dest,
+# install_path (NBT service_path) or exe_path (legacy)
 # Optional: redeploy_land_registry (bool) — set LH registry keys before extract (LAND).
 
 - name: 重新部署：检查目标机程序是否存在
   ansible.windows.win_stat:
-    path: "{{ exe_path }}"
+    path: "{{ install_path | default(exe_path) }}"
   register: _redeploy_exe_stat
 
 - name: 重新部署：检查目标机压缩包是否存在
@@ -79,10 +80,10 @@
 
 - name: 重新部署：解压后再次检查程序文件
   ansible.windows.win_stat:
-    path: "{{ exe_path }}"
+    path: "{{ install_path | default(exe_path) }}"
   register: _redeploy_exe_stat_after
 
 - name: 重新部署：程序文件仍不存在则失败
   ansible.builtin.fail:
-    msg: "Executable not found after redeploy package step: {{ exe_path }}"
+    msg: "Install path not found after redeploy package step: {{ install_path | default(exe_path) }}"
   when: not ((_redeploy_exe_stat.stat.exists | default(false)) or (_redeploy_exe_stat_after.stat.exists | default(false)))

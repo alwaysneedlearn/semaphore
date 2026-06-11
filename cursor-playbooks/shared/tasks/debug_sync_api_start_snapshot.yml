@@ -4,17 +4,17 @@
 - name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（路径与进程）"
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} exe_path={{ exe_path | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} install_path={{ service_path | default(exe_path | default('n/a')) }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_exists_initial={{ _sem_dbg_exe_stat.stat.exists | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_exists_after_extract={{ _sem_dbg_exe_after.stat.exists | default('n/a') if (_sem_dbg_exe_after is defined) else 'n/a' }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] profile_user={{ _reconfig_profile_user | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ _sem_dbg_need_reconfigure | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_check={{ _sem_dbg_process_out | trim }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_name={{ nbt_service_name | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_name={{ service_name | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_status={{ _nbt_service_status.stdout | default('n/a') if (_nbt_service_status is defined) else 'n/a' }}"
   vars:
-    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_exe_stat)) }}"
-    _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_nbt_exe_stat_after_extract)) }}"
+    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat)) }}"
+    _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_redeploy_exe_stat_after)) }}"
     _sem_dbg_need_reconfigure: "{{ _land_need_reconfigure | default(_sinexcel_need_reconfigure | default(_nbt_need_reconfigure)) }}"
     _sem_dbg_process_out: >-
       {% if _land_process_after_start is defined %}{{ _land_process_after_start.stdout | default('') }}

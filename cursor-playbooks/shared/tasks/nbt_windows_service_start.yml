@@ -1,9 +1,9 @@
 ---
-# Start NBT Windows service. Vars: nbt_service_name.
+# Start NBT Windows service. Vars: service_name.
 
 - name: 启动 NBT Windows 服务
   ansible.windows.win_service:
-    name: "{{ nbt_service_name }}"
+    name: "{{ service_name }}"
     state: started
   register: _nbt_service_start_action
 

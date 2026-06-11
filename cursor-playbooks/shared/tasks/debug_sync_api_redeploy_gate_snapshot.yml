@@ -11,8 +11,8 @@
       - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] gate api_body={{ (_sem_dbg_api.content | default('') | string | truncate(500, True)) if (_sem_dbg_api is defined) else '' }}"
   vars:
     _sem_dbg_need: "{{ _land_need_reconfigure | default(_sinexcel_need_reconfigure | default(_nbt_need_reconfigure)) }}"
-    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_exe_stat)) }}"
-    _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_nbt_exe_stat_after_extract)) }}"
+    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat)) }}"
+    _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_redeploy_exe_stat_after)) }}"
     _sem_dbg_exe_exists: "{{ (_sem_dbg_exe_stat.stat.exists | default(false)) or (_sem_dbg_exe_after.stat.exists | default(false)) }}"
     _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check)) }}"
     _sem_dbg_api: "{{ _land_api_check | default(_sinexcel_api_check | default(_nbt_api_check)) }}"

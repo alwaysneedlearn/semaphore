@@ -1,0 +1,13 @@
+---
+# NBT service install layout (no exe_name / exe_path).
+# Env: SERVICE_NAME, SERVICE_PATH, NBT_SERVICE_NAME, NBT_SERVICE_PATH, ZIP_NAME, ZIP_PATH.
+
+service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default(lookup('env', 'SERVICE_NAME') | default('', true), true) | trim) | default('NBT.MES.Service', true) }}"
+service_path: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES\\数据上传\\NBT.MES.Service', true) }}"
+zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('nbt.zip', true) }}"
+zip_path: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/nbt/pkg', true) }}"
+service_parent_dir: "{{ service_path | regex_replace('\\\\[^\\\\]+$', '') }}"
+install_path: "{{ service_path }}"
+redeploy_zip_dest: "{{ service_parent_dir }}\\{{ zip_name }}"
+redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}"
+redeploy_extract_dest: "{{ service_parent_dir }}"

@@ -90,19 +90,18 @@ SEMAPHORE_API_TOKEN=<token>
 
 ### NBT
 
-NBT 为 **Windows 服务**启停，**不写 INI**。Start / Stop / Restart 使用 `win_service`（`NBT_SERVICE_NAME`）。
+NBT 为 **Windows 服务**启停，**不写 INI**。使用 **`service_name` / `service_path`**（不用 `exe_name` / `exe_path`）。
 
 ```env
-NBT_SERVICE_NAME=nbt_agent
+SERVICE_NAME=NBT.MES.Service
+SERVICE_PATH=D:\MES\数据上传\NBT.MES.Service
+ZIP_NAME=nbt.zip
+ZIP_PATH=/root/nbt/pkg
 NBT_API_PORT=8885
 SEMAPHORE_API_TOKEN=<token>
-# 仅 Status / Redeploy 需要路径：
-EXE_NAME=nbt_agent.exe
-ZIP_NAME=nbt
-EXE_DIR=C:\Program Files\NBT
-EXE_DIR_FALLBACK_DRIVES=D,E,C
-ZIP_PATH=/root/nbt/pkg
 ```
+
+Redeploy：控制器 `{{ ZIP_PATH }}/{{ ZIP_NAME }}` → 目标 `D:\MES\数据上传\nbt.zip`，解压到 `service_path` 的父目录。
 
 详见 [`nbt/README.md`](nbt/README.md)。
 

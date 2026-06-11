@@ -5,8 +5,9 @@
 - name: DEBUG NBT 服务模式（无 INI 写配置）
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-NBT] NBT_SERVICE_CTRL_REV=1"
-      - "[DEBUG-NBT] service_name={{ nbt_service_name }}"
+      - "[DEBUG-NBT] NBT_SERVICE_CTRL_REV=2"
+      - "[DEBUG-NBT] service_name={{ service_name }}"
+      - "[DEBUG-NBT] service_path={{ service_path | default('n/a') }}"
       - "[DEBUG-NBT] stop_first={{ nbt_service_stop_first | default(true) }}"
   when: sem_debug_tag | default('') == 'NBT'
 
