@@ -49,6 +49,9 @@ SEMAPHORE_API_TOKEN=<token>
 | `NBT_HEARTBEAT_MAX_AGE_MINUTES` | `90` | 心跳最大间隔（分钟） |
 | `NBT_START_CHECK_API` | `true` | 启动/重启后验证心跳 |
 | `SEMAPHORE_API_TOKEN` | — | 回调 Token（必填） |
+| `TDENGINE_URL` | — | 配置后 bulk 回调后写入 TDengine（见 `docs/tdengine-setup.md`） |
+| `TDENGINE_TAG_SUPPLIER` | `newarerm` | NBT 建议设为 `nbt`（超级表 TAG） |
+| `TDENGINE_STATUS_TABLE` | `neware_remote_computer_status` | 可按类型改为 NBT 子表名 |
 
 ## 设备配置（非变量组）
 

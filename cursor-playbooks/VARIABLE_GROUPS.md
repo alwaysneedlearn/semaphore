@@ -99,9 +99,15 @@ ZIP_NAME=nbt.zip
 ZIP_PATH=/root/nbt/pkg
 NBT_API_PORT=8885
 SEMAPHORE_API_TOKEN=<token>
+# TDengine（与 NEWARE 共用 shared 写入任务；NBT 建议单独 TAG）
+TDENGINE_URL=http://tdengine:6041
+TDENGINE_TAG_SUPPLIER=nbt
+TDENGINE_STATUS_TABLE=nbt_remote_computer_status
 ```
 
 Redeploy：控制器 `{{ ZIP_PATH }}/{{ ZIP_NAME }}` → 目标 `D:\MES\数据上传\nbt.zip`，解压到 `service_path` 的父目录。
+
+TDengine：任务日志搜 **`[DEBUG-TDENGINE]`**；未配置 `TDENGINE_URL` 时会打印 `TDengine publish skipped`。
 
 详见 [`nbt/README.md`](nbt/README.md)。
 

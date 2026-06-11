@@ -65,6 +65,5 @@
       - "[DEBUG-API] bulk PUT json.updated={{ (_sem_bulk_put_result.json.updated | default('n/a')) if (_sem_bulk_put_result.json is defined) else 'n/a' }}"
   when: _sem_bulk_put_result is defined and not (_sem_bulk_put_result.skipped | default(false))
 
-- name: 写入 TDengine 状态（Variable Group ENV，本任务 bulk 行；仅设备类型提供 sem_profile_tasks_dir 时）
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/semaphore_tdengine_publish_from_bulk.yml"
-  when: sem_profile_tasks_dir is defined
+- name: 写入 TDengine 状态（Variable Group ENV，本任务 bulk 行；所有设备类型）
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_tdengine_publish_from_bulk.yml"
