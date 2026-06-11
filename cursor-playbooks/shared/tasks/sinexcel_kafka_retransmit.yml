@@ -72,18 +72,9 @@
     _sinexcel_kafka_history_envelope is defined and
     (_sinexcel_kafka_history_envelope.Msg | default('') | trim) | length > 0
 
-- name: 筛选待重传 FlowId（默认仅 UploadExist=false）
+- name: 准备待重传 FlowId 列表（QueryHistory 全部行）
   ansible.builtin.set_fact:
-    _sinexcel_retransmit_flow_items: >-
-      {{
-        (
-          _sinexcel_kafka_history_rows
-          | selectattr('UploadExist', 'equalto', false)
-          | list
-        )
-        if (sinexcel_retransmit_only_missing | default(true) | bool)
-        else _sinexcel_kafka_history_rows
-      }}
+    _sinexcel_retransmit_flow_items: "{{ _sinexcel_kafka_history_rows }}"
   when: _sinexcel_kafka_history_rows is defined
 
 - name: 初始化批量 Retransmit 请求体
@@ -144,9 +135,8 @@
       - "[DEBUG-SINEXCEL] retransmit skipped=no_flow_ids"
       - "[DEBUG-SINEXCEL] QueryHistory http={{ _sinexcel_kafka_history_raw.status | default('skipped') }}"
       - "[DEBUG-SINEXCEL] history_rows={{ _sinexcel_kafka_history_rows | default([]) | length }}"
-      - "[DEBUG-SINEXCEL] flow_items_after_filter={{ _sinexcel_retransmit_flow_items | default([]) | length }}"
-      - "[DEBUG-SINEXCEL] only_missing={{ sinexcel_retransmit_only_missing | default(true) }}"
-      - "[DEBUG-SINEXCEL] hint={{ 'no_history_rows' if (_sinexcel_kafka_history_rows | default([]) | length) == 0 else 'all_rows_already_uploaded_or_filtered' }}"
+      - "[DEBUG-SINEXCEL] flow_items={{ _sinexcel_retransmit_flow_items | default([]) | length }}"
+      - "[DEBUG-SINEXCEL] hint=no_history_rows"
   when:
     - _sinexcel_retransmit_start_ok | default(false) | bool
     - _sinexcel_retransmit_end_ok | default(false) | bool

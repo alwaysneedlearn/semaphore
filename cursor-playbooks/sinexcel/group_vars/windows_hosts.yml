@@ -13,4 +13,3 @@ sinexcel_kafka_query_history_path: "/kafka/QueryHistory"
 sinexcel_kafka_retransmit_path: "/kafka/Retransmit"
 sinexcel_kafka_timeout: 15
 sinexcel_kafka_verify_tls: false
-sinexcel_retransmit_only_missing: true
