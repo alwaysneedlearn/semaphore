@@ -157,13 +157,26 @@ try {
     }
   } else {
     Write-Output "STOP_TASK_NO_OUTPUT|task=$taskName|timeout=${timeoutSec}s|log=$outFile"
-    $still = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
-    if ($still.Count -gt 0 -and ($forceRaw -match '^(?i:true|1|yes)$')) {
-      $still | Stop-Process -Force -ErrorAction SilentlyContinue
-      Start-Sleep -Seconds 1
-      $after = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
-      if ($after.Count -eq 0) {
-        Write-Output 'FORCE_STOPPED|reason=no_task_log_fallback'
+    $verifyScript = Join-Path $PSScriptRoot 'sem_verify_process_stopped_by_name_windows.ps1'
+    if (-not (Test-Path -LiteralPath $verifyScript)) {
+      $verifyScript = 'C:\Windows\Temp\sem_verify_process_stopped_by_name_windows.ps1'
+    }
+    if (Test-Path -LiteralPath $verifyScript) {
+      $env:VERIFY_PROCESS_NAME = $verifyName
+      $recheck = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $verifyScript 2>$null
+      if ($recheck -match '^NOT_RUNNING') {
+        Write-Output 'NOT_RUNNING|reason=no_task_log_recheck'
+      } elseif ($forceRaw -match '^(?i:true|1|yes)$') {
+        $forceScript = Join-Path $PSScriptRoot 'sem_force_stop_process_by_name_windows.ps1'
+        if (-not (Test-Path -LiteralPath $forceScript)) {
+          $forceScript = 'C:\Windows\Temp\sem_force_stop_process_by_name_windows.ps1'
+        }
+        if (Test-Path -LiteralPath $forceScript) {
+          $env:VERIFY_PROCESS_NAME = $verifyName
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $forceScript
+        } else {
+          Write-Output 'STILL_RUNNING|reason=no_task_log'
+        }
       } else {
         Write-Output 'STILL_RUNNING|reason=no_task_log'
       }

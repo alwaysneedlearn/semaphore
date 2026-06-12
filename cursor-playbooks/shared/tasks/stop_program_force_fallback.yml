@@ -1,19 +1,17 @@
 ---
-# WinRM-session force stop when graceful interactive stop did not end the process.
-# Requires play vars: stop_verify_process_name (or stop_graceful_process_name).
+# WinRM force stop when graceful interactive stop did not end the process.
+# Uses alive thresholds (Handles/WS) — zombie PIDs count as stopped.
 
 - name: 停止程序（强制结束回退）
-  ansible.windows.win_shell: |
-    $name = "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"
-    $p = Get-Process -Name $name -ErrorAction SilentlyContinue
-    if ($null -eq $p) {
-      Write-Output "NOT_RUNNING|reason=force_fallback"
-      exit 0
-    }
-    $p | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
-    $after = Get-Process -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -eq $after) { Write-Output "FORCE_STOPPED|reason=winrm_fallback" } else { Write-Output "STILL_RUNNING|reason=force_fallback_failed" }
+  environment:
+    VERIFY_PROCESS_NAME: "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_force_stop_process_by_name_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
   register: stop_force_fallback_result
   changed_when: >-
     stop_force_fallback_result is defined and

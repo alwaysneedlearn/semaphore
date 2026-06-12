@@ -78,6 +78,38 @@ if ([string]::IsNullOrWhiteSpace($verifyName)) {
 }
 if ([string]::IsNullOrWhiteSpace($verifyName)) { $verifyName = $procName }
 
+$aliveHelper = Join-Path $PSScriptRoot 'sem_process_alive_windows.ps1'
+if (-not (Test-Path -LiteralPath $aliveHelper)) {
+  $aliveHelper = 'C:\Windows\Temp\sem_process_alive_windows.ps1'
+}
+if (Test-Path -LiteralPath $aliveHelper) {
+  . $aliveHelper
+}
+
+function Write-VerifyStopOutcome {
+  param([string]$ProcessName)
+  if (-not (Get-Command Get-SemaphoreProcessAliveThresholds -ErrorAction SilentlyContinue)) {
+    $any = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue)
+    if ($any.Count -eq 0) { Write-StopLine 'NOT_RUNNING'; return 'NOT_RUNNING' }
+    Write-StopLine 'STILL_RUNNING'
+    return 'STILL_RUNNING'
+  }
+  $t = Get-SemaphoreProcessAliveThresholds
+  Start-Sleep -Seconds 1
+  $alive = Get-SemaphoreAliveProcess -ProcessName $ProcessName -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes
+  if ($alive) {
+    Write-StopLine "STILL_RUNNING|PID:$($alive.Id)|Handles:$($alive.Handles)|WS_KB:$([math]::Round($alive.WorkingSet64/1KB,0))"
+    return 'STILL_RUNNING'
+  }
+  $stale = Get-SemaphoreStaleProcess -ProcessName $ProcessName -MinHandles $t.MinHandles -MinWsBytes $t.MinWsBytes
+  if ($stale) {
+    Write-StopLine "NOT_RUNNING|STALE_PID:$($stale.Id)|Handles:$($stale.Handles)|WS_KB:$([math]::Round($stale.WorkingSet64/1KB,0))"
+    return 'NOT_RUNNING'
+  }
+  Write-StopLine 'NOT_RUNNING'
+  return 'NOT_RUNNING'
+}
+
 if (-not ([System.Management.Automation.PSTypeName]'SemaphoreWindowHelper').Type) {
   Add-Type @"
 using System;
@@ -93,11 +125,22 @@ public class SemaphoreWindowHelper {
 "@
 }
 
-$procs = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
-if ($procs.Count -eq 0) {
-  Write-StopLine 'ALREADY_STOPPED'
-  exit 0
+if (Get-Command Get-SemaphoreProcessAliveThresholds -ErrorAction SilentlyContinue) {
+  $t0 = Get-SemaphoreProcessAliveThresholds
+  $alive0 = Get-SemaphoreAliveProcess -ProcessName $procName -MinHandles $t0.MinHandles -MinWsBytes $t0.MinWsBytes
+  if (-not $alive0 -and -not (Get-Process -Name $procName -ErrorAction SilentlyContinue)) {
+    Write-StopLine 'ALREADY_STOPPED'
+    exit 0
+  }
+} else {
+  $procs0 = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
+  if ($procs0.Count -eq 0) {
+    Write-StopLine 'ALREADY_STOPPED'
+    exit 0
+  }
 }
+
+$procs = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
 
 $closed = 0
 $restored = 0
@@ -137,25 +180,21 @@ if (-not (Test-Path -LiteralPath $helperPath)) {
   }
 }
 
-Start-Sleep -Seconds 1
-
-$still = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
-if ($still.Count -eq 0) {
-  Write-StopLine 'NOT_RUNNING'
-  exit 0
-}
+$outcome = Write-VerifyStopOutcome -ProcessName $verifyName
+if ($outcome -eq 'NOT_RUNNING') { exit 0 }
 
 if ($forceAfter) {
-  $still | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 1
-  $after = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
-  if ($after.Count -eq 0) {
+  $still = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
+  if ($still.Count -gt 0) {
+    $still | Stop-Process -Force -ErrorAction SilentlyContinue
+  }
+  Start-Sleep -Seconds 2
+  $outcome2 = Write-VerifyStopOutcome -ProcessName $verifyName
+  if ($outcome2 -eq 'NOT_RUNNING') {
     Write-StopLine 'FORCE_STOPPED'
     exit 0
   }
-  Write-StopLine 'STILL_RUNNING'
   exit 1
 }
 
-Write-StopLine 'STILL_RUNNING'
 exit 1

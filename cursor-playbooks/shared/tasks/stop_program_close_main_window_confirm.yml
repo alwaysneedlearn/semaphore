@@ -58,24 +58,69 @@
     msg: "{{ stop_graceful_result.stdout_lines | default([]) }}"
   when: stop_graceful_result is defined
 
+- name: 停止程序（复核进程是否已实际退出）
+  environment:
+    VERIFY_PROCESS_NAME: "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_verify_process_stopped_by_name_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: stop_verify_recheck_result
+  changed_when: false
+  failed_when: false
+  when:
+    - stop_graceful_result is defined
+    - not (stop_graceful_result.unreachable | default(false))
+
+- name: 停止程序（日志 STILL_RUNNING 但复核已退出，继续后续流程）
+  ansible.builtin.debug:
+    msg: >-
+      [DEBUG-STOP] {{ inventory_hostname }} graceful log reported still running but alive-check says stopped:
+      recheck={{ stop_verify_recheck_result.stdout | default('') | trim }}
+  when:
+    - stop_verify_recheck_result is defined
+    - not (stop_verify_recheck_result.skipped | default(false))
+    - 'NOT_RUNNING' in (stop_verify_recheck_result.stdout | default(''))
+    - >-
+      'STILL_RUNNING' in (stop_graceful_result.stdout | default('')) or
+      (
+        stop_force_fallback_result is defined and
+        not (stop_force_fallback_result.skipped | default(false)) and
+        'STILL_RUNNING' in (stop_force_fallback_result.stdout | default(''))
+      )
+
 - name: 停止程序（优雅+强制后仍运行则失败本主机）
   ansible.builtin.fail:
     msg: >-
       [停止] {{ inventory_hostname }} 无法终止 {{ stop_verify_process_name | default(stop_graceful_process_name) }}:
       graceful={{ stop_graceful_result.stdout | default('') | trim }}
       fallback={{ stop_force_fallback_result.stdout | default('(not run)') | trim }}
+      recheck={{ stop_verify_recheck_result.stdout | default('(not run)') | trim }}
+  vars:
+    _stop_recheck_ran: >-
+      {{ (stop_verify_recheck_result is defined) and not (stop_verify_recheck_result.skipped | default(false)) }}
+    _stop_recheck_ok: "{{ 'NOT_RUNNING' in (stop_verify_recheck_result.stdout | default('')) }}"
+    _stop_graceful_ok: >-
+      {{
+        'NOT_RUNNING' in (stop_graceful_result.stdout | default('')) or
+        'ALREADY_STOPPED' in (stop_graceful_result.stdout | default('')) or
+        'FORCE_STOPPED' in (stop_graceful_result.stdout | default(''))
+      }}
+    _stop_fallback_ok: >-
+      {{
+        (stop_force_fallback_result is not defined) or
+        (stop_force_fallback_result.skipped | default(false)) or
+        'NOT_RUNNING' in (stop_force_fallback_result.stdout | default('')) or
+        'FORCE_STOPPED' in (stop_force_fallback_result.stdout | default(''))
+      }}
+    _stop_effectively_stopped: >-
+      {{ (_stop_recheck_ran | bool and (_stop_recheck_ok | bool)) or
+         (not (_stop_recheck_ran | bool) and (_stop_graceful_ok | bool) and (_stop_fallback_ok | bool)) }}
   when:
     - stop_graceful_fail_on_still_running | default(true) | bool
     - stop_graceful_result is defined
     - not (stop_graceful_result.unreachable | default(false))
-    - >-
-      'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
-      'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
-      'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
-    - >-
-      (stop_force_fallback_result is not defined) or
-      (stop_force_fallback_result.skipped | default(false)) or
-      (
-        'NOT_RUNNING' not in (stop_force_fallback_result.stdout | default('')) and
-        'FORCE_STOPPED' not in (stop_force_fallback_result.stdout | default(''))
-      )
+    - not (_stop_effectively_stopped | bool)
