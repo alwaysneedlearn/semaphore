@@ -204,6 +204,14 @@
       @yes="executePendingBulkAction()"
     />
 
+    <YesNoDialog
+      :title="$t('deviceActionConfirmTitle')"
+      :text="deviceActionConfirmText"
+      v-model="deviceActionConfirmDialog"
+      :yes-button-title="$t('confirmTask')"
+      @yes="executePendingDeviceAction()"
+    />
+
     <v-row class="ma-4" dense>
       <v-col cols="6" sm="3">
         <v-card outlined>
@@ -582,6 +590,9 @@ export default {
       bulkActionConfirmDialog: false,
       pendingBulkAction: null,
       pendingBulkTaskCount: 0,
+      deviceActionConfirmDialog: false,
+      pendingDeviceAction: null,
+      pendingDeviceActionTarget: null,
       profilesList: [],
       profileById: {},
       filters: {
@@ -626,6 +637,26 @@ export default {
       const action = this.pendingBulkAction || '';
       return `Selected devices span ${n} device type(s). This will create ${n} separate `
         + `task(s) (one per type). Continue with "${action}"?`;
+    },
+    deviceActionConfirmText() {
+      const action = this.pendingDeviceAction;
+      if (!action) {
+        return '';
+      }
+      const actionLabel = this.deviceActionLabel(action);
+      const device = this.pendingDeviceActionTarget;
+      if (device) {
+        const host = device.hostname || device.ip_address || `#${device.id}`;
+        const ip = device.ip_address || '—';
+        return this.$t('deviceActionConfirmSingle', { action: actionLabel, host, ip });
+      }
+      const count = this.selectedDeviceIds.length;
+      let text = this.$t('deviceActionConfirmBulk', { action: actionLabel, count });
+      const n = this.pendingBulkTaskCount;
+      if (n > 1) {
+        text += ` ${this.$t('deviceActionConfirmMultiType', { n })}`;
+      }
+      return text;
     },
     hasActiveFilters() {
       const f = this.filters || {};
@@ -736,12 +767,48 @@ export default {
       return profileIds.size || 0;
     },
 
+    deviceActionNeedsConfirm(action) {
+      return action === 'stop' || action === 'restart' || action === 'redeploy';
+    },
+
+    deviceActionLabel(action) {
+      const key = {
+        stop: 'deviceStop',
+        restart: 'deviceRestart',
+        redeploy: 'deviceRedeploy',
+      }[action];
+      return key ? this.$t(key) : action;
+    },
+
     runBulkAction(action) {
+      if (this.deviceActionNeedsConfirm(action)) {
+        this.pendingDeviceAction = action;
+        this.pendingDeviceActionTarget = null;
+        this.pendingBulkTaskCount = this.countProfileGroupsForSelection();
+        this.deviceActionConfirmDialog = true;
+        return;
+      }
       const n = this.countProfileGroupsForSelection();
       if (n > 1) {
         this.pendingBulkAction = action;
         this.pendingBulkTaskCount = n;
         this.bulkActionConfirmDialog = true;
+        return;
+      }
+      this.executeBulkAction(action);
+    },
+
+    executePendingDeviceAction() {
+      const action = this.pendingDeviceAction;
+      const device = this.pendingDeviceActionTarget;
+      this.pendingDeviceAction = null;
+      this.pendingDeviceActionTarget = null;
+      this.pendingBulkTaskCount = 0;
+      if (!action) {
+        return;
+      }
+      if (device) {
+        this.executeDeviceAction(device, action);
         return;
       }
       this.executeBulkAction(action);
@@ -1029,7 +1096,18 @@ export default {
       }
     },
 
-    async runAction(device, action) {
+    runAction(device, action) {
+      if (this.deviceActionNeedsConfirm(action)) {
+        this.pendingDeviceAction = action;
+        this.pendingDeviceActionTarget = device;
+        this.pendingBulkTaskCount = 0;
+        this.deviceActionConfirmDialog = true;
+        return;
+      }
+      this.executeDeviceAction(device, action);
+    },
+
+    async executeDeviceAction(device, action) {
       this.busyId = device.id;
       try {
         const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
