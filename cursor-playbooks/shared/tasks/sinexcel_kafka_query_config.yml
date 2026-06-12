@@ -1,13 +1,21 @@
 ---
 # POST /kafka/QueryConfig — sets _sinexcel_kafka_* and optional _sinexcel_api_after.
+# API requires JSON body "{}"; literal `body: {}` in uri may omit the body on some Ansible builds.
+
+- name: 准备 QueryConfig 请求体
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_query_body: {}
 
 - name: 查询 SINEXCEL Kafka 配置
   ansible.builtin.uri:
     url: >-
       {{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path }}
     method: POST
-    body_format: json
-    body: {}
+    body_format: raw
+    body: "{{ _sinexcel_kafka_query_body | to_json }}"
+    headers:
+      Content-Type: application/json
+      Accept: application/json
     timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
     validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
     return_content: true
@@ -54,6 +62,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-SINEXCEL] api_query url={{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path }}"
+      - "[DEBUG-SINEXCEL] api_query request_body={{ _sinexcel_kafka_query_body | default({}) | to_json }}"
       - "[DEBUG-SINEXCEL] api_query http={{ _sinexcel_kafka_query_raw.status | default('n/a') }} result={{ _sinexcel_kafka_result_text | default('n/a') }}"
       - "[DEBUG-SINEXCEL] api_query EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
       - "[DEBUG-SINEXCEL] api_query api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"

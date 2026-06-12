@@ -47,7 +47,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /kafka/QueryConfig` | Patrol/health: `Msg.EnableFlowInfoExtendedSqlite == true` |
+| `POST /kafka/QueryConfig` | Patrol/health: body **`{}`** (required); `Msg.EnableFlowInfoExtendedSqlite == true` |
 | `POST /kafka/SetConfig` | Apply **KafkaConfig** category (addrs, topics) |
 | `POST /kafka/IsEnable` | `{"EnableFlowInfoExtendedSqlite": true}` |
 | `POST /kafka/QueryHistory` | `StartTime` / `EndTime` → history rows with `FlowId` |
