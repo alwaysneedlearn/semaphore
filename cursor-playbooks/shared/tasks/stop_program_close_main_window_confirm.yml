@@ -1,10 +1,9 @@
 ---
 # Graceful stop with confirmation popup (CloseMainWindow + Enter on title keyword).
 # Requires: deploy_sem_windows_helper_scripts.yml first.
-# Play vars (or Variable Group env): stop_graceful_process_name, stop_popup_wait_seconds,
-# stop_popup_keyword, stop_force_after_graceful; optional stop_verify_process_name.
+# Play vars: stop_graceful_process_name, stop_popup_*; stop_graceful_fail_on_still_running (default true for restart/redeploy).
 
-- name: 停止程序（主窗口关闭 + 弹窗确认）
+- name: 停止程序（解析交互用户）
   ansible.windows.win_shell: |
     $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
       ForEach-Object {
@@ -41,11 +40,7 @@
   args:
     chdir: C:\Windows\Temp
   register: stop_graceful_result
-  failed_when: >-
-    (stop_graceful_fail_on_still_running | default(true) | bool) and
-    stop_graceful_result is defined and
-    'stdout' in stop_graceful_result and
-    'STILL_RUNNING' in stop_graceful_result.stdout
+  failed_when: false
   changed_when: >-
     stop_graceful_result is defined and
     'stdout' in stop_graceful_result and
@@ -55,10 +50,32 @@
       'NOT_RUNNING' in stop_graceful_result.stdout
     )
 
+- name: 停止程序（优雅失败时 WinRM 强制结束）
+  ansible.builtin.include_tasks: stop_program_force_fallback.yml
+
 - name: 停止程序（弹窗确认明细）
   ansible.builtin.debug:
     msg: "{{ stop_graceful_result.stdout_lines | default([]) }}"
   when: stop_graceful_result is defined
 
-- name: 停止程序（优雅失败时 WinRM 强制结束）
-  ansible.builtin.include_tasks: stop_program_force_fallback.yml
+- name: 停止程序（优雅+强制后仍运行则失败本主机）
+  ansible.builtin.fail:
+    msg: >-
+      [停止] {{ inventory_hostname }} 无法终止 {{ stop_verify_process_name | default(stop_graceful_process_name) }}:
+      graceful={{ stop_graceful_result.stdout | default('') | trim }}
+      fallback={{ stop_force_fallback_result.stdout | default('(not run)') | trim }}
+  when:
+    - stop_graceful_fail_on_still_running | default(true) | bool
+    - stop_graceful_result is defined
+    - not (stop_graceful_result.unreachable | default(false))
+    - >-
+      'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
+      'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
+      'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
+    - >-
+      (stop_force_fallback_result is not defined) or
+      (stop_force_fallback_result.skipped | default(false)) or
+      (
+        'NOT_RUNNING' not in (stop_force_fallback_result.stdout | default('')) and
+        'FORCE_STOPPED' not in (stop_force_fallback_result.stdout | default(''))
+      )

@@ -61,9 +61,15 @@ Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`) and include:
 
 NEWARE uses `neware/tasks/debug_patrol_snapshot.yml` and `debug_action_snapshot.yml` (`[DEBUG-NEWARE]`). Semaphore bulk PUT still logs `[DEBUG-API]` in `semaphore_bulk_put_from_hostvars.yml`.
 
+## Windows helper scripts (`deploy_sem_windows_helper_scripts.yml`)
+
+Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** `sem_resolve_exe_dir_windows.ps1` exists after copy (no “deployed” flag without a real file). `resolve_exe_dir_windows.yml` also includes deploy when `sem_tasks_dir` is set.
+
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 
-Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Variable Group / play vars:
+Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Graceful stop no longer **fatal**s on `STILL_RUNNING` before WinRM force fallback; `device_stop` sets `stop_graceful_fail_on_still_running: false` so the play writes an unhealthy callback instead of aborting bulk. Restart/redeploy keep default `true` (fail after fallback if still running).
+
+Variable Group / play vars:
 
 | Var / ENV | Default | Meaning |
 |-----------|---------|---------|

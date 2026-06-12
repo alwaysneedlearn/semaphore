@@ -1,7 +1,13 @@
 ---
 # Resolve EXE_DIR drive like NEWARE: preferred drive first, then fallbacks.
 # LAND: set app_dir + EXE_DIR_FALLBACK_DRIVES (e.g. D,F); probes APP_DIR\EXE on each drive.
-# Requires deploy_sem_windows_helper_scripts.yml to have copied helper script.
+# Requires deploy_sem_windows_helper_scripts.yml (auto-included when sem_tasks_dir set).
+
+- name: 确保 Windows 辅助脚本已部署
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+  when:
+    - sem_tasks_dir is defined
+    - (sem_tasks_dir | trim | length) > 0
 
 - name: 解析 EXE_DIR（盘符回退）
   environment:

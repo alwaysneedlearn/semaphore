@@ -1,38 +1,60 @@
 ---
-# 每台主机每 play 仅一次：将 shared/files（及可选 profile files）复制到 C:\Windows\Temp\
+# 每台主机：校验 C:\Windows\Temp\ 下辅助脚本，缺失则从控制器复制。
 # 依赖 play vars：sem_files_dir、可选 sem_profile_files_dir
 
-- name: 一次性部署 Semaphore Windows 辅助脚本（shared）
+- name: 检查目标机 Semaphore 辅助脚本
+  ansible.windows.win_stat:
+    path: C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
+  register: _sem_helper_scripts_stat
+  when: _winrm_session_ok | default(false) | bool
+
+- name: 部署 Semaphore Windows 辅助脚本（shared）
   ansible.windows.win_copy:
     src: "{{ sem_files_dir }}/"
     dest: C:\Windows\Temp\
   changed_when: false
+  register: _sem_helper_copy_shared
   when:
     - _winrm_session_ok | default(false) | bool
-    - not (sem_helper_scripts_deployed | default(false) | bool)
     - sem_files_dir is defined
+    - not (_sem_helper_scripts_stat.stat.exists | default(false) | bool)
 
-- name: 一次性部署设备类型辅助脚本（profile）
+- name: 部署设备类型辅助脚本（profile）
   ansible.windows.win_copy:
     src: "{{ sem_profile_files_dir }}/"
     dest: C:\Windows\Temp\
   changed_when: false
   when:
     - _winrm_session_ok | default(false) | bool
-    - not (sem_helper_scripts_deployed | default(false) | bool)
     - sem_profile_files_dir is defined
     - (sem_profile_files_dir | trim | length) > 0
+    - not (_sem_helper_scripts_stat.stat.exists | default(false) | bool)
 
-- name: 登记辅助脚本已部署
-  ansible.builtin.set_fact:
-    sem_helper_scripts_deployed: true
+- name: 部署后校验辅助脚本
+  ansible.windows.win_stat:
+    path: C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
+  register: _sem_helper_scripts_stat_after
+  when: _winrm_session_ok | default(false) | bool
+
+- name: 辅助脚本部署失败（目标机缺少 ps1）
+  ansible.builtin.fail:
+    msg: >-
+      Windows helper scripts missing on {{ inventory_hostname }} after deploy attempt.
+      Expected C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1.
+      Controller sem_files_dir={{ sem_files_dir | default('undefined') }}.
+      win_copy={{ _sem_helper_copy_shared | default({'skipped': true}) }}.
+      Ensure runner git pull and playbook path includes cursor-playbooks/shared/files.
   when:
     - _winrm_session_ok | default(false) | bool
-    - not (sem_helper_scripts_deployed | default(false) | bool)
+    - _sem_helper_scripts_stat_after is defined
+    - not (_sem_helper_scripts_stat_after.stat.exists | default(false) | bool)
 
-- name: DEBUG 辅助脚本批量部署
+- name: DEBUG 辅助脚本部署
   ansible.builtin.debug:
     msg:
       - "[DEBUG-DEPLOY] host={{ inventory_hostname }} dest=C:\\Windows\\Temp\\"
       - "[DEBUG-DEPLOY] shared_files={{ sem_files_dir | default('n/a') }}"
       - "[DEBUG-DEPLOY] profile_files={{ sem_profile_files_dir | default('(none)') }}"
+      - "[DEBUG-DEPLOY] existed_before={{ _sem_helper_scripts_stat.stat.exists | default(false) if (_sem_helper_scripts_stat is defined) else 'n/a' }}"
+      - "[DEBUG-DEPLOY] exists_after={{ _sem_helper_scripts_stat_after.stat.exists | default(false) if (_sem_helper_scripts_stat_after is defined) else 'n/a' }}"
+  when: _winrm_session_ok | default(false) | bool

@@ -27,6 +27,7 @@
     sinexcel_api_token: "{{ (lookup('env', 'SINEXCEL_API_TOKEN') | default('', true) | trim) | default('sinexcelapi', true) }}"
     sinexcel_api_verify_tls: "{{ ((lookup('env', 'SINEXCEL_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
     sinexcel_stop_check_api: "{{ ((lookup('env', 'SINEXCEL_STOP_CHECK_API') | default('', true) | trim) | default('false', true)) | bool }}"
+    stop_graceful_fail_on_still_running: false
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
