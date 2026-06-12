@@ -515,7 +515,6 @@ export default {
   deviceProbeTooltip:
     'Probe: TCP reachability on this device\'s RDP port, WinRM (Ansible) port, and configured API port only—not login or full application health.',
   deviceActions: 'Actions',
-  deviceStart: 'Start',
   deviceStop: 'Stop',
   deviceRestart: 'Restart',
   deviceRedeploy: 'Redeploy',
@@ -603,7 +602,6 @@ export default {
   deviceConnectionDefaultsHelp:
     'WinRM defaults used when generating windows_hosts inventory (auto and temporary inventories). Shared for the whole project; not per device type.',
   deviceTemplateDiscover: 'Discover template',
-  deviceTemplateStart: 'Start template',
   deviceTemplateStop: 'Stop template',
   deviceTemplateRestart: 'Restart template',
   deviceTemplateStatus: 'Status template',

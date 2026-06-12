@@ -159,10 +159,6 @@
             <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click="runBulkAction('start')">
-            <v-list-item-icon><v-icon>mdi-play</v-icon></v-list-item-icon>
-            <v-list-item-title>{{ $t('deviceStart') }}</v-list-item-title>
-          </v-list-item>
           <v-list-item @click="runBulkAction('stop')">
             <v-list-item-icon><v-icon>mdi-stop</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceStop') }}</v-list-item-title>
@@ -472,10 +468,6 @@
               </v-btn>
             </template>
             <v-list dense>
-              <v-list-item @click="runAction(item, 'start')">
-                <v-list-item-icon><v-icon>mdi-play</v-icon></v-list-item-icon>
-                <v-list-item-title>{{ $t('deviceStart') }}</v-list-item-title>
-              </v-list-item>
               <v-list-item @click="runAction(item, 'stop')">
                 <v-list-item-icon><v-icon>mdi-stop</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceStop') }}</v-list-item-title>

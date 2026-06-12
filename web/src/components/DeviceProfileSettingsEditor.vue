@@ -136,7 +136,6 @@ import { getErrorMessage } from '@/lib/error';
 import DeviceConfigItemsEditor from '@/components/DeviceConfigItemsEditor.vue';
 
 const TEMPLATE_ID_FIELDS = [
-  'start_template_id',
   'stop_template_id',
   'restart_template_id',
   'status_template_id',
@@ -160,7 +159,6 @@ export default {
       saveError: null,
       defaultConfigItems: [],
       templateActions: [
-        { field: 'start_template_id', label: 'Start template' },
         { field: 'stop_template_id', label: 'Stop template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'redeploy_template_id', label: 'Redeploy template' },

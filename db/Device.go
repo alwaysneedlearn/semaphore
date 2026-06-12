@@ -42,7 +42,6 @@ type DeviceAction string
 
 const (
 	DeviceActionDiscover DeviceAction = "discover"
-	DeviceActionStart    DeviceAction = "start"
 	DeviceActionStop     DeviceAction = "stop"
 	DeviceActionRestart  DeviceAction = "restart"
 	DeviceActionRedeploy DeviceAction = "redeploy"
@@ -243,7 +242,6 @@ type DeviceConfigItem struct {
 type ProjectDeviceSettings struct {
 	ProjectID                               int        `db:"project_id" json:"project_id"`
 	DiscoverTemplateID                      *int       `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	StartTemplateID                         *int       `db:"start_template_id" json:"start_template_id,omitempty"`
 	StopTemplateID                          *int       `db:"stop_template_id" json:"stop_template_id,omitempty"`
 	RestartTemplateID                       *int       `db:"restart_template_id" json:"restart_template_id,omitempty"`
 	StatusTemplateID                        *int       `db:"status_template_id" json:"status_template_id,omitempty"`
@@ -267,8 +265,6 @@ func (s ProjectDeviceSettings) TemplateIDForAction(action DeviceAction) *int {
 	switch action {
 	case DeviceActionDiscover:
 		return s.DiscoverTemplateID
-	case DeviceActionStart:
-		return s.StartTemplateID
 	case DeviceActionStop:
 		return s.StopTemplateID
 	case DeviceActionRestart:

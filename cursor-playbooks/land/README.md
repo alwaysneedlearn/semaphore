@@ -5,7 +5,6 @@ LAND device type uses API-first status/config with optional Windows process cont
 ## Playbooks
 
 - `device_status.yml` — check exe existence + process running + API status, then bulk callback
-- `device_start.yml` — start process if not running, optional API check, then bulk callback
 - `device_stop.yml` — graceful stop (CloseMainWindow + popup confirm), optional API check, then bulk callback
 - `device_restart.yml` — graceful stop then ModifyConfig + interactive start (same stop path as `device_stop.yml`)
 - `device_check_restart_redeploy.yml` — check process/API health; when unhealthy, graceful stop + ModifyConfig + start, then bulk callback
@@ -95,7 +94,7 @@ Implemented via `../shared/tasks/debug_sync_api_*.yml` with play var `sem_debug_
 
 SINEXCEL and NBT use the same shared tasks with `sem_debug_tag: SINEXCEL` / `NBT`. NEWARE uses `[DEBUG-NEWARE]` in `neware/tasks/debug_*.yml`.
 
-`device_start.yml` / `device_restart.yml` / `device_check_restart_redeploy.yml` now use the same startup strategy as NEWARE:
+`device_restart.yml` / `device_check_restart_redeploy.yml` use the same startup strategy as NEWARE:
 - check exe first (`{{ exe_path }}`); if missing, check/copy `{{ exe_dir }}\{{ zip_filename }}` then `Expand-Archive`
 - launch via **interactive scheduled task** (desktop logged-in user, RunLevel Highest), not plain `Start-Process` under WinRM session
 

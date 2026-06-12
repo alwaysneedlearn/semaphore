@@ -58,7 +58,7 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 凡包含 **`semaphore_bulk_put_from_hostvars.yml`** 的模板均会尝试写 TDengine（在配置了 `TDENGINE_URL` 时），含 **NBT**（`cursor-playbooks/nbt/device_*.yml`）：
 
 - Patrol / `device_status.yml`
-- `device_start.yml` / `device_stop.yml` / `device_restart.yml`
+- `device_stop.yml` / `device_restart.yml`
 - `device_redeploy.yml` / `device_check_restart.yml`
 
 **不包含**：`device_discovery.yml`（发现不写设备状态 bulk）。

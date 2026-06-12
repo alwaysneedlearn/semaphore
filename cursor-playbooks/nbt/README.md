@@ -9,7 +9,7 @@ Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI*
 | Playbook | 说明 |
 |----------|------|
 | `device_status.yml` | 巡检：`service_path` 存在 + 服务 Running + 心跳 |
-| `device_start.yml` / `device_stop.yml` | 启停服务 |
+| `device_stop.yml` | 停止服务 |
 | `device_restart.yml` | 停 → 启 → 心跳 → 可选 ResetData |
 | `device_redeploy.yml` | 下发 `nbt.zip` 到 `service_parent_dir` + 服务重启 |
 | `device_check_restart.yml` | 不健康时服务重启 |
