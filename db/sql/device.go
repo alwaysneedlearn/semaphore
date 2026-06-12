@@ -512,9 +512,17 @@ func (d *SqlDb) SetDeviceConfigItems(projectID, deviceID int, items []db.DeviceC
 	return tx.Commit()
 }
 
+const projectDeviceSettingsColumns = "" +
+	"project_id, discover_template_id, stop_template_id, restart_template_id, " +
+	"status_template_id, config_template_id, default_inventory_id, " +
+	"default_ansible_user, default_ansible_password, default_ansible_connection, " +
+	"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, " +
+	"default_ansible_winrm_server_cert_validation, default_config_json, " +
+	"status_refresh_interval_min, last_status_refresh_at"
+
 func (d *SqlDb) GetProjectDeviceSettings(projectID int) (settings db.ProjectDeviceSettings, err error) {
 	err = d.selectOne(&settings,
-		"select * from project__device_settings where project_id=?",
+		"select "+projectDeviceSettingsColumns+" from project__device_settings where project_id=?",
 		projectID,
 	)
 	if errors.Is(err, db.ErrNotFound) {
@@ -581,7 +589,7 @@ func (d *SqlDb) MarkProjectStatusRefreshed(projectID int, refreshed time.Time) e
 
 func (d *SqlDb) GetProjectsDueForStatusRefresh(now time.Time) ([]db.ProjectDeviceSettings, error) {
 	var settings []db.ProjectDeviceSettings
-	q, args, err := squirrel.Select("*").
+	q, args, err := squirrel.Select(strings.Split(projectDeviceSettingsColumns, ", ")...).
 		From("project__device_settings").
 		Where(squirrel.Gt{"status_refresh_interval_min": 0}).
 		ToSql()
