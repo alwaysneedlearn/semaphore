@@ -12,6 +12,7 @@ const DEVICE_WINRM_EXAMPLE_GROUPS = [
     labelKey: 'deviceWinrmExamplesNetwork',
     commands: [
       'Get-NetTCPConnection -State Listen | Sort-Object LocalPort | Select-Object LocalAddress, LocalPort, OwningProcess',
+      "netstat -ano | Select-String ':3389'",
       'netstat -ano | findstr LISTENING',
     ],
   },

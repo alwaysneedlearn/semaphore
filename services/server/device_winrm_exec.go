@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/masterzen/winrm"
 	"github.com/semaphoreui/semaphore/db"
 )
+
+var winrmCmdExePattern = regexp.MustCompile(`(?i)\bfindstr\b|\bcertutil\b|\bwmic\b`)
 
 // DeviceWinRMExecRequest is input for a single remote command.
 type DeviceWinRMExecRequest struct {
@@ -103,13 +106,15 @@ func ExecDeviceWinRMCommand(ctx context.Context, creds DeviceWinRMExecCredential
 		return res
 	}
 
+	runCommand, runShell := prepareWinRMCommand(command, shell)
+
 	var stdout, stderr string
 	var exitCode int
-	switch shell {
+	switch runShell {
 	case db.DeviceWinRMShellCmd:
-		stdout, stderr, exitCode, err = client.RunCmdWithContext(ctx, command)
+		stdout, stderr, exitCode, err = client.RunCmdWithContext(ctx, runCommand)
 	default:
-		stdout, stderr, exitCode, err = client.RunPSWithContextWithString(ctx, command, "")
+		stdout, stderr, exitCode, err = client.RunPSWithContextWithString(ctx, runCommand, "")
 	}
 
 	res.DurationMS = int(time.Since(start).Milliseconds())
@@ -135,11 +140,32 @@ func ExecDeviceWinRMCommand(ctx context.Context, creds DeviceWinRMExecCredential
 	}
 
 	res.OK = exitCode == 0
-	if !res.OK && res.ErrorCode == "" {
-		res.ErrorCode = "command_failed"
+	if !res.OK {
+		// Command ran; non-zero exit (e.g. findstr with no matches) is not a transport failure.
 		res.ErrorMessage = fmt.Sprintf("exit code %d", exitCode)
 	}
 	return res
+}
+
+// prepareWinRMCommand routes classic cmd.exe pipelines through cmd /c when shell is PowerShell.
+func prepareWinRMCommand(command, shell string) (string, string) {
+	command = strings.TrimSpace(command)
+	sh := strings.ToLower(strings.TrimSpace(shell))
+	if sh == "" {
+		sh = db.DeviceWinRMShellPowerShell
+	}
+	if sh == db.DeviceWinRMShellCmd {
+		return command, db.DeviceWinRMShellCmd
+	}
+	if needsCmdExe(command) {
+		escaped := strings.ReplaceAll(command, "'", "''")
+		return "cmd /c '" + escaped + "'", db.DeviceWinRMShellPowerShell
+	}
+	return command, db.DeviceWinRMShellPowerShell
+}
+
+func needsCmdExe(command string) bool {
+	return winrmCmdExePattern.MatchString(command)
 }
 
 func truncateResponseOutput(stdout, stderr string) (string, string, bool) {
