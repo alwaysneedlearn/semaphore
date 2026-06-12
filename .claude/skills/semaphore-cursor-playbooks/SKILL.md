@@ -2,8 +2,8 @@
 name: semaphore-cursor-playbooks
 description: >
   Author, review, or debug Ansible playbooks under cursor-playbooks/ for Semaphore UI Windows device
-  management (Patrol, start/stop/restart, bulk status callbacks). Use whenever editing device_status.yml,
-  device_start.yml, WinRM tasks, semaphore_callback_row, PUT /devices/status/bulk, win_ping UNREACHABLE,
+  management (Patrol, stop/restart/redeploy, bulk status callbacks). Use whenever editing device_status.yml,
+  device_restart.yml, WinRM tasks, semaphore_callback_row, PUT /devices/status/bulk, win_ping UNREACHABLE,
   include_tasks/delegate_to errors, or runner playbooks at /root/playbook/. Triggers on "cursor-playbooks",
   "playbook 编写", "WinRM ping", "checking 不更新", "TaskInclude delegate_to", "semaphore bulk callback",
   "ignore_unreachable", "clear_host_errors", "set_fact undefined", "did not find expected '-' indicator",
@@ -244,7 +244,6 @@ cursor-playbooks/
   device_discovery.yml   # Project-level discovery (not under neware/)
   neware/                # NEWARE Windows hosts (current production tree)
     device_status.yml    # Patrol — upload-status API first, log fallback
-    device_start.yml
     device_restart.yml
     device_stop.yml
     device_check_restart_redeploy.yml

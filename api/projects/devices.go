@@ -796,7 +796,6 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 	ps := db.ProjectDeviceProfileSettings{
 		ProjectID:            project.ID,
 		DiscoverTemplateID:   settings.DiscoverTemplateID,
-		StartTemplateID:      settings.StartTemplateID,
 		StopTemplateID:       settings.StopTemplateID,
 		RestartTemplateID:    settings.RestartTemplateID,
 		StatusTemplateID:     settings.StatusTemplateID,
@@ -1454,7 +1453,7 @@ func buildCategorizedDeviceConfig(items []db.DeviceConfigItem) map[string]map[st
 	return categorized
 }
 
-// RunDeviceAction triggers the configured template for {start, stop, restart,
+// RunDeviceAction triggers the configured template for {stop, restart, redeploy,
 // status} on a specific device.
 func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
@@ -1468,7 +1467,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch body.Action {
-	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
+	case db.DeviceActionStop, db.DeviceActionRestart,
 		db.DeviceActionRedeploy, db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
@@ -1508,8 +1507,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		extraVars["default_config"] = defaultConfig
 	}
 
-	if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart ||
-		body.Action == db.DeviceActionRedeploy {
+	if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
 		if err != nil {
 			helpers.WriteError(w, err)
@@ -1542,7 +1540,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch body.Action {
-	case db.DeviceActionStart, db.DeviceActionStop, db.DeviceActionRestart,
+	case db.DeviceActionStop, db.DeviceActionRestart,
 		db.DeviceActionRedeploy, db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
@@ -1637,8 +1635,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		} else if defaultConfig := defaultConfigForPlaybook(settings.DefaultConfigJSON); defaultConfig != nil {
 			extraVars["default_config"] = defaultConfig
 		}
-		if body.Action == db.DeviceActionStart || body.Action == db.DeviceActionRestart ||
-			body.Action == db.DeviceActionRedeploy {
+		if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
 			configByHostname := map[string]map[string]map[string]string{}
 			configsByHost := map[string]map[string]map[string]string{}
 			for _, d := range devs {

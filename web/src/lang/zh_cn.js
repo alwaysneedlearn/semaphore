@@ -441,7 +441,6 @@ export default {
   deviceProbeTooltip:
     '探测：仅检测该设备配置的 RDP、WinRM（Ansible）与 API 端口的 TCP 是否可达；不含登录验证与完整业务健康检查。',
   deviceActions: '操作',
-  deviceStart: '启动',
   deviceStop: '停止',
   deviceRestart: '重启',
   deviceRedeploy: '重新部署',
@@ -528,7 +527,6 @@ export default {
   deviceConnectionDefaultsHelp:
     '生成 windows_hosts 清单（自动清单与批量任务临时清单）时使用的 WinRM 默认值，全项目共用，与设备类型无关。',
   deviceTemplateDiscover: '发现模板',
-  deviceTemplateStart: '启动模板',
   deviceTemplateStop: '停止模板',
   deviceTemplateRestart: '重启模板',
   deviceTemplateStatus: '状态模板',

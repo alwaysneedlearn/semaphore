@@ -36,8 +36,7 @@ grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
 | File | Purpose |
 |------|---------|
 | `device_status.yml` | Exe + process + **Kafka QueryConfig** (`EnableFlowInfoExtendedSqlite`), bulk callback |
-| `device_start.yml` | **SetConfig / IsEnable** + 交互启动（含弹窗确认） |
-| `device_restart.yml` | Same + **QueryHistory + Retransmit**（`Retransmit` 分类） |
+| `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryHistory + Retransmit**（`Retransmit` 分类） |
 | `device_redeploy.yml` | 仅 **zip 下发** + API 启停（无 INI） |
 | `device_check_restart.yml` | Unhealthy gate via Kafka QueryConfig; restart only when needed |
 | `device_stop.yml` | Force stop process |

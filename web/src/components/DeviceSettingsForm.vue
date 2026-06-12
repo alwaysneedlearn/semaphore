@@ -174,7 +174,6 @@ import { getErrorMessage } from '@/lib/error';
 
 const ACTIONS = [
   { field: 'discover_template_id', label: 'deviceTemplateDiscover' },
-  { field: 'start_template_id', label: 'deviceTemplateStart' },
   { field: 'stop_template_id', label: 'deviceTemplateStop' },
   { field: 'restart_template_id', label: 'deviceTemplateRestart' },
   { field: 'status_template_id', label: 'deviceTemplateStatus' },
@@ -192,7 +191,6 @@ export default {
       templates: [],
       settings: {
         discover_template_id: null,
-        start_template_id: null,
         stop_template_id: null,
         restart_template_id: null,
         status_template_id: null,

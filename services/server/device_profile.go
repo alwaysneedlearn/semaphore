@@ -33,7 +33,6 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 		ProjectID:                projectID,
 		ProfileID:                  p.ID,
 		DiscoverTemplateID:       projectSettings.DiscoverTemplateID,
-		StartTemplateID:          projectSettings.StartTemplateID,
 		StopTemplateID:           projectSettings.StopTemplateID,
 		RestartTemplateID:        projectSettings.RestartTemplateID,
 		StatusTemplateID:         projectSettings.StatusTemplateID,
@@ -67,7 +66,7 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 	if err != nil {
 		return err
 	}
-	needsTemplates := ps.DiscoverTemplateID == nil && ps.StartTemplateID == nil &&
+	needsTemplates := ps.DiscoverTemplateID == nil &&
 		ps.StopTemplateID == nil && ps.RestartTemplateID == nil &&
 		ps.StatusTemplateID == nil && ps.ConfigTemplateID == nil
 	if !needsTemplates {
@@ -78,7 +77,6 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 		return err
 	}
 	ps.DiscoverTemplateID = projectSettings.DiscoverTemplateID
-	ps.StartTemplateID = projectSettings.StartTemplateID
 	ps.StopTemplateID = projectSettings.StopTemplateID
 	ps.RestartTemplateID = projectSettings.RestartTemplateID
 	ps.StatusTemplateID = projectSettings.StatusTemplateID
