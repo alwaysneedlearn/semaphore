@@ -53,6 +53,8 @@ SEMAPHORE_API_TOKEN=<token>
 | `TDENGINE_TAG_SUPPLIER` | `newarerm` | NBT 建议设为 `nbt`（超级表 TAG） |
 | `TDENGINE_STATUS_TABLE` | `neware_remote_computer_status` | 可按类型改为 NBT 子表名 |
 
+**Bulk 回调 / TDengine**：仅在第二 play `hosts: localhost` 执行一次 `semaphore_bulk_put_from_hostvars.yml`（不在 `post_tasks` 里重复 bulk，避免 TDengine 写入两次）。任务日志应只看到一组 `[DEBUG-API]` bulk PUT 与 `[DEBUG-TDENGINE]`。
+
 ## 设备配置（非变量组）
 
 | Category | 用途 |
