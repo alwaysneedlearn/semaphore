@@ -78,11 +78,16 @@
       when: _land_exe_stat.stat.exists | default(false)
 
     - ansible.builtin.set_fact:
-        _land_need_reconfigure: >-
+        _land_need_reconfigure: "{{ _land_check_need_reconfig | bool }}"
+      vars:
+        _land_proc_out: "{{ _land_process_check.stdout | default('') | trim }}"
+        _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
+        _land_api_ok: "{{ ((_land_api_check.status | default(-1) | int) >= 200) and ((_land_api_check.status | default(-1) | int) < 300) }}"
+        _land_check_need_reconfig: >-
           {{
             (not (_land_exe_stat.stat.exists | default(false)))
-            or ('RUNNING' not in (_land_process_check.stdout | default('')))
-            or (not (((_land_api_check.status | default(0) | int) >= 200) and ((_land_api_check.status | default(0) | int) < 300)))
+            or (not (_land_proc_running | bool))
+            or (not (_land_api_ok | bool))
           }}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"

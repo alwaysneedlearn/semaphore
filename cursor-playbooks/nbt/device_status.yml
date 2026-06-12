@@ -33,25 +33,28 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
 
     - ansible.builtin.set_fact:
-        need_reconfigure: "{{ _nbt_need_reconfig }}"
+        need_reconfigure: "{{ _nbt_need_reconfig | bool }}"
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'healthy' if not (_nbt_need_reconfig | bool) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if not (_nbt_need_reconfig | bool) else 'offline' }}"
+          abnormal_reason: "{{ _nbt_abnormal_reason | trim }}"
       vars:
+        _nbt_svc_out: "{{ _nbt_service_status.stdout | default('') | trim }}"
+        _nbt_svc_running: "{{ (_nbt_svc_out.split('|') | first) == 'RUNNING' }}"
         _nbt_need_reconfig: >-
           {{
             (not (_nbt_service_path_stat.stat.exists | default(false)))
-            or ('RUNNING' not in (_nbt_service_status.stdout | default('')))
+            or (not (_nbt_svc_running | bool))
             or not (nbt_heartbeat_ok | default(false) | bool)
           }}
-          abnormal_reason: >-
-            {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service path not found: {{ service_path }}
-            {% elif 'RUNNING' not in (_nbt_service_status.stdout | default('')) %}Service not running: {{ service_name }} ({{ _nbt_service_status.stdout | default('') | trim }})
-            {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
-            {% else %}{% endif %}
+        _nbt_abnormal_reason: >-
+          {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service path not found: {{ service_path }}
+          {% elif not (_nbt_svc_running | bool) %}Service not running: {{ service_name }} ({{ _nbt_svc_out }})
+          {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
+          {% else %}{% endif %}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 

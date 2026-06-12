@@ -70,25 +70,28 @@
 
     - name: 状态判断并组装回调行
       ansible.builtin.set_fact:
-        need_reconfigure: "{{ _sinexcel_need_reconfig }}"
+        need_reconfigure: "{{ _sinexcel_need_reconfig | bool }}"
         semaphore_callback_row:
           hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
           ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'healthy' if not (_sinexcel_need_reconfig | bool) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if not (_sinexcel_need_reconfig | bool) else 'offline' }}"
+          abnormal_reason: "{{ _sinexcel_abnormal_reason | trim }}"
       vars:
+        _sinexcel_proc_out: "{{ _sinexcel_process_check.stdout | default('') | trim }}"
+        _sinexcel_proc_running: "{{ (_sinexcel_proc_out.split('|') | first) == 'RUNNING' }}"
         _sinexcel_need_reconfig: >-
           {{
             (not (_sinexcel_exe_stat.stat.exists | default(false)))
-            or ('RUNNING' not in (_sinexcel_process_check.stdout | default('')))
+            or (not (_sinexcel_proc_running | bool))
             or (not (_sinexcel_kafka_api_ok | default(false) | bool))
           }}
-          abnormal_reason: >-
-            {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
-            {% elif 'RUNNING' not in (_sinexcel_process_check.stdout | default('')) %}Process not running: {{ process_name }}
-            {% elif not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled: EnableFlowInfoExtendedSqlite!=true result={{ _sinexcel_kafka_result_text | default('n/a') }}
-            {% else %}{% endif %}
+        _sinexcel_abnormal_reason: >-
+          {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
+          {% elif not (_sinexcel_proc_running | bool) %}Process not running: {{ process_name }} ({{ _sinexcel_proc_out }})
+          {% elif not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled: EnableFlowInfoExtendedSqlite!=true result={{ _sinexcel_kafka_result_text | default('n/a') }}
+          {% else %}{% endif %}
 
     - name: DEBUG SINEXCEL 巡检结果
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
