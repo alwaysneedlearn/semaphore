@@ -46,20 +46,33 @@
   register: _land_process_after_restart
   changed_when: false
 
-- name: 重启后查询 LAND API 状态
-  ansible.builtin.uri:
-    url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
-    method: POST
-    body_format: json
-    body:
-      token: "{{ land_api_token }}"
-    timeout: "{{ land_api_timeout }}"
-    validate_certs: "{{ land_api_verify_tls }}"
-    return_content: true
-    status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-  register: _land_api_after_restart
-  delegate_to: localhost
-  failed_when: false
+- name: 重启后查询 LAND API 状态（轮询 QueryStatus）
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status.yml"
+  register: _land_api_status_poll
+  until: land_api_status_ok | default(false) | bool
+  retries: "{{ land_api_status_start_poll_retries | default(6) | int }}"
+  delay: "{{ land_api_status_start_poll_delay | default(10) | int }}"
+  when: land_start_check_api | default(true) | bool
+
+- name: DEBUG LAND 启动后 QueryStatus 轮询
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll retries={{ land_api_status_start_poll_retries | default(6) }} delay_s={{ land_api_status_start_poll_delay | default(10) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll attempts={{ _land_api_status_poll.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll ok={{ land_api_status_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll last_http={{ _land_api_after_restart.status | default('n/a') }}"
+  when:
+    - land_start_check_api | default(true) | bool
+    - _land_api_status_poll is defined
+
+- name: 跳过启动后 LAND API 检查
+  ansible.builtin.set_fact:
+    _land_api_after_restart:
+      status: 200
+      skipped: true
+      content: ""
+    land_api_status_ok: true
+  when: not (land_start_check_api | default(true) | bool)
 
 - name: 启动后 API 修改配置重试
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
@@ -70,6 +83,5 @@
   when: >-
     (merged_cfg.Redeliver | default({}) | length) > 0
     and ('RUNNING' in (_land_process_after_restart.stdout | default('')))
-    and ((_land_api_after_restart.status | default(0) | int) >= 200)
-    and ((_land_api_after_restart.status | default(0) | int) < 300)
+    and (land_api_status_ok | default(false) | bool)
     and (land_include_redeliver | default(true) | bool)

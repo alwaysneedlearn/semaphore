@@ -123,6 +123,8 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 |----------|---------|------|
 | `SINEXCEL_API_PORT` / `API_PORT` | `9002` | SetConfig / QueryConfig 等 HTTP API |
 | `SINEXCEL_START_CHECK_API` | `true` | 启动后要求 `EnableFlowInfoExtendedSqlite=true` |
+| `SINEXCEL_KAFKA_START_POLL_RETRIES` | `6` | 启动后轮询 `QueryConfig` 直至 `api_ok`（巡检仍为单次 POST） |
+| `SINEXCEL_KAFKA_START_POLL_DELAY` | `10` | `QueryConfig` 轮询间隔（秒） |
 | `EXE_ARGS` | 空 | 启动参数 |
 | `RESTART_DELAY` | `30` | 启动前等待（秒） |
 | `PROCESS_VERIFY_POLL_SECONDS` | `5` | 进程确认轮询 |

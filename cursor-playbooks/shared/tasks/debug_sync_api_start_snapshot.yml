@@ -66,9 +66,16 @@
         + (
           [
             '[DEBUG-' ~ _tag ~ '] land_api http=' ~ (_sem_dbg_land_api_status | string),
+            '[DEBUG-' ~ _tag ~ '] land_api_status_ok=' ~ (land_api_status_ok | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] land_query_status_poll_attempts=' ~ (_land_api_status_poll.attempts | default('n/a') | string),
             '[DEBUG-' ~ _tag ~ '] nbt_heartbeat_ok=' ~ (nbt_heartbeat_ok | default('n/a') | string)
           ] if (_land_api_after_start is defined or _land_api_after_restart is defined or _land_api_check is defined
                   or nbt_heartbeat_ok is defined or nbt_heartbeat_last_send is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] kafka_query_poll_attempts=' ~ (_sinexcel_kafka_query_poll.attempts | default('n/a') | string)
+          ] if (_sinexcel_kafka_query_poll is defined) else []
         )
         + (
           [

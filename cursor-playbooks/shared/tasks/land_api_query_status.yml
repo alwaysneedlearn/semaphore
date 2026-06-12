@@ -1,0 +1,26 @@
+---
+# POST QueryStatus — sets _land_api_status_raw, _land_api_after_restart, land_api_status_ok.
+
+- name: LAND 查询 API 状态（QueryStatus）
+  ansible.builtin.uri:
+    url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
+    method: POST
+    body_format: json
+    body:
+      token: "{{ land_api_token }}"
+    timeout: "{{ land_api_timeout }}"
+    validate_certs: "{{ land_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+  register: _land_api_status_raw
+  delegate_to: localhost
+  failed_when: false
+
+- name: LAND 解析 QueryStatus 并判定 API 健康
+  ansible.builtin.set_fact:
+    _land_api_after_restart: "{{ _land_api_status_raw }}"
+    land_api_status_ok: "{{ _land_api_ok | bool }}"
+  vars:
+    _land_api_http: "{{ _land_api_status_raw.status | default(0) | int }}"
+    _land_api_ok: "{{ (_land_api_http >= 200) and (_land_api_http < 300) }}"
+  when: _land_api_status_raw is defined

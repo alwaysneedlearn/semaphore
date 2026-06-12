@@ -72,6 +72,8 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_API_TOKEN` | `landapi` | Token in request JSON body |
 | `LAND_API_VERIFY_TLS` | `true` | Whether to verify TLS cert |
 | `LAND_START_CHECK_API` | `true` | After start/restart, verify API |
+| `LAND_API_STATUS_START_POLL_RETRIES` | `6` | After start/restart, poll `QueryStatus` until HTTP 2xx (patrol uses single POST) |
+| `LAND_API_STATUS_START_POLL_DELAY` | `10` | Seconds between `QueryStatus` poll attempts |
 | `LAND_STOP_CHECK_API` | `false` | After stop, verify API |
 | `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | Process for `CloseMainWindow` (graceful stop) |
 | `STOP_VERIFY_PROCESS_NAME` | (`STOP_GRACEFUL_PROCESS_NAME`) | Process name to verify stopped (default `LHBTS`, same as graceful stop) |

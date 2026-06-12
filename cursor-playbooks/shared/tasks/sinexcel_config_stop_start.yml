@@ -1,12 +1,12 @@
 ---
 # SINEXCEL: Kafka SetConfig/IsEnable (while running) → stop → start (+ start popup) → QueryConfig → retry → Retransmit.
 # 不写 INI；配置仅经 HTTP API（KafkaConfig / SetConfig）。Play vars: merged_cfg, process_name, sinexcel_kafka_*.
-# Revision marker (logs): SINEXCEL_CONFIG_STOP_START_REV=4 — no apply_neware_style / INI patch.
+# Revision marker (logs): SINEXCEL_CONFIG_STOP_START_REV=5 — post-start QueryConfig poll.
 
 - name: "DEBUG SINEXCEL 启停流程版本（无 INI 重配）"
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] SINEXCEL_CONFIG_STOP_START_REV=4"
+      - "[DEBUG-SINEXCEL] SINEXCEL_CONFIG_STOP_START_REV=5"
       - "[DEBUG-SINEXCEL] ini_reconfig=disabled (HTTP API only; no apply_neware_style_device_config_files)"
 
 - name: 准备 SINEXCEL 配置分类
@@ -70,8 +70,8 @@
   register: _ini_agent_process_after
   changed_when: false
 
-- name: 启动后查询 Kafka 配置（健康判定）
-  ansible.builtin.include_tasks: sinexcel_kafka_query_config.yml
+- name: 启动后查询 Kafka 配置（健康判定，轮询）
+  ansible.builtin.include_tasks: sinexcel_kafka_query_config_start_poll.yml
   when: sinexcel_start_check_api | default(true) | bool
 
 - name: 启动后：Kafka SetConfig 重试
@@ -85,8 +85,8 @@
     'RUNNING' in (_ini_agent_process_after.stdout | default(''))
     and not (_sinexcel_kafka_enabled | default(false) | bool)
 
-- name: 启动后再次查询 Kafka 配置（IsEnable 后）
-  ansible.builtin.include_tasks: sinexcel_kafka_query_config.yml
+- name: 启动后再次查询 Kafka 配置（IsEnable 后，轮询）
+  ansible.builtin.include_tasks: sinexcel_kafka_query_config_start_poll.yml
   when: >-
     sinexcel_start_check_api | default(true) | bool
     and (_sinexcel_kafka_enable_raw is defined)

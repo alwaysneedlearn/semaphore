@@ -103,12 +103,12 @@
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
             {% if _land_need_reconfigure | bool %}
-            {{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'unhealthy' }}
+            {{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}
             {% else %}healthy{% endif %}
           winrm_status: online
           api_status: >-
             {% if _land_need_reconfigure | bool %}
-            {{ 'online' if ((_land_api_after_restart.status | default(0) | int) >= 200 and (_land_api_after_restart.status | default(0) | int) < 300) else 'offline' }}
+            {{ 'online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'offline' }}
             {% else %}online{% endif %}
           abnormal_reason: ""
 

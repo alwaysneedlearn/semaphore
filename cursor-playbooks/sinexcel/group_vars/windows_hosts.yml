@@ -13,3 +13,6 @@ sinexcel_kafka_query_history_path: "/kafka/QueryHistory"
 sinexcel_kafka_retransmit_path: "/kafka/Retransmit"
 sinexcel_kafka_timeout: 15
 sinexcel_kafka_verify_tls: false
+# After start/restart: poll POST /kafka/QueryConfig until api_ok or retries exhausted (patrol uses single POST).
+sinexcel_kafka_start_poll_retries: "{{ ((lookup('env', 'SINEXCEL_KAFKA_START_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
+sinexcel_kafka_start_poll_delay: "{{ ((lookup('env', 'SINEXCEL_KAFKA_START_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
