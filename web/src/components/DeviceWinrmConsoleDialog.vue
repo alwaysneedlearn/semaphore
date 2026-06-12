@@ -59,7 +59,7 @@
                 :key="idx"
                 @click="command = cmd"
               >
-                <v-list-item-title class="monospace-caption">
+                <v-list-item-title class="monospace-caption winrm-console-font">
                   {{ truncate(cmd, 80) }}
                 </v-list-item-title>
               </v-list-item>
@@ -74,7 +74,7 @@
           auto-grow
           outlined
           dense
-          class="monospace-field"
+          class="monospace-field winrm-console-font"
           :disabled="executing"
         />
 
@@ -102,7 +102,16 @@
 
         <div v-if="lastOutput !== null" class="mb-4">
           <div class="subtitle-2 mb-1">{{ $t('deviceWinrmOutput') }}</div>
-          <pre class="winrm-output">{{ formatOutput(lastOutput) }}</pre>
+          <v-alert
+            v-if="lastOutput.message && !lastOutput.ok"
+            type="warning"
+            dense
+            text
+            class="mb-2"
+          >
+            {{ lastOutput.message }}
+          </v-alert>
+          <pre class="winrm-output winrm-console-font">{{ formatOutput(lastOutput) }}</pre>
           <div class="caption" v-if="lastOutput.duration_ms != null">
             exit={{ lastOutput.exit_code }} duration={{ lastOutput.duration_ms }}ms
           </div>
@@ -372,6 +381,9 @@ export default {
           force_offline: this.forceOffline,
         });
         this.lastOutput = res.data;
+        if (res.data && res.data.error) {
+          this.formError = res.data.message || res.data.error;
+        }
         await this.loadHistory();
       } catch (e) {
         if (e.response && e.response.data) {
@@ -387,7 +399,7 @@ export default {
       const parts = [];
       if (o.stdout) parts.push(o.stdout);
       if (o.stderr) parts.push(`[stderr]\n${o.stderr}`);
-      if (o.message) parts.push(`[error] ${o.message}`);
+      if (o.message && o.error) parts.push(`[error] ${o.message}`);
       return parts.join('\n') || '(empty)';
     },
     formatLogDetail(log) {
@@ -457,6 +469,14 @@ export default {
 </script>
 
 <style scoped>
+.winrm-console-font {
+  font-family: ui-monospace, 'Cascadia Code', 'Cascadia Mono', 'Segoe UI Mono', 'JetBrains Mono',
+    'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+}
 .winrm-output {
   background: #1e1e1e;
   color: #d4d4d4;
@@ -464,16 +484,25 @@ export default {
   border-radius: 4px;
   max-height: 280px;
   overflow: auto;
-  font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.monospace-field >>> textarea {
-  font-family: monospace;
+.monospace-field >>> textarea,
+.monospace-field >>> .v-text-field__slot textarea {
+  font-family: ui-monospace, 'Cascadia Code', 'Cascadia Mono', 'Segoe UI Mono', 'JetBrains Mono',
+    'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
+  line-height: 1.5;
 }
 .monospace-caption {
-  font-family: monospace;
+  font-family: ui-monospace, 'Cascadia Code', 'Cascadia Mono', 'Segoe UI Mono', 'JetBrains Mono',
+    'Fira Code', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+  word-break: break-all;
+}
+.winrm-history-table >>> .monospace-caption {
+  font-size: 11px;
 }
 </style>

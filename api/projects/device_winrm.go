@@ -123,7 +123,7 @@ func ExecDeviceWinRMCommand(w http.ResponseWriter, r *http.Request) {
 		out["message"] = execResult.ErrorMessage
 	}
 	status := http.StatusOK
-	if execResult.ErrorCode != "" && !execResult.OK {
+	if execResult.ErrorCode != "" {
 		status = http.StatusBadGateway
 	}
 	helpers.WriteJSON(w, status, out)
