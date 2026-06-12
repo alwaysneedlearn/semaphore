@@ -47,23 +47,8 @@
   changed_when: false
 
 - name: 重启后查询 LAND API 状态（轮询 QueryStatus）
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status.yml"
-  register: _land_api_status_poll
-  until: land_api_status_ok | default(false) | bool
-  retries: "{{ land_api_status_start_poll_retries | default(6) | int }}"
-  delay: "{{ land_api_status_start_poll_delay | default(10) | int }}"
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status_start_poll.yml"
   when: land_start_check_api | default(true) | bool
-
-- name: DEBUG LAND 启动后 QueryStatus 轮询
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll retries={{ land_api_status_start_poll_retries | default(6) }} delay_s={{ land_api_status_start_poll_delay | default(10) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll attempts={{ _land_api_status_poll.attempts | default(1) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll ok={{ land_api_status_ok | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll last_http={{ _land_api_after_restart.status | default('n/a') }}"
-  when:
-    - land_start_check_api | default(true) | bool
-    - _land_api_status_poll is defined
 
 - name: 跳过启动后 LAND API 检查
   ansible.builtin.set_fact:

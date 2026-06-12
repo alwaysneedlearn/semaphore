@@ -1,0 +1,68 @@
+---
+# After service start: poll GET /SendStatus until HTTP 200 (patrol uses single GET in nbt_api_heartbeat_check.yml).
+# until/retries must be on uri (not include_tasks) for older Ansible.
+
+- name: 启动后轮询 NBT 心跳（SendStatus）
+  ansible.builtin.uri:
+    url: "{{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_heartbeat_path }}"
+    method: GET
+    timeout: "{{ nbt_api_timeout }}"
+    validate_certs: "{{ nbt_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 500, 502, 503]
+  register: _nbt_heartbeat
+  delegate_to: localhost
+  failed_when: false
+  until: >
+    _nbt_heartbeat is defined and
+    (_nbt_heartbeat.status | default(0) | int) == 200
+  retries: "{{ nbt_heartbeat_start_poll_retries | default(6) | int }}"
+  delay: "{{ nbt_heartbeat_start_poll_delay | default(10) | int }}"
+
+- name: NBT 解析心跳并判定上报状态
+  ansible.builtin.set_fact:
+    nbt_heartbeat_last_send: "{{ _hb_last_send }}"
+    nbt_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    nbt_heartbeat_ok: "{{ _hb_ok | bool }}"
+    _nbt_api_status: "{{ _nbt_heartbeat }}"
+  vars:
+    _hb_http_ok: "{{ (_nbt_heartbeat.status | default(0) | int) == 200 }}"
+    _hb_last_send: "{{ (_nbt_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
+    _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
+    _hb_age_seconds: >-
+      {{
+        (
+          (now(fmt='%Y-%m-%d %H:%M:%S') | to_datetime)
+          - (_hb_last_send | to_datetime('%Y-%m-%d %H:%M:%S'))
+        ).total_seconds() | float
+        if (_hb_http_ok | bool) and (_hb_has_send | bool)
+        else -1
+      }}
+    _hb_max_min: "{{ nbt_heartbeat_max_age_minutes | default(90) | int }}"
+    _hb_age_min: >-
+      {{
+        ((_hb_age_seconds | float) / 60) | round(1)
+        if (_hb_age_seconds | float) >= 0
+        else 'n/a'
+      }}
+    _hb_ok: >-
+      {{
+        (_hb_http_ok | bool) and (
+          (
+            (_hb_age_seconds | float) >= 0
+            and ((_hb_age_seconds | float) / 60) <= (_hb_max_min | int)
+          ) or (
+            (_hb_age_seconds | float) < 0
+          )
+        )
+      }}
+  failed_when: false
+
+- name: DEBUG NBT 启动后心跳轮询
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll retries={{ nbt_heartbeat_start_poll_retries | default(6) }} delay_s={{ nbt_heartbeat_start_poll_delay | default(10) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll attempts={{ _nbt_heartbeat.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll ok={{ nbt_heartbeat_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_http={{ _nbt_heartbeat.status | default('n/a') }}"
+  when: _nbt_heartbeat is defined

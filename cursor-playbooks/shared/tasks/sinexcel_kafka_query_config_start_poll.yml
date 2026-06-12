@@ -1,18 +1,45 @@
 ---
-# After start/restart: poll POST /kafka/QueryConfig until _sinexcel_kafka_api_ok (patrol uses single GET).
+# After start/restart: poll POST /kafka/QueryConfig until api_ok (patrol uses sinexcel_kafka_query_config.yml).
+# until/retries must be on uri (not include_tasks) for older Ansible.
+
+- name: 准备 QueryConfig 请求体
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_query_body: {}
 
 - name: 启动后轮询 Kafka QueryConfig
-  ansible.builtin.include_tasks: sinexcel_kafka_query_config.yml
-  register: _sinexcel_kafka_query_poll
-  until: _sinexcel_kafka_api_ok | default(false) | bool
+  ansible.builtin.uri:
+    url: >-
+      {{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path }}
+    method: POST
+    body_format: raw
+    body: "{{ _sinexcel_kafka_query_body | to_json }}"
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
+    validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+  register: _sinexcel_kafka_query_raw
+  delegate_to: localhost
+  failed_when: false
+  until: >
+    _sinexcel_kafka_query_raw is defined and
+    (_sinexcel_kafka_query_raw.status | default(0) | int) == 200 and
+    ((_sinexcel_kafka_query_raw.content | default('') | trim) | length) > 0 and
+    ('成功' in (((_sinexcel_kafka_query_raw.content | from_json).Result | default('')) | string)) and
+    (((_sinexcel_kafka_query_raw.content | from_json).Msg | default('{}') | from_json).EnableFlowInfoExtendedSqlite | default(false) | bool)
   retries: "{{ sinexcel_kafka_start_poll_retries | default(6) | int }}"
   delay: "{{ sinexcel_kafka_start_poll_delay | default(10) | int }}"
+  vars:
+    _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
 
 - name: DEBUG SINEXCEL 启动后 Kafka QueryConfig 轮询
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('SINEXCEL') }}] kafka_query_poll retries={{ sinexcel_kafka_start_poll_retries | default(6) }} delay_s={{ sinexcel_kafka_start_poll_delay | default(10) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('SINEXCEL') }}] kafka_query_poll attempts={{ _sinexcel_kafka_query_poll.attempts | default(1) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('SINEXCEL') }}] kafka_query_poll api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('SINEXCEL') }}] kafka_query_poll attempts={{ _sinexcel_kafka_query_raw.attempts | default(1) }}"
       - "[DEBUG-{{ sem_debug_tag | default('SINEXCEL') }}] kafka_query_poll last_http={{ _sinexcel_kafka_query_raw.status | default('n/a') }}"
-  when: _sinexcel_kafka_query_poll is defined
+  when: _sinexcel_kafka_query_raw is defined
+
+- ansible.builtin.include_tasks: sinexcel_kafka_query_config_apply.yml

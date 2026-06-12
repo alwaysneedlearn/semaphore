@@ -1,0 +1,46 @@
+---
+# Parse _sinexcel_kafka_query_raw → _sinexcel_kafka_* (after single or polled uri).
+
+- name: 解析 Kafka QueryConfig 并判定 API 健康
+  ansible.builtin.set_fact:
+    _sinexcel_kafka_result_text: "{{ _kafka_result_text }}"
+    _sinexcel_kafka_enabled: "{{ _kafka_enabled | bool }}"
+    _sinexcel_kafka_api_ok: "{{ _kafka_api_ok | bool }}"
+  vars:
+    _kafka_http_ok: "{{ (_sinexcel_kafka_query_raw.status | default(0) | int) == 200 }}"
+    _kafka_envelope: >-
+      {{
+        (_sinexcel_kafka_query_raw.content | from_json)
+        if (_kafka_http_ok | bool) and ((_sinexcel_kafka_query_raw.content | default('') | trim) | length) > 0
+        else {}
+      }}
+    _kafka_result_text: "{{ _kafka_envelope.Result | default('') | string }}"
+    _kafka_result_ok: "{{ (_kafka_http_ok | bool) and ('成功' in (_kafka_result_text | default(''))) }}"
+    _kafka_config_parsed: >-
+      {{
+        (_kafka_envelope.Msg | default('{}') | from_json)
+        if ((_kafka_envelope.Msg | default('') | trim) | length) > 0
+        else {}
+      }}
+    _kafka_enabled: "{{ _kafka_config_parsed.EnableFlowInfoExtendedSqlite | default(false) | bool }}"
+    _kafka_api_ok: "{{ (_kafka_result_ok | bool) and (_kafka_enabled | bool) }}"
+  when: _sinexcel_kafka_query_raw is defined
+
+- name: 登记启动后 API 寄存器（_sinexcel_api_after）
+  ansible.builtin.set_fact:
+    _sinexcel_api_after: "{{ _sinexcel_kafka_query_raw }}"
+  when:
+    - _sinexcel_kafka_query_raw is defined
+    - sinexcel_kafka_register_api_after | default(true) | bool
+
+- name: DEBUG SINEXCEL Kafka QueryConfig
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] api_query url={{ sinexcel_kafka_api_scheme }}://{{ _sinexcel_kafka_target_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path }}"
+      - "[DEBUG-SINEXCEL] api_query request_body={{ _sinexcel_kafka_query_body | default({}) | to_json }}"
+      - "[DEBUG-SINEXCEL] api_query http={{ _sinexcel_kafka_query_raw.status | default('n/a') }} result={{ _sinexcel_kafka_result_text | default('n/a') }}"
+      - "[DEBUG-SINEXCEL] api_query EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
+      - "[DEBUG-SINEXCEL] api_query api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
+  vars:
+    _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+  when: _sinexcel_kafka_query_raw is defined

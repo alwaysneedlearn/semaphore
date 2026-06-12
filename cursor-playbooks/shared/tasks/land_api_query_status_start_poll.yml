@@ -1,0 +1,42 @@
+---
+# After start/restart: poll POST QueryStatus until HTTP 2xx (patrol uses land_api_query_status.yml).
+# until/retries must be on uri (not include_tasks) for older Ansible.
+
+- name: 启动后轮询 LAND QueryStatus
+  ansible.builtin.uri:
+    url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
+    method: POST
+    body_format: json
+    body:
+      token: "{{ land_api_token }}"
+    timeout: "{{ land_api_timeout }}"
+    validate_certs: "{{ land_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
+  register: _land_api_status_raw
+  delegate_to: localhost
+  failed_when: false
+  until: >
+    _land_api_status_raw is defined and
+    (_land_api_status_raw.status | default(0) | int) >= 200 and
+    (_land_api_status_raw.status | default(0) | int) < 300
+  retries: "{{ land_api_status_start_poll_retries | default(6) | int }}"
+  delay: "{{ land_api_status_start_poll_delay | default(10) | int }}"
+
+- name: LAND 解析 QueryStatus 并判定 API 健康
+  ansible.builtin.set_fact:
+    _land_api_after_restart: "{{ _land_api_status_raw }}"
+    land_api_status_ok: "{{ _land_api_ok | bool }}"
+  vars:
+    _land_api_http: "{{ _land_api_status_raw.status | default(0) | int }}"
+    _land_api_ok: "{{ (_land_api_http >= 200) and (_land_api_http < 300) }}"
+  when: _land_api_status_raw is defined
+
+- name: DEBUG LAND 启动后 QueryStatus 轮询
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll retries={{ land_api_status_start_poll_retries | default(6) }} delay_s={{ land_api_status_start_poll_delay | default(10) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll attempts={{ _land_api_status_raw.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll ok={{ land_api_status_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LAND') }}] query_status_poll last_http={{ _land_api_after_restart.status | default('n/a') }}"
+  when: _land_api_status_raw is defined
