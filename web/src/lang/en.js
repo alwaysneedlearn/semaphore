@@ -518,6 +518,11 @@ export default {
   deviceStop: 'Stop',
   deviceRestart: 'Restart',
   deviceRedeploy: 'Redeploy',
+  deviceActionConfirmTitle: 'Confirm device action',
+  deviceActionConfirmSingle: 'Run "{action}" on {host} ({ip})?',
+  deviceActionConfirmBulk: 'Run "{action}" on {count} selected device(s)?',
+  deviceActionConfirmMultiType:
+    'Selected devices span {n} device type(s); this will create {n} separate task(s).',
   deviceWinrmConsole: 'WinRM console',
   deviceWinrmCredentialWinrm: 'WinRM credentials',
   deviceWinrmCredentialRdp: 'RDP credentials (via WinRM)',
