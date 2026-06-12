@@ -1,11 +1,9 @@
 ---
-# PUT discovered hosts to Semaphore (Devices → Discovery tab). Requires SEMAPHORE_API_TOKEN.
-#
-# Include from device_discovery.yml（根目录 play）。play 须设置 sem_tasks_dir。
+# PUT discovered hosts to Semaphore. Requires SEMAPHORE_API_TOKEN.
 
 - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_bulk_credentials.yml"
 
-- name: 解析 discovery 回调 task_id
+- name: 解析 discovery 回调参数
   ansible.builtin.set_fact:
     _sem_discovery_task_id: >-
       {{ (
@@ -14,35 +12,33 @@
         (semaphore_vars.task_details.id | default('')) | string | trim
       ) or (
         lookup('env', 'SEMAPHORE_TASK_DETAILS_ID') | default('', true) | trim
-      ) }}
+      }}
+    _sem_discovery_cred_ok: >-
+      {{
+        (_sem_bulk_pid | default('') | trim | length) > 0 and
+        (_sem_bulk_token | default('') | trim | length) > 0 and
+        (_sem_discovery_task_id | default('') | trim | length) > 0
+      }}
 
-- name: DEBUG discovery 回调前置检查
+- name: DEBUG discovery 回调
   ansible.builtin.debug:
-    msg:
-      - "[DEBUG-API] discovery_hosts={{ discovered_devices | default([]) | length }}"
-      - "[DEBUG-API] discovery_pid={{ _sem_bulk_pid | default('') }}"
-      - "[DEBUG-API] discovery_task_id={{ _sem_discovery_task_id | default('') }}"
-      - "[DEBUG-API] discovery_token_set={{ (_sem_bulk_token | default('') | trim | length) > 0 }}"
+    msg: "{{ _disc_debug_lines }}"
+  vars:
+    _disc_debug_lines: >-
+      {{
+        [
+          '[DEBUG-API] discovery_hosts=' ~ (discovered_devices | default([]) | length | string),
+          '[DEBUG-API] discovery_pid=' ~ (_sem_bulk_pid | default('')),
+          '[DEBUG-API] discovery_task_id=' ~ (_sem_discovery_task_id | default('')),
+          '[DEBUG-API] discovery_token_set=' ~ (((_sem_bulk_token | default('') | trim | length) > 0) | string)
+        ]
+        + (
+          ['Discovery callback skipped: need semaphore_project_id, semaphore_task_id, and SEMAPHORE_API_TOKEN']
+          if ((discovered_devices | default([]) | length) > 0 and not (_sem_discovery_cred_ok | bool))
+          else []
+        )
+      }}
   when: discovered_devices is defined
-
-- name: 提示缺少 discovery 回调凭据
-  ansible.builtin.debug:
-    msg: >-
-      Discovery callback skipped: need semaphore_project_id, semaphore_task_id (or task_details.id),
-      and SEMAPHORE_API_TOKEN. hosts={{ discovered_devices | default([]) | length }}
-  when:
-    - (discovered_devices | default([])) | length > 0
-    - (_sem_bulk_pid | default('') | trim | length) < 1
-      or (_sem_bulk_token | default('') | trim | length) < 1
-      or (_sem_discovery_task_id | default('') | trim | length) < 1
-
-- name: 构建 discovery PUT JSON body（devices 必须为数组，勿用引号包成字符串）
-  ansible.builtin.set_fact:
-    _sem_discovery_put_json: "{{ {'task_id': (_sem_discovery_task_id | int), 'devices': (discovered_devices | default([]))} | to_json }}"
-
-- name: 解析 discovery PUT body 为对象
-  ansible.builtin.set_fact:
-    _sem_discovery_put_body: "{{ _sem_discovery_put_json | from_json }}"
 
 - name: PUT Semaphore /devices/discovery/results
   ansible.builtin.uri:
@@ -52,14 +48,15 @@
       Content-Type: application/json
       Authorization: "Bearer {{ _sem_bulk_token }}"
     body_format: json
-    body: "{{ _sem_discovery_put_body }}"
+    body:
+      task_id: "{{ _sem_discovery_task_id | int }}"
+      devices: "{{ discovered_devices | default([]) }}"
     status_code: [200, 400, 401, 403, 404]
   register: _sem_discovery_put_result
   failed_when: false
   when:
-    - (_sem_bulk_pid | default('') | trim | length) > 0
-    - (_sem_bulk_token | default('') | trim | length) > 0
-    - (_sem_discovery_task_id | default('') | trim | length) > 0
+    - (discovered_devices | default([]) | length) > 0
+    - _sem_discovery_cred_ok | bool
 
 - name: DEBUG Semaphore discovery PUT 响应
   ansible.builtin.debug:

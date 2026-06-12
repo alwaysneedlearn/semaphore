@@ -1,6 +1,5 @@
 ---
-# POST /kafka/QueryConfig — parse Msg JSON; set _sinexcel_kafka_enabled from EnableFlowInfoExtendedSqlite.
-# Play vars: sinexcel_kafka_api_*, _agent_target_host or _sinexcel_target_host, sinexcel_kafka_query_register (optional)
+# POST /kafka/QueryConfig — sets _sinexcel_kafka_* and optional _sinexcel_api_after.
 
 - name: 查询 SINEXCEL Kafka 配置
   ansible.builtin.uri:
@@ -19,61 +18,37 @@
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
 
-- name: 解析 Kafka QueryConfig 响应信封
+- name: 解析 Kafka QueryConfig 并判定 API 健康
   ansible.builtin.set_fact:
-    _sinexcel_kafka_envelope: "{{ _sinexcel_kafka_query_raw.content | from_json }}"
-  when: >
-    (_sinexcel_kafka_query_raw.status | default(0) | int) == 200 and
-    ((_sinexcel_kafka_query_raw.content | default('') | trim) | length) > 0
-
-- name: 登记 Kafka QueryConfig Result 文本
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_result_text: "{{ _sinexcel_kafka_envelope.Result | default('') | string }}"
-  when: _sinexcel_kafka_envelope is defined
-
-- name: 登记 Kafka QueryConfig HTTP/Result 是否成功
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_query_http_ok: "{{ (_sinexcel_kafka_query_raw.status | default(0) | int) == 200 }}"
+    _sinexcel_kafka_result_text: "{{ _kafka_result_text }}"
+    _sinexcel_kafka_enabled: "{{ _kafka_enabled | bool }}"
+    _sinexcel_kafka_api_ok: "{{ _kafka_api_ok | bool }}"
+  vars:
+    _kafka_http_ok: "{{ (_sinexcel_kafka_query_raw.status | default(0) | int) == 200 }}"
+    _kafka_envelope: >-
+      {{
+        (_sinexcel_kafka_query_raw.content | from_json)
+        if (_kafka_http_ok | bool) and ((_sinexcel_kafka_query_raw.content | default('') | trim) | length) > 0
+        else {}
+      }}
+    _kafka_result_text: "{{ _kafka_envelope.Result | default('') | string }}"
+    _kafka_result_ok: "{{ (_kafka_http_ok | bool) and ('成功' in (_kafka_result_text | default(''))) }}"
+    _kafka_config_parsed: >-
+      {{
+        (_kafka_envelope.Msg | default('{}') | from_json)
+        if ((_kafka_envelope.Msg | default('') | trim) | length) > 0
+        else {}
+      }}
+    _kafka_enabled: "{{ _kafka_config_parsed.EnableFlowInfoExtendedSqlite | default(false) | bool }}"
+    _kafka_api_ok: "{{ (_kafka_result_ok | bool) and (_kafka_enabled | bool) }}"
   when: _sinexcel_kafka_query_raw is defined
 
-- name: 登记 Kafka QueryConfig Result 是否成功
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_result_ok: >-
-      {{
-        (_sinexcel_kafka_query_http_ok | default(false) | bool) and
-        ('成功' in (_sinexcel_kafka_result_text | default('')))
-      }}
-  when: _sinexcel_kafka_result_text is defined
-
-- name: 解析 Kafka QueryConfig Msg JSON
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_config_parsed: "{{ (_sinexcel_kafka_envelope.Msg | default('{}') | from_json) }}"
-  when: >
-    _sinexcel_kafka_envelope is defined and
-    (_sinexcel_kafka_envelope.Msg | default('') | trim) | length > 0
-
-- name: 登记 EnableFlowInfoExtendedSqlite 状态
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_enabled: "{{ _sinexcel_kafka_config_parsed.EnableFlowInfoExtendedSqlite | default(false) | bool }}"
-  when: _sinexcel_kafka_config_parsed is defined
-
-- name: Kafka 未启用时登记 EnableFlowInfoExtendedSqlite=false
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_enabled: false
-  when: _sinexcel_kafka_config_parsed is not defined
-
-- name: 登记 API 健康（QueryConfig + EnableFlowInfoExtendedSqlite）
-  ansible.builtin.set_fact:
-    _sinexcel_kafka_api_ok: >-
-      {{
-        (_sinexcel_kafka_result_ok | default(false) | bool) and
-        (_sinexcel_kafka_enabled | default(false) | bool)
-      }}
-
-- name: 兼容启动后检查寄存器（_sinexcel_api_after）
+- name: 登记启动后 API 寄存器（_sinexcel_api_after）
   ansible.builtin.set_fact:
     _sinexcel_api_after: "{{ _sinexcel_kafka_query_raw }}"
-  when: sinexcel_kafka_register_api_after | default(true) | bool
+  when:
+    - _sinexcel_kafka_query_raw is defined
+    - sinexcel_kafka_register_api_after | default(true) | bool
 
 - name: DEBUG SINEXCEL Kafka QueryConfig
   ansible.builtin.debug:
@@ -84,3 +59,4 @@
       - "[DEBUG-SINEXCEL] api_query api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
+  when: _sinexcel_kafka_query_raw is defined

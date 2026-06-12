@@ -96,14 +96,6 @@
     - not (_td_now_cmd.skipped | default(false))
     - (_value_parts | length) > 0
 
-- name: DEBUG TDengine INSERT 请求
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-TDENGINE] post_url={{ _td_base }}/rest/sql/{{ _td_db }}"
-      - "[DEBUG-TDENGINE] insert_table={{ _td_insert_table }} using_stable={{ _td_using_stable }} tag_supplier={{ _td_tag_supplier }} rows={{ _td_row_count }} fixed_ts={{ _td_fixed_ts }}"
-      - "[DEBUG-TDENGINE] sql={{ _td_sql }}"
-  when: _td_sql is defined
-
 - name: POST TDengine status INSERT
   ansible.builtin.uri:
     url: "{{ _td_base }}/rest/sql/{{ _td_db }}"
@@ -125,9 +117,12 @@
       }}
   when: _td_sql is defined
 
-- name: DEBUG TDengine INSERT 结果
+- name: DEBUG TDengine INSERT 请求与结果
   ansible.builtin.debug:
     msg:
+      - "[DEBUG-TDENGINE] post_url={{ _td_base }}/rest/sql/{{ _td_db }}"
+      - "[DEBUG-TDENGINE] insert_table={{ _td_insert_table }} using_stable={{ _td_using_stable }} tag_supplier={{ _td_tag_supplier }} rows={{ _td_row_count }} fixed_ts={{ _td_fixed_ts }}"
+      - "[DEBUG-TDENGINE] sql={{ _td_sql }}"
       - "[DEBUG-TDENGINE] http_status={{ _td_put_result.status | default('n/a') }}"
       - "[DEBUG-TDENGINE] json.code={{ _resp.code | default('n/a') }} desc={{ _resp.desc | default('') }}"
       - "[DEBUG-TDENGINE] json.affected_rows={{ _affected | default('n/a') }} rows={{ _resp.rows | default('n/a') }}"

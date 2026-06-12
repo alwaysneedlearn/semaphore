@@ -11,19 +11,16 @@
       sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
       （device_discovery.yml 使用 playbook_dir/shared/tasks）
 
-- name: 登记共享 tasks 目录
+- name: 初始化 WinRM 建连上下文
   ansible.builtin.set_fact:
     _sem_tasks_dir: "{{ sem_tasks_dir | trim }}"
+    winrm_connect_retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('2', true)) | int }}"
+    winrm_connect_retry_delay: "{{ ((lookup('env', 'WINRM_CONNECT_RETRY_DELAY') | default('', true) | trim) | default('5', true)) | int }}"
 
 - name: 强制刷新 WinRM 会话标记（中途建连）
   ansible.builtin.set_fact:
     _winrm_session_ok: false
   when: winrm_force_reconnect | default(false) | bool
-
-- name: 登记 WinRM 建连重试参数
-  ansible.builtin.set_fact:
-    winrm_connect_retries: "{{ ((lookup('env', 'WINRM_CONNECT_RETRIES') | default('', true) | trim) | default('2', true)) | int }}"
-    winrm_connect_retry_delay: "{{ ((lookup('env', 'WINRM_CONNECT_RETRY_DELAY') | default('', true) | trim) | default('5', true)) | int }}"
 
 - name: WinRM 建连重试序列
   ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_connect_one_attempt.yml"

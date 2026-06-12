@@ -14,11 +14,11 @@ git fetch origin develop
 git checkout develop
 git pull origin develop
 grep -n '_app_from_cfg' shared/tasks/prepare_device_exe_paths.yml
-# 应无输出；且应有 PREPARE_DEVICE_EXE_PATHS_REV=3
+# 应无输出；且应有 PREPARE_DEVICE_EXE_PATHS_REV=4
 grep PREPARE_DEVICE_EXE_PATHS_REV shared/tasks/prepare_device_exe_paths.yml
 ```
 
-重跑巡检后，任务日志里应出现 **`[DEBUG-INSTALL] PREPARE_DEVICE_EXE_PATHS_REV=3`**。若看不到，模板 Playbook 路径是否指向该目录下的 `sinexcel/device_status.yml`。
+重跑巡检后，任务日志里应出现 **`[DEBUG-INSTALL] PREPARE_DEVICE_EXE_PATHS_REV=4`**。若看不到，模板 Playbook 路径是否指向该目录下的 `sinexcel/device_status.yml`。
 
 **Restart 仍出现「写入 INI 设备配置」/ `apply_neware_style_device_config_files.yml` 时**：runner 文件未更新。在 runner 上：
 

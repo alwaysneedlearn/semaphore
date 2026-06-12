@@ -16,11 +16,3 @@
   changed_when: false
   ignore_unreachable: true
   failed_when: false
-
-- name: DEBUG NBT 服务状态
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-NBT] service_name={{ service_name }}"
-      - "[DEBUG-NBT] service_path={{ service_path | default('n/a') }}"
-      - "[DEBUG-NBT] service_status={{ _nbt_service_status.stdout | default('') | trim }}"
-  when: sem_debug_tag | default('') == 'NBT'

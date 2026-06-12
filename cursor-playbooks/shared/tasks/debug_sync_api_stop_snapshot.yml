@@ -1,49 +1,49 @@
 ---
-# After stop. Play var: sem_debug_tag. Graceful: stop_graceful_result; force: _*_stop_result.
+# After stop. Play var: sem_debug_tag. Single consolidated DEBUG task.
 
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（弹窗参数）"
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止"
   ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_popup_keyword={{ stop_popup_keyword | default('') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_popup_wait_seconds={{ stop_popup_wait_seconds | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_popup_match_mode={{ stop_popup_match_mode | default('title_or_content') }}"
-  when: stop_popup_keyword is defined or stop_popup_match_mode is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（优雅停止脚本输出）"
-  ansible.builtin.debug:
-    msg: "{{ stop_graceful_result.stdout_lines | default(['(no stdout)']) }}"
-  when: stop_graceful_result is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（WinRM 强制回退输出）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] force_fallback_stdout={{ (stop_force_fallback_result.stdout | default('') | trim) if (stop_force_fallback_result is defined) else '(not run)' }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_POPUP_CONFIRMED={{ 'POPUP_CONFIRMED' in (stop_graceful_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_POPUP_NOT_FOUND={{ 'POPUP_NOT_FOUND' in (stop_graceful_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_NOT_RUNNING={{ 'NOT_RUNNING' in (stop_graceful_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_FORCE_STOPPED={{ 'FORCE_STOPPED' in (stop_graceful_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_has_STILL_RUNNING={{ 'STILL_RUNNING' in (stop_graceful_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] graceful_log_incomplete={{ 'STOP_TASK_LOG_INCOMPLETE' in (stop_graceful_result.stdout | default('')) }}"
-  when: stop_graceful_result is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（进程与 API）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} verify_process={{ stop_verify_process_name | default(process_name | default('n/a')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] after_stop={{ (_sem_dbg_after_stop.stdout | default('') | trim) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] stop_check_api={{ _sem_dbg_stop_check_api }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_after_stop.status | default('n/a') if (_sem_dbg_api_after_stop is defined) else 'skipped' }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ ((_sem_dbg_api_after_stop.content | default('') | string) | truncate(1500, True)) if (_sem_dbg_api_after_stop is defined) else '' }}"
+    msg: "{{ _stop_dbg_lines }}"
   vars:
+    _tag: "{{ sem_debug_tag | default('DEVICE') }}"
     _sem_dbg_after_stop: "{{ _land_process_after_stop | default(_sem_stop_verify_before_reconfig | default(_sinexcel_process_after_stop | default(_nbt_process_after_stop))) }}"
     _sem_dbg_api_after_stop: "{{ _land_api_after_stop | default(_sinexcel_api_after_stop | default(_nbt_api_after_stop)) }}"
     _sem_dbg_stop_check_api: "{{ land_stop_check_api | default(sinexcel_stop_check_api | default(nbt_stop_check_api | default(false))) }}"
-  when: _sem_dbg_after_stop is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 停止（回调行预览）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
-  when: semaphore_callback_row is defined
+    _stop_dbg_lines: >-
+      {{
+        (
+          [
+            '[DEBUG-' ~ _tag ~ '] stop_popup_keyword=' ~ (stop_popup_keyword | default('')),
+            '[DEBUG-' ~ _tag ~ '] stop_popup_wait_seconds=' ~ (stop_popup_wait_seconds | default('n/a') | string)
+          ] if (stop_popup_keyword is defined or stop_popup_match_mode is defined) else []
+        )
+        + (
+          (stop_graceful_result.stdout_lines | default(['(no stdout)']) | map('regex_replace', '^', '[DEBUG-' ~ _tag ~ '] graceful: ') | list)
+          if (stop_graceful_result is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] force_fallback_stdout=' ~ ((stop_force_fallback_result.stdout | default('') | trim) if (stop_force_fallback_result is defined) else '(not run)'),
+            '[DEBUG-' ~ _tag ~ '] graceful_has_NOT_RUNNING=' ~ (('NOT_RUNNING' in (stop_graceful_result.stdout | default(''))) | string),
+            '[DEBUG-' ~ _tag ~ '] graceful_has_STILL_RUNNING=' ~ (('STILL_RUNNING' in (stop_graceful_result.stdout | default(''))) | string)
+          ] if (stop_graceful_result is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] host=' ~ inventory_hostname ~ ' verify_process=' ~ (stop_verify_process_name | default(process_name | default('n/a'))),
+            '[DEBUG-' ~ _tag ~ '] after_stop=' ~ (_sem_dbg_after_stop.stdout | default('') | trim),
+            '[DEBUG-' ~ _tag ~ '] stop_check_api=' ~ (_sem_dbg_stop_check_api | string),
+            '[DEBUG-' ~ _tag ~ '] api http_status=' ~ (_sem_dbg_api_after_stop.status | default('n/a') | string if (_sem_dbg_api_after_stop is defined) else 'skipped')
+          ] if (_sem_dbg_after_stop is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] callback device_status=' ~ (semaphore_callback_row.device_status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] callback api_status=' ~ (semaphore_callback_row.api_status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] callback abnormal_reason=' ~ (semaphore_callback_row.abnormal_reason | default('') | trim)
+          ] if (semaphore_callback_row is defined) else []
+        )
+      }}
+  when: >
+    stop_popup_keyword is defined or stop_graceful_result is defined or _sem_dbg_after_stop is defined or
+    semaphore_callback_row is defined

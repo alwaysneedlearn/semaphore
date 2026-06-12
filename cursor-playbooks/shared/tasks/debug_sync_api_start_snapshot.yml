@@ -1,18 +1,11 @@
 ---
-# After start / restart / redeploy. Play var: sem_debug_tag.
+# After start / restart / redeploy. Play var: sem_debug_tag. Single consolidated DEBUG task.
 
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（路径与进程）"
+- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动"
   ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] host={{ inventory_hostname }} install_path={{ _sem_dbg_install_path }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_exists_initial={{ _sem_dbg_exe_stat.stat.exists | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] exe_exists_after_extract={{ _sem_dbg_exe_after.stat.exists | default('n/a') if (_sem_dbg_exe_after is defined) else 'n/a' }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] profile_user={{ _reconfig_profile_user | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] need_reconfigure={{ _sem_dbg_need_reconfigure | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] process_check={{ _sem_dbg_process_out | trim }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_name={{ service_name | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] service_status={{ _nbt_service_status.stdout | default('n/a') if (_nbt_service_status is defined) else 'n/a' }}"
+    msg: "{{ _start_dbg_lines }}"
   vars:
+    _tag: "{{ sem_debug_tag | default('DEVICE') }}"
     _sem_dbg_install_path: >-
       {% if service_path is defined and (service_path | string | trim) | length > 0 %}{{ service_path }}
       {% elif exe_path is defined %}{{ exe_path }}
@@ -34,78 +27,57 @@
       {% elif _sinexcel_process_check is defined %}{{ _sinexcel_process_check.stdout | default('') }}
       {% elif _nbt_process_check is defined %}{{ _nbt_process_check.stdout | default('') }}
       {% else %}skipped{% endif %}
-  when: _sem_dbg_exe_stat is defined or _nbt_service_status is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（交互启动与弹窗）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] profile_user={{ _reconfig_profile_user | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_keyword={{ start_popup_keyword | default('') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_wait_seconds={{ start_popup_wait_seconds | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_match_mode={{ start_popup_match_mode | default('title_or_content') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_script_stdout={{ (relaunch_result.stdout | default('') | string | trim) | truncate(3000, True) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_confirmed={{ 'POPUP_CONFIRMED' in (relaunch_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_popup_not_found={{ 'POPUP_NOT_FOUND' in (relaunch_result.stdout | default('')) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] start_verify_ok={{ 'VERIFY_OK' in (relaunch_result.stdout | default('')) }}"
-  when: relaunch_result is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（API）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_check_enabled={{ sinexcel_start_check_api | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api POST {{ sinexcel_kafka_api_scheme | default('http') }}://{{ _sem_dbg_api_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path | default('/kafka/QueryConfig') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_api_raw.status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api result={{ _sinexcel_kafka_result_text | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ (_sem_dbg_api_raw.content | default('') | string) | truncate(2000, True) }}"
-  vars:
     _sem_dbg_api_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
     _sem_dbg_api_raw: "{{ _sinexcel_kafka_query_raw | default(_sinexcel_api_after) }}"
-  when: _sem_dbg_api_raw is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims / NBT 心跳 API）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka_check_enabled={{ sinexcel_start_check_api | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka POST {{ sinexcel_kafka_api_scheme | default('http') }}://{{ _sem_dbg_kafka_host }}:{{ sinexcel_kafka_api_port }}{{ sinexcel_kafka_query_config_path | default('/kafka/QueryConfig') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka http_status={{ _sem_dbg_kafka_raw.status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka result={{ _sinexcel_kafka_result_text | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka EnableFlowInfoExtendedSqlite={{ _sinexcel_kafka_enabled | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka api_ok={{ _sinexcel_kafka_api_ok | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] kafka response_body={{ (_sem_dbg_kafka_raw.content | default('') | string) | truncate(2000, True) }}"
-  vars:
-    _sem_dbg_kafka_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
-    _sem_dbg_kafka_raw: "{{ _sinexcel_kafka_query_raw | default(_sinexcel_api_after) }}"
-  when: _sem_dbg_kafka_raw is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（SyncLims API）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api_check_enabled={{ land_start_check_api | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api http_status={{ _sem_dbg_land_api_status }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] api response_body={{ _sem_dbg_land_api_body | truncate(2000, True) }}"
-  vars:
     _sem_dbg_land_api_status: >-
       {% if _land_api_after_start is defined %}{{ _land_api_after_start.status | default('n/a') }}
       {% elif _land_api_after_restart is defined %}{{ _land_api_after_restart.status | default('n/a') }}
       {% elif _land_api_check is defined %}{{ _land_api_check.status | default('n/a') }}
       {% else %}skipped{% endif %}
-    _sem_dbg_land_api_body: >-
-      {% if _land_api_after_start is defined %}{{ _land_api_after_start.content | default('') | string }}
-      {% elif _land_api_after_restart is defined %}{{ _land_api_after_restart.content | default('') | string }}
-      {% elif _land_api_check is defined %}{{ _land_api_check.content | default('') | string }}
-      {% else %}{% endif %}
+    _start_dbg_lines: >-
+      {{
+        (
+          [
+            '[DEBUG-' ~ _tag ~ '] host=' ~ inventory_hostname ~ ' install_path=' ~ _sem_dbg_install_path,
+            '[DEBUG-' ~ _tag ~ '] exe_exists_initial=' ~ (_sem_dbg_exe_stat.stat.exists | default(false) | string if (_sem_dbg_exe_stat is defined) else 'n/a'),
+            '[DEBUG-' ~ _tag ~ '] need_reconfigure=' ~ (_sem_dbg_need_reconfigure | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] process_check=' ~ (_sem_dbg_process_out | trim),
+            '[DEBUG-' ~ _tag ~ '] service_name=' ~ (service_name | default('n/a')),
+            '[DEBUG-' ~ _tag ~ '] service_status=' ~ (_nbt_service_status.stdout | default('n/a') | trim if (_nbt_service_status is defined) else 'n/a')
+          ] if (_sem_dbg_exe_stat is defined or _nbt_service_status is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] start_script_stdout=' ~ ((relaunch_result.stdout | default('') | string | trim) | truncate(3000, True)),
+            '[DEBUG-' ~ _tag ~ '] start_popup_confirmed=' ~ (('POPUP_CONFIRMED' in (relaunch_result.stdout | default(''))) | string),
+            '[DEBUG-' ~ _tag ~ '] start_verify_ok=' ~ (('VERIFY_OK' in (relaunch_result.stdout | default(''))) | string)
+          ] if (relaunch_result is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] api_check_enabled=' ~ (sinexcel_start_check_api | default(false) | string),
+            '[DEBUG-' ~ _tag ~ '] api POST ' ~ (sinexcel_kafka_api_scheme | default('http')) ~ '://' ~ _sem_dbg_api_host
+              ~ ':' ~ (sinexcel_kafka_api_port | string) ~ (sinexcel_kafka_query_config_path | default('/kafka/QueryConfig'))
+              ~ ' http=' ~ (_sem_dbg_api_raw.status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] api result=' ~ (_sinexcel_kafka_result_text | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] api api_ok=' ~ (_sinexcel_kafka_api_ok | default(false) | string)
+          ] if (_sem_dbg_api_raw is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] land_api http=' ~ (_sem_dbg_land_api_status | string),
+            '[DEBUG-' ~ _tag ~ '] nbt_heartbeat_ok=' ~ (nbt_heartbeat_ok | default('n/a') | string)
+          ] if (_land_api_after_start is defined or _land_api_after_restart is defined or _land_api_check is defined
+                  or nbt_heartbeat_ok is defined or nbt_heartbeat_last_send is defined) else []
+        )
+        + (
+          [
+            '[DEBUG-' ~ _tag ~ '] callback device_status=' ~ (semaphore_callback_row.device_status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] callback api_status=' ~ (semaphore_callback_row.api_status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] callback abnormal_reason=' ~ (semaphore_callback_row.abnormal_reason | default('') | trim)
+          ] if (semaphore_callback_row is defined) else []
+        )
+      }}
   when: >
-    _land_api_after_start is defined or _sinexcel_api_after_start is defined or _nbt_api_after_start is defined or
-    _land_api_after_restart is defined or _sinexcel_api_after_restart is defined or _nbt_api_after_restart is defined or
-    _land_api_check is defined or _sinexcel_api_check is defined or _nbt_api_check is defined or
-    nbt_heartbeat_ok is defined or nbt_heartbeat_last_send is defined
-
-- name: "DEBUG {{ sem_debug_tag | default('DEVICE') }} 启动（回调行预览）"
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback device_status={{ semaphore_callback_row.device_status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback api_status={{ semaphore_callback_row.api_status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] callback abnormal_reason={{ semaphore_callback_row.abnormal_reason | default('') | trim }}"
-  when: semaphore_callback_row is defined
+    _sem_dbg_exe_stat is defined or _nbt_service_status is defined or relaunch_result is defined or
+    _sem_dbg_api_raw is defined or semaphore_callback_row is defined or nbt_heartbeat_ok is defined

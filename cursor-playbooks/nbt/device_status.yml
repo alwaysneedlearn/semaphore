@@ -30,25 +30,23 @@
         _nbt_process_check: "{{ _nbt_service_status }}"
       when: _nbt_service_status is defined
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
-
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
 
     - ansible.builtin.set_fact:
-        need_reconfigure: >-
+        need_reconfigure: "{{ _nbt_need_reconfig }}"
+        semaphore_callback_row:
+          hostname: "{{ _nbt_dev.hostname | default('', true) }}"
+          ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if not (_nbt_need_reconfig | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if not (_nbt_need_reconfig | bool) else 'offline' }}"
+      vars:
+        _nbt_need_reconfig: >-
           {{
             (not (_nbt_service_path_stat.stat.exists | default(false)))
             or ('RUNNING' not in (_nbt_service_status.stdout | default('')))
             or not (nbt_heartbeat_ok | default(false) | bool)
           }}
-
-    - ansible.builtin.set_fact:
-        semaphore_callback_row:
-          hostname: "{{ _nbt_dev.hostname | default('', true) }}"
-          ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if not (need_reconfigure | default(true) | bool) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
             {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service path not found: {{ service_path }}
             {% elif 'RUNNING' not in (_nbt_service_status.stdout | default('')) %}Service not running: {{ service_name }} ({{ _nbt_service_status.stdout | default('') | trim }})

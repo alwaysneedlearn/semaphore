@@ -42,10 +42,7 @@
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _sinexcel_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-
-    - name: 解析 API 目标主机
-      ansible.builtin.set_fact:
-        _sinexcel_target_host: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
+        _sinexcel_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
     - name: 检查 SINEXCEL 程序文件是否存在
       ansible.windows.win_stat:
@@ -66,31 +63,27 @@
       changed_when: false
       ignore_unreachable: true
 
-    - name: DEBUG SINEXCEL 巡检前置
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
-
     - name: 查询 SINEXCEL Kafka 配置（健康判定）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_kafka_query_config.yml"
       vars:
         sinexcel_kafka_register_api_after: false
 
-    - name: 状态判断：综合判定是否需要重配
+    - name: 状态判断并组装回调行
       ansible.builtin.set_fact:
-        need_reconfigure: >-
+        need_reconfigure: "{{ _sinexcel_need_reconfig }}"
+        semaphore_callback_row:
+          hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
+          ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if not (_sinexcel_need_reconfig | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if not (_sinexcel_need_reconfig | bool) else 'offline' }}"
+      vars:
+        _sinexcel_need_reconfig: >-
           {{
             (not (_sinexcel_exe_stat.stat.exists | default(false)))
             or ('RUNNING' not in (_sinexcel_process_check.stdout | default('')))
             or (not (_sinexcel_kafka_api_ok | default(false) | bool))
           }}
-
-    - name: 组装 SINEXCEL 状态回调行
-      ansible.builtin.set_fact:
-        semaphore_callback_row:
-          hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
-          ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if not (need_reconfigure | default(true) | bool) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if not (need_reconfigure | default(true) | bool) else 'offline' }}"
           abnormal_reason: >-
             {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
             {% elif 'RUNNING' not in (_sinexcel_process_check.stdout | default('')) %}Process not running: {{ process_name }}

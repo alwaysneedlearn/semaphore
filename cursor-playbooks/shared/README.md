@@ -54,7 +54,7 @@ Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`) and include:
 
 | Task file | Used by |
 |-----------|---------|
-| `debug_sync_api_patrol_snapshot.yml` | Status patrol (before/after API + callback) |
+| `debug_sync_api_patrol_snapshot.yml` | Status patrol — single consolidated `[DEBUG-*]` task (call once after callback row) |
 | `debug_sync_api_stop_snapshot.yml` | Stop (graceful script lines, process, optional API) |
 | `debug_sync_api_start_snapshot.yml` | Start / restart / redeploy |
 | `debug_sync_api_redeploy_gate_snapshot.yml` | `device_check_restart_redeploy` need_reconfigure gate |

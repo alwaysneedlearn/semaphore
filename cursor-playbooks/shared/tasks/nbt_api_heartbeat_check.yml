@@ -1,9 +1,5 @@
 ---
-# GET /SendStatus — returns last data send time (plain text, e.g. 2026-06-09 13:35:19).
-# Play vars: nbt_api_scheme, nbt_api_port, nbt_api_heartbeat_path, _nbt_target_host,
-#   nbt_heartbeat_max_age_minutes (default 90), nbt_api_timeout, nbt_api_verify_tls.
-# Sets: _nbt_heartbeat, nbt_heartbeat_last_send, nbt_heartbeat_age_minutes, nbt_heartbeat_ok,
-#   _nbt_api_status (alias for debug tasks).
+# GET /SendStatus — last data send time. Sets _nbt_heartbeat, nbt_heartbeat_* , _nbt_api_status.
 
 - name: NBT 查询心跳（上次发数据时间）
   ansible.builtin.uri:
@@ -17,80 +13,41 @@
   delegate_to: localhost
   failed_when: false
 
-- name: NBT 解析心跳响应时间
+- name: NBT 解析心跳并判定上报状态
   ansible.builtin.set_fact:
-    nbt_heartbeat_last_send: "{{ (_nbt_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
-
-- name: NBT 计算心跳数据年龄
-  ansible.builtin.set_fact:
-    _nbt_heartbeat_age_seconds: >-
+    nbt_heartbeat_last_send: "{{ _hb_last_send }}"
+    nbt_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    nbt_heartbeat_ok: "{{ _hb_ok | bool }}"
+    _nbt_api_status: "{{ _nbt_heartbeat }}"
+  vars:
+    _hb_http_ok: "{{ (_nbt_heartbeat.status | default(0) | int) == 200 }}"
+    _hb_last_send: "{{ (_nbt_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
+    _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
+    _hb_age_seconds: >-
       {{
         (
           (now(fmt='%Y-%m-%d %H:%M:%S') | to_datetime)
-          - (nbt_heartbeat_last_send | to_datetime('%Y-%m-%d %H:%M:%S'))
+          - (_hb_last_send | to_datetime('%Y-%m-%d %H:%M:%S'))
         ).total_seconds() | float
+        if (_hb_http_ok | bool) and (_hb_has_send | bool)
+        else -1
       }}
-  when: >
-    (_nbt_heartbeat.status | default(0) | int) == 200 and
-    (nbt_heartbeat_last_send | default('') | trim | length) > 0
-  failed_when: false
-
-- name: NBT 心跳年龄无法解析
-  ansible.builtin.set_fact:
-    _nbt_heartbeat_age_seconds: -1
-  when: >
-    (_nbt_heartbeat.status | default(0) | int) != 200 or
-    (nbt_heartbeat_last_send | default('') | trim | length) == 0 or
-    _nbt_heartbeat_age_seconds is not defined
-
-- name: NBT 判定心跳数据上报正常
-  ansible.builtin.set_fact:
-    nbt_heartbeat_age_minutes: "{{ ((_nbt_heartbeat_age_seconds | float) / 60) | round(1) }}"
-    nbt_heartbeat_ok: true
-  when: >
-    (_nbt_heartbeat.status | default(0) | int) == 200 and
-    (_nbt_heartbeat_age_seconds | default(-1) | float) >= 0 and
-    ((_nbt_heartbeat_age_seconds | float) / 60) <= (nbt_heartbeat_max_age_minutes | default(90) | int)
-
-- name: NBT 判定心跳数据上报正常（时钟略超前视为正常）
-  ansible.builtin.set_fact:
-    nbt_heartbeat_age_minutes: "{{ ((_nbt_heartbeat_age_seconds | float) / 60) | round(1) }}"
-    nbt_heartbeat_ok: true
-  when: >
-    (_nbt_heartbeat.status | default(0) | int) == 200 and
-    (_nbt_heartbeat_age_seconds | default(0) | float) < 0
-
-- name: NBT 判定心跳数据上报不正常
-  ansible.builtin.set_fact:
-    nbt_heartbeat_ok: false
-    nbt_heartbeat_age_minutes: >-
+    _hb_max_min: "{{ nbt_heartbeat_max_age_minutes | default(90) | int }}"
+    _hb_age_min: >-
       {{
-        ((_nbt_heartbeat_age_seconds | default(-1) | float) / 60) | round(1)
-        if (_nbt_heartbeat_age_seconds | default(-1) | float) >= 0
+        ((_hb_age_seconds | float) / 60) | round(1)
+        if (_hb_age_seconds | float) >= 0
         else 'n/a'
       }}
-  when: >
-    not (
-      (
-        (_nbt_heartbeat.status | default(0) | int) == 200 and
-        (_nbt_heartbeat_age_seconds | default(-1) | float) >= 0 and
-        ((_nbt_heartbeat_age_seconds | float) / 60) <= (nbt_heartbeat_max_age_minutes | default(90) | int)
-      ) or (
-        (_nbt_heartbeat.status | default(0) | int) == 200 and
-        (_nbt_heartbeat_age_seconds | default(0) | float) < 0
-      )
-    )
-
-- name: NBT 心跳结果供巡检 DEBUG 复用
-  ansible.builtin.set_fact:
-    _nbt_api_status: "{{ _nbt_heartbeat }}"
-
-- name: DEBUG NBT 心跳
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat GET {{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_heartbeat_path }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat http_status={{ _nbt_heartbeat.status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat response_body={{ _nbt_heartbeat.content | default('') | string | trim }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat last_send={{ nbt_heartbeat_last_send | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat age_minutes={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat ok={{ nbt_heartbeat_ok | default(false) }}"
+    _hb_ok: >-
+      {{
+        (_hb_http_ok | bool) and (
+          (
+            (_hb_age_seconds | float) >= 0
+            and ((_hb_age_seconds | float) / 60) <= (_hb_max_min | int)
+          ) or (
+            (_hb_age_seconds | float) < 0
+          )
+        )
+      }}
+  failed_when: false
