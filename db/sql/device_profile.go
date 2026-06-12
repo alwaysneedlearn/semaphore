@@ -2,6 +2,7 @@ package sql
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -59,10 +60,18 @@ func (d *SqlDb) CreateDeviceProfile(p db.DeviceProfile) (db.DeviceProfile, error
 	return p, nil
 }
 
+const projectDeviceProfileSettingsColumns = "" +
+	"project_id, profile_id, discover_template_id, stop_template_id, restart_template_id, " +
+	"status_template_id, redeploy_template_id, check_restart_template_id, config_template_id, " +
+	"default_inventory_id, default_ansible_user, default_ansible_password, default_ansible_connection, " +
+	"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, " +
+	"default_ansible_winrm_server_cert_validation, default_config_json, " +
+	"status_refresh_interval_min, last_status_refresh_at, tdengine_status_table"
+
 func (d *SqlDb) GetProjectDeviceProfileSettings(projectID, profileID int) (db.ProjectDeviceProfileSettings, error) {
 	var s db.ProjectDeviceProfileSettings
 	err := d.Sql().SelectOne(&s, d.PrepareQuery(
-		"select * from project__device_profile_settings where project_id=? and profile_id=?",
+		"select "+projectDeviceProfileSettingsColumns+" from project__device_profile_settings where project_id=? and profile_id=?",
 	), projectID, profileID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -124,7 +133,7 @@ func (d *SqlDb) AssignDevicesWithoutProfile(projectID, profileID int) error {
 
 func (d *SqlDb) GetDeviceProfileSettingsDueForRefresh(now time.Time) ([]db.ProjectDeviceProfileSettings, error) {
 	var settings []db.ProjectDeviceProfileSettings
-	q, args, err := squirrel.Select("*").
+	q, args, err := squirrel.Select(strings.Split(projectDeviceProfileSettingsColumns, ", ")...).
 		From("project__device_profile_settings").
 		Where(squirrel.Gt{"status_refresh_interval_min": 0}).
 		ToSql()
