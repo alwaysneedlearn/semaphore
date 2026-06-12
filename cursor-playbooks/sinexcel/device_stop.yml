@@ -90,13 +90,7 @@
     - name: DEBUG SINEXCEL 停止结果
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"
 
-  post_tasks:
-    - name: 写回 Semaphore 设备状态（post_tasks）
-      run_once: true
-      delegate_to: localhost
-      block:
-        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
-- name: 写回 Semaphore 设备状态（独立 play）
+- name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
   hosts: localhost
   gather_facts: false
   vars:

@@ -145,12 +145,7 @@
           ansible.builtin.debug:
             msg: "{{ _status_report_msg_lines }}"
 
-    - name: 写回 Semaphore 设备状态（post_tasks，成功主机批量汇总）
-      run_once: true
-      delegate_to: localhost
-      block:
-        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
-- name: 写回 Semaphore 设备状态（独立 play，play1 exit 4 时补跑 bulk）
+- name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
   hosts: localhost
   gather_facts: false
   vars:
