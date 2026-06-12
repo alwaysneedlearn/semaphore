@@ -9,9 +9,24 @@
 - name: 启动 NBT Windows 服务
   ansible.builtin.include_tasks: nbt_windows_service_start.yml
 
-- name: NBT 启动后心跳检查
+- name: NBT 启动后心跳检查（轮询 SendStatus）
   ansible.builtin.include_tasks: nbt_api_heartbeat_check.yml
+  register: _nbt_heartbeat_poll
+  until: nbt_heartbeat_ok | default(false) | bool
+  retries: "{{ nbt_heartbeat_start_poll_retries | default(6) | int }}"
+  delay: "{{ nbt_heartbeat_start_poll_delay | default(10) | int }}"
   when: nbt_start_check_api | default(false) | bool
+
+- name: DEBUG NBT 启动后心跳轮询
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll retries={{ nbt_heartbeat_start_poll_retries | default(6) }} delay_s={{ nbt_heartbeat_start_poll_delay | default(10) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll attempts={{ _nbt_heartbeat_poll.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll ok={{ nbt_heartbeat_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_http={{ _nbt_heartbeat.status | default('n/a') }}"
+  when:
+    - nbt_start_check_api | default(false) | bool
+    - _nbt_heartbeat_poll is defined
 
 - name: NBT ResetData（仅 restart）
   ansible.builtin.include_tasks: nbt_api_reset_data.yml
