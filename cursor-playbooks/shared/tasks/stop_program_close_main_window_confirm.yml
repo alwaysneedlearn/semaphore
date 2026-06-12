@@ -80,17 +80,18 @@
     msg: >-
       [DEBUG-STOP] {{ inventory_hostname }} graceful log reported still running but alive-check says stopped:
       recheck={{ stop_verify_recheck_result.stdout | default('') | trim }}
-  when:
-    - stop_verify_recheck_result is defined
-    - not (stop_verify_recheck_result.skipped | default(false))
-    - 'NOT_RUNNING' in (stop_verify_recheck_result.stdout | default(''))
-    - >-
+  when: >
+    stop_verify_recheck_result is defined and
+    not (stop_verify_recheck_result.skipped | default(false)) and
+    'NOT_RUNNING' in (stop_verify_recheck_result.stdout | default('')) and
+    (
       'STILL_RUNNING' in (stop_graceful_result.stdout | default('')) or
       (
         stop_force_fallback_result is defined and
         not (stop_force_fallback_result.skipped | default(false)) and
         'STILL_RUNNING' in (stop_force_fallback_result.stdout | default(''))
       )
+    )
 
 - name: 停止程序（优雅+强制后仍运行则失败本主机）
   ansible.builtin.fail:
