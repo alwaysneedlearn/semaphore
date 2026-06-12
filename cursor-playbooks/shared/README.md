@@ -67,7 +67,7 @@ Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** `s
 
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 
-Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Stop verify uses **`sem_process_alive_windows.ps1`** thresholds (`PROCESS_ALIVE_MIN_HANDLES` / `PROCESS_ALIVE_MIN_WS_KB`): zombie PIDs with low Handles/WS count as **NOT_RUNNING** (same as NEWARE). After graceful+fallback, **`sem_verify_process_stopped_by_name_windows.ps1`** rechecks before `fail` — if the UI process is gone but logs said `STILL_RUNNING`, restart continues. `device_stop` sets `stop_graceful_fail_on_still_running: false` (unhealthy callback only).
+Used by `land/device_stop.yml` and `sinexcel/device_stop.yml`. Stop verify uses **`sem_process_alive_windows.ps1`** thresholds (`PROCESS_ALIVE_MIN_HANDLES` / `PROCESS_ALIVE_MIN_WS_KB`): zombie PIDs with low Handles/WS count as **NOT_RUNNING** (same as NEWARE). After graceful+fallback, **`sem_verify_process_stopped_by_name_windows.ps1`** rechecks before `fail` (invoked with `&` in the existing WinRM PowerShell session, not nested `powershell.exe -File`). Stop succeeds when recheck prints `NOT_RUNNING`, or when recheck is inconclusive but graceful/fallback logs show `NOT_RUNNING` / `FORCE_STOPPED` (recheck `STILL_RUNNING` still fails). `device_stop` sets `stop_graceful_fail_on_still_running: false` (unhealthy callback only).
 
 Variable Group / play vars:
 

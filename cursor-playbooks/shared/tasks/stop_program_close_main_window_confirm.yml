@@ -64,10 +64,7 @@
     PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
     PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
   ansible.windows.win_shell: >-
-    powershell.exe -NoProfile -ExecutionPolicy Bypass
-    -File C:\Windows\Temp\sem_verify_process_stopped_by_name_windows.ps1
-  args:
-    chdir: C:\Windows\Temp
+    & 'C:\Windows\Temp\sem_verify_process_stopped_by_name_windows.ps1'
   register: stop_verify_recheck_result
   changed_when: false
   failed_when: false
@@ -101,9 +98,9 @@
       fallback={{ stop_force_fallback_result.stdout | default('(not run)') | trim }}
       recheck={{ stop_verify_recheck_result.stdout | default('(not run)') | trim }}
   vars:
-    _stop_recheck_ran: >-
-      {{ (stop_verify_recheck_result is defined) and not (stop_verify_recheck_result.skipped | default(false)) }}
-    _stop_recheck_ok: "{{ 'NOT_RUNNING' in (stop_verify_recheck_result.stdout | default('')) }}"
+    _stop_recheck_stdout: "{{ stop_verify_recheck_result.stdout | default('') }}"
+    _stop_recheck_ok: "{{ 'NOT_RUNNING' in _stop_recheck_stdout }}"
+    _stop_recheck_still_running: "{{ 'STILL_RUNNING' in _stop_recheck_stdout }}"
     _stop_graceful_ok: >-
       {{
         'NOT_RUNNING' in (stop_graceful_result.stdout | default('')) or
@@ -118,8 +115,14 @@
         'FORCE_STOPPED' in (stop_force_fallback_result.stdout | default(''))
       }}
     _stop_effectively_stopped: >-
-      {{ (_stop_recheck_ran | bool and (_stop_recheck_ok | bool)) or
-         (not (_stop_recheck_ran | bool) and (_stop_graceful_ok | bool) and (_stop_fallback_ok | bool)) }}
+      {{
+        (_stop_recheck_ok | bool) or
+        (
+          not (_stop_recheck_still_running | bool) and
+          (_stop_graceful_ok | bool) and
+          (_stop_fallback_ok | bool)
+        )
+      }}
   when:
     - stop_graceful_fail_on_still_running | default(true) | bool
     - stop_graceful_result is defined

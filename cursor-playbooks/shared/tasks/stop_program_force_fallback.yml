@@ -8,10 +8,7 @@
     PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
     PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
   ansible.windows.win_shell: >-
-    powershell.exe -NoProfile -ExecutionPolicy Bypass
-    -File C:\Windows\Temp\sem_force_stop_process_by_name_windows.ps1
-  args:
-    chdir: C:\Windows\Temp
+    & 'C:\Windows\Temp\sem_force_stop_process_by_name_windows.ps1'
   register: stop_force_fallback_result
   changed_when: >-
     stop_force_fallback_result is defined and
