@@ -13,10 +13,9 @@
   changed_when: >-
     stop_force_fallback_result is defined and
     'FORCE_STOPPED' in (stop_force_fallback_result.stdout | default(''))
-  when:
-    - stop_graceful_result is defined
-    - not (stop_graceful_result.unreachable | default(false))
-    - >-
-      'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
-      'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
-      'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
+  when: >
+    stop_graceful_result is defined and
+    not (stop_graceful_result.unreachable | default(false)) and
+    'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
+    'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
+    'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
