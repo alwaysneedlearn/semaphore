@@ -67,6 +67,7 @@
           [
             '[DEBUG-' ~ _tag ~ '] land_api http=' ~ (_sem_dbg_land_api_status | string),
             '[DEBUG-' ~ _tag ~ '] land_api_status_ok=' ~ (land_api_status_ok | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] land_api_real_status=' ~ (land_api_real_status | default('n/a') | string),
             '[DEBUG-' ~ _tag ~ '] land_query_status_poll_attempts=' ~ (_land_api_status_raw.attempts | default('n/a') | string),
             '[DEBUG-' ~ _tag ~ '] nbt_heartbeat_ok=' ~ (nbt_heartbeat_ok | default('n/a') | string)
           ] if (_land_api_after_start is defined or _land_api_after_restart is defined or _land_api_check is defined

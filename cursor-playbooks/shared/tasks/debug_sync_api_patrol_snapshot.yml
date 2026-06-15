@@ -17,7 +17,8 @@
     _sem_dbg_api_ok: >-
       {% if _sinexcel_kafka_api_ok is defined %}{{ _sinexcel_kafka_api_ok | default(false) }}
       {% elif _nbt_heartbeat is defined %}{{ nbt_heartbeat_ok | default(false) }}
-      {% elif _land_api_status is defined %}{{ ((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) }}
+      {% elif land_api_status_ok is defined %}{{ land_api_status_ok | default(false) }}
+      {% elif _land_api_status_raw is defined %}{{ land_api_status_ok | default(false) }}
       {% else %}n/a{% endif %}
     _patrol_dbg_lines: >-
       {{
@@ -43,9 +44,11 @@
           [
             '[DEBUG-' ~ _tag ~ '] api POST ' ~ (land_api_scheme | default('http')) ~ '://' ~ (_land_target_host | default(inventory_hostname))
               ~ ':' ~ (land_api_port | default(8080) | string) ~ (land_api_status_path | default('/SyncLims/QueryStatus'))
-              ~ ' http=' ~ (_land_api_status.status | default('n/a') | string),
-            '[DEBUG-' ~ _tag ~ '] api_json_ok=' ~ (((_land_api_status.status | default(0) | int) >= 200 and (_land_api_status.status | default(0) | int) < 300) | string)
-          ] if (_land_api_status is defined) else []
+              ~ ' http=' ~ (_land_api_status_raw.status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] query_status real_status=' ~ (land_api_real_status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] query_status history_status=' ~ (land_api_history_status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] query_status api_ok=' ~ (land_api_status_ok | default(false) | string)
+          ] if (_land_api_status_raw is defined) else []
         )
         + (
           [
@@ -77,5 +80,5 @@
       }}
   when: >
     _sem_dbg_path_stat is defined or _sem_dbg_process is defined or _sinexcel_kafka_query_raw is defined or
-    _land_api_status is defined or _nbt_heartbeat is defined or semaphore_callback_row is defined or
+    _land_api_status is defined or _land_api_status_raw is defined or _nbt_heartbeat is defined or semaphore_callback_row is defined or
     need_reconfigure is defined

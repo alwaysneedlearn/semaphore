@@ -1,0 +1,48 @@
+---
+# Parse QueryStatus JSON. Input register: _land_api_status_raw | _land_api_status | _land_api_check.
+# Sets: _land_api_after_restart, land_api_real_status, land_api_history_status, land_api_status_ok.
+# Healthy when HTTP 2xx and (LAND_QUERY_STATUS_REQUIRE_REAL_STATUS=false or data.real_status=true).
+
+- name: LAND 解析 QueryStatus 并判定 API 健康
+  ansible.builtin.set_fact:
+    _land_api_after_restart: "{{ _land_qs_reg }}"
+    land_api_real_status: "{{ _land_real_status | bool }}"
+    land_api_history_status: "{{ _land_history_status | bool }}"
+    land_api_status_ok: "{{ _land_api_ok | bool }}"
+  vars:
+    _land_qs_reg: "{{ _land_api_status_raw | default(_land_api_status | default(_land_api_check | default({}))) }}"
+    _land_http_ok: >-
+      {{
+        (_land_qs_reg.status | default(0) | int) >= 200
+        and (_land_qs_reg.status | default(0) | int) < 300
+      }}
+    _land_qs_envelope: >-
+      {{
+        (_land_qs_reg.content | from_json)
+        if (_land_http_ok | bool) and ((_land_qs_reg.content | default('') | trim) | length) > 0
+        else {}
+      }}
+    _land_qs_data: "{{ _land_qs_envelope.data | default({}) }}"
+    _land_real_status: "{{ _land_qs_data.real_status | default(false) | bool }}"
+    _land_history_status: "{{ _land_qs_data.history_status | default(false) | bool }}"
+    _land_require_real: "{{ land_query_status_require_real_status | default(true) | bool }}"
+    _land_api_ok: >-
+      {{
+        (_land_http_ok | bool) and (
+          (not (_land_require_real | bool))
+          or (_land_real_status | bool)
+        )
+      }}
+  when: _land_qs_reg is defined and (_land_qs_reg.status is defined)
+
+- name: DEBUG LAND QueryStatus 解析
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] query_status http={{ _land_qs_reg.status | default('n/a') }}"
+      - "[DEBUG-LAND] query_status require_real_status={{ land_query_status_require_real_status | default(true) }}"
+      - "[DEBUG-LAND] query_status data.real_status={{ land_api_real_status | default('n/a') }} data.history_status={{ land_api_history_status | default('n/a') }}"
+      - "[DEBUG-LAND] query_status api_ok={{ land_api_status_ok | default(false) }}"
+      - "[DEBUG-LAND] query_status body={{ (_land_qs_reg.content | default('') | string) | truncate(800, True) }}"
+  vars:
+    _land_qs_reg: "{{ _land_api_status_raw | default(_land_api_status | default(_land_api_check | default({}))) }}"
+  when: _land_qs_reg is defined and (_land_qs_reg.status is defined)

@@ -62,19 +62,7 @@
       changed_when: false
       when: _land_exe_stat.stat.exists | default(false)
 
-    - ansible.builtin.uri:
-        url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
-        method: POST
-        body_format: json
-        body:
-          token: "{{ land_api_token }}"
-        timeout: "{{ land_api_timeout }}"
-        validate_certs: "{{ land_api_verify_tls }}"
-        return_content: true
-        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-      register: _land_api_check
-      delegate_to: localhost
-      failed_when: false
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status.yml"
       when: _land_exe_stat.stat.exists | default(false)
 
     - ansible.builtin.set_fact:
@@ -82,7 +70,7 @@
       vars:
         _land_proc_out: "{{ _land_process_check.stdout | default('') | trim }}"
         _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
-        _land_api_ok: "{{ ((_land_api_check.status | default(-1) | int) >= 200) and ((_land_api_check.status | default(-1) | int) < 300) }}"
+        _land_api_ok: "{{ land_api_status_ok | default(false) | bool }}"
         _land_check_need_reconfig: >-
           {{
             (not (_land_exe_stat.stat.exists | default(false)))

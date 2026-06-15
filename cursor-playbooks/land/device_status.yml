@@ -63,19 +63,8 @@
       ignore_unreachable: true
 
     - name: 查询 LAND API 状态
-      ansible.builtin.uri:
-        url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_status_path }}"
-        method: POST
-        body_format: json
-        body:
-          token: "{{ land_api_token }}"
-        timeout: "{{ land_api_timeout }}"
-        validate_certs: "{{ land_api_verify_tls }}"
-        return_content: true
-        status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
-      register: _land_api_status
-      delegate_to: localhost
-      failed_when: false
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status.yml"
+      when: _land_exe_stat.stat.exists | default(false)
 
     - name: 状态判断并组装回调行
       ansible.builtin.set_fact:
@@ -90,7 +79,7 @@
       vars:
         _land_proc_out: "{{ _land_process_check.stdout | default('') | trim }}"
         _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
-        _land_api_ok: "{{ ((_land_api_status.status | default(-1) | int) >= 200) and ((_land_api_status.status | default(-1) | int) < 300) }}"
+        _land_api_ok: "{{ land_api_status_ok | default(false) | bool }}"
         _land_need_reconfig: >-
           {{
             (not (_land_exe_stat.stat.exists | default(false)))
@@ -100,7 +89,7 @@
         _land_abnormal_reason: >-
           {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
           {% elif not (_land_proc_running | bool) %}Process not running: {{ process_name }} ({{ _land_proc_out }})
-          {% elif not (_land_api_ok | bool) %}API status failed: http={{ _land_api_status.status | default('n/a') }} body={{ (_land_api_status.content | default('') | string) | truncate(200, True) }}
+          {% elif not (_land_api_ok | bool) %}API QueryStatus failed: http={{ _land_api_status_raw.status | default('n/a') }} real_status={{ land_api_real_status | default('n/a') }} history_status={{ land_api_history_status | default('n/a') }} body={{ (_land_api_status_raw.content | default('') | string) | truncate(200, True) }}
           {% else %}{% endif %}
 
     - name: DEBUG LAND 巡检结果

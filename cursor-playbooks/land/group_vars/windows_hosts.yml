@@ -6,6 +6,7 @@ ansible_winrm_read_timeout_sec: 30
 ansible_winrm_server_cert_validation: ignore
 
 land_start_check_api: "{{ ((lookup('env', 'LAND_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
-# After start/restart: poll POST QueryStatus until HTTP 2xx or retries exhausted (patrol uses single POST).
+land_query_status_require_real_status: "{{ ((lookup('env', 'LAND_QUERY_STATUS_REQUIRE_REAL_STATUS') | default('', true) | trim) | default('true', true)) | bool }}"
+# After start/restart: poll POST QueryStatus until api_ok or retries exhausted (patrol uses single POST).
 land_api_status_start_poll_retries: "{{ ((lookup('env', 'LAND_API_STATUS_START_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
 land_api_status_start_poll_delay: "{{ ((lookup('env', 'LAND_API_STATUS_START_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
