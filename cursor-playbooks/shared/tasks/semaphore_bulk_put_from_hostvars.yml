@@ -14,7 +14,17 @@
   when: hostvars[item].semaphore_callback_row is defined
   vars:
     _sem_row: "{{ hostvars[item].semaphore_callback_row }}"
-    _sem_bulk_item: "{{ _sem_row | combine({'status': _sem_row.device_status | default(_sem_row.status | default('unhealthy'))}, recursive=True) }}"
+    _sem_bulk_item: >-
+      {{
+        _sem_row
+        | combine(
+            {
+              'device_status': (_sem_row.device_status | default(_sem_row.status | default('unhealthy')) | string | trim),
+              'status': (_sem_row.device_status | default(_sem_row.status | default('unhealthy')) | string | trim)
+            },
+            recursive=True
+          )
+      }}
 
 - name: DEBUG bulk 回调（前置检查 / 缺凭据提示）
   ansible.builtin.debug:

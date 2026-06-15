@@ -102,14 +102,14 @@
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
-            {% if _land_need_reconfigure | bool %}
-            {{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}
-            {% else %}healthy{% endif %}
+            {{ 'healthy' if not (_land_need_reconfigure | bool)
+               else ('healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
+               else 'unhealthy') }}
           winrm_status: online
           api_status: >-
-            {% if _land_need_reconfigure | bool %}
-            {{ 'online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'offline' }}
-            {% else %}online{% endif %}
+            {{ 'online' if not (_land_need_reconfigure | bool)
+               else ('online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
+               else 'offline') }}
           abnormal_reason: ""
 
 - name: 写回 Semaphore 设备状态

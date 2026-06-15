@@ -53,14 +53,13 @@
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
-            {% if not (_nbt_need_reconfigure | bool) %}healthy
-            {% elif ('RUNNING' in (_nbt_service_status.stdout | default(''))) and (nbt_heartbeat_ok | default(false) | bool) %}healthy
-            {% else %}unhealthy{% endif %}
+            {{ 'healthy' if not (_nbt_need_reconfigure | bool)
+               else ('healthy' if ('RUNNING' in (_nbt_service_status.stdout | default(''))) and (nbt_heartbeat_ok | default(false) | bool)
+               else 'unhealthy') }}
           winrm_status: online
           api_status: >-
-            {% if not (_nbt_need_reconfigure | bool) %}online
-            {% elif (nbt_heartbeat_ok | default(false) | bool) %}online
-            {% else %}offline{% endif %}
+            {{ 'online' if not (_nbt_need_reconfigure | bool)
+               else ('online' if (nbt_heartbeat_ok | default(false) | bool) else 'offline') }}
           abnormal_reason: ""
 
 - name: 写回 Semaphore 设备状态

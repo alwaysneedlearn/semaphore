@@ -95,14 +95,13 @@
           hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
           ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
-            {% if not (_sinexcel_need_reconfigure | bool) %}healthy
-            {% elif ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and (_sinexcel_kafka_api_ok | default(false) | bool) %}healthy
-            {% else %}unhealthy{% endif %}
+            {{ 'healthy' if not (_sinexcel_need_reconfigure | bool)
+               else ('healthy' if ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and (_sinexcel_kafka_api_ok | default(false) | bool)
+               else 'unhealthy') }}
           winrm_status: online
           api_status: >-
-            {% if not (_sinexcel_need_reconfigure | bool) %}online
-            {% elif (_sinexcel_kafka_api_ok | default(false) | bool) %}online
-            {% else %}offline{% endif %}
+            {{ 'online' if not (_sinexcel_need_reconfigure | bool)
+               else ('online' if (_sinexcel_kafka_api_ok | default(false) | bool) else 'offline') }}
           abnormal_reason: ""
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"

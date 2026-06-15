@@ -78,8 +78,8 @@
     _value_parts: >-
       {%- set out = [] -%}
       {%- for item in semaphore_status_bulk_updates | default([]) -%}
-      {%- set _raw_st = item.device_status | default(item.status | default('unhealthy')) -%}
-      {%- set _td_mapped = 'online' if (_raw_st | string) == 'healthy' else 'offline' -%}
+      {%- set _raw_st = (item.device_status | default(item.status | default('unhealthy')) | string | trim) -%}
+      {%- set _td_mapped = 'online' if _raw_st == 'healthy' else 'offline' -%}
       {%- set _cn = (((item.hostname | default('') | trim) or (item.ip | default(''))) | string) | replace("'", "''") -%}
       {%- set _ip = (item.ip | default(item.hostname | default('')) | string) | replace("'", "''") -%}
       {%- set _raw_reason = item.abnormal_reason | default('') | string -%}
@@ -120,7 +120,12 @@
 - name: DEBUG TDengine INSERT 请求与结果
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-TDENGINE] post_url={{ _td_base }}/rest/sql/{{ _td_db }}"
+      - >-
+        [DEBUG-TDENGINE] row_sample device_status={{
+          (semaphore_status_bulk_updates | default([]) | first | default({})).device_status | default('n/a') | to_json
+        }} trimmed_online={{
+          ((semaphore_status_bulk_updates | default([]) | first | default({})).device_status | default('') | string | trim) == 'healthy'
+        }}
       - "[DEBUG-TDENGINE] insert_table={{ _td_insert_table }} using_stable={{ _td_using_stable }} tag_supplier={{ _td_tag_supplier }} rows={{ _td_row_count }} fixed_ts={{ _td_fixed_ts }}"
       - "[DEBUG-TDENGINE] sql={{ _td_sql }}"
       - "[DEBUG-TDENGINE] http_status={{ _td_put_result.status | default('n/a') }}"
