@@ -8,6 +8,7 @@
 #   TDENGINE_TAG_SUPPLIER — supplier 为超级表 TAG（非列），默认 newarerm
 #   TDENGINE_SUPER_TABLE  — 超级表名，默认 dws_computer_status（与库名拼成 lab.dws_computer_status）
 #   TDENGINE_FIXED_TS  — 可选，覆盖固定 ts 字符串
+#   TDENGINE_TIMEZONE  — updated_time/check_time 时区（IANA 名），默认 Asia/Shanghai
 
 - name: 解析 TDengine 配置并检查是否启用
   ansible.builtin.set_fact:
@@ -19,6 +20,9 @@
     _td_fixed_ts: >-
       {{ (lookup('env', 'TDENGINE_FIXED_TS') | default('', true) | trim)
          | default('2262-01-01 08:00:00.000', true) }}
+    _td_timezone: >-
+      {{ (lookup('env', 'TDENGINE_TIMEZONE') | default('', true) | trim)
+         | default('Asia/Shanghai', true) }}
     _td_tag_supplier: >-
       {{ (lookup('env', 'TDENGINE_TAG_SUPPLIER') | default('', true) | trim)
          | default('newarerm', true) }}
@@ -41,16 +45,30 @@
     - (semaphore_status_bulk_updates | default([]) | length) > 0
     - not (_td_enabled | bool)
 
-# GNU date 的 %3N 在部分 runner 上无效；用 python3 取 UTC 毫秒时间（避免 lookup pipe 与 % 冲突）
-- name: 获取 UTC 时间（updated_time / check_time）
+# 用 python3 取带时区的时间戳（避免 GNU date %3N 与 lookup pipe 问题）
+- name: 获取时间（updated_time / check_time）
   ansible.builtin.command:
     argv:
       - python3
       - -c
       - |
-        from datetime import datetime, timezone
-        dt = datetime.now(timezone.utc)
+        import os
+        from datetime import datetime, timezone, timedelta
+
+        tz_name = (os.environ.get('TDENGINE_TIMEZONE') or 'Asia/Shanghai').strip() or 'Asia/Shanghai'
+        try:
+            from zoneinfo import ZoneInfo
+            dt = datetime.now(ZoneInfo(tz_name))
+        except Exception:
+            if tz_name in ('Asia/Shanghai', 'Asia/Chongqing', 'PRC', 'UTC+8'):
+                dt = datetime.now(timezone(timedelta(hours=8)))
+            elif tz_name == 'UTC':
+                dt = datetime.now(timezone.utc)
+            else:
+                dt = datetime.now(timezone.utc)
         print(f"{dt.strftime('%Y-%m-%d %H:%M:%S')}.{dt.microsecond // 1000:03d}")
+  environment:
+    TDENGINE_TIMEZONE: "{{ _td_timezone }}"
   register: _td_now_cmd
   changed_when: false
   when: _td_enabled | bool
@@ -126,7 +144,7 @@
         }} trimmed_online={{
           ((semaphore_status_bulk_updates | default([]) | first | default({})).device_status | default('') | string | trim) == 'healthy'
         }}
-      - "[DEBUG-TDENGINE] insert_table={{ _td_insert_table }} using_stable={{ _td_using_stable }} tag_supplier={{ _td_tag_supplier }} rows={{ _td_row_count }} fixed_ts={{ _td_fixed_ts }}"
+      - "[DEBUG-TDENGINE] insert_table={{ _td_insert_table }} using_stable={{ _td_using_stable }} tag_supplier={{ _td_tag_supplier }} rows={{ _td_row_count }} fixed_ts={{ _td_fixed_ts }} timezone={{ _td_timezone }}"
       - "[DEBUG-TDENGINE] sql={{ _td_sql }}"
       - "[DEBUG-TDENGINE] http_status={{ _td_put_result.status | default('n/a') }}"
       - "[DEBUG-TDENGINE] json.code={{ _resp.code | default('n/a') }} desc={{ _resp.desc | default('') }}"

@@ -15,6 +15,7 @@ Semaphore **不再**在服务端自动写 TDengine。凡包含 **`semaphore_bulk
 | `TDENGINE_STATUS_TABLE` | 否 | 子表名，默认 `neware_remote_computer_status`（SQL 中为 `lab.neware_remote_computer_status`） |
 | `TDENGINE_SUPER_TABLE` | 否 | 超级表名，默认 `dws_computer_status`（SQL 中为 `lab.dws_computer_status`） |
 | `TDENGINE_TAG_SUPPLIER` | 否 | 超级表 **TAG** `supplier` 的值，默认 `newarerm`（**不是**数据列） |
+| `TDENGINE_TIMEZONE` | 否 | `updated_time` / `check_time` 的 IANA 时区，默认 **`Asia/Shanghai`**（北京时间 UTC+8） |
 
 未设置 `TDENGINE_URL` 时跳过 TDengine，仅写 Semaphore DB。
 
@@ -39,7 +40,7 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 - `device_status` **`healthy`** → `status` = **`online`**；其余 → **`offline`**
 - `computer_name` = bulk 回调行的 **`hostname`**
 - `ip_addr` = bulk 回调行的 **`ip`**（为空时回退 `hostname`）
-- `updated_time` = `check_time` = playbook 执行时的 **UTC** 时间，格式 `YYYY-MM-DD HH:MM:SS.mmm`（三位毫秒，如 `2026-05-28 01:01:39.000`）
+- `updated_time` = `check_time` = playbook 写入瞬间的本地时间（**`TDENGINE_TIMEZONE`**，默认 **`Asia/Shanghai`**），格式 `YYYY-MM-DD HH:MM:SS.mmm`（三位毫秒，如 `2026-05-28 09:01:39.000`）。字符串不含时区后缀；需 UTC 时在 Variable Group 设 `TDENGINE_TIMEZONE=UTC`。
 - `abnormal_reason` = 回调行 `abnormal_reason`；为空时：`offline`→`ABNORMAL`，`online`→空字符串
 - **`supplier`** 为超级表 **TAG**，固定 **`newarerm`**（Variable Group：`TDENGINE_TAG_SUPPLIER`）
 

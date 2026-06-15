@@ -101,6 +101,7 @@ NBT_API_PORT=8885
 SEMAPHORE_API_TOKEN=<token>
 # TDengine（与 NEWARE 共用 shared 写入任务；NBT 建议单独 TAG）
 TDENGINE_URL=http://tdengine:6041
+TDENGINE_TIMEZONE=Asia/Shanghai
 TDENGINE_TAG_SUPPLIER=nbt
 TDENGINE_STATUS_TABLE=nbt_remote_computer_status
 ```
