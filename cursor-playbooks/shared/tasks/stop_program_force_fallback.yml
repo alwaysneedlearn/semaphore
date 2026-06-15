@@ -1,26 +1,30 @@
 ---
 # WinRM force stop when graceful interactive stop did not end the process.
 # Uses alive thresholds (Handles/WS) — zombie PIDs count as stopped.
+# Do not use YAML list when: with 'NOT_RUNNING' not in (...) — breaks YAML parse on older Ansible.
+
+- name: 停止程序（登记是否需强制结束）
+  ansible.builtin.set_fact:
+    _stop_needs_force_fallback: >-
+      {{
+        (stop_graceful_result is defined)
+        and not (stop_graceful_result.unreachable | default(false))
+        and ('NOT_RUNNING' not in (stop_graceful_result.stdout | default('')))
+        and ('ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')))
+        and ('FORCE_STOPPED' not in (stop_graceful_result.stdout | default('')))
+      }}
+  when: stop_graceful_result is defined
 
 - name: 停止程序（检查强制结束脚本）
   ansible.windows.win_stat:
     path: C:\Windows\Temp\sem_force_stop_process_by_name_windows.ps1
   register: _stop_force_script_stat
-  when: >
-    stop_graceful_result is defined and
-    not (stop_graceful_result.unreachable | default(false)) and
-    'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
-    'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
-    'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
+  when: _stop_needs_force_fallback | default(false) | bool
 
 - name: 停止程序（补部署强制结束脚本）
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
   when:
-    - stop_graceful_result is defined
-    - not (stop_graceful_result.unreachable | default(false))
-    - 'NOT_RUNNING' not in (stop_graceful_result.stdout | default(''))
-    - 'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default(''))
-    - 'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
+    - _stop_needs_force_fallback | default(false) | bool
     - _stop_force_script_stat is defined
     - not (_stop_force_script_stat.stat.exists | default(false) | bool)
     - sem_tasks_dir is defined
@@ -41,9 +45,4 @@
   changed_when: >-
     stop_force_fallback_result is defined and
     'FORCE_STOPPED' in (stop_force_fallback_result.stdout | default(''))
-  when: >
-    stop_graceful_result is defined and
-    not (stop_graceful_result.unreachable | default(false)) and
-    'NOT_RUNNING' not in (stop_graceful_result.stdout | default('')) and
-    'ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')) and
-    'FORCE_STOPPED' not in (stop_graceful_result.stdout | default(''))
+  when: _stop_needs_force_fallback | default(false) | bool
