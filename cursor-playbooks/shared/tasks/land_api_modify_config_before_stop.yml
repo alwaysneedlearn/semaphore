@@ -1,6 +1,6 @@
 ---
 # ModifyConfig while LAND process is still running (before graceful stop / restart).
-# Requires: merged_cfg; optional _land_process_check or _land_process_before_restart with RUNNING in stdout.
+# Process registers: _land_process_before (restart/redeploy), _land_process_check (check_restart/status).
 
 - name: 初始化停止前改配置结果（未尝试）
   ansible.builtin.set_fact:
@@ -14,15 +14,19 @@
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
     and (
-      'RUNNING' in (_land_process_before_restart.stdout | default(""))
-      or 'RUNNING' in (_land_process_check.stdout | default(""))
+      'RUNNING' in (_land_process_before.stdout | default(''))
+      or 'RUNNING' in (_land_process_before_restart.stdout | default(''))
+      or 'RUNNING' in (_land_process_check.stdout | default(''))
     )
 
 - name: DEBUG LAND 停止前未改配置（进程未运行）
   ansible.builtin.debug:
     msg:
       - "[DEBUG-LAND] modify_config phase=before_stop skipped=process_not_running"
+      - "[DEBUG-LAND] process_before={{ (_land_process_before.stdout | default('n/a') | trim) }}"
+      - "[DEBUG-LAND] process_check={{ (_land_process_check.stdout | default('n/a') | trim) }}"
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
-    and 'RUNNING' not in (_land_process_before_restart.stdout | default(""))
-    and 'RUNNING' not in (_land_process_check.stdout | default(""))
+    and 'RUNNING' not in (_land_process_before.stdout | default(''))
+    and 'RUNNING' not in (_land_process_before_restart.stdout | default(''))
+    and 'RUNNING' not in (_land_process_check.stdout | default(''))
