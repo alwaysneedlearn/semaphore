@@ -21,6 +21,9 @@
     _land_api_after_restart: "{{ _land_api_status_raw }}"
     land_api_status_ok: "{{ _land_api_ok | bool }}"
   vars:
-    _land_api_http: "{{ _land_api_status_raw.status | default(0) | int }}"
-    _land_api_ok: "{{ (_land_api_http >= 200) and (_land_api_http < 300) }}"
+    _land_api_ok: >-
+      {{
+        (_land_api_status_raw.status | default(0) | int) >= 200
+        and (_land_api_status_raw.status | default(0) | int) < 300
+      }}
   when: _land_api_status_raw is defined
