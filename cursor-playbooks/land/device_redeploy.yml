@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: LAND
     land_include_redeliver: false
     redeploy_land_registry: true

@@ -63,7 +63,7 @@ NEWARE uses `neware/tasks/debug_patrol_snapshot.yml` and `debug_action_snapshot.
 
 ## Windows helper scripts (`deploy_sem_windows_helper_scripts.yml`)
 
-Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** `sem_resolve_exe_dir_windows.ps1` exists after copy (no “deployed” flag without a real file). `resolve_exe_dir_windows.yml` also includes deploy when `sem_tasks_dir` is set.
+Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** a fixed set of helper scripts (including `sem_force_stop_process_by_name_windows.ps1`) exists; re-copies the whole `shared/files/` directory when **any** required script is missing (not only `sem_resolve_exe_dir_windows.ps1`). Playbooks must set **`sem_files_dir`** (or rely on deploy’s default `{{ playbook_dir }}/../shared/files`). `resolve_exe_dir_windows.yml` also includes deploy when `sem_tasks_dir` is set.
 
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 

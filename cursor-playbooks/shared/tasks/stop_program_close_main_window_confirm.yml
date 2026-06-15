@@ -70,7 +70,10 @@
     PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
     PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
   ansible.windows.win_shell: >-
-    & 'C:\Windows\Temp\sem_verify_process_stopped_by_name_windows.ps1'
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_verify_process_stopped_by_name_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
   register: stop_verify_recheck_result
   changed_when: false
   failed_when: false
