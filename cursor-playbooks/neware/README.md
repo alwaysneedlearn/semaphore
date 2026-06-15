@@ -86,7 +86,8 @@ Playbooks emit **`ansible.builtin.debug`** and **`win_shell` stdout** lines so S
 | ENV | Example | Meaning |
 |-----|---------|---------|
 | **`RECONFIG_CONFIG_FALLBACK_USERS`** | `NEWARE,Administrator` | Comma/semicolon-separated; try left-to-right, first existing `C:\Users\<name>` wins |
-| **`RECONFIG_CONFIG_FALLBACK_USER`** | `NEWARE` | Legacy: used only if **`RECONFIG_CONFIG_FALLBACK_USERS`** is empty (then defaults to `NEWARE,Administrator`) |
+| **`RECONFIG_CONFIG_FALLBACK_USE`** | *(alias)* | Same as **`RECONFIG_CONFIG_FALLBACK_USERS`** (typo-tolerant alias) |
+| **`RECONFIG_CONFIG_FALLBACK_USER`** | `NEWARE` | Legacy: used only if **`RECONFIG_CONFIG_FALLBACK_USERS`** / **`USE`** are empty (then defaults to `NEWARE,Administrator`) |
 
 Add more local profile names as needed, e.g. `NEWARE,Administrator,Operator`.
 | `RECONFIG_LOG_*` / `RECONFIG_MODIFY_*` | Same info from the Windows `win_shell` task stdout (visible without expanding `debug`) |

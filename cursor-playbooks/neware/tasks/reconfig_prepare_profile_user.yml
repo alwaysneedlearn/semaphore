@@ -3,6 +3,27 @@
 # Sets: _reconfig_profile_user, _reconfig_profile_dir_exists, _reconfig_config_user,
 #       _reconfig_config_user_source, _reconfig_fallback_checked, _reconfig_profile_dir_check
 
+- name: 重配执行：登记配置用户回退列表（环境变量）
+  ansible.builtin.set_fact:
+    _reconfig_config_fallback_users_env: >-
+      {{
+        (
+          (
+            (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim)
+            or (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USE') | default('', true) | trim)
+          )
+          | regex_replace('[;\\s]+', ',')
+        )
+        if (
+          ((lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim) | length > 0)
+          or ((lookup('env', 'RECONFIG_CONFIG_FALLBACK_USE') | default('', true) | trim) | length > 0)
+        )
+        else (
+          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USER') | default('', true) | trim)
+          | default('NEWARE,Administrator', true)
+        )
+      }}
+
 - name: 重配执行：解析 Profile 用户与配置目录（单次 WinRM）
   ansible.windows.win_shell: |
     $ErrorActionPreference = 'Continue'
@@ -87,18 +108,7 @@
     Write-Output "FALLBACK_CHECKED=$fallbackChecked"
   environment:
     RECONFIG_ANSIBLE_USER: "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}"
-    RECONFIG_CONFIG_FALLBACK_USERS: >-
-      {{
-        (
-          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim)
-          | regex_replace('[;\\s]+', ',')
-        )
-        if ((lookup('env', 'RECONFIG_CONFIG_FALLBACK_USERS') | default('', true) | trim) | length > 0)
-        else (
-          (lookup('env', 'RECONFIG_CONFIG_FALLBACK_USER') | default('', true) | trim)
-          | default('NEWARE,Administrator', true)
-        )
-      }}
+    RECONFIG_CONFIG_FALLBACK_USERS: "{{ _reconfig_config_fallback_users_env }}"
   register: _reconfig_profile_resolve
   changed_when: false
 
@@ -148,3 +158,4 @@
     msg:
       - "[DEBUG-重配-用户] profile_user={{ _reconfig_profile_user }} profile_dir_exists={{ _reconfig_profile_dir_exists }}"
       - "[DEBUG-重配-用户] config_user={{ _reconfig_config_user }} source={{ _reconfig_config_user_source }} fallback_checked={{ _reconfig_fallback_checked | default('') }}"
+      - "[DEBUG-重配-用户] fallback_users_env={{ _reconfig_config_fallback_users_env | default('') }}"
