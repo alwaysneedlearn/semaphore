@@ -118,6 +118,14 @@
       Write-Output "LOG_OK|baseline=$baseline|cursor=$lastLine|total=$total"
       exit 0
     }
+    $tail = @($newLines.Value | Select-Object -Last 5)
+    $sampleIdx = 0
+    foreach ($ln in $tail) {
+      $sampleIdx++
+      $snippet = $ln
+      if ($snippet.Length -gt 240) { $snippet = $snippet.Substring(0, 240) + '...' }
+      Write-Output ("LOG_MISS_SAMPLE|{0}|{1}" -f $sampleIdx, $snippet)
+    }
     Write-Output "LOG_MISS|baseline=$baseline|cursor=$lastLine|total=$total"
     exit 1
   environment:
@@ -137,7 +145,7 @@
       - "[DEBUG-LOG-POLL] attempt {{ ansible_loop.index }}/{{ ansible_loop.length }} rc={{ item.rc | default('n/a') }} attempts_total={{ log_poll.attempts | default(1) }}"
       - "{{ _poll_lines }}"
   vars:
-    _poll_lines: "{{ item.stdout_lines | default([]) | map('regex_replace', '\\r$', '') | map('trim') | select('search', 'LOG_POLL') | list }}"
+    _poll_lines: "{{ item.stdout_lines | default([]) | map('regex_replace', '\\r$', '') | map('trim') | select('search', 'LOG_POLL|LOG_MISS') | list }}"
   loop: "{{ log_poll.results | default([log_poll], true) }}"
   loop_control:
     extended: true

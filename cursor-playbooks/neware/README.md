@@ -60,7 +60,8 @@ Patrol all sets devices to `checking` first; the status template should run a pl
 |------|--------|
 | URL | `POST http://{device_ip}:{api_port}` (no path) |
 | Body | `{ "CallType": 1 }` — **`API_STATUS_CALL_TYPE`** (default **1**) |
-| Retries | **`API_STATUS_RETRIES`** (default **3**), **`API_STATUS_RETRY_DELAY`** (default **3** s) |
+| Retries | **`API_STATUS_RETRIES`** (default **3**), **`API_STATUS_RETRY_DELAY`** (default **3** s) — patrol/health |
+| Start-verify poll | **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`** (default = **`LOG_POLL_RETRIES`** / **`LOG_POLL_DELAY`**, else **8** / **10** s) — restart/redeploy until **`ExecResultData==3`** |
 | Envelope OK | HTTP **200**, **`ResponeResultCode==0`**, **`ExecResultCode==0`** |
 | **`ExecResultData`** | **1** = 程序已启动 · **2** = 启动数据上报中 · **3** = 数据上报已启动（健康，跳过日志关键字） |
 
@@ -139,7 +140,7 @@ When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other sec
 
 1. **`tasks/start_verify_register_exe_start_ok.yml`** — **`_exe_start_script_ok`** from **`VERIFY_OK`**.
 2. **`tasks/start_verify_poll_process_after_start.yml`** — process poll; may set **`skip_log_poll`** on process/exe failure.
-3. **`tasks/neware_query_upload_status_api.yml`** — upload-status POST with retries; **`ExecResultData==3`** → skip log poll.
+3. **`tasks/neware_query_upload_status_api_start_poll.yml`** — upload-status POST **polled** until **`ExecResultData==3`** (defaults align with **`LOG_POLL_RETRIES`** / **`LOG_POLL_DELAY`**; override **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`**). Patrol/health still uses **`neware_query_upload_status_api.yml`** (short retries).
 4. **`tasks/log_poll_confirm.yml`** when API did not return **3**.
 5. **`final_start_ok`** — **`_exe_start_script_ok`** + **`process_running_after_start`** + (**`api_upload_started`** or log poll **`rc == 0`**).
 

@@ -1,0 +1,70 @@
+---
+# 启动验证：轮询 POST 直至 ExecResultData==EXPORT_STARTED（3），与日志轮询窗口对齐。
+# until/retries 必须挂在 uri 上（旧版 Ansible 不支持 include_tasks 上使用）。
+
+- name: 启动验证：登记 API 轮询参数
+  ansible.builtin.set_fact:
+    _neware_api_status_call_type: "{{ api_status_call_type | default(((lookup('env', 'API_STATUS_CALL_TYPE') | default('', true) | trim) | default('1', true)) | int) | int }}"
+    _neware_api_timeout_seconds: "{{ api_timeout_seconds | default(((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int) | int }}"
+    _neware_api_expected_response_code: "{{ api_expected_response_code | default(((lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
+    _neware_api_expected_exec_success_code: "{{ api_expected_exec_success_code | default(((lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
+    _neware_export_upload_started: "{{ export_started | default(((lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true)) | int) | int }}"
+    _neware_api_start_poll_retries: >-
+      {{
+        api_status_start_poll_retries | default(
+          (
+            (lookup('env', 'API_STATUS_START_POLL_RETRIES') | default('', true) | trim)
+            | default(
+                (lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim)
+                | default('8', true),
+                true
+              )
+          ) | int
+        ) | int
+      }}
+    _neware_api_start_poll_delay: >-
+      {{
+        api_status_start_poll_delay | default(
+          (
+            (lookup('env', 'API_STATUS_START_POLL_DELAY') | default('', true) | trim)
+            | default(
+                (lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim)
+                | default('10', true),
+                true
+              )
+          ) | int
+        ) | int
+      }}
+
+- name: 启动验证：轮询数据上报状态 API（直至 ExecResultData==3）
+  ansible.builtin.uri:
+    url: "http://{{ api_host }}:{{ api_port }}"
+    method: POST
+    body_format: json
+    body:
+      CallType: "{{ _neware_api_status_call_type | int }}"
+    headers:
+      Content-Type: "application/json; charset=utf-8"
+    return_content: true
+    timeout: "{{ _neware_api_timeout_seconds | int }}"
+  register: api_upload_status_result
+  delegate_to: localhost
+  failed_when: false
+  until: >
+    api_upload_status_result is defined and
+    (api_upload_status_result.status | default(0) | int) == 200 and
+    ((api_upload_status_result.content | default('') | trim) | length) > 0 and
+    ((api_upload_status_result.content | from_json).ResponeResultCode | default(-1) | int == _neware_api_expected_response_code | int) and
+    ((api_upload_status_result.content | from_json).ExecResultCode | default(-1) | int == _neware_api_expected_exec_success_code | int) and
+    ((api_upload_status_result.content | from_json).ExecResultData | default(-1) | int) == (_neware_export_upload_started | int)
+  retries: "{{ _neware_api_start_poll_retries | int }}"
+  delay: "{{ _neware_api_start_poll_delay | int }}"
+
+- ansible.builtin.include_tasks: neware_query_upload_status_api_apply.yml
+
+- name: 启动验证：DEBUG API 轮询汇总
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_start_poll retries={{ _neware_api_start_poll_retries }} delay_s={{ _neware_api_start_poll_delay }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_start_poll attempts={{ api_upload_status_result.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_start_poll upload_started={{ api_upload_started | default(false) }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}"

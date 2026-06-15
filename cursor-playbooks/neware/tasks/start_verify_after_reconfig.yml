@@ -5,8 +5,8 @@
 
 - ansible.builtin.include_tasks: tasks/start_verify_poll_process_after_start.yml
 
-- name: 启动验证：查询数据上报状态 API（含重试）
-  ansible.builtin.include_tasks: tasks/neware_query_upload_status_api.yml
+- name: 启动验证：轮询数据上报状态 API（直至 ExecResultData==3）
+  ansible.builtin.include_tasks: tasks/neware_query_upload_status_api_start_poll.yml
   vars:
     neware_api_query_context: start_verify
   when: >
@@ -79,6 +79,9 @@
       exe_start_ok={{ _exe_start_script_ok | default(false) }}
       process_running_after_start={{ process_running_after_start | default(false) }}
       api_upload_started={{ api_upload_started | default(false) }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}
+      api_last_http={{ api_upload_status_result.status | default('n/a') }} api_last_body={{ api_upload_status_result.content | default('') | truncate(400, True, '...') }}
       skip_log_poll={{ skip_log_poll | default(false) }} ({{ skip_log_poll_reason | default('') }})
       log_poll_ok={{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
+      log_path={{ log_path | default('n/a') }}
+      hint=进程已启动时检查 API_PORT/INI ServerPort 与 BTSClient HTTP 是否可达；日志无关键字可增大 LOG_POLL_RETRIES/DELAY 或 API_STATUS_START_POLL_*
   when: not (final_start_ok | default(false) | bool)
