@@ -2,8 +2,8 @@
 
 Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI**。
 
-- **`SERVICE_NAME`** → exe 文件名（如 `NBTMESService.exe`）
-- **`NBT_SERVICE_NAME`** → Windows 服务名（`win_service`）
+- **`SERVICE_NAME`** → exe 文件名（如 `NBT.MES.Service.exe`）
+- **`NBT_SERVICE_NAME`** → Windows 服务名（`win_service`，如 `NBTMESService`）
 - **`SERVICE_PATH`** → 父目录，在其下查找 exe
 
 任务日志：搜 **`[DEBUG-NBT]`**；路径解析见 **`tasks/resolve_nbt_service_install.yml`**。
@@ -23,9 +23,9 @@ Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI*
 | 概念 | 变量 | 示例 |
 |------|------|------|
 | **搜索根目录** | `SERVICE_PATH` / `service_base_dir` | `D:\MES` |
-| **exe 文件名** | `SERVICE_NAME` → `service_exe_name` | `NBTMESService` → `NBTMESService.exe` |
-| **Windows 服务名** | `NBT_SERVICE_NAME` → `service_name` | `NBT.MES.Service` |
-| 解析到的 exe | `service_exe_path` / `install_path` | `D:\MES\数据上传\NBTMESService\NBTMESService.exe` |
+| **exe 文件名** | `SERVICE_NAME` → `service_exe_name` | `NBT.MES.Service` → `NBT.MES.Service.exe` |
+| **Windows 服务名** | `NBT_SERVICE_NAME` → `service_name` | `NBTMESService` |
+| 解析到的 exe | `service_exe_path` / `install_path` | `D:\MES\NBTMESService\NBT.MES.Service.exe` |
 | 安装目录 | `service_path` | exe 所在文件夹 |
 | 控制器 zip | `ZIP_PATH` + `ZIP_NAME` | `/root/nbt/pkg/nbt.zip` |
 | 目标机 zip | `service_parent_dir\nbt.zip` | `D:\MES\nbt.zip` |
@@ -33,18 +33,18 @@ Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI*
 
 解析顺序（`sem_resolve_nbt_service_install.ps1`）：
 
-1. `{SERVICE_PATH}\{SERVICE_NAME}.exe`
-2. `{SERVICE_PATH}\{exe主干目录}\{SERVICE_NAME}.exe`（如 `NBTMESService\NBTMESService.exe`）
-3. `{SERVICE_PATH}\{NBT_SERVICE_NAME}\{SERVICE_NAME}.exe`
-4. 在 `SERVICE_PATH` 下递归查找 exe（默认深度 **3**）
+1. `{SERVICE_PATH}\NBT.MES.Service.exe`
+2. `{SERVICE_PATH}\NBT.MES.Service\NBT.MES.Service.exe`
+3. `{SERVICE_PATH}\NBTMESService\NBT.MES.Service.exe`（服务名子目录 + exe 文件名）
+4. 在 `SERVICE_PATH` 下递归查找 `NBT.MES.Service.exe`（默认深度 **3**）
 
 未解析到 exe 时**不会**对空路径执行 `win_stat`（避免 illegal path fatal）。
 
 ## Variable Group ENV
 
 ```env
-SERVICE_NAME=NBTMESService
-NBT_SERVICE_NAME=NBT.MES.Service
+SERVICE_NAME=NBT.MES.Service
+NBT_SERVICE_NAME=NBTMESService
 SERVICE_PATH=D:\MES
 ZIP_NAME=nbt.zip
 ZIP_PATH=/root/nbt/pkg
@@ -58,8 +58,8 @@ SEMAPHORE_API_TOKEN=<token>
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVICE_NAME` | — | **exe 文件名**（必填推荐；自动补 `.exe`） |
-| `NBT_SERVICE_NAME` | `NBT.MES.Service` | **Windows 服务名**（`Get-Service` / 启停） |
+| `SERVICE_NAME` | `NBT.MES.Service` | **exe 文件名**（自动补 `.exe`） |
+| `NBT_SERVICE_NAME` | `NBTMESService` | **Windows 服务名**（`Get-Service` / 启停） |
 | `SERVICE_PATH` / `NBT_SERVICE_PATH` | `D:\MES` | 父目录，在其下查找 exe |
 | `NBT_SERVICE_SCAN_MAX_DEPTH` | `3` | 递归扫描最大深度 |
 | `NBT_SERVICE_SCAN_LATEST` | `true` | 多个 exe 命中时取最新修改时间 |

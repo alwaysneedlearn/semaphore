@@ -1,9 +1,9 @@
 ---
 # NBT service install layout.
-# SERVICE_NAME = exe file name (e.g. NBTMESService); NBT_SERVICE_NAME = Windows service name.
+# SERVICE_NAME = exe file (e.g. NBT.MES.Service.exe); NBT_SERVICE_NAME = Windows service (e.g. NBTMESService).
 # SERVICE_PATH / NBT_SERVICE_PATH = parent directory to search under.
 
-service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('NBT.MES.Service', true) }}"
+service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('NBTMESService', true) }}"
 service_base_dir: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES', true) }}"
 service_exe_name: >-
   {{

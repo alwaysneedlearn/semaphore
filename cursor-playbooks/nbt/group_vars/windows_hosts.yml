@@ -2,7 +2,7 @@
 # NBT Windows service + HTTP API defaults (see nbt/vars/service_layout.yml).
 # SERVICE_NAME = exe file base name; NBT_SERVICE_NAME = Windows service name (win_service).
 
-service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('NBT.MES.Service', true) }}"
+service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('NBTMESService', true) }}"
 service_base_dir: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES', true) }}"
 service_exe_name: >-
   {{

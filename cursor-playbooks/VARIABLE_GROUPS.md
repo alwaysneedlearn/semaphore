@@ -97,8 +97,8 @@ NBT 为 **Windows 服务**启停，**不写 INI**。变量分工：
 - **`SERVICE_PATH`**：父目录，在其下查找 exe
 
 ```env
-SERVICE_NAME=NBTMESService
-NBT_SERVICE_NAME=NBT.MES.Service
+SERVICE_NAME=NBT.MES.Service
+NBT_SERVICE_NAME=NBTMESService
 SERVICE_PATH=D:\MES
 ZIP_NAME=nbt.zip
 ZIP_PATH=/root/nbt/pkg
