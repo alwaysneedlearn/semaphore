@@ -90,11 +90,16 @@ SEMAPHORE_API_TOKEN=<token>
 
 ### NBT
 
-NBT 为 **Windows 服务**启停，**不写 INI**。`SERVICE_PATH` 填 **父目录**；playbook 按 **`SERVICE_NAME` → `{SERVICE_NAME}.exe`** 在该目录下解析（见 `nbt/tasks/resolve_nbt_service_install.yml`）。
+NBT 为 **Windows 服务**启停，**不写 INI**。变量分工：
+
+- **`SERVICE_NAME`**：exe 文件名（如 `NBTMESService` 或 `NBTMESService.exe`）
+- **`NBT_SERVICE_NAME`**：Windows 服务名（`Get-Service -Name`，如 `NBT.MES.Service`）
+- **`SERVICE_PATH`**：父目录，在其下查找 exe
 
 ```env
-SERVICE_NAME=NBT.MES.Service
-SERVICE_PATH=D:\MES\数据上传
+SERVICE_NAME=NBTMESService
+NBT_SERVICE_NAME=NBT.MES.Service
+SERVICE_PATH=D:\MES
 ZIP_NAME=nbt.zip
 ZIP_PATH=/root/nbt/pkg
 NBT_API_PORT=8885

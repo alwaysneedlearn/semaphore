@@ -1,0 +1,16 @@
+---
+# Stat resolved service exe; skip win_stat when path empty (illegal path fatal on Windows).
+
+- name: NBT 检查服务程序文件是否存在
+  ansible.windows.win_stat:
+    path: "{{ install_path }}"
+  register: _nbt_service_path_stat
+  ignore_unreachable: true
+  when: nbt_service_exe_resolved | default(false) | bool
+
+- name: NBT 登记服务 exe 未解析（跳过 win_stat）
+  ansible.builtin.set_fact:
+    _nbt_service_path_stat:
+      stat:
+        exists: false
+  when: not (nbt_service_exe_resolved | default(false) | bool)

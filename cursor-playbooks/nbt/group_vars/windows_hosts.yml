@@ -1,9 +1,19 @@
 ---
-# NBT Windows service + HTTP API defaults (see nbt/vars/service_layout.yml for path/zip).
+# NBT Windows service + HTTP API defaults (see nbt/vars/service_layout.yml).
+# SERVICE_NAME = exe file base name; NBT_SERVICE_NAME = Windows service name (win_service).
 
-service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default(lookup('env', 'SERVICE_NAME') | default('', true), true) | trim) | default('NBT.MES.Service', true) }}"
-service_base_dir: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES\\数据上传', true) }}"
-service_exe_name: "{{ (service_name | regex_replace('(?i)\\.exe$', '')) ~ '.exe' }}"
+service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('NBT.MES.Service', true) }}"
+service_base_dir: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES', true) }}"
+service_exe_name: >-
+  {{
+    (
+      (lookup('env', 'SERVICE_NAME') | default('', true) | trim)
+      | regex_replace('(?i)\\.exe$', '')
+    )
+    ~ '.exe'
+    if ((lookup('env', 'SERVICE_NAME') | default('', true) | trim) | length > 0)
+    else 'NBT.MES.Service.exe'
+  }}
 service_path: "{{ service_base_dir }}"
 install_path: "{{ service_base_dir }}\\{{ service_exe_name }}"
 service_parent_dir: "{{ service_base_dir }}"
@@ -19,6 +29,5 @@ nbt_start_check_api: "{{ ((lookup('env', 'NBT_START_CHECK_API') | default('', tr
 nbt_stop_check_api: "{{ ((lookup('env', 'NBT_STOP_CHECK_API') | default('', true) | trim) | default('false', true)) | bool }}"
 nbt_service_scan_max_depth: "{{ ((lookup('env', 'NBT_SERVICE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int }}"
 nbt_service_scan_latest: "{{ ((lookup('env', 'NBT_SERVICE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
-# After service start: poll GET /SendStatus until ok or retries exhausted (patrol uses single GET).
 nbt_heartbeat_start_poll_retries: "{{ ((lookup('env', 'NBT_HEARTBEAT_START_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
 nbt_heartbeat_start_poll_delay: "{{ ((lookup('env', 'NBT_HEARTBEAT_START_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"

@@ -13,7 +13,7 @@
   environment:
     NBT_SERVICE_BASE_DIR: "{{ service_base_dir | default(service_path, true) }}"
     NBT_SERVICE_NAME: "{{ service_name }}"
-    NBT_SERVICE_EXE_NAME: "{{ service_exe_name | default('', true) }}"
+    NBT_SERVICE_EXE_NAME: "{{ service_exe_name }}"
     NBT_SERVICE_SCAN_MAX_DEPTH: "{{ nbt_service_scan_max_depth | default(((lookup('env', 'NBT_SERVICE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int) | string }}"
     NBT_SERVICE_SCAN_LATEST: "{{ (nbt_service_scan_latest | default(((lookup('env', 'NBT_SERVICE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool)) | string | lower }}"
   ansible.windows.win_shell: >-
@@ -38,6 +38,7 @@
     install_path: "{{ (_nbt_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) }}"
     service_parent_dir: "{{ (_nbt_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}"
     _nbt_service_resolve_source: "{{ (_nbt_resolve_source_line | regex_replace('^SERVICE_RESOLVE_SOURCE=', '') | trim) }}"
+    nbt_service_exe_resolved: "{{ ((_nbt_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) | length) > 0 }}"
     redeploy_zip_dest: "{{ (_nbt_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}\\{{ zip_name | default('nbt.zip', true) }}"
     redeploy_extract_dest: "{{ (_nbt_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}"
 
@@ -45,8 +46,8 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-NBT] service_base_dir={{ service_base_dir | default(service_path, true) }}"
-      - "[DEBUG-NBT] service_name={{ service_name }} service_exe_name={{ service_exe_name | default('') }}"
-      - "[DEBUG-NBT] resolve_source={{ _nbt_service_resolve_source | default('n/a') }}"
+      - "[DEBUG-NBT] windows_service_name={{ service_name }} exe_file={{ service_exe_name | default('') }}"
+      - "[DEBUG-NBT] resolve_source={{ _nbt_service_resolve_source | default('n/a') }} exe_resolved={{ nbt_service_exe_resolved | default(false) }}"
       - "[DEBUG-NBT] service_exe_path={{ service_exe_path | default('') }}"
       - "[DEBUG-NBT] service_path(install_dir)={{ service_path | default('') }}"
       - "[DEBUG-NBT] service_parent_dir(zip)={{ service_parent_dir | default('') }}"

@@ -1,4 +1,5 @@
-# Resolve NBT service exe under NBT_SERVICE_BASE_DIR using NBT_SERVICE_NAME / NBT_SERVICE_EXE_NAME.
+# Resolve NBT service exe under NBT_SERVICE_BASE_DIR.
+# NBT_SERVICE_EXE_NAME = exe file (SERVICE_NAME); NBT_SERVICE_NAME = Windows service (optional subdir).
 # Env: NBT_SERVICE_BASE_DIR, NBT_SERVICE_NAME, NBT_SERVICE_EXE_NAME,
 #      NBT_SERVICE_SCAN_MAX_DEPTH, NBT_SERVICE_SCAN_LATEST
 
@@ -6,15 +7,18 @@ $ErrorActionPreference = 'Continue'
 $base = [string]$env:NBT_SERVICE_BASE_DIR
 if ($null -eq $base) { $base = '' }
 $base = $base.Trim().TrimEnd('\')
-$svcName = [string]$env:NBT_SERVICE_NAME
-if ($null -eq $svcName) { $svcName = '' }
-$svcName = $svcName.Trim()
+$winSvcName = [string]$env:NBT_SERVICE_NAME
+if ($null -eq $winSvcName) { $winSvcName = '' }
+$winSvcName = $winSvcName.Trim()
 $exeName = [string]$env:NBT_SERVICE_EXE_NAME
-if ([string]::IsNullOrWhiteSpace($exeName)) {
-  $exeName = $svcName
-  if (-not $exeName.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
-    $exeName = $exeName + '.exe'
-  }
+if ($null -eq $exeName) { $exeName = '' }
+$exeName = $exeName.Trim()
+if (-not $exeName.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
+  if ($exeName.Length -gt 0) { $exeName = $exeName + '.exe' }
+}
+$exeStem = ''
+if ($exeName.Length -gt 0) {
+  $exeStem = [IO.Path]::GetFileNameWithoutExtension($exeName)
 }
 $maxDepth = 3
 if (-not [string]::IsNullOrWhiteSpace($env:NBT_SERVICE_SCAN_MAX_DEPTH)) {
@@ -28,7 +32,7 @@ if (-not [string]::IsNullOrWhiteSpace($scanLatestRaw)) {
 }
 
 function Test-ExeAt([string]$Dir) {
-  if ([string]::IsNullOrWhiteSpace($Dir)) { return $null }
+  if ([string]::IsNullOrWhiteSpace($Dir) -or [string]::IsNullOrWhiteSpace($exeName)) { return $null }
   $p = Join-Path $Dir $exeName
   if (Test-Path -LiteralPath $p) { return $p }
   return $null
@@ -37,14 +41,18 @@ function Test-ExeAt([string]$Dir) {
 $resolved = $null
 $source = 'not_found'
 
-if ($base.Length -gt 0) {
+if ($base.Length -gt 0 -and $exeName.Length -gt 0) {
   $resolved = Test-ExeAt $base
   if ($resolved) { $source = 'exe_in_base_dir' }
 
-  if (-not $resolved -and $svcName.Length -gt 0) {
-    $sub = Join-Path $base $svcName
-    $resolved = Test-ExeAt $sub
-    if ($resolved) { $source = 'exe_in_service_name_subdir' }
+  if (-not $resolved -and $exeStem.Length -gt 0) {
+    $resolved = Test-ExeAt (Join-Path $base $exeStem)
+    if ($resolved) { $source = 'exe_in_exe_stem_subdir' }
+  }
+
+  if (-not $resolved -and $winSvcName.Length -gt 0) {
+    $resolved = Test-ExeAt (Join-Path $base $winSvcName)
+    if ($resolved) { $source = 'exe_in_windows_service_subdir' }
   }
 
   if (-not $resolved -and (Test-Path -LiteralPath $base)) {
@@ -76,5 +84,5 @@ Write-Output 'SERVICE_EXE_PATH='
 Write-Output 'SERVICE_INSTALL_DIR='
 Write-Output "SERVICE_BASE_DIR=$base"
 Write-Output "SERVICE_RESOLVE_SOURCE=$source"
-Write-Output "SERVICE_EXE_NOT_FOUND|base=$base|exe=$exeName|depth=$maxDepth"
+Write-Output "SERVICE_EXE_NOT_FOUND|base=$base|exe=$exeName|win_service=$winSvcName|depth=$maxDepth"
 exit 0

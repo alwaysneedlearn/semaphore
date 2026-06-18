@@ -24,10 +24,7 @@
 
     - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
 
-    - name: 检查 NBT 服务程序文件是否存在
-      ansible.windows.win_stat:
-        path: "{{ install_path }}"
-      register: _nbt_service_path_stat
+    - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
       when: _nbt_service_path_stat.stat.exists | default(false)

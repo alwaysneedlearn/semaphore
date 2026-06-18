@@ -1,12 +1,20 @@
 ---
-# NBT service install layout (no exe_name / exe_path).
-# SERVICE_PATH = parent directory to search; SERVICE_NAME → {SERVICE_NAME}.exe under that tree.
-# Env: SERVICE_NAME, SERVICE_PATH, NBT_SERVICE_NAME, NBT_SERVICE_PATH, ZIP_NAME, ZIP_PATH.
+# NBT service install layout.
+# SERVICE_NAME = exe file name (e.g. NBTMESService); NBT_SERVICE_NAME = Windows service name.
+# SERVICE_PATH / NBT_SERVICE_PATH = parent directory to search under.
 
-service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default(lookup('env', 'SERVICE_NAME') | default('', true), true) | trim) | default('NBT.MES.Service', true) }}"
-service_base_dir: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES\\数据上传', true) }}"
-service_exe_name: "{{ (service_name | regex_replace('(?i)\\.exe$', '')) ~ '.exe' }}"
-# Legacy alias until resolve_nbt_service_install.yml runs:
+service_name: "{{ (lookup('env', 'NBT_SERVICE_NAME') | default('', true) | trim) | default('NBT.MES.Service', true) }}"
+service_base_dir: "{{ (lookup('env', 'NBT_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES', true) }}"
+service_exe_name: >-
+  {{
+    (
+      (lookup('env', 'SERVICE_NAME') | default('', true) | trim)
+      | regex_replace('(?i)\\.exe$', '')
+    )
+    ~ '.exe'
+    if ((lookup('env', 'SERVICE_NAME') | default('', true) | trim) | length > 0)
+    else 'NBT.MES.Service.exe'
+  }}
 service_path: "{{ service_base_dir }}"
 install_path: "{{ service_base_dir }}\\{{ service_exe_name }}"
 service_parent_dir: "{{ service_base_dir }}"
