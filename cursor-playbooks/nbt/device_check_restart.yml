@@ -22,9 +22,11 @@
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 检查 NBT 服务安装路径是否存在
+    - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
+
+    - name: 检查 NBT 服务程序文件是否存在
       ansible.windows.win_stat:
-        path: "{{ service_path }}"
+        path: "{{ install_path }}"
       register: _nbt_service_path_stat
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"

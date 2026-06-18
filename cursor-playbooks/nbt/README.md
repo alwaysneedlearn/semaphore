@@ -1,39 +1,50 @@
 # NBT playbooks (`cursor-playbooks/nbt/`)
 
-Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI**。安装目录用 **`service_path`**，服务名用 **`service_name`**（不再使用 `exe_name` / `exe_path`）。
+Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI**。在 **`SERVICE_PATH` 父目录**下按 **`SERVICE_NAME.exe`** 解析安装路径（类似 SINEXCEL 扫描 exe）。
 
-任务日志：搜 **`[DEBUG-NBT]`**；布局标记 **`NBT_SERVICE_CTRL_REV=2`**。
+任务日志：搜 **`[DEBUG-NBT]`**；路径解析见 **`tasks/resolve_nbt_service_install.yml`**。
 
 ## Semaphore templates
 
 | Playbook | 说明 |
 |----------|------|
-| `device_status.yml` | 巡检：`service_path` 存在 + 服务 Running + 心跳 |
+| `device_status.yml` | 巡检：解析 exe + 服务 Running + 心跳 |
 | `device_stop.yml` | 停止服务 |
 | `device_restart.yml` | 停 → 启 → 心跳 → 可选 ResetData |
-| `device_redeploy.yml` | 下发 `nbt.zip` 到 `service_parent_dir` + 服务重启 |
+| `device_redeploy.yml` | 下发 `nbt.zip` 到 `SERVICE_PATH` + 服务重启 |
 | `device_check_restart.yml` | 不健康时服务重启 |
 
 ## 路径与 Redeploy
 
 | 概念 | 变量 | 示例 |
 |------|------|------|
-| 服务安装目录 | `service_path` | `D:\MES\数据上传\NBT.MES.Service` |
-| Windows 服务名 | `service_name` | `NBT.MES.Service` |
+| **搜索根目录** | `SERVICE_PATH` / `service_base_dir` | `D:\MES\数据上传` |
+| Windows 服务名 | `SERVICE_NAME` / `service_name` | `NBT.MES.Service` |
+| 程序文件名 | `service_exe_name` | `NBT.MES.Service.exe`（由服务名自动补 `.exe`） |
+| 解析到的 exe | `service_exe_path` / `install_path` | `D:\MES\数据上传\NBT.MES.Service\NBT.MES.Service.exe` |
+| 安装目录 | `service_path` | exe 所在文件夹 |
 | 控制器 zip | `ZIP_PATH` + `ZIP_NAME` | `/root/nbt/pkg/nbt.zip` |
 | 目标机 zip | `service_parent_dir\nbt.zip` | `D:\MES\数据上传\nbt.zip` |
-| 解压目录 | `service_parent_dir` | `D:\MES\数据上传` |
+| 解压目录 | `redeploy_extract_dest` | `D:\MES\数据上传`（= `SERVICE_PATH`） |
 
-`service_parent_dir` = `service_path` 的父目录（playbook 自动推导）。
+解析顺序（`resolve_nbt_service_install.yml`）：
+
+1. `{SERVICE_PATH}\{SERVICE_NAME}.exe`
+2. `{SERVICE_PATH}\{SERVICE_NAME}\{SERVICE_NAME}.exe`
+3. 在 `SERVICE_PATH` 下浅层递归查找 `{SERVICE_NAME}.exe`（默认深度 **3**；多命中时默认取 **mtime 最新**）
+
+**兼容旧配置**：若 `SERVICE_PATH` 仍填写完整安装目录且其下直接有 exe，命中 `exe_in_base_dir`。
 
 ## Variable Group ENV
 
 ```env
 SERVICE_NAME=NBT.MES.Service
-SERVICE_PATH=D:\MES\数据上传\NBT.MES.Service
+SERVICE_PATH=D:\MES\数据上传
 ZIP_NAME=nbt.zip
 ZIP_PATH=/root/nbt/pkg
 NBT_API_PORT=8885
+NBT_SERVICE_SCAN_MAX_DEPTH=3
+NBT_SERVICE_SCAN_LATEST=true
 SEMAPHORE_API_TOKEN=<token>
 ```
 
@@ -41,8 +52,10 @@ SEMAPHORE_API_TOKEN=<token>
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVICE_NAME` / `NBT_SERVICE_NAME` | `NBT.MES.Service` | `Get-Service -Name` |
-| `SERVICE_PATH` / `NBT_SERVICE_PATH` | `D:\MES\数据上传\NBT.MES.Service` | 安装目录（巡检 / Redeploy 检查） |
+| `SERVICE_NAME` / `NBT_SERVICE_NAME` | `NBT.MES.Service` | `Get-Service -Name`；同时推导 exe 文件名 |
+| `SERVICE_PATH` / `NBT_SERVICE_PATH` | `D:\MES\数据上传` | **父目录**，在其下查找 `{SERVICE_NAME}.exe` |
+| `NBT_SERVICE_SCAN_MAX_DEPTH` | `3` | 递归扫描最大深度 |
+| `NBT_SERVICE_SCAN_LATEST` | `true` | 多个 exe 命中时取最新修改时间 |
 | `ZIP_NAME` | `nbt.zip` | 安装包文件名（含 `.zip`） |
 | `ZIP_PATH` | `/root/nbt/pkg` | 控制器上 zip 目录 |
 | `NBT_API_PORT` | `8885` | 心跳 API；设备 `api_port` 优先 |

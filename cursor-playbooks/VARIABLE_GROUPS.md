@@ -90,14 +90,15 @@ SEMAPHORE_API_TOKEN=<token>
 
 ### NBT
 
-NBT 为 **Windows 服务**启停，**不写 INI**。使用 **`service_name` / `service_path`**（不用 `exe_name` / `exe_path`）。
+NBT 为 **Windows 服务**启停，**不写 INI**。`SERVICE_PATH` 填 **父目录**；playbook 按 **`SERVICE_NAME` → `{SERVICE_NAME}.exe`** 在该目录下解析（见 `nbt/tasks/resolve_nbt_service_install.yml`）。
 
 ```env
 SERVICE_NAME=NBT.MES.Service
-SERVICE_PATH=D:\MES\数据上传\NBT.MES.Service
+SERVICE_PATH=D:\MES\数据上传
 ZIP_NAME=nbt.zip
 ZIP_PATH=/root/nbt/pkg
 NBT_API_PORT=8885
+NBT_SERVICE_SCAN_MAX_DEPTH=3
 SEMAPHORE_API_TOKEN=<token>
 # TDengine（与 NEWARE 共用 shared 写入任务；NBT 建议单独 TAG）
 TDENGINE_URL=http://tdengine:6041

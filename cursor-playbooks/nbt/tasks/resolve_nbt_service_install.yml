@@ -1,0 +1,119 @@
+---
+# Resolve NBT service exe under SERVICE_PATH (parent directory) + SERVICE_NAME.exe.
+# Sets: service_exe_path, service_path (install dir), install_path (= exe), service_parent_dir (= base).
+# Legacy: SERVICE_PATH may still be the full install folder containing SERVICE_NAME.exe.
+
+- name: NBT 解析服务 exe 路径（SERVICE_PATH 目录 + SERVICE_NAME）
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = 'Continue'
+    $base = [string]$env:NBT_SERVICE_BASE_DIR
+    if ($null -eq $base) { $base = '' }
+    $base = $base.Trim().TrimEnd('\')
+    $svcName = [string]$env:NBT_SERVICE_NAME
+    if ($null -eq $svcName) { $svcName = '' }
+    $svcName = $svcName.Trim()
+    $exeName = [string]$env:NBT_SERVICE_EXE_NAME
+    if ([string]::IsNullOrWhiteSpace($exeName)) {
+      $exeName = $svcName
+      if (-not $exeName.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
+        $exeName = $exeName + '.exe'
+      }
+    }
+    $maxDepth = 3
+    if (-not [string]::IsNullOrWhiteSpace($env:NBT_SERVICE_SCAN_MAX_DEPTH)) {
+      [void][int]::TryParse($env:NBT_SERVICE_SCAN_MAX_DEPTH, [ref]$maxDepth)
+      if ($maxDepth -lt 0) { $maxDepth = 0 }
+    }
+    $scanLatest = $true
+    $scanLatestRaw = [string]$env:NBT_SERVICE_SCAN_LATEST
+    if (-not [string]::IsNullOrWhiteSpace($scanLatestRaw)) {
+      $scanLatest = $scanLatestRaw -match '^(?i:true|1|yes)$'
+    }
+
+    function Test-ExeAt([string]$Dir) {
+      if ([string]::IsNullOrWhiteSpace($Dir)) { return $null }
+      $p = Join-Path $Dir $exeName
+      if (Test-Path -LiteralPath $p) { return $p }
+      return $null
+    }
+
+    $resolved = $null
+    $source = 'not_found'
+
+    if ($base.Length -gt 0) {
+      $resolved = Test-ExeAt $base
+      if ($resolved) { $source = 'exe_in_base_dir' }
+
+      if (-not $resolved -and $svcName.Length -gt 0) {
+        $sub = Join-Path $base $svcName
+        $resolved = Test-ExeAt $sub
+        if ($resolved) { $source = 'exe_in_service_name_subdir' }
+      }
+
+      if (-not $resolved -and (Test-Path -LiteralPath $base)) {
+        $hits = @(
+          Get-ChildItem -LiteralPath $base -Filter $exeName -File -Recurse -Depth $maxDepth -ErrorAction SilentlyContinue
+        )
+        if ($hits.Count -gt 0) {
+          if ($scanLatest) {
+            $pick = $hits | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          } else {
+            $pick = $hits | Select-Object -First 1
+          }
+          $resolved = $pick.FullName
+          $source = 'scan_under_base'
+        }
+      }
+    }
+
+    if ($resolved) {
+      $installDir = Split-Path -Parent $resolved
+      Write-Output "SERVICE_EXE_PATH=$resolved"
+      Write-Output "SERVICE_INSTALL_DIR=$installDir"
+      Write-Output "SERVICE_BASE_DIR=$base"
+      Write-Output "SERVICE_RESOLVE_SOURCE=$source"
+      exit 0
+    }
+
+    Write-Output "SERVICE_EXE_PATH="
+    Write-Output "SERVICE_INSTALL_DIR="
+    Write-Output "SERVICE_BASE_DIR=$base"
+    Write-Output "SERVICE_RESOLVE_SOURCE=$source"
+    Write-Output "SERVICE_EXE_NOT_FOUND|base=$base|exe=$exeName|depth=$maxDepth"
+    exit 0
+  environment:
+    NBT_SERVICE_BASE_DIR: "{{ service_base_dir | default(service_path, true) }}"
+    NBT_SERVICE_NAME: "{{ service_name }}"
+    NBT_SERVICE_EXE_NAME: "{{ service_exe_name | default('', true) }}"
+    NBT_SERVICE_SCAN_MAX_DEPTH: "{{ nbt_service_scan_max_depth | default(((lookup('env', 'NBT_SERVICE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int) | string }}"
+    NBT_SERVICE_SCAN_LATEST: "{{ (nbt_service_scan_latest | default(((lookup('env', 'NBT_SERVICE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool)) | string | lower }}"
+  register: _nbt_resolve_service_install
+  changed_when: false
+
+- name: NBT 登记解析后的服务路径
+  ansible.builtin.set_fact:
+    _nbt_resolve_exe_line: "{{ (_nbt_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_EXE_PATH=') | list | first) | default('SERVICE_EXE_PATH=', true) }}"
+    _nbt_resolve_install_line: "{{ (_nbt_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_INSTALL_DIR=') | list | first) | default('SERVICE_INSTALL_DIR=', true) }}"
+    _nbt_resolve_base_line: "{{ (_nbt_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_BASE_DIR=') | list | first) | default('SERVICE_BASE_DIR=', true) }}"
+    _nbt_resolve_source_line: "{{ (_nbt_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_RESOLVE_SOURCE=') | list | first) | default('SERVICE_RESOLVE_SOURCE=', true) }}"
+
+- name: NBT 应用解析后的服务安装路径
+  ansible.builtin.set_fact:
+    service_exe_path: "{{ (_nbt_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) }}"
+    service_path: "{{ (_nbt_resolve_install_line | regex_replace('^SERVICE_INSTALL_DIR=', '') | trim) }}"
+    install_path: "{{ (_nbt_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) }}"
+    service_parent_dir: "{{ (_nbt_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}"
+    _nbt_service_resolve_source: "{{ (_nbt_resolve_source_line | regex_replace('^SERVICE_RESOLVE_SOURCE=', '') | trim) }}"
+    redeploy_zip_dest: "{{ (_nbt_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}\\{{ zip_name | default('nbt.zip', true) }}"
+    redeploy_extract_dest: "{{ (_nbt_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}"
+
+- name: NBT DEBUG 服务路径解析
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-NBT] service_base_dir={{ service_base_dir | default(service_path, true) }}"
+      - "[DEBUG-NBT] service_name={{ service_name }} service_exe_name={{ service_exe_name | default('') }}"
+      - "[DEBUG-NBT] resolve_source={{ _nbt_service_resolve_source | default('n/a') }}"
+      - "[DEBUG-NBT] service_exe_path={{ service_exe_path | default('') }}"
+      - "[DEBUG-NBT] service_path(install_dir)={{ service_path | default('') }}"
+      - "[DEBUG-NBT] service_parent_dir(zip)={{ service_parent_dir | default('') }}"
+      - "[DEBUG-NBT] install_path={{ install_path | default('') }}"
