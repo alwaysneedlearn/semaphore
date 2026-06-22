@@ -7,6 +7,7 @@
     - vars/api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: SINEXCEL
     ini_agent_force_stop: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"

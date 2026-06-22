@@ -5,7 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: LAND
     land_include_redeliver: true
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"

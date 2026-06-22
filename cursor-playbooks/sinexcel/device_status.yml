@@ -7,7 +7,7 @@
     - vars/api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: SINEXCEL
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
@@ -101,7 +101,7 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_files_dir: "{{ playbook_dir }}/files"
   tasks:
     - name: 执行 bulk 回调
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

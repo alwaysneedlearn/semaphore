@@ -5,8 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
-    sem_profile_files_dir: "{{ playbook_dir }}/files"
+    sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_debug_tag: NEWARE
     _exe_name_default: uu.exe

@@ -2,12 +2,7 @@
 # Resolve NBT service exe under SERVICE_PATH (parent directory) + SERVICE_NAME.exe.
 # Sets: service_exe_path, service_path (install dir), install_path (= exe), service_parent_dir (= base).
 # Script in nbt/files/ avoids inline PowerShell { } confusing Ansible Jinja on older runners.
-
-- name: NBT 下发服务路径解析脚本
-  ansible.windows.win_copy:
-    src: "{{ playbook_dir }}/files/sem_resolve_nbt_service_install.ps1"
-    dest: C:\Windows\Temp\sem_resolve_nbt_service_install.ps1
-  changed_when: false
+# 前置：deploy_sem_windows_helper_scripts.yml（批量复制 playbook_dir/files/）
 
 - name: NBT 解析服务 exe 路径（SERVICE_PATH 目录 + SERVICE_NAME）
   environment:
