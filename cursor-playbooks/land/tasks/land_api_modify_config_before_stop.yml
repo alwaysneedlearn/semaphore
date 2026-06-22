@@ -14,9 +14,9 @@
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
     and (
-      'RUNNING' in (_land_process_before.stdout | default(''))
-      or 'RUNNING' in (_land_process_before_restart.stdout | default(''))
-      or 'RUNNING' in (_land_process_check.stdout | default(''))
+      (((_land_process_before | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      or (((_land_process_before_restart | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      or (((_land_process_check | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
     )
 
 - name: DEBUG LAND 停止前未改配置（进程未运行）
@@ -27,6 +27,6 @@
       - "[DEBUG-LAND] process_check={{ (_land_process_check.stdout | default('n/a') | trim) }}"
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
-    and 'RUNNING' not in (_land_process_before.stdout | default(''))
-    and 'RUNNING' not in (_land_process_before_restart.stdout | default(''))
-    and 'RUNNING' not in (_land_process_check.stdout | default(''))
+    and (((_land_process_before | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
+    and (((_land_process_before_restart | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
+    and (((_land_process_check | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING'

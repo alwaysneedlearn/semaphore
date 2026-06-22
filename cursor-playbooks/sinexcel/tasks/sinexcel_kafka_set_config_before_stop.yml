@@ -16,9 +16,9 @@
   when: >-
     (sinexcel_kafka_cfg_flat | default({}) | length) > 0
     and (
-      'RUNNING' in (_sinexcel_process_before_restart.stdout | default(''))
-      or 'RUNNING' in (_sinexcel_process_check.stdout | default(''))
-      or 'RUNNING' in (_ini_agent_process_before.stdout | default(''))
+      (((_sinexcel_process_before_restart | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      or (((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      or (((_ini_agent_process_before | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
     )
 
 - name: DEBUG SINEXCEL 停止前未 SetConfig（进程未运行）
@@ -27,6 +27,6 @@
       - "[DEBUG-SINEXCEL] kafka_set phase=before_stop skipped=process_not_running"
   when: >-
     (sinexcel_kafka_cfg_flat | default({}) | length) > 0
-    and 'RUNNING' not in (_sinexcel_process_before_restart.stdout | default(''))
-    and 'RUNNING' not in (_sinexcel_process_check.stdout | default(''))
-    and 'RUNNING' not in (_ini_agent_process_before.stdout | default(''))
+    and (((_sinexcel_process_before_restart | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
+    and (((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
+    and (((_ini_agent_process_before | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')

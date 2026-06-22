@@ -27,8 +27,8 @@
   vars:
     sinexcel_kafka_enable_phase: before_stop
   when: >-
-    'RUNNING' in (_sinexcel_process_before_restart.stdout | default(''))
-    or 'RUNNING' in (_sinexcel_process_check.stdout | default(''))
+    (((_sinexcel_process_before_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING')
+    or (((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
 
 - name: 强制停止进程（重启前）
   ansible.windows.win_shell: |
@@ -82,7 +82,7 @@
   vars:
     sinexcel_kafka_enable_phase: after_start
   when: >-
-    'RUNNING' in (_ini_agent_process_after.stdout | default(''))
+    (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING')
     and not (_sinexcel_kafka_enabled | default(false) | bool)
 
 - name: 启动后再次查询 Kafka 配置（IsEnable 后，轮询）
@@ -97,5 +97,5 @@
   when: >-
     (sinexcel_include_retransmit | default(false) | bool)
     and (sinexcel_retransmit_cfg | default(merged_cfg.Retransmit | default({})) | length) > 0
-    and ('RUNNING' in (_ini_agent_process_after.stdout | default('')))
+    and (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING')
     and (_sinexcel_kafka_enabled | default(false) | bool)

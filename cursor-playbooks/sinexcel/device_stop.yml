@@ -86,7 +86,7 @@
             {% if 'NOT_RUNNING' in _proc %}Stop completed; process not running
             {% elif 'STOP_TASK_NO_OUTPUT' in _grace %}Graceful stop produced no log (check scheduled task / helper on desktop); process still running
             {% elif 'POPUP_NOT_FOUND' in _grace %}Confirm popup not found (minimized/hidden window?); process still running
-            {% elif 'STILL_RUNNING' in _grace or 'RUNNING' in _proc %}Stop failed: process still running
+            {% elif (_grace.split('|') | first) == 'STILL_RUNNING' or (_proc.split('|') | first) == 'RUNNING' %}Stop failed: process still running
             {% else %}Stop failed: {{ _proc or _grace or 'unknown' }}{% endif %}
 
     - name: DEBUG SINEXCEL 停止结果

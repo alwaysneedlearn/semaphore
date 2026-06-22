@@ -10,8 +10,8 @@
     (merged_cfg.SystemConfig | default({}) | length) > 0
     and not (_land_modify_config_before_ok | default(false) | bool)
     and (
-      'RUNNING' in (_land_process_after_start.stdout | default(""))
-      or 'RUNNING' in (_land_process_after_restart.stdout | default(""))
+      (((_land_process_after_start | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      or (((_land_process_after_restart | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
     )
     and (
       (
@@ -23,8 +23,8 @@
       ) or (
         not (land_start_check_api | default(true) | bool)
         and (
-          'RUNNING' in (_land_process_after_start.stdout | default(""))
-          or 'RUNNING' in (_land_process_after_restart.stdout | default(""))
+          (((_land_process_after_start | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+          or (((_land_process_after_restart | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
         )
       )
     )

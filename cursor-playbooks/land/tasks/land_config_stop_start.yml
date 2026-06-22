@@ -13,7 +13,7 @@
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_before_stop.yml"
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
-    and 'RUNNING' in (_land_process_before.stdout | default(''))
+    and (((_land_process_before.stdout | default('') | trim).split('|') | first) == 'RUNNING')
 
 - name: LAND 优雅停止
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
@@ -67,6 +67,6 @@
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_redeliver.yml"
   when: >-
     (merged_cfg.Redeliver | default({}) | length) > 0
-    and ('RUNNING' in (_land_process_after_restart.stdout | default('')))
+    and (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING')
     and (land_api_status_ok | default(false) | bool)
     and (land_include_redeliver | default(true) | bool)

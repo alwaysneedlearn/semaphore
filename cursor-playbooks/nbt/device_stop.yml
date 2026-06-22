@@ -39,7 +39,7 @@
             {% set _svc = (_nbt_service_status.stdout | default('') | trim) %}
             {% if 'NOT_FOUND' in _svc %}Service not found: {{ service_name }}
             {% elif 'NOT_RUNNING' in _svc or 'Stopped' in _svc %}Stop completed; service not running
-            {% elif 'RUNNING' in _svc %}Stop failed: service still running ({{ _svc }})
+            {% elif ((_svc.split('|') | first) == 'RUNNING') %}Stop failed: service still running ({{ _svc }})
             {% else %}Stop failed: {{ _svc or 'unknown' }}{% endif %}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_stop_snapshot.yml"
