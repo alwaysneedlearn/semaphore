@@ -41,7 +41,12 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 - `computer_name` = bulk 回调行的 **`hostname`**
 - `ip_addr` = bulk 回调行的 **`ip`**（为空时回退 `hostname`）
 - `updated_time` = `check_time` = playbook 写入瞬间的本地时间（**`TDENGINE_TIMEZONE`**，默认 **`Asia/Shanghai`**），格式 `YYYY-MM-DD HH:MM:SS.mmm`（三位毫秒，如 `2026-05-28 09:01:39.000`）。字符串不含时区后缀；需 UTC 时在 Variable Group 设 `TDENGINE_TIMEZONE=UTC`。
-- `abnormal_reason` = 回调行 `abnormal_reason`；为空时：`offline`→`ABNORMAL`，`online`→空字符串
+- `abnormal_reason`（写入 TDengine 时）：`status=online` → 空；`offline` 时按 `api_status` / `winrm_status` / 回调原文映射为中文：
+  - **API异常，服务运行中** — `api_status=offline` 且 `winrm_status=online`（或 WinRM 可达、进程在跑）
+  - **API异常，服务未运行** — 进程/服务未运行（原文含 Process not running 等），或仅 API 不可达且无法确认 WinRM
+  - **网络连接异常（API、WinRM均不可达）** — `api_status` 与 `winrm_status` 均为 `offline`
+  - 其它未归类 offline → 保留 playbook 英文 `abnormal_reason`；仍为空则 **设备异常**
+- Semaphore DB / UI 仍保存 playbook 原始 `abnormal_reason`（英文）；仅 TDengine 列使用上述中文
 - **`supplier`** 为超级表 **TAG**，固定 **`newarerm`**（Variable Group：`TDENGINE_TAG_SUPPLIER`）
 
 ## 每台设备只保留一行（ts 固定策略）

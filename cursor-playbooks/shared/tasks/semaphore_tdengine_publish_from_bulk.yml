@@ -98,11 +98,29 @@
       {%- for item in semaphore_status_bulk_updates | default([]) -%}
       {%- set _raw_st = (item.device_status | default(item.status | default('unhealthy')) | string | trim) -%}
       {%- set _td_mapped = 'online' if _raw_st == 'healthy' else 'offline' -%}
+      {%- set _api_st = (item.api_status | default('') | string | trim | lower) -%}
+      {%- set _winrm_st = (item.winrm_status | default('') | string | trim | lower) -%}
+      {%- set _raw_reason = item.abnormal_reason | default('') | string -%}
+      {%- set _raw_l = _raw_reason | lower -%}
+      {%- if _td_mapped == 'online' -%}
+      {%- set _reason = '' -%}
+      {%- elif ('process not running' in _raw_l) or ('not_running' in _raw_l) or ('进程未运行' in _raw_reason) or ('服务未运行' in _raw_reason) or ('服务不存在' in _raw_reason) or ('already stopped' in _raw_l) or ('not running' in _raw_l and 'still running' not in _raw_l) -%}
+      {%- set _reason = 'API异常，服务未运行' -%}
+      {%- elif (_api_st == 'offline') and (_winrm_st == 'online') -%}
+      {%- set _reason = 'API异常，服务运行中' -%}
+      {%- elif (_api_st == 'offline') and (_winrm_st == 'offline') -%}
+      {%- set _reason = '网络连接异常（API、WinRM均不可达）' -%}
+      {%- elif _winrm_st == 'offline' -%}
+      {%- set _reason = '网络连接异常（API、WinRM均不可达）' -%}
+      {%- elif _api_st == 'offline' -%}
+      {%- set _reason = 'API异常，服务未运行' -%}
+      {%- elif (_raw_reason | trim | length) > 0 -%}
+      {%- set _reason = _raw_reason | trim -%}
+      {%- else -%}
+      {%- set _reason = '设备异常' -%}
+      {%- endif -%}
       {%- set _cn = (((item.hostname | default('') | trim) or (item.ip | default(''))) | string) | replace("'", "''") -%}
       {%- set _ip = (item.ip | default(item.hostname | default('')) | string) | replace("'", "''") -%}
-      {%- set _raw_reason = item.abnormal_reason | default('') | string -%}
-      {%- set _reason_default = '' if _td_mapped == 'online' else 'ABNORMAL' -%}
-      {%- set _reason = (_raw_reason | trim) if (_raw_reason | trim | length) > 0 else _reason_default -%}
       {%- set _reason_esc = _reason | replace("'", "''") -%}
       {%- set _tuple = "('" ~ _ts_esc ~ "','" ~ _cn ~ "','" ~ _ip ~ "','" ~ _td_mapped ~ "','" ~ _now_esc ~ "','" ~ _now_esc ~ "','" ~ _reason_esc ~ "')" -%}
       {%- set _ = out.append(_tuple) -%}
@@ -141,6 +159,10 @@
       - >-
         [DEBUG-TDENGINE] row_sample device_status={{
           (semaphore_status_bulk_updates | default([]) | first | default({})).device_status | default('n/a') | to_json
+        }} api_status={{
+          (semaphore_status_bulk_updates | default([]) | first | default({})).api_status | default('n/a') | to_json
+        }} winrm_status={{
+          (semaphore_status_bulk_updates | default([]) | first | default({})).winrm_status | default('n/a') | to_json
         }} trimmed_online={{
           ((semaphore_status_bulk_updates | default([]) | first | default({})).device_status | default('') | string | trim) == 'healthy'
         }}
