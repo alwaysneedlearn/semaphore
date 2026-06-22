@@ -28,4 +28,5 @@
     msg: >
       [综合判断] 日志_OK={{ log_status_ok | default('n/a') }} |
       需要重配={{ need_reconfigure | default('n/a') }}
-      {% if log_health_use_tail | default(false) | bool %}| Tail行数={{ log_health_tail_lines | default(8000) }}{% endif %}
+      | tail={{ log_health_tail_lines | default(10) }}
+      | recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}

@@ -37,8 +37,6 @@
     log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
     log_read_retries: "{{ ((lookup('env', 'LOG_READ_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
     log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
-    log_health_tail_lines: "{{ ((lookup('env', 'LOG_HEALTH_TAIL_LINES') | default('', true) | trim) | default('8000', true)) | int }}"
-    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
 
   tasks:
     - name: 解析当前设备信息
@@ -166,8 +164,6 @@
             'NOT_RUNNING' not in check_result.stdout
           block:
             - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
-              vars:
-                log_health_use_tail: true
 
             - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
 
@@ -182,7 +178,7 @@
                   api_upload_started={{ api_upload_started | default(false) }} |
                   ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
                   日志_OK={{ log_status_ok | default('n/a') }} |
-                  Tail行数={{ log_health_tail_lines }} |
+                  tail={{ log_health_tail_lines | default(10) }} recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }} |
                   需要重配={{ need_reconfigure | default('n/a') }}
 
     - name: 登记进程运行状态（供 stop 判断）

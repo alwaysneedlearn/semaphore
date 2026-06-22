@@ -1,6 +1,6 @@
 ---
 # 进程已在跑：先 POST 查询数据上报状态；ExecResultData==3 则跳过日志关键字，否则回退日志检查。
-# 依赖 play vars：api_host、api_port、log_success_keyword、log_health_recent_minutes 等。
+# 依赖 play vars：api_host、api_port、log_health_*（group_vars/windows_hosts.yml）
 # 产出：need_reconfigure、log_status_ok、api_upload_*、upload_health_via_api（API 命中 3 时）
 
 - ansible.builtin.include_tasks: tasks/neware_query_upload_status_api.yml
@@ -33,4 +33,5 @@
       ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
       日志_OK={{ log_status_ok | default('n/a') }} |
       需要重配={{ need_reconfigure | default('n/a') }}
-      {% if log_health_use_tail | default(false) | bool %}| Tail行数={{ log_health_tail_lines | default(8000) }}{% endif %}
+      | tail={{ log_health_tail_lines | default(10) }}
+      | recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}

@@ -12,6 +12,17 @@ api_expected_exec_success_code: "{{ (lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CO
 export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true) | trim) | default('1', true) }}"
 export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
 export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
+# 状态检测日志回退（Patrol / check_restart 参考路径）：最新 N 行 + 时间窗，单次不重试
+_log_health_recent_hours: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_HOURS') | default('', true) | trim) | default('6', true)) | int }}"
+_log_health_recent_minutes_env: "{{ (lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) }}"
+log_health_recent_minutes: >-
+  {{
+    (_log_health_recent_minutes_env | int)
+    if ((_log_health_recent_minutes_env | string | trim | length) > 0)
+    else ((_log_health_recent_hours | int) * 60)
+  }}
+log_health_tail_lines: "{{ ((lookup('env', 'LOG_HEALTH_TAIL_LINES') | default('', true) | trim) | default('10', true)) | int }}"
+log_health_keyword: "{{ (lookup('env', 'LOG_HEALTH_KEYWORD') | default('', true) | trim) | default('提示', true) }}"
 # 启动验证：轮询直至 ExecResultData==3（默认与 LOG_POLL_RETRIES/DELAY 对齐）
 api_status_start_poll_retries: "{{ ((lookup('env', 'API_STATUS_START_POLL_RETRIES') | default('', true) | trim) | default((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('5', true), true)) | int }}"
 api_status_start_poll_delay: "{{ ((lookup('env', 'API_STATUS_START_POLL_DELAY') | default('', true) | trim) | default((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('8', true), true)) | int }}"

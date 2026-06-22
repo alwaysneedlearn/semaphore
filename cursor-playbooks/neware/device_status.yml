@@ -16,8 +16,6 @@
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('D:\\Program Files\\NEWARE', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
-    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
-    log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -178,7 +176,8 @@
                   api_upload_started={{ api_upload_started | default(false) }} |
                   ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
                   日志_OK={{ log_status_ok | default('n/a') }} |
-                  异常/需关注={{ need_reconfigure | default('n/a') }}
+                  异常/需关注={{ need_reconfigure | default('n/a') }} |
+                  tail={{ log_health_tail_lines | default(10) }} recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}
 
         - name: 登记 Semaphore 状态回调行（参考路径）
           ansible.builtin.set_fact:

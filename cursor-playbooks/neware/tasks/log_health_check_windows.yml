@@ -1,20 +1,18 @@
 ---
-# 进程在跑时：在最新 NWReport_DBWB*.log 中按时间窗查找上传成功关键字（API ExecResultData!=3 时回退）
-# 变量：exe_dir, zip_name, log_health_recent_minutes；可选 log_health_use_tail + log_health_tail_lines
-# 可选 log_health_keyword（默认 LOG_SUCCESS_KEYWORD / 本轮通道状态上传成功）
+# 状态检测日志回退（API ExecResultData!=3 且进程在跑）：单次读取，不重试。
+# 变量：exe_dir、zip_name；group/play：log_health_tail_lines（默认 10）、log_health_recent_minutes、log_health_keyword（默认 提示）
 # 输出 register：log_check_result（FOUND_KEYWORD | NO_KEYWORD | NO_LOGS_FOUND）
 
-- name: 状态判断：检查日志上报状态
+- name: 状态判断：检查日志上报状态（最新 N 行，单次）
   environment:
-    LOG_HEALTH_KEYWORD: "{{ log_health_keyword | default(log_success_keyword | default('本轮通道状态上传成功', true), true) }}"
-    SEMAPHORE_LOG_HEALTH_USE_TAIL: "{{ '1' if (log_health_use_tail | default(false) | bool) else '0' }}"
-    SEMAPHORE_LOG_HEALTH_TAIL_LINES: "{{ log_health_tail_lines | default(8000) | string }}"
+    LOG_HEALTH_KEYWORD: "{{ log_health_keyword | default(((lookup('env', 'LOG_HEALTH_KEYWORD') | default('', true) | trim) | default('提示', true)), true) }}"
+    SEMAPHORE_LOG_HEALTH_TAIL_LINES: "{{ log_health_tail_lines | default(((lookup('env', 'LOG_HEALTH_TAIL_LINES') | default('', true) | trim) | default('10', true)) | int) | string }}"
   win_shell: |
     $logDir = "{{ exe_dir }}\\{{ zip_name }}\\LogData"
-    $recentMin = {{ log_health_recent_minutes | int }}
+    $recentMin = {{ log_health_recent_minutes | default(360) | int }}
     $keyword = [string]$env:LOG_HEALTH_KEYWORD
-    $useTail = ($env:SEMAPHORE_LOG_HEALTH_USE_TAIL -eq '1')
     $tailN = [int]$env:SEMAPHORE_LOG_HEALTH_TAIL_LINES
+    if ($tailN -lt 1) { $tailN = 10 }
     $logFiles = Get-ChildItem -Path $logDir -Filter "NWReport_DBWB*.log" -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -match '^NWReport_DBWB\d{8}\.log$' } |
       Sort-Object LastWriteTime -Descending
@@ -27,11 +25,7 @@
       Write-Output "NO_LOGS_FOUND"
       exit 0
     }
-    if ($useTail) {
-      $lines = @(Get-Content -LiteralPath $latestLog -Tail $tailN -ErrorAction SilentlyContinue)
-    } else {
-      $lines = @(Get-Content -LiteralPath $latestLog -ErrorAction SilentlyContinue)
-    }
+    $lines = @(Get-Content -LiteralPath $latestLog -Tail $tailN -ErrorAction SilentlyContinue)
     if ($lines.Count -eq 0) {
       Write-Output "NO_KEYWORD"
       exit 0
@@ -40,13 +34,7 @@
     $cutoff = $now.AddMinutes(-$recentMin)
     function Test-KeywordLine([string]$line, [string]$kw) {
       if ([string]::IsNullOrWhiteSpace($line) -or [string]::IsNullOrWhiteSpace($kw)) { return $false }
-      if ($line.IndexOf($kw, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
-      $alt = $kw.Trim()
-      if ($alt.StartsWith('提示 ')) {
-        $short = $alt.Substring(3)
-        if ($line.IndexOf($short, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
-      } elseif ($line.IndexOf(('提示 ' + $alt), [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
-      return $false
+      return ($line.IndexOf($kw, [StringComparison]::OrdinalIgnoreCase) -ge 0)
     }
 
     $found = $false
@@ -72,6 +60,7 @@
     msg: >-
       [日志检查] 结果={{ log_check_result.stdout | default('未执行') | trim }}
       unreachable={{ log_check_result.unreachable | default(false) }}
-      mode={{ 'tail' if (log_health_use_tail | default(false) | bool) else 'full' }}
-      recent_min={{ log_health_recent_minutes | default(8) }}
+      tail_lines={{ log_health_tail_lines | default(10) }}
+      recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}
+      keyword={{ log_health_keyword | default('提示') }}
   when: log_check_result is defined

@@ -17,8 +17,9 @@
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_health_via_api={{ upload_health_via_api | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_status_ok={{ log_status_ok | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_recent_minutes={{ log_health_recent_minutes | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_success_keyword={{ log_success_keyword | default('') | truncate(80, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_tail_lines={{ log_health_tail_lines | default(10) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_keyword={{ log_health_keyword | default('提示') | truncate(40, True) }}"
   when: >
     log_status_ok is defined or need_reconfigure is defined or
     api_upload_started is defined or api_upload_exec_result_data is defined
