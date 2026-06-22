@@ -13,17 +13,17 @@
       failed_when: false
       ignore_unreachable: true
 
+  always:
     - ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_eval_ping_result.yml"
+      when: _winrm_ping is defined
 
     - name: 登记 WinRM 已连通
       ansible.builtin.set_fact:
         _winrm_session_ok: true
         _winrm_ping_last_success: "{{ _winrm_ping }}"
-      when: _winrm_ping_ok | default(false) | bool
-
-  always:
-    - ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_eval_ping_result.yml"
-      when: _winrm_ping is defined
+      when:
+        - _winrm_ping is defined
+        - _winrm_ping_ok | default(false) | bool
 
     # 无 ignore_unreachable 时 UNREACHABLE 会跳过 block 内后续任务；always 内再 clear 以便重试与登记回调
     - name: ping 未成功则标记并清除 unreachable

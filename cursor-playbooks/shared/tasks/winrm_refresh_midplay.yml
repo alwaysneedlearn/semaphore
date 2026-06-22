@@ -1,9 +1,35 @@
 ---
-# 长 play 内 WinRM 可能已断开；在后续 win_* / 重配 / 日志任务前强制重新建连。
+# 长 play 内 WinRM 可能已断开；在后续 win_* / 重配 / 日志任务前探测会话。
+# 优化：先单次 win_ping；仅失败时才走完整 winrm_ensure_reachable（reset + 重试序列）。
 
 - name: "{{ winrm_refresh_label | default('WinRM 中途建连（长任务前）') }}"
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
   when: _winrm_session_ok | default(false) | bool
-  vars:
-    winrm_force_reconnect: true
-    winrm_connect_context: "{{ winrm_refresh_label | default('mid-play') }}"
+  block:
+    - name: 中途 WinRM 快速探测
+      ansible.windows.win_ping:
+      register: _winrm_ping
+      failed_when: false
+      ignore_unreachable: true
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_eval_ping_result.yml"
+
+    - name: DEBUG 中途 WinRM 探测
+      ansible.builtin.debug:
+        msg:
+          - "[DEBUG-WINRM] context={{ winrm_refresh_label | default('mid-play') }}"
+          - "[DEBUG-WINRM] midplay_probe_ok={{ _winrm_ping_ok | default(false) }}"
+          - "[DEBUG-WINRM] action={{ 'skip full reconnect' if (_winrm_ping_ok | default(false) | bool) else 'run full winrm_ensure_reachable' }}"
+      when: _winrm_ping is defined
+
+    - name: 中途探测失败则完整重连
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      when: not (_winrm_ping_ok | default(false) | bool)
+      vars:
+        winrm_force_reconnect: true
+        winrm_connect_context: "{{ winrm_refresh_label | default('mid-play') }}"
+
+    - name: 中途重连仍失败则结束本主机
+      ansible.builtin.meta: end_host
+      when:
+        - not (_winrm_ping_ok | default(false) | bool)
+        - not (_winrm_session_ok | default(false) | bool)
