@@ -17,118 +17,161 @@
     exe_dir: "{{ exe_dir_preferred }}"
     zip_name: "{{ (lookup('env', 'ZIP_NAME') | default('', true) | trim) | default('test', true) }}"
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
-    # 日志状态检查：仅统计最近 N 分钟内的日志行
     log_health_recent_minutes: "{{ ((lookup('env', 'LOG_HEALTH_RECENT_MINUTES') | default('', true) | trim) | default('8', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - name: WinRM 建连（含重试，须在其它 win_* 任务之前）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - name: WinRM 未连通则不再执行本主机后续步骤
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - name: 一次性部署 Windows 辅助脚本
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - name: 解析 EXE_DIR（目标盘符 D→E→C）
-      block:
-        - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
-      ignore_unreachable: true
-
-    - name: 采集进程状态信息
-      block:
-        - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
-        - ansible.builtin.set_fact:
-            status: "{{ _sem_process_status }}"
-      ignore_unreachable: true
-
-    - name: 状态判断：输出程序状态
-      ansible.builtin.debug:
-        msg: "[程序状态] {{ status.stdout | trim }}"
-      when: >
-        not (status.unreachable | default(false)) and
-        status is defined and
-        'stdout' in status
-
-    - name: DEBUG NEWARE 巡检（进程）
-      ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
-
-    - name: 登记 Semaphore 回调行（不可达，须在 end_host 之前）
+    - name: 解析当前设备信息
       ansible.builtin.set_fact:
-        semaphore_callback_row:
-          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
-          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
-          device_status: unhealthy
-          winrm_status: offline
-          api_status: offline
-          abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"
+        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+
+    # --- 必要：BTSClient 数据上报 API（controller HTTP，不依赖 WinRM）---
+    - name: 数据上报状态 API（Patrol 首要判定）
+      ansible.builtin.include_tasks: tasks/neware_query_upload_status_api.yml
       vars:
-        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
-      when: status.unreachable | default(false)
+        neware_api_query_context: patrol
 
-    - name: 跳过不可达主机
-      ansible.builtin.meta: end_host
-      when: status.unreachable | default(false)
-
-    - name: 进程未运行时标记异常（需重配/关注）
-      ansible.builtin.set_fact:
-        need_reconfigure: true
-        log_status_ok: false
-      when: >
-        status is defined and
-        'stdout' in status and
-        'NOT_RUNNING' in status.stdout
-
-    - name: 状态判断：数据上报状态（API 优先，日志关键字回退）
-      when: >
-        status is defined and
-        'stdout' in status and
-        'NOT_RUNNING' not in status.stdout
+  # 快路径：ExecResultData==3 → healthy；WinRM/进程/日志仅作 winrm_status 参考或跳过
+    - name: 数据上报 API 已健康（跳过 WinRM/进程/日志参考检查）
+      when: api_upload_started | default(false) | bool
       block:
-        - ansible.builtin.include_tasks: tasks/health_gate_upload_status_api_then_log.yml
-          vars:
-            neware_health_gate_context: patrol
+        - name: WinRM 参考探测（仅填写 winrm_status，不改变 API 健康结论）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
 
-        - name: 输出综合判断结果（含程序状态）
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            log_status_ok: true
+            upload_health_via_api: true
+            semaphore_callback_row:
+              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: >-
+                {{
+                  'WinRM unreachable (API upload healthy; reference only)'
+                  if not (_winrm_session_ok | default(false) | bool)
+                  else ''
+                }}
+
+        - name: DEBUG NEWARE 巡检（API 快路径）
+          ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    # 参考路径：API 未达 3 → WinRM + 进程 + 日志关键字回退
+    - name: API 未达上报已启动 — WinRM/进程/日志参考检查
+      when: not (api_upload_started | default(false) | bool)
+      block:
+        - name: WinRM 建连（含重试）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+        - name: WinRM 未连通则不再执行本主机后续步骤
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+        - name: 一次性部署 Windows 辅助脚本
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+        - name: 解析 EXE_DIR（参考：日志路径）
+          block:
+            - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
+          ignore_unreachable: true
+
+        - name: 采集进程状态（参考）
+          block:
+            - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
+            - ansible.builtin.set_fact:
+                status: "{{ _sem_process_status }}"
+          ignore_unreachable: true
+
+        - name: 状态判断：输出程序状态
           ansible.builtin.debug:
-            msg: >
-              [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
-              api_upload_started={{ api_upload_started | default('n/a') }} |
-              日志_OK={{ log_status_ok | default('n/a') }} |
-              异常/需关注={{ need_reconfigure }}
+            msg: "[程序状态] {{ status.stdout | trim }}"
+          when: >
+            not (status.unreachable | default(false)) and
+            status is defined and
+            'stdout' in status
 
-    # 不传 rdp_status（**Probe** 维护 RDP TCP）。api_status：进程在跑且 API ExecResultData==3 或日志回退 OK → online。
-    - name: 登记 Semaphore 状态回调行（Patrol/巡检结束后 PUT bulk）
-      when: not (status.unreachable | default(false))
-      ansible.builtin.set_fact:
-        semaphore_callback_row:
-          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
-          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
-          device_status: >-
-            {{ 'unhealthy' if status is not defined or ('stdout' not in status)
-               else ('unhealthy' if 'NOT_RUNNING' in (status.stdout | default(''))
-               else ('unhealthy' if (need_reconfigure is defined and need_reconfigure | bool)
-               else 'healthy')) }}
-          winrm_status: >-
-            {{ 'offline' if (not (_winrm_session_ok | default(false) | bool))
-            or (log_check_result is defined and (log_check_result.unreachable | default(false)))
-            else 'online' }}
-          api_status: >-
-            {{ 'offline' if status is not defined or ('stdout' not in status)
-               else ('offline' if 'NOT_RUNNING' in (status.stdout | default(''))
-               else ('online' if (need_reconfigure is defined and not (need_reconfigure | bool))
-               else 'offline')) }}
-          abnormal_reason: >-
-            {{ 'Process not running' if 'NOT_RUNNING' in (status.stdout | default(''))
-               else ('WinRM unreachable during log status check' if (log_check_result is defined and (log_check_result.unreachable | default(false)))
-               else ('Health check: API ExecResultData!=3 and log keyword fallback failed (need reconfigure)' if (need_reconfigure is defined and need_reconfigure | bool)
-               else '')) }}
-      vars:
-        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
+        - name: DEBUG NEWARE 巡检（进程）
+          ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
 
-    - name: DEBUG NEWARE 巡检（结果）
-      ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
-      when: not (status.unreachable | default(false))
+        - name: 登记 Semaphore 回调行（WinRM/进程采集不可达）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"
+          when: status.unreachable | default(false)
+
+        - name: 跳过不可达主机
+          ansible.builtin.meta: end_host
+          when: status.unreachable | default(false)
+
+        - name: 进程未运行时标记异常
+          ansible.builtin.set_fact:
+            need_reconfigure: true
+            log_status_ok: false
+            upload_health_via_api: false
+          when: >
+            status is defined and
+            'stdout' in status and
+            'NOT_RUNNING' in status.stdout
+
+        - name: 日志关键字回退（API 未达 3 且进程在跑）
+          when: >
+            status is defined and
+            'stdout' in status and
+            'NOT_RUNNING' not in status.stdout
+          block:
+            - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
+            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+            - ansible.builtin.set_fact:
+                upload_health_via_api: false
+
+            - name: 输出综合判断结果（参考路径）
+              ansible.builtin.debug:
+                msg: >
+                  [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
+                  api_upload_started={{ api_upload_started | default(false) }} |
+                  ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
+                  日志_OK={{ log_status_ok | default('n/a') }} |
+                  异常/需关注={{ need_reconfigure | default('n/a') }}
+
+        - name: 登记 Semaphore 状态回调行（参考路径）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: >-
+                {{ 'unhealthy' if status is not defined or ('stdout' not in status)
+                   else ('unhealthy' if 'NOT_RUNNING' in (status.stdout | default(''))
+                   else ('unhealthy' if (need_reconfigure is defined and need_reconfigure | bool)
+                   else 'healthy')) }}
+              winrm_status: >-
+                {{ 'offline' if (not (_winrm_session_ok | default(false) | bool))
+                or (log_check_result is defined and (log_check_result.unreachable | default(false)))
+                else 'online' }}
+              api_status: >-
+                {{ 'offline' if status is not defined or ('stdout' not in status)
+                   else ('offline' if 'NOT_RUNNING' in (status.stdout | default(''))
+                   else ('online' if (need_reconfigure is defined and not (need_reconfigure | bool))
+                   else 'offline')) }}
+              abnormal_reason: >-
+                {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
+                {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
+                {% elif need_reconfigure is defined and need_reconfigure | bool %}API ExecResultData!=3 and log keyword fallback failed
+                {% else %}{% endif %}
+
+        - name: DEBUG NEWARE 巡检（结果）
+          ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
 
   post_tasks:
     - name: 生成状态报告
