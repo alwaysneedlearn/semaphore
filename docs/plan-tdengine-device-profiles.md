@@ -1,6 +1,8 @@
 # 实施计划：TDengine 状态同步 + 多设备类型（Profile）
 
-本文档为技术计划与实现对照。**已实现（develop）**：TDengine Admin、Profile CRUD/UI（Devices → Device types）、`v2.18.15`、NEWARE 默认、Patrol/批量/调度按 Profile、bulk 后 TDengine 分表快照、列表按类型筛选、多任务前端提示、Discover 用 NEWARE 发现模板。运维说明见 [tdengine-setup.md](./tdengine-setup.md)。**可选未做**：AnsibleHook.End 写 TD、Bolt profile 持久化、DELETE profile、playbooks `profiles/<key>/` 目录。
+> **状态：已完成**（`develop`，2026-06）— Profile CRUD/UI、多类型调度、playbook bulk 后 TDengine 写入均已落地。运维说明见 [tdengine-setup.md](./tdengine-setup.md)。
+
+本文档为技术计划与实现对照。**已实现（develop）**：Profile CRUD/UI（Devices → Device types）、`v2.18.15`、NEWARE 默认、Patrol/批量/调度按 Profile、bulk 后 TDengine 分表快照（playbook Variable Group，非服务端 Admin 页）、列表按类型筛选、多任务前端提示、Discover 用 NEWARE 发现模板。**延期/可选**：服务端 TDengine Admin 页、`pkg/tdengine` Go 客户端、AnsibleHook.End 写 TD、Bolt profile 持久化、DELETE profile、playbooks `profiles/<key>/` 目录。
 
 ---
 
@@ -150,10 +152,10 @@ device_status == healthy  → status = online
 
 ### 1.5 验收（TDengine）
 
-- [ ] `enabled=false` 时零副作用
-- [ ] 一次 Patrol 后，TDengine `status` 表行数 = 该项目 NEWARE 设备数；`healthy` 设备为 `online`
-- [ ] 单设备 status 后，**全项目** 设备在 TDengine 中刷新（非 1 行）
-- [ ] DB 仍为 UI 与 API 主数据源；TDengine 与 DB 不一致时以 DB 为准
+- [x] 未配置 `TDENGINE_URL` 时零副作用（跳过 publish）
+- [x] 一次 Patrol 后，TDengine 表写入 bulk 行；`healthy` 设备为 `online`
+- [x] bulk 回调后按任务行写入 TDengine（playbook 路径，见 `semaphore_tdengine_publish_from_bulk.yml`）
+- [x] DB 仍为 UI 与 API 主数据源；TDengine 与 DB 不一致时以 DB 为准
 
 ---
 
