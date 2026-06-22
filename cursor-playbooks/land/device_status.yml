@@ -109,12 +109,6 @@
         - name: 解析 EXE_DIR（盘符回退）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
 
-        - name: 检查 LAND 程序文件是否存在
-          ansible.windows.win_stat:
-            path: "{{ exe_path }}"
-          register: _land_exe_stat
-          ignore_unreachable: true
-
         - name: 检查 LAND 进程状态
           ansible.windows.win_shell: |
             $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -143,13 +137,11 @@
             _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
             _land_need_reconfig: >-
               {{
-                (not (_land_exe_stat.stat.exists | default(false)))
-                or (not (_land_proc_running | bool))
+                (not (_land_proc_running | bool))
                 or (not (land_api_status_ok | default(false) | bool))
               }}
             _land_abnormal_reason: >-
-              {% if not (_land_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
-              {% elif not (_land_proc_running | bool) %}Process not running: {{ process_name }} ({{ _land_proc_out }})
+              {% if not (_land_proc_running | bool) %}Process not running: {{ process_name }} ({{ _land_proc_out }})
               {% elif not (land_api_status_ok | default(false) | bool) %}API QueryStatus: real_status={{ land_api_real_status | default('n/a') }} history_status={{ land_api_history_status | default('n/a') }} body={{ (_land_api_status_raw.content | default('') | string) | truncate(200, True) }}
               {% else %}{% endif %}
 

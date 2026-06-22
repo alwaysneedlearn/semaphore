@@ -11,11 +11,14 @@
 
 - name: NBT 启动后心跳检查（轮询 SendStatus）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_start_poll.yml"
-  when: nbt_start_check_api | default(false) | bool
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - nbt_start_check_api | default(false) | bool
 
 - name: NBT ResetData（仅 restart）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_reset_data.yml"
   when: >
-    (nbt_include_reset_data | default(false) | bool)
+    not (start_aborted_exe_missing | default(false) | bool)
+    and (nbt_include_reset_data | default(false) | bool)
     and (merged_cfg.ResetData | default({}) | length > 0)
     and (nbt_heartbeat_ok | default(false) | bool)

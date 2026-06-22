@@ -1,5 +1,6 @@
 ---
-# Stat resolved service exe; skip win_stat when path empty (illegal path fatal on Windows).
+# DEPRECATED: 服务 exe 存在性仅在 nbt_abort_if_service_exe_missing_at_start（启动前）检查。
+# Patrol/check_restart 不再单独 stat exe。
 
 - name: NBT 检查服务程序文件是否存在
   ansible.windows.win_stat:

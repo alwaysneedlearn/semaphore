@@ -191,9 +191,6 @@
         process_running: false
       when: not (api_upload_status_ok | default(false) | bool)
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
-      when: need_reconfigure | default(false) | bool
-
     - block:
         - ansible.builtin.include_tasks: tasks/neware_config_start_verify.yml
       when: need_reconfigure | default(false) | bool

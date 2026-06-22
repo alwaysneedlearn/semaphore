@@ -67,25 +67,19 @@
 
     - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
 
-    - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
-
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"
-      when: _nbt_service_path_stat.stat.exists | default(false)
 
     - name: NBT 心跳 HTTP 200 但未达健康 — 参考判定是否 restart
       when:
+        - _nbt_need_reconfigure | default(false) | bool
         - nbt_heartbeat_http_ok | default(false) | bool
         - not (nbt_heartbeat_ok | default(false) | bool)
       ansible.builtin.set_fact:
         _nbt_need_reconfigure: >-
           {{
-            (not (_nbt_service_path_stat.stat.exists | default(false)))
-            or (((_nbt_service_status | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
+            (((_nbt_service_status | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
             or (not (nbt_heartbeat_ok | default(false) | bool))
           }}
-
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/assert_service_path_require_redeploy.yml"
-      when: _nbt_need_reconfigure | default(false) | bool
 
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_service_stop_start.yml"
       when: _nbt_need_reconfigure | default(false) | bool
@@ -96,14 +90,16 @@
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
-            {{ 'healthy' if not (_nbt_need_reconfigure | default(false) | bool)
+            {{ 'unhealthy' if (host_failure_reason is defined)
+               else ('healthy' if not (_nbt_need_reconfigure | default(false) | bool)
                else ('healthy' if (((_nbt_service_status | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING') and (nbt_heartbeat_ok | default(false) | bool)
-               else 'unhealthy') }}
+               else 'unhealthy')) }}
           winrm_status: online
           api_status: >-
-            {{ 'online' if not (_nbt_need_reconfigure | default(false) | bool)
-               else ('online' if (nbt_heartbeat_ok | default(false) | bool) else 'offline') }}
-          abnormal_reason: ""
+            {{ 'offline' if (host_failure_reason is defined)
+               else ('online' if not (_nbt_need_reconfigure | default(false) | bool)
+               else ('online' if (nbt_heartbeat_ok | default(false) | bool) else 'offline')) }}
+          abnormal_reason: "{{ host_failure_reason | default('') }}"
       when: semaphore_callback_row is not defined
 
 - name: 写回 Semaphore 设备状态

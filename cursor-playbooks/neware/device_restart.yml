@@ -55,8 +55,6 @@
     - ansible.builtin.meta: end_host
       when: check_result.unreachable | default(false)
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
-
     - ansible.builtin.set_fact:
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
 

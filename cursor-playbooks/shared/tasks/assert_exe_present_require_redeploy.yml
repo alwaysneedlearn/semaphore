@@ -1,5 +1,6 @@
 ---
-# Fail with redeploy hint when exe_path is missing (start/restart must not copy zip).
+# DEPRECATED: exe 检查已合并到 reconfig_start_program_windows（启动时 EXE_NOT_FOUND_AT_START）。
+# 保留仅供历史参考；新 playbook 请勿 include。
 
 - name: 检查程序文件是否存在
   ansible.windows.win_stat:

@@ -35,7 +35,7 @@
   ansible.builtin.set_fact:
     _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
 
-- name: 启动 LAND 程序
+- name: 启动程序
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
 
 - name: 重启后确认进程状态
@@ -45,10 +45,13 @@
     if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
   register: _land_process_after_restart
   changed_when: false
+  when: not (start_aborted_exe_missing | default(false) | bool)
 
 - name: 重启后查询 LAND API 状态（轮询 QueryStatus）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status_start_poll.yml"
-  when: land_start_check_api | default(true) | bool
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - land_start_check_api | default(true) | bool
 
 - name: 跳过启动后 LAND API 检查
   ansible.builtin.set_fact:
@@ -57,16 +60,21 @@
       skipped: true
       content: ""
     land_api_status_ok: true
-  when: not (land_start_check_api | default(true) | bool)
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - not (land_start_check_api | default(true) | bool)
 
 - name: 启动后 API 修改配置重试
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
-  when: (merged_cfg.SystemConfig | default({}) | length) > 0
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - (merged_cfg.SystemConfig | default({}) | length) > 0
 
 - name: 数据重传 Redeliver（restart 专用）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_redeliver.yml"
   when: >-
-    (merged_cfg.Redeliver | default({}) | length) > 0
+    not (start_aborted_exe_missing | default(false) | bool)
+    and (merged_cfg.Redeliver | default({}) | length) > 0
     and (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING')
     and (land_api_status_ok | default(false) | bool)
     and (land_include_redeliver | default(true) | bool)

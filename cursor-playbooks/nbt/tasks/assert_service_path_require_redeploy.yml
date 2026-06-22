@@ -1,5 +1,5 @@
 ---
-# Fail with redeploy hint when service_path / install_path is missing.
+# DEPRECATED: 服务路径检查已合并到 nbt_abort_if_service_exe_missing_at_start（启动前）。
 
 - name: 检查服务安装路径是否存在
   ansible.windows.win_stat:

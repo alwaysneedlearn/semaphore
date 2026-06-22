@@ -1,0 +1,22 @@
+---
+# After reconfig_start_program_windows: abort host when PS1 emitted EXE_NOT_FOUND_AT_START.
+
+- name: 检测启动脚本 EXE_NOT_FOUND_AT_START
+  ansible.builtin.set_fact:
+    start_aborted_exe_missing: >-
+      {{
+        relaunch_result is defined and
+        ('EXE_NOT_FOUND_AT_START' in (relaunch_result.stdout | default('')))
+      }}
+
+- name: EXE 不存在：登记失败并跳过后续启动验证
+  when: start_aborted_exe_missing | default(false) | bool
+  block:
+    - name: 登记启动失败原因（程序不存在）
+      ansible.builtin.set_fact:
+        final_start_ok: false
+        host_failure_reason: "程序不存在，无法启动: {{ exe_path }} — 请先执行重新部署 (redeploy)"
+        _exe_start_script_ok: false
+
+    - name: EXE 不存在 — 结束本主机后续任务
+      ansible.builtin.meta: end_host

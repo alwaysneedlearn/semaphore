@@ -1,0 +1,27 @@
+---
+# Before win_service start: abort when resolved service exe path is missing.
+
+- name: NBT 启动前检查服务程序文件
+  ansible.windows.win_stat:
+    path: "{{ _nbt_start_exe_path }}"
+  register: _nbt_start_exe_stat
+  vars:
+    _nbt_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
+  when: (_nbt_start_exe_path | default('', true) | trim) | length > 0
+
+- name: NBT 服务程序不存在则中止启动
+  when:
+    - (_nbt_start_exe_path | default('', true) | trim) | length > 0
+    - _nbt_start_exe_stat is defined
+    - not (_nbt_start_exe_stat.stat.exists | default(false) | bool)
+  vars:
+    _nbt_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
+  block:
+    - name: 登记 NBT 启动失败原因（服务程序不存在）
+      ansible.builtin.set_fact:
+        start_aborted_exe_missing: true
+        final_start_ok: false
+        host_failure_reason: "服务程序不存在，无法启动: {{ _nbt_start_exe_path }} — 请先执行重新部署 (redeploy)"
+
+    - name: NBT 服务程序不存在 — 结束本主机后续任务
+      ansible.builtin.meta: end_host

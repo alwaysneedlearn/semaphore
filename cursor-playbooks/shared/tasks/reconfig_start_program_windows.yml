@@ -22,3 +22,6 @@
     relaunch_result is defined and 'stdout' in relaunch_result and
     ('START_ERROR' in relaunch_result.stdout or
     'VERIFY_FAILED' in relaunch_result.stdout)
+
+- name: EXE 不存在则中止启动及后续验证
+  ansible.builtin.include_tasks: reconfig_abort_if_exe_missing_at_start.yml

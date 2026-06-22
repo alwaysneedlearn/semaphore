@@ -27,3 +27,4 @@
 
 - name: 启动验证
   ansible.builtin.include_tasks: start_verify_after_reconfig.yml
+  when: not (start_aborted_exe_missing | default(false) | bool)

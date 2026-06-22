@@ -89,8 +89,6 @@
 
         - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
 
-        - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
-
         - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"
 
         - ansible.builtin.set_fact:
@@ -112,13 +110,11 @@
             _nbt_svc_running: "{{ (_nbt_svc_out.split('|') | first) == 'RUNNING' }}"
             _nbt_need_reconfig: >-
               {{
-                (not (_nbt_service_path_stat.stat.exists | default(false)))
-                or (not (_nbt_svc_running | bool))
+                (not (_nbt_svc_running | bool))
                 or not (nbt_heartbeat_ok | default(false) | bool)
               }}
             _nbt_abnormal_reason: >-
-              {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service exe not found: {{ service_exe_name }} under {{ service_base_dir | default(service_path) }} (win_service={{ service_name }} resolved={{ service_exe_path | default('') }})
-              {% elif not (_nbt_svc_running | bool) %}Service not running: {{ service_name }} ({{ _nbt_svc_out }})
+              {% if not (_nbt_svc_running | bool) %}Service not running: {{ service_name }} ({{ _nbt_svc_out }})
               {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
               {% else %}{% endif %}
 

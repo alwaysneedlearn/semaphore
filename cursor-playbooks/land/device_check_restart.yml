@@ -90,35 +90,27 @@
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
 
-    - name: 检查 LAND 程序文件是否存在
-      ansible.windows.win_stat:
-        path: "{{ exe_path }}"
-      register: _land_exe_stat
-
     - name: 检查 LAND 进程状态
       ansible.windows.win_shell: |
         $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
       register: _land_process_check
       changed_when: false
-      when: _land_exe_stat.stat.exists | default(false)
 
     - name: LAND API 2xx 但未达健康 — 参考判定是否 restart
       when:
+        - _land_need_reconfigure | default(false) | bool
         - land_api_http_ok | default(false) | bool
         - not (land_api_status_ok | default(false) | bool)
       ansible.builtin.set_fact:
         _land_need_reconfigure: "{{ _land_gate_need | bool }}"
       vars:
         _land_proc_out: "{{ ((_land_process_check | default({})).stdout | default('')) | trim }}"
-        _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
         _land_gate_need: >-
           {{
-            (not (_land_exe_stat.stat.exists | default(false)))
-            or ((_land_proc_out.split('|') | first) != 'RUNNING')
+            ((_land_proc_out.split('|') | first) != 'RUNNING')
             or (not (land_api_status_ok | default(false) | bool))
           }}
-      when: _land_need_reconfigure | default(false) | bool
 
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
       when: _land_need_reconfigure | default(false) | bool
@@ -129,15 +121,17 @@
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
-            {{ 'healthy' if not (_land_need_reconfigure | default(false) | bool)
+            {{ 'unhealthy' if (host_failure_reason is defined)
+               else ('healthy' if not (_land_need_reconfigure | default(false) | bool)
                else ('healthy' if (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
-               else 'unhealthy') }}
+               else 'unhealthy')) }}
           winrm_status: online
           api_status: >-
-            {{ 'online' if not (_land_need_reconfigure | default(false) | bool)
+            {{ 'offline' if (host_failure_reason is defined)
+               else ('online' if not (_land_need_reconfigure | default(false) | bool)
                else ('online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
-               else 'offline') }}
-          abnormal_reason: ""
+               else 'offline')) }}
+          abnormal_reason: "{{ host_failure_reason | default('') }}"
       when: semaphore_callback_row is not defined
 
 - name: 写回 Semaphore 设备状态

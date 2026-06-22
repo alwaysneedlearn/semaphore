@@ -9,5 +9,6 @@
         not (relaunch_result.unreachable | default(false)) and
         not (relaunch_result.skipped | default(false)) and
         not (relaunch_result.failed | default(false)) and
+        not ('EXE_NOT_FOUND_AT_START' in (relaunch_result.stdout | default(''))) and
         ('VERIFY_OK' in (relaunch_result.stdout | default('')))
       }}

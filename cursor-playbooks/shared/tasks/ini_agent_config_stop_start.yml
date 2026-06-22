@@ -43,6 +43,7 @@
     if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
   register: _ini_agent_process_after
   changed_when: false
+  when: not (start_aborted_exe_missing | default(false) | bool)
 
 - name: SINEXCEL 启动后 API 检查
   ansible.builtin.uri:
@@ -58,4 +59,6 @@
   register: _sinexcel_api_after
   delegate_to: localhost
   failed_when: false
-  when: sinexcel_start_check_api | default(false) | bool
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - sinexcel_start_check_api | default(false) | bool

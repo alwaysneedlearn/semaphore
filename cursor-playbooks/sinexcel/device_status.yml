@@ -112,12 +112,6 @@
         - name: 解析 EXE_DIR（盘符回退）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
 
-        - name: 检查 SINEXCEL 程序文件是否存在
-          ansible.windows.win_stat:
-            path: "{{ exe_path }}"
-          register: _sinexcel_exe_stat
-          ignore_unreachable: true
-
         - name: 检查 SINEXCEL 进程状态
           ansible.windows.win_shell: |
             $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -146,13 +140,11 @@
             _sinexcel_proc_running: "{{ (_sinexcel_proc_out.split('|') | first) == 'RUNNING' }}"
             _sinexcel_need_reconfig: >-
               {{
-                (not (_sinexcel_exe_stat.stat.exists | default(false)))
-                or (not (_sinexcel_proc_running | bool))
+                (not (_sinexcel_proc_running | bool))
                 or (not (_sinexcel_kafka_api_ok | default(false) | bool))
               }}
             _sinexcel_abnormal_reason: >-
-              {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
-              {% elif not (_sinexcel_proc_running | bool) %}Process not running: {{ process_name }} ({{ _sinexcel_proc_out }})
+              {% if not (_sinexcel_proc_running | bool) %}Process not running: {{ process_name }} ({{ _sinexcel_proc_out }})
               {% elif not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled: EnableFlowInfoExtendedSqlite!=true result={{ _sinexcel_kafka_result_text | default('n/a') }}
               {% else %}{% endif %}
 

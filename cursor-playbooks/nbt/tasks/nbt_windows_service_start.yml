@@ -1,5 +1,8 @@
 ---
-# Start NBT Windows service. Vars: service_name.
+# Start NBT Windows service. Vars: service_name, install_path / service_exe_path (optional pre-check).
+
+- name: NBT 启动前检查服务 exe 是否存在
+  ansible.builtin.include_tasks: nbt_abort_if_service_exe_missing_at_start.yml
 
 - name: 启动 NBT Windows 服务
   ansible.windows.win_service:
