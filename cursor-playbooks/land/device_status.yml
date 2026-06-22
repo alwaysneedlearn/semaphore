@@ -139,7 +139,7 @@
               api_status: "{{ 'online' if not (_land_need_reconfig | bool) else 'offline' }}"
               abnormal_reason: "{{ _land_abnormal_reason | trim }}"
           vars:
-            _land_proc_out: "{{ _land_process_check.stdout | default('') | trim }}"
+            _land_proc_out: "{{ ((_land_process_check | default({})).stdout | default('')) | trim }}"
             _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
             _land_need_reconfig: >-
               {{

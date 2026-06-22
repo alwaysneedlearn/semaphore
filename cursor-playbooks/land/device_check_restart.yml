@@ -110,7 +110,7 @@
       ansible.builtin.set_fact:
         _land_need_reconfigure: "{{ _land_gate_need | bool }}"
       vars:
-        _land_proc_out: "{{ _land_process_check.stdout | default('') | trim }}"
+        _land_proc_out: "{{ ((_land_process_check | default({})).stdout | default('')) | trim }}"
         _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
         _land_gate_need: >-
           {{

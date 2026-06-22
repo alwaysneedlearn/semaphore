@@ -36,6 +36,12 @@
       }}
   when: _land_qs_reg is defined and (_land_qs_reg.status is defined)
 
+- name: LAND QueryStatus 无解析结果时登记默认事实
+  ansible.builtin.set_fact:
+    land_api_http_ok: false
+    land_api_status_ok: false
+  when: land_api_http_ok is not defined
+
 - name: DEBUG LAND QueryStatus 解析
   ansible.builtin.debug:
     msg:

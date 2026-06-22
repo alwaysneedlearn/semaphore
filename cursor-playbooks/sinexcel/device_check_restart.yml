@@ -120,7 +120,7 @@
         _sinexcel_need_reconfigure: >-
           {{
             (not (_sinexcel_exe_stat.stat.exists | default(false)))
-            or ('RUNNING' not in (_sinexcel_process_check.stdout | default('')))
+            or ('RUNNING' not in ((_sinexcel_process_check | default({})).stdout | default('')))
             or (
               (sinexcel_start_check_api | default(true) | bool)
               and not (_sinexcel_kafka_api_ok | default(false) | bool)

@@ -142,7 +142,7 @@
               api_status: "{{ 'online' if not (_sinexcel_need_reconfig | bool) else 'offline' }}"
               abnormal_reason: "{{ _sinexcel_abnormal_reason | trim }}"
           vars:
-            _sinexcel_proc_out: "{{ _sinexcel_process_check.stdout | default('') | trim }}"
+            _sinexcel_proc_out: "{{ ((_sinexcel_process_check | default({})).stdout | default('')) | trim }}"
             _sinexcel_proc_running: "{{ (_sinexcel_proc_out.split('|') | first) == 'RUNNING' }}"
             _sinexcel_need_reconfig: >-
               {{

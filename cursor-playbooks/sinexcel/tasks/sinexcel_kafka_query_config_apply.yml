@@ -27,6 +27,12 @@
     _kafka_api_ok: "{{ (_kafka_result_ok | bool) and (_kafka_enabled | bool) }}"
   when: _sinexcel_kafka_query_raw is defined
 
+- name: SINEXCEL QueryConfig 无解析结果时登记默认事实
+  ansible.builtin.set_fact:
+    sinexcel_kafka_http_ok: false
+    _sinexcel_kafka_api_ok: false
+  when: sinexcel_kafka_http_ok is not defined
+
 - name: 登记启动后 API 寄存器（_sinexcel_api_after）
   ansible.builtin.set_fact:
     _sinexcel_api_after: "{{ _sinexcel_kafka_query_raw }}"

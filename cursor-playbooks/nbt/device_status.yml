@@ -108,7 +108,7 @@
               api_status: "{{ 'online' if not (_nbt_need_reconfig | bool) else 'offline' }}"
               abnormal_reason: "{{ _nbt_abnormal_reason | trim }}"
           vars:
-            _nbt_svc_out: "{{ _nbt_service_status.stdout | default('') | trim }}"
+            _nbt_svc_out: "{{ ((_nbt_service_status | default({})).stdout | default('')) | trim }}"
             _nbt_svc_running: "{{ (_nbt_svc_out.split('|') | first) == 'RUNNING' }}"
             _nbt_need_reconfig: >-
               {{
