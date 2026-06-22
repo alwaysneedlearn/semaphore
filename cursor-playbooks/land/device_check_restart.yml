@@ -1,5 +1,5 @@
 ---
-- name: LAND 巡检重启（不健康仅 restart）
+- name: LAND 巡检重启（API 优先；不健康仅 restart）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -43,48 +43,87 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
-    - ansible.builtin.set_fact:
+    - name: 解析当前设备信息
+      ansible.builtin.set_fact:
         _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-
-    - ansible.builtin.set_fact:
         _land_target_host: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
 
-    - ansible.windows.win_stat:
+    - name: LAND QueryStatus API（巡检重启首要判定）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status.yml"
+
+    - name: LAND API 已健康（跳过 restart）
+      when: land_api_status_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "LAND check_restart API 快路径"
+
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            _land_need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _land_dev.hostname | default('', true) }}"
+              ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: ""
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LAND API 未通过 — 标记需要 restart
+      ansible.builtin.set_fact:
+        _land_need_reconfigure: true
+      when: not (land_api_status_ok | default(false) | bool)
+
+    - name: WinRM 建连（含重试）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+    - name: WinRM 未连通则不再执行本主机后续步骤
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+    - name: 部署 Windows 启动辅助脚本
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+    - name: 解析 EXE_DIR（盘符回退）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
+
+    - name: 检查 LAND 程序文件是否存在
+      ansible.windows.win_stat:
         path: "{{ exe_path }}"
       register: _land_exe_stat
 
-    - ansible.windows.win_shell: |
+    - name: 检查 LAND 进程状态
+      ansible.windows.win_shell: |
         $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
       register: _land_process_check
       changed_when: false
       when: _land_exe_stat.stat.exists | default(false)
 
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status.yml"
-      when: _land_exe_stat.stat.exists | default(false)
-
-    - ansible.builtin.set_fact:
-        _land_need_reconfigure: "{{ _land_check_need_reconfig | bool }}"
+    - name: LAND API 2xx 但未达健康 — 参考判定是否 restart
+      when:
+        - land_api_http_ok | default(false) | bool
+        - not (land_api_status_ok | default(false) | bool)
+      ansible.builtin.set_fact:
+        _land_need_reconfigure: "{{ _land_gate_need | bool }}"
       vars:
         _land_proc_out: "{{ _land_process_check.stdout | default('') | trim }}"
         _land_proc_running: "{{ (_land_proc_out.split('|') | first) == 'RUNNING' }}"
-        _land_api_ok: "{{ land_api_status_ok | default(false) | bool }}"
-        _land_check_need_reconfig: >-
+        _land_gate_need: >-
           {{
             (not (_land_exe_stat.stat.exists | default(false)))
             or (not (_land_proc_running | bool))
-            or (not (_land_api_ok | bool))
+            or (not (land_api_status_ok | default(false) | bool))
           }}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
-      when: _land_need_reconfigure | bool
+      when: _land_need_reconfigure | default(false) | bool
 
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
-      when: _land_need_reconfigure | bool
+      when: _land_need_reconfigure | default(false) | bool
 
   post_tasks:
     - ansible.builtin.set_fact:
@@ -92,15 +131,16 @@
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
-            {{ 'healthy' if not (_land_need_reconfigure | bool)
+            {{ 'healthy' if not (_land_need_reconfigure | default(false) | bool)
                else ('healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
                else 'unhealthy') }}
           winrm_status: online
           api_status: >-
-            {{ 'online' if not (_land_need_reconfigure | bool)
+            {{ 'online' if not (_land_need_reconfigure | default(false) | bool)
                else ('online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
                else 'offline') }}
           abnormal_reason: ""
+      when: semaphore_callback_row is not defined
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost

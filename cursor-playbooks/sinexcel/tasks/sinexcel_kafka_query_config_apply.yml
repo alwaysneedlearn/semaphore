@@ -5,6 +5,7 @@
   ansible.builtin.set_fact:
     _sinexcel_kafka_result_text: "{{ _kafka_result_text }}"
     _sinexcel_kafka_enabled: "{{ _kafka_enabled | bool }}"
+    sinexcel_kafka_http_ok: "{{ _kafka_http_ok | bool }}"
     _sinexcel_kafka_api_ok: "{{ _kafka_api_ok | bool }}"
   vars:
     _kafka_http_ok: "{{ (_sinexcel_kafka_query_raw.status | default(0) | int) == 200 }}"

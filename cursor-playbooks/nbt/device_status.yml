@@ -1,5 +1,5 @@
 ---
-- name: NBT 状态巡检（服务 + 心跳 API）
+- name: NBT 状态巡检（心跳 API 优先 + 服务参考）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -13,51 +13,116 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - ansible.builtin.set_fact:
+    - name: 解析当前设备信息
+      ansible.builtin.set_fact:
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
+    - name: NBT 心跳 API（Patrol 首要判定）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
 
-    - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
+    - name: NBT 心跳已健康（跳过 WinRM/服务参考）
+      when: nbt_heartbeat_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "NBT Patrol API 快路径"
 
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _nbt_dev.hostname | default('', true) }}"
+              ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: >-
+                {{
+                  'WinRM unreachable (heartbeat healthy; reference only)'
+                  if not (_winrm_session_ok | default(false) | bool)
+                  else ''
+                }}
 
-    - ansible.builtin.set_fact:
-        _nbt_process_check: "{{ _nbt_service_status }}"
-      when: _nbt_service_status is defined
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
-      when: (_nbt_service_status.stdout | default('') | trim).split('|') | first == 'RUNNING'
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
 
-    - ansible.builtin.set_fact:
-        need_reconfigure: "{{ _nbt_need_reconfig | bool }}"
-        semaphore_callback_row:
-          hostname: "{{ _nbt_dev.hostname | default('', true) }}"
-          ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if not (_nbt_need_reconfig | bool) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if not (_nbt_need_reconfig | bool) else 'offline' }}"
-          abnormal_reason: "{{ _nbt_abnormal_reason | trim }}"
-      vars:
-        _nbt_svc_out: "{{ _nbt_service_status.stdout | default('') | trim }}"
-        _nbt_svc_running: "{{ (_nbt_svc_out.split('|') | first) == 'RUNNING' }}"
-        _nbt_need_reconfig: >-
-          {{
-            (not (_nbt_service_path_stat.stat.exists | default(false)))
-            or (not (_nbt_svc_running | bool))
-            or not (nbt_heartbeat_ok | default(false) | bool)
-          }}
-        _nbt_abnormal_reason: >-
-          {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service exe not found: {{ service_exe_name }} under {{ service_base_dir | default(service_path) }} (win_service={{ service_name }} resolved={{ service_exe_path | default('') }})
-          {% elif not (_nbt_svc_running | bool) %}Service not running: {{ service_name }} ({{ _nbt_svc_out }})
-          {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
-          {% else %}{% endif %}
+    - name: NBT 心跳 API 不可达或非 200 — 快速失败
+      when: not (nbt_heartbeat_http_ok | default(false) | bool)
+      block:
+        - name: 登记 Semaphore 状态回调行（API 快速失败）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _nbt_dev.hostname | default('', true) }}"
+              ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: >-
+                {{
+                  'Heartbeat API unreachable: ' ~ (_nbt_heartbeat.msg | default('connection failed') | string)
+                  if (_nbt_heartbeat.status | default(0) | int) in [0, -1]
+                  else 'Heartbeat API HTTP ' ~ (_nbt_heartbeat.status | default(0) | string) ~ ' (expected 200)'
+                }}
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 快速失败 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: NBT 心跳 HTTP 200 但未达健康 — WinRM/服务参考检查
+      when:
+        - nbt_heartbeat_http_ok | default(false) | bool
+        - not (nbt_heartbeat_ok | default(false) | bool)
+      block:
+        - name: WinRM 建连（含重试）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+        - name: WinRM 未连通则不再执行本主机后续步骤
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+        - name: 部署 Windows 启动辅助脚本
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+        - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
+
+        - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
+
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"
+
+        - ansible.builtin.set_fact:
+            _nbt_process_check: "{{ _nbt_service_status }}"
+          when: _nbt_service_status is defined
+
+        - name: 状态判断并组装回调行（参考路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: "{{ _nbt_need_reconfig | bool }}"
+            semaphore_callback_row:
+              hostname: "{{ _nbt_dev.hostname | default('', true) }}"
+              ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+              device_status: "{{ 'healthy' if not (_nbt_need_reconfig | bool) else 'unhealthy' }}"
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: "{{ 'online' if not (_nbt_need_reconfig | bool) else 'offline' }}"
+              abnormal_reason: "{{ _nbt_abnormal_reason | trim }}"
+          vars:
+            _nbt_svc_out: "{{ _nbt_service_status.stdout | default('') | trim }}"
+            _nbt_svc_running: "{{ (_nbt_svc_out.split('|') | first) == 'RUNNING' }}"
+            _nbt_need_reconfig: >-
+              {{
+                (not (_nbt_service_path_stat.stat.exists | default(false)))
+                or (not (_nbt_svc_running | bool))
+                or not (nbt_heartbeat_ok | default(false) | bool)
+              }}
+            _nbt_abnormal_reason: >-
+              {% if not (_nbt_service_path_stat.stat.exists | default(false)) %}Service exe not found: {{ service_exe_name }} under {{ service_base_dir | default(service_path) }} (win_service={{ service_name }} resolved={{ service_exe_path | default('') }})
+              {% elif not (_nbt_svc_running | bool) %}Service not running: {{ service_name }} ({{ _nbt_svc_out }})
+              {% elif not (nbt_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ nbt_heartbeat_last_send | default('n/a') }} age_min={{ nbt_heartbeat_age_minutes | default('n/a') }} max={{ nbt_heartbeat_max_age_minutes | default(90) }} http={{ _nbt_heartbeat.status | default('n/a') }}
+              {% else %}{% endif %}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
 - name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
   hosts: localhost

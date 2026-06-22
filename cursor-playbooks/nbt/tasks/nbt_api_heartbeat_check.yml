@@ -17,6 +17,7 @@
   ansible.builtin.set_fact:
     nbt_heartbeat_last_send: "{{ _hb_last_send }}"
     nbt_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    nbt_heartbeat_http_ok: "{{ _hb_http_ok | bool }}"
     nbt_heartbeat_ok: "{{ _hb_ok | bool }}"
     _nbt_api_status: "{{ _nbt_heartbeat }}"
   vars:

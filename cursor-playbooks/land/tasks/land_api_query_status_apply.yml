@@ -8,6 +8,7 @@
     _land_api_after_restart: "{{ _land_qs_reg }}"
     land_api_real_status: "{{ _land_real_status | bool }}"
     land_api_history_status: "{{ _land_history_status | bool }}"
+    land_api_http_ok: "{{ _land_http_ok | bool }}"
     land_api_status_ok: "{{ _land_api_ok | bool }}"
   vars:
     _land_qs_reg: "{{ _land_api_status_raw | default(_land_api_status | default(_land_api_check | default({}))) }}"

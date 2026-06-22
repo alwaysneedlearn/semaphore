@@ -1,5 +1,5 @@
 ---
-- name: SINEXCEL 状态巡检（API + 进程）
+- name: SINEXCEL 状态巡检（API 优先 + 进程参考）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -30,73 +30,133 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - name: WinRM 建连（含重试）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - name: WinRM 未连通则不再执行本主机后续步骤
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - name: 部署 Windows 启动辅助脚本
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - name: 解析每设备安装路径
-      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/prepare_device_exe_paths.yml"
-    - name: 解析 EXE_DIR（盘符回退）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _sinexcel_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _sinexcel_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - name: 检查 SINEXCEL 程序文件是否存在
-      ansible.windows.win_stat:
-        path: "{{ exe_path }}"
-      register: _sinexcel_exe_stat
-      ignore_unreachable: true
-
-    - name: 检查 SINEXCEL 进程状态
-      ansible.windows.win_shell: |
-        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -ne $p) {
-          $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
-          "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
-        } else {
-          "NOT_RUNNING"
-        }
-      register: _sinexcel_process_check
-      changed_when: false
-      ignore_unreachable: true
-
-    - name: 查询 SINEXCEL Kafka 配置（健康判定）
+    - name: SINEXCEL Kafka QueryConfig API（Patrol 首要判定）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config.yml"
-      when: (_sinexcel_process_check.stdout | default('') | trim).split('|') | first == 'RUNNING'
       vars:
         sinexcel_kafka_register_api_after: false
 
-    - name: 状态判断并组装回调行
-      ansible.builtin.set_fact:
-        need_reconfigure: "{{ _sinexcel_need_reconfig | bool }}"
-        semaphore_callback_row:
-          hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
-          ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if not (_sinexcel_need_reconfig | bool) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if not (_sinexcel_need_reconfig | bool) else 'offline' }}"
-          abnormal_reason: "{{ _sinexcel_abnormal_reason | trim }}"
-      vars:
-        _sinexcel_proc_out: "{{ _sinexcel_process_check.stdout | default('') | trim }}"
-        _sinexcel_proc_running: "{{ (_sinexcel_proc_out.split('|') | first) == 'RUNNING' }}"
-        _sinexcel_need_reconfig: >-
-          {{
-            (not (_sinexcel_exe_stat.stat.exists | default(false)))
-            or (not (_sinexcel_proc_running | bool))
-            or (not (_sinexcel_kafka_api_ok | default(false) | bool))
-          }}
-        _sinexcel_abnormal_reason: >-
-          {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
-          {% elif not (_sinexcel_proc_running | bool) %}Process not running: {{ process_name }} ({{ _sinexcel_proc_out }})
-          {% elif not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled: EnableFlowInfoExtendedSqlite!=true result={{ _sinexcel_kafka_result_text | default('n/a') }}
-          {% else %}{% endif %}
+    - name: SINEXCEL API 已健康（跳过 WinRM/进程参考）
+      when: _sinexcel_kafka_api_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "SINEXCEL Patrol API 快路径"
 
-    - name: DEBUG SINEXCEL 巡检结果
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
+              ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: >-
+                {{
+                  'WinRM unreachable (API healthy; reference only)'
+                  if not (_winrm_session_ok | default(false) | bool)
+                  else ''
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: SINEXCEL API 不可达或非 200 — 快速失败
+      when: not (sinexcel_kafka_http_ok | default(false) | bool)
+      block:
+        - name: 登记 Semaphore 状态回调行（API 快速失败）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
+              ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: >-
+                {{
+                  'API unreachable: ' ~ (_sinexcel_kafka_query_raw.msg | default('connection failed') | string)
+                  if (_sinexcel_kafka_query_raw.status | default(0) | int) in [0, -1]
+                  else 'API HTTP ' ~ (_sinexcel_kafka_query_raw.status | default(0) | string) ~ ' (expected 200)'
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 快速失败 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: SINEXCEL API 200 但未达健康 — WinRM/进程参考检查
+      when:
+        - sinexcel_kafka_http_ok | default(false) | bool
+        - not (_sinexcel_kafka_api_ok | default(false) | bool)
+      block:
+        - name: WinRM 建连（含重试）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+        - name: WinRM 未连通则不再执行本主机后续步骤
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+        - name: 部署 Windows 启动辅助脚本
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+        - name: 解析每设备安装路径
+          ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/prepare_device_exe_paths.yml"
+
+        - name: 解析 EXE_DIR（盘符回退）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
+
+        - name: 检查 SINEXCEL 程序文件是否存在
+          ansible.windows.win_stat:
+            path: "{{ exe_path }}"
+          register: _sinexcel_exe_stat
+          ignore_unreachable: true
+
+        - name: 检查 SINEXCEL 进程状态
+          ansible.windows.win_shell: |
+            $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $p) {
+              $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+              "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+            } else {
+              "NOT_RUNNING"
+            }
+          register: _sinexcel_process_check
+          changed_when: false
+          ignore_unreachable: true
+
+        - name: 状态判断并组装回调行（参考路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: "{{ _sinexcel_need_reconfig | bool }}"
+            semaphore_callback_row:
+              hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
+              ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
+              device_status: "{{ 'healthy' if not (_sinexcel_need_reconfig | bool) else 'unhealthy' }}"
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: "{{ 'online' if not (_sinexcel_need_reconfig | bool) else 'offline' }}"
+              abnormal_reason: "{{ _sinexcel_abnormal_reason | trim }}"
+          vars:
+            _sinexcel_proc_out: "{{ _sinexcel_process_check.stdout | default('') | trim }}"
+            _sinexcel_proc_running: "{{ (_sinexcel_proc_out.split('|') | first) == 'RUNNING' }}"
+            _sinexcel_need_reconfig: >-
+              {{
+                (not (_sinexcel_exe_stat.stat.exists | default(false)))
+                or (not (_sinexcel_proc_running | bool))
+                or (not (_sinexcel_kafka_api_ok | default(false) | bool))
+              }}
+            _sinexcel_abnormal_reason: >-
+              {% if not (_sinexcel_exe_stat.stat.exists | default(false)) %}Executable not found: {{ exe_path }}
+              {% elif not (_sinexcel_proc_running | bool) %}Process not running: {{ process_name }} ({{ _sinexcel_proc_out }})
+              {% elif not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled: EnableFlowInfoExtendedSqlite!=true result={{ _sinexcel_kafka_result_text | default('n/a') }}
+              {% else %}{% endif %}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
 - name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
   hosts: localhost
