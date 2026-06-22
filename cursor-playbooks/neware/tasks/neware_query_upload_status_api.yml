@@ -15,7 +15,9 @@
           else (lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim)
         )
         | default(
-            '5' if ((neware_api_query_context | default('', true) | trim) in ['patrol', 'check_restart']) else '15',
+            (api_patrol_timeout_seconds | default(15) | string)
+            if ((neware_api_query_context | default('', true) | trim) in ['patrol', 'check_restart'])
+            else (api_timeout_seconds | default(15) | string),
             true
           )
         | int
