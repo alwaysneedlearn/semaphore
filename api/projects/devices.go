@@ -1503,9 +1503,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if defaultConfig := defaultConfigForPlaybook(settings.DefaultConfigJSON); defaultConfig != nil {
-		extraVars["default_config"] = defaultConfig
-	}
+	mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
 
 	if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
@@ -1513,7 +1511,10 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 			helpers.WriteError(w, err)
 			return
 		}
-		extraVars["config"] = buildCategorizedDeviceConfig(items)
+		cfg := buildCategorizedDeviceConfig(items)
+		mergeRestartRedeployConfigExtraVars(extraVars, []db.Device{device}, map[int]map[string]map[string]string{
+			device.ID: cfg,
+		})
 	}
 
 	tmpInventoryID, err := createTemporaryInventoryForDevices(r, project.ID, []db.Device{device})
@@ -1630,31 +1631,18 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		extraVars := map[string]any{"devices": profilePayload}
-		if defaultConfig := defaultConfigForPlaybook(ps.DefaultConfigJSON); defaultConfig != nil {
-			extraVars["default_config"] = defaultConfig
-		} else if defaultConfig := defaultConfigForPlaybook(settings.DefaultConfigJSON); defaultConfig != nil {
-			extraVars["default_config"] = defaultConfig
-		}
+		mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
 		if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
-			configByHostname := map[string]map[string]map[string]string{}
-			configsByHost := map[string]map[string]map[string]string{}
+			configByDeviceID := map[int]map[string]map[string]string{}
 			for _, d := range devs {
 				items, itemErr := store.GetDeviceConfigItems(project.ID, d.ID)
 				if itemErr != nil {
 					helpers.WriteError(w, itemErr)
 					return
 				}
-				cfg := buildCategorizedDeviceConfig(items)
-				configByHostname[d.Hostname] = cfg
-				if ip := strings.TrimSpace(d.IPAddress); ip != "" {
-					configsByHost[ip] = cfg
-				}
-				if h := strings.TrimSpace(d.Hostname); h != "" {
-					configsByHost[h] = cfg
-				}
+				configByDeviceID[d.ID] = buildCategorizedDeviceConfig(items)
 			}
-			extraVars["configs_by_hostname"] = configByHostname
-			extraVars["configs_by_host"] = configsByHost
+			mergeRestartRedeployConfigExtraVars(extraVars, devs, configByDeviceID)
 		}
 		task, err := runDeviceTemplateWithProfileSettings(r, project, ps, body.Action, extraVars, tmpInventoryID)
 		if err != nil {
