@@ -23,7 +23,7 @@
     exe_dir_fallback_drives: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) | default('D,E,C', true) }}"
     exe_scan_latest: "{{ ((lookup('env', 'EXE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
     exe_scan_max_depth: "{{ ((lookup('env', 'EXE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('2', true)) | int }}"
-    exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
+    exe_path: "{% if app_dir in ['.', ''] %}{{ exe_dir }}\\{{ exe_name }}{% else %}{{ exe_dir }}\\{{ app_dir }}\\{{ exe_name }}{% endif %}"
     process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
     stop_graceful_process_name: "{{ process_name }}"
     stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"

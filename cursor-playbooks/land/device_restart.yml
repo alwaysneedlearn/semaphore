@@ -17,7 +17,7 @@
     exe_name: "{{ _exe_name_base ~ '.exe' }}"
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
     app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else 'LHBTS' }}"
-    exe_path: "{{ exe_dir ~ '\\' ~ exe_name if app_dir in ['.', ''] else exe_dir ~ '\\' ~ app_dir ~ '\\' ~ exe_name }}"
+    exe_path: "{% if app_dir in ['.', ''] %}{{ exe_dir }}\\{{ exe_name }}{% else %}{{ exe_dir }}\\{{ app_dir }}\\{{ exe_name }}{% endif %}"
     exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"

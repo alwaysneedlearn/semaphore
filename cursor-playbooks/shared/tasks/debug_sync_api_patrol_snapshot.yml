@@ -11,7 +11,7 @@
     _sem_dbg_install_path: >-
       {% if service_path is defined and (service_path | string | trim) | length > 0 %}{{ service_path }}
       {% elif exe_path is defined %}{{ exe_path }}
-      {% elif exe_dir is defined and exe_name is defined %}{{ exe_dir }}\{{ exe_name }}
+      {% elif exe_dir is defined and exe_name is defined %}{{ [exe_dir, exe_name] | join('\\') }}
       {% else %}n/a{% endif %}
     _sem_dbg_api_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(_nbt_target_host | default(inventory_hostname, true), true), true) }}"
     _sem_dbg_api_ok: >-
