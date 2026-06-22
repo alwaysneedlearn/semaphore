@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: LAND
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
@@ -35,7 +36,7 @@
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
     - name: 规范化 LAND 安装包路径变量
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_prepare_zip_vars.yml"
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_prepare_zip_vars.yml"
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - name: 解析当前设备信息
@@ -63,7 +64,7 @@
       ignore_unreachable: true
 
     - name: 查询 LAND API 状态
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status.yml"
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status.yml"
       when: _land_exe_stat.stat.exists | default(false)
 
     - name: 状态判断并组装回调行
@@ -100,6 +101,7 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
   tasks:
     - name: 执行 bulk 回调

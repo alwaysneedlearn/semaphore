@@ -2,11 +2,11 @@
 # Retry SetConfig after start when before_stop failed/skipped and process is up.
 
 - name: 准备 SINEXCEL KafkaConfig 分类
-  ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_prepare_merged_cfg.yml"
   when: sinexcel_kafka_cfg_flat is not defined
 
 - name: 启动后：Kafka SetConfig（停止前失败或未尝试时重试）
-  ansible.builtin.include_tasks: sinexcel_kafka_set_config_attempt.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_set_config_attempt.yml"
   vars:
     sinexcel_kafka_set_phase: after_start
   when: >-

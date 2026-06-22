@@ -3,4 +3,4 @@
 # (ModifyConfig only while LAND is running; retry after start if the pre-stop attempt failed.)
 
 - name: 程序运行中：API 修改配置（停止前）
-  ansible.builtin.include_tasks: land_api_modify_config_before_stop.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_before_stop.yml"

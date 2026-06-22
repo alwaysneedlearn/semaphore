@@ -16,4 +16,4 @@
   delegate_to: localhost
   failed_when: false
 
-- ansible.builtin.include_tasks: land_api_query_status_apply.yml
+- ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status_apply.yml"

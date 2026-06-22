@@ -42,4 +42,4 @@
       - "[DEBUG-{{ sem_debug_tag | default('SINEXCEL') }}] kafka_query_poll last_http={{ _sinexcel_kafka_query_raw.status | default('n/a') }}"
   when: _sinexcel_kafka_query_raw is defined
 
-- ansible.builtin.include_tasks: sinexcel_kafka_query_config_apply.yml
+- ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config_apply.yml"

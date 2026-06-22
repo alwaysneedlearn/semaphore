@@ -7,6 +7,7 @@
     - vars/api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: SINEXCEL
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
@@ -36,7 +37,7 @@
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
     - name: 解析每设备安装路径
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/prepare_device_exe_paths.yml"
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/prepare_device_exe_paths.yml"
     - name: 解析 EXE_DIR（盘符回退）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - name: 解析当前设备信息
@@ -64,7 +65,7 @@
       ignore_unreachable: true
 
     - name: 查询 SINEXCEL Kafka 配置（健康判定）
-      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_kafka_query_config.yml"
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config.yml"
       vars:
         sinexcel_kafka_register_api_after: false
 
@@ -101,6 +102,7 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
   tasks:
     - name: 执行 bulk 回调

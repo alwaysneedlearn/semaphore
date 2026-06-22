@@ -26,4 +26,4 @@
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
 
-- ansible.builtin.include_tasks: sinexcel_kafka_query_config_apply.yml
+- ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config_apply.yml"

@@ -8,4 +8,4 @@
   register: _nbt_service_stop_action
 
 - name: 确认 NBT 服务已停止
-  ansible.builtin.include_tasks: nbt_windows_service_status.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"

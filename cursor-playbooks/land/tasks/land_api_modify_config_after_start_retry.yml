@@ -3,7 +3,7 @@
 # Requires: _land_process_after_start or _land_process_after_restart; _land_api_after_start or _land_api_after_restart
 
 - name: 启动后：API 修改配置（停止前失败或未尝试时重试）
-  ansible.builtin.include_tasks: land_api_modify_config_attempt.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_attempt.yml"
   vars:
     land_modify_config_phase: after_start
   when: >-

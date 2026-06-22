@@ -7,6 +7,7 @@
     - vars/api_port.yml
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: SINEXCEL
     ini_agent_force_stop: false
@@ -49,7 +50,7 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/prepare_device_exe_paths.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/prepare_device_exe_paths.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
     - ansible.builtin.set_fact:
         _sinexcel_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
@@ -68,7 +69,7 @@
       changed_when: false
       when: _sinexcel_exe_stat.stat.exists | default(false)
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_kafka_query_config.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config.yml"
       vars:
         sinexcel_kafka_register_api_after: false
       when: _sinexcel_exe_stat.stat.exists | default(false)
@@ -87,7 +88,7 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
       when: _sinexcel_need_reconfigure | bool
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/sinexcel_config_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_config_stop_start.yml"
       when: _sinexcel_need_reconfigure | bool
 
   post_tasks:
@@ -113,5 +114,6 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

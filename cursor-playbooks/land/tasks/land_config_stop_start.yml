@@ -10,7 +10,7 @@
   changed_when: false
 
 - name: LAND API 修改配置（停止前，进程在跑时）
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_before_stop.yml"
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_before_stop.yml"
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
     and 'RUNNING' in (_land_process_before.stdout | default(''))
@@ -47,7 +47,7 @@
   changed_when: false
 
 - name: 重启后查询 LAND API 状态（轮询 QueryStatus）
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status_start_poll.yml"
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status_start_poll.yml"
   when: land_start_check_api | default(true) | bool
 
 - name: 跳过启动后 LAND API 检查
@@ -60,11 +60,11 @@
   when: not (land_start_check_api | default(true) | bool)
 
 - name: 启动后 API 修改配置重试
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
   when: (merged_cfg.SystemConfig | default({}) | length) > 0
 
 - name: 数据重传 Redeliver（restart 专用）
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_redeliver.yml"
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_redeliver.yml"
   when: >-
     (merged_cfg.Redeliver | default({}) | length) > 0
     and ('RUNNING' in (_land_process_after_restart.stdout | default('')))

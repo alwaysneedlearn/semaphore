@@ -3,7 +3,7 @@
 # Play vars: nbt_reset_data_cfg or merged_cfg.ResetData, nbt_api_reset_data_path, _nbt_target_host.
 
 - name: 准备 NBT 配置分类
-  ansible.builtin.include_tasks: nbt_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_prepare_merged_cfg.yml"
   when: nbt_reset_data_cfg is not defined
 
 - name: 解析 ResetData 日期字段

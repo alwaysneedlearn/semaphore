@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: NBT
     nbt_service_stop_first: true
@@ -29,7 +30,7 @@
     - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_service_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_service_stop_start.yml"
 
   post_tasks:
     - ansible.builtin.set_fact:
@@ -48,5 +49,6 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

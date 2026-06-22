@@ -2,7 +2,7 @@
 # QueryHistory by time range, then batch POST /kafka/Retransmit with FlowId list.
 
 - name: 准备 SINEXCEL 配置分类
-  ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_prepare_merged_cfg.yml"
   when: sinexcel_retransmit_cfg is not defined
 
 - name: 解析并校验 Retransmit 时间

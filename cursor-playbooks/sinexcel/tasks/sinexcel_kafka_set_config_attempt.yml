@@ -3,7 +3,7 @@
 # Vars: sinexcel_kafka_set_phase (before_stop|after_start), sinexcel_kafka_cfg_flat
 
 - name: 准备 SINEXCEL KafkaConfig 分类
-  ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_prepare_merged_cfg.yml"
   when: sinexcel_kafka_cfg_flat is not defined
 
 - name: 初始化 SetConfig 请求体

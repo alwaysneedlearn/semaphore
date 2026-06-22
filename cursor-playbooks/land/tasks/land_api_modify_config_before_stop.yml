@@ -8,7 +8,7 @@
     _land_api_modify_config_before: {}
 
 - name: 程序运行中：API 修改配置（停止前）
-  ansible.builtin.include_tasks: land_api_modify_config_attempt.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_attempt.yml"
   vars:
     land_modify_config_phase: before_stop
   when: >-

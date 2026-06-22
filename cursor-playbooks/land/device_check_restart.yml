@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: LAND
     land_include_redeliver: true
@@ -63,7 +64,7 @@
       changed_when: false
       when: _land_exe_stat.stat.exists | default(false)
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_api_query_status.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status.yml"
       when: _land_exe_stat.stat.exists | default(false)
 
     - ansible.builtin.set_fact:
@@ -82,7 +83,7 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
       when: _land_need_reconfigure | bool
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/land_config_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
       when: _land_need_reconfigure | bool
 
   post_tasks:
@@ -106,5 +107,6 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

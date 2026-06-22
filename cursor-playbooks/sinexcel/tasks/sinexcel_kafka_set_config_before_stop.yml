@@ -2,7 +2,7 @@
 # SetConfig while SINEXCEL process is still running (before graceful stop).
 
 - name: 准备 SINEXCEL KafkaConfig 分类
-  ansible.builtin.include_tasks: sinexcel_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_prepare_merged_cfg.yml"
   when: sinexcel_kafka_cfg_flat is not defined
 
 - name: 初始化停止前 SetConfig 结果
@@ -10,7 +10,7 @@
     _sinexcel_kafka_set_before_ok: false
 
 - name: 进程运行中：Kafka SetConfig（停止前）
-  ansible.builtin.include_tasks: sinexcel_kafka_set_config_attempt.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_set_config_attempt.yml"
   vars:
     sinexcel_kafka_set_phase: before_stop
   when: >-

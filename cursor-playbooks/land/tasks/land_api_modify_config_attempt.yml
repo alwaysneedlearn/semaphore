@@ -3,7 +3,7 @@
 # Vars: land_modify_config_phase (before_stop|after_start), merged_cfg, land_api_*, _land_target_host
 
 - name: 准备 LAND SystemConfig（ModifyConfig 仅用此分类）
-  ansible.builtin.include_tasks: land_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_prepare_merged_cfg.yml"
   when: land_system_cfg_flat is not defined
 
 - name: "API 修改配置（LAND，{{ land_modify_config_phase | default('attempt') }}）"

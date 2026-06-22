@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: NBT
     nbt_service_stop_first: true
@@ -28,10 +29,10 @@
 
     - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"
       when: _nbt_service_path_stat.stat.exists | default(false)
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
       when: _nbt_service_path_stat.stat.exists | default(false)
 
     - ansible.builtin.set_fact:
@@ -42,10 +43,10 @@
             or (not (nbt_heartbeat_ok | default(false) | bool))
           }}
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_service_path_require_redeploy.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/assert_service_path_require_redeploy.yml"
       when: _nbt_need_reconfigure | bool
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_service_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_service_stop_start.yml"
       when: _nbt_need_reconfigure | bool
 
   post_tasks:
@@ -68,5 +69,6 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

@@ -5,6 +5,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: NBT
     _devices_from_extra: "{{ devices | default([]) }}"
@@ -23,13 +24,13 @@
 
     - ansible.builtin.include_tasks: tasks/nbt_stat_service_exe.yml
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_windows_service_status.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_status.yml"
 
     - ansible.builtin.set_fact:
         _nbt_process_check: "{{ _nbt_service_status }}"
       when: _nbt_service_status is defined
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/nbt_api_heartbeat_check.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
 
     - ansible.builtin.set_fact:
         need_reconfigure: "{{ _nbt_need_reconfig | bool }}"
@@ -62,6 +63,7 @@
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

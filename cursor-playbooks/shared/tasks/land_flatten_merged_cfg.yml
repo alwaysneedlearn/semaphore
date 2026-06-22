@@ -1,3 +1,0 @@
----
-# Legacy include: prepare SystemConfig flat map for ModifyConfig.
-- ansible.builtin.include_tasks: land_prepare_merged_cfg.yml

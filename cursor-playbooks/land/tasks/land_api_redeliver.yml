@@ -3,7 +3,7 @@
 # Play vars: land_redeliver_cfg, land_api_*, _land_target_host, land_api_redeliver_path
 
 - name: 准备 LAND 配置分类
-  ansible.builtin.include_tasks: land_prepare_merged_cfg.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_prepare_merged_cfg.yml"
   when: land_redeliver_cfg is not defined
 
 - name: 解析 Redeliver 时间字段

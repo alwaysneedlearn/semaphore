@@ -3,18 +3,18 @@
 # nbt_include_reset_data, merged_cfg, _nbt_target_host.
 
 - name: 停止 NBT Windows 服务（重启前）
-  ansible.builtin.include_tasks: nbt_windows_service_stop.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_stop.yml"
   when: nbt_service_stop_first | default(true) | bool
 
 - name: 启动 NBT Windows 服务
-  ansible.builtin.include_tasks: nbt_windows_service_start.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_windows_service_start.yml"
 
 - name: NBT 启动后心跳检查（轮询 SendStatus）
-  ansible.builtin.include_tasks: nbt_api_heartbeat_start_poll.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_start_poll.yml"
   when: nbt_start_check_api | default(false) | bool
 
 - name: NBT ResetData（仅 restart）
-  ansible.builtin.include_tasks: nbt_api_reset_data.yml
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_reset_data.yml"
   when: >
     (nbt_include_reset_data | default(false) | bool)
     and (merged_cfg.ResetData | default({}) | length > 0)
