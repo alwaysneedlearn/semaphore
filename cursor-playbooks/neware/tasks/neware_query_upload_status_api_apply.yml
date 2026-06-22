@@ -48,7 +48,7 @@
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api patrol_fast={{ _neware_api_patrol_mode | default(false) }} timeout_s={{ _neware_api_timeout_seconds | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api retries_cfg={{ _neware_api_status_retries | default('n/a') }} delay_s={{ _neware_api_status_retry_delay | default('n/a') }} attempts={{ api_upload_status_result.attempts | default(1) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api http_status={{ api_upload_status_result.status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api uri_failed={{ api_upload_status_result.failed | default(false) }} uri_msg={{ api_upload_status_result.msg | default('') | string | trim }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api uri_skipped={{ api_upload_status_result.skipped | default(false) }} uri_failed={{ api_upload_status_result.failed | default(false) }} uri_msg={{ api_upload_status_result.msg | default('') | string | trim }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api response_body={{ api_upload_status_result.content | default('') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_status_api envelope_ok={{ api_upload_status_ok | default(false) }}"
       - >-

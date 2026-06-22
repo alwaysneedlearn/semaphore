@@ -35,23 +35,9 @@
     _neware_api_expected_exec_success_code: "{{ api_expected_exec_success_code | default(((lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
     _neware_export_upload_started: "{{ export_started | default(((lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true)) | int) | int }}"
 
-- name: 数据上报状态：调用 API 查询（Patrol 单次快速探测）
-  ansible.builtin.uri:
-    url: "http://{{ api_host }}:{{ api_port }}"
-    method: POST
-    body_format: json
-    body:
-      CallType: "{{ _neware_api_status_call_type | int }}"
-    headers:
-      Content-Type: "application/json; charset=utf-8"
-    return_content: true
-    timeout: "{{ _neware_api_timeout_seconds | int }}"
-  register: api_upload_status_result
-  delegate_to: localhost
-  failed_when: false
-  when: _neware_api_patrol_mode | default(false) | bool
+# 单条 uri + register：勿拆成两条互斥 when 的 uri 共用 register——跳过的任务会覆盖上一条的真实响应。
 
-- name: 数据上报状态：调用 API 查询（含失败重试）
+- name: 数据上报状态：调用 API 查询
   ansible.builtin.uri:
     url: "http://{{ api_host }}:{{ api_port }}"
     method: POST
@@ -66,13 +52,15 @@
   delegate_to: localhost
   failed_when: false
   until: >
-    api_upload_status_result is defined and
-    (api_upload_status_result.status | default(0) | int) == 200 and
-    ((api_upload_status_result.content | default('') | trim) | length) > 0 and
-    ((api_upload_status_result.content | from_json).ResponeResultCode | default(-1) | int == _neware_api_expected_response_code | int) and
-    ((api_upload_status_result.content | from_json).ExecResultCode | default(-1) | int == _neware_api_expected_exec_success_code | int)
+    (_neware_api_patrol_mode | default(false) | bool) or
+    (
+      api_upload_status_result is defined and
+      (api_upload_status_result.status | default(0) | int) == 200 and
+      ((api_upload_status_result.content | default('') | trim) | length) > 0 and
+      ((api_upload_status_result.content | from_json).ResponeResultCode | default(-1) | int == _neware_api_expected_response_code | int) and
+      ((api_upload_status_result.content | from_json).ExecResultCode | default(-1) | int == _neware_api_expected_exec_success_code | int)
+    )
   retries: "{{ _neware_api_status_retries | int }}"
   delay: "{{ _neware_api_status_retry_delay | int }}"
-  when: not (_neware_api_patrol_mode | default(false) | bool)
 
 - ansible.builtin.include_tasks: neware_query_upload_status_api_apply.yml
