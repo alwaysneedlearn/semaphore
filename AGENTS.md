@@ -6,6 +6,8 @@
 
 Semaphore UI is a Go backend + Vue.js 2 frontend served as a single binary. The build system uses [go-task](https://taskfile.dev/) (`Taskfile.yml`), not Make.
 
+**会话交接 / 新 Cloud Agent 上手**：见 [`docs/cloud-agent-handover.md`](docs/cloud-agent-handover.md)（设备类型操作速查、近期 `develop` 修复、Runner 踩坑）。
+
 ### Prerequisites (already installed by update script)
 
 - **Go 1.24.6** — backend
