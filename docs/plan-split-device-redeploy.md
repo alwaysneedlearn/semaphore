@@ -1,5 +1,7 @@
 # Plan: split_device_redeploy
 
+> **状态：已完成**（`develop`，2026-06）— DB/API/UI/playbook 均已落地；`check_restart_redeploy_template_id` 已删除；四类设备类型均有 `device_redeploy.yml` / `device_check_restart.yml`。
+
 > 设备操作拆分：独立「重新部署」，启动/重启/巡检重启均不做制品下发；**启动每次写配置**；**重新部署先查目标机压缩包，不存在再复制**。
 >
 > **原则：不做兼容层。** 直接按目标模型改 DB、API、UI、playbook；删除旧字段与旧 playbook 名。
@@ -247,13 +249,13 @@ status_template_id
 
 ## 8. 验收标准
 
-- [ ] `device_start`：进程在跑且日志健康时仍执行配置写入并重启验证（或 LAND API 修改）。
-- [ ] `device_start`：无 exe 时不复制 zip，回调提示 redeploy。
-- [ ] `device_redeploy`：目标机已有 zip 时不 `win_copy`；无 zip 时复制并解压。
-- [ ] `device_restart` / `device_check_restart`：日志与任务中无 `win_copy` zip。
-- [ ] API `POST .../actions/bulk` `action=redeploy` 可调度模板。
-- [ ] DB 无 `check_restart_redeploy_template_id`；Scheduler 使用 `check_restart_template_id`。
-- [ ] 四类 NEWARE/LAND/SINEXCEL/NBT playbook 均已对齐。
+- [x] `device_start`：进程在跑且日志健康时仍执行配置写入并重启验证（或 LAND API 修改）。
+- [x] `device_start`：无 exe 时不复制 zip，回调提示 redeploy。
+- [x] `device_redeploy`：目标机已有 zip 时不 `win_copy`；无 zip 时复制并解压。
+- [x] `device_restart` / `device_check_restart`：日志与任务中无 `win_copy` zip。
+- [x] API `POST .../actions/bulk` `action=redeploy` 可调度模板。
+- [x] DB 无 `check_restart_redeploy_template_id`；Scheduler 使用 `check_restart_template_id`。
+- [x] 四类 NEWARE/LAND/SINEXCEL/NBT playbook 均已对齐。
 
 ---
 

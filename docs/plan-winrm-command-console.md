@@ -1,5 +1,7 @@
 # Plan: WinRM 命令窗口（设备远程命令）
 
+> **状态：已完成（MVP + Phase 2 核心）**（`develop`，2026-06）— 对话框、执行 API、审计日志、凭据预览、示例命令均已落地。Phase 3 流式 Shell / 批量执行为可选后续。
+
 > 在设备管理页增加 **WinRM 命令窗口**：可选择 **RDP 凭据对** 或 **WinRM 凭据对** 连接目标 Windows 主机，输入命令执行并查看输出；内置常用示例（查进程、端口、目录等）。
 >
 > **范围说明：** 首版为 **单次命令执行 + 输出回显**（非完整交互式 PTY Shell）。后续可演进为 WebSocket 流式会话。
@@ -310,9 +312,9 @@ GET /api/project/{project_id}/devices/{device_id}/winrm/connection-preview?crede
 ### Phase 2 — 体验与安全
 
 - [x] `GET .../winrm/connection-preview`
-- [ ] 项目设置页「允许 WinRM 命令」开关
-- [ ] 输出复制、命令历史（仅当前会话 localStorage，不上传）
-- [ ] 更多示例（服务、磁盘、query user）
+- [ ] 项目设置页「允许 WinRM 命令」开关（延期）
+- [ ] 输出复制、命令历史 localStorage（延期；已有 DB 审计历史）
+- [x] 更多示例（服务、磁盘；`query user` 仍可选补充）
 
 ### Phase 3 — 可选演进
 
@@ -382,4 +384,4 @@ GET /api/project/{project_id}/devices/{device_id}/winrm/connection-preview?crede
 
 ---
 
-*文档版本：§8 已记录 1/3/4/5 结论；§8.1 待选审计方案（A 或 B）后可开 Phase 1 实现 PR。*
+*文档版本：MVP 已交付（§5 Phase 1 全勾；Phase 2 核心完成）。§8 结论 1/3/4/5 已落实；审计方案选 B（`project__device_winrm_exec_log`）。*
