@@ -64,9 +64,42 @@
         - name: API 健康 — 结束本主机
           ansible.builtin.meta: end_host
 
-    # 参考路径：API 未达 3 → WinRM + 进程 + 日志关键字回退
-    - name: API 未达上报已启动 — WinRM/进程/日志参考检查
-      when: not (api_upload_started | default(false) | bool)
+    # 快速失败：API 不通 / 非 200 / 响应信封无效 → unhealthy，不跑 WinRM 参考链
+    - name: Patrol API 不可达或非 200 — 快速失败
+      when:
+        - not (api_upload_started | default(false) | bool)
+        - not (api_upload_status_ok | default(false) | bool)
+      block:
+        - name: 登记 Semaphore 状态回调行（API 快速失败）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: >-
+                {{
+                  'API unreachable: ' ~ (api_upload_status_result.msg | default('connection failed') | string)
+                  if (api_upload_status_result.status | default(0) | int) in [0, -1]
+                  else (
+                    'API HTTP ' ~ (api_upload_status_result.status | default(0) | string) ~ ' (expected 200)'
+                    if (api_upload_status_result.status | default(0) | int) != 200
+                    else 'API response invalid (HTTP 200 but envelope check failed)'
+                  )
+                }}
+
+        - name: DEBUG NEWARE 巡检（API 快速失败）
+          ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
+
+        - name: API 快速失败 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    # 参考路径：HTTP 200 且信封有效，但 ExecResultData!=3 → WinRM + 进程 + 日志
+    - name: API 200 但未达上报已启动 — WinRM/进程/日志参考检查
+      when:
+        - not (api_upload_started | default(false) | bool)
+        - api_upload_status_ok | default(false) | bool
       block:
         - name: WinRM 建连（含重试）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
