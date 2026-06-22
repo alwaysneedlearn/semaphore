@@ -15,21 +15,6 @@
       }}
   when: stop_graceful_result is defined
 
-- name: 停止程序（检查强制结束脚本）
-  ansible.windows.win_stat:
-    path: C:\Windows\Temp\sem_force_stop_process_by_name_windows.ps1
-  register: _stop_force_script_stat
-  when: _stop_needs_force_fallback | default(false) | bool
-
-- name: 停止程序（补部署强制结束脚本）
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-  when:
-    - _stop_needs_force_fallback | default(false) | bool
-    - _stop_force_script_stat is defined
-    - not (_stop_force_script_stat.stat.exists | default(false) | bool)
-    - sem_tasks_dir is defined
-    - (sem_tasks_dir | trim | length) > 0
-
 - name: 停止程序（强制结束回退）
   environment:
     VERIFY_PROCESS_NAME: "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"

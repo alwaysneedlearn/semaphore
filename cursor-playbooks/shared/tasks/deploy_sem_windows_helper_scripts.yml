@@ -1,5 +1,5 @@
 ---
-# 每台主机：校验 C:\Windows\Temp\ 下辅助脚本，缺失则从控制器复制。
+# 每台主机：将控制器辅助脚本批量复制到 C:\Windows\Temp\（不做存在性校验）。
 # 依赖 play vars：sem_files_dir、可选 sem_profile_files_dir
 
 - name: 默认 sem_files_dir（play 未声明时）
@@ -9,58 +9,14 @@
     - _winrm_session_ok | default(false) | bool
     - sem_files_dir is not defined or ((sem_files_dir | default('', true) | trim) | length) == 0
 
-- name: 登记必需辅助脚本列表
-  ansible.builtin.set_fact:
-    _sem_helper_required_scripts:
-      - sem_resolve_exe_dir_windows.ps1
-      - sem_force_stop_process_by_name_windows.ps1
-      - sem_verify_process_stopped_by_name_windows.ps1
-      - sem_process_alive_windows.ps1
-      - sem_stop_close_main_window_confirm_interactive.ps1
-      - sem_reconfig_start_program_windows.ps1
-  when: _winrm_session_ok | default(false) | bool
-
-- name: 检查目标机 Semaphore 辅助脚本
-  ansible.windows.win_stat:
-    path: "C:\\Windows\\Temp\\{{ item }}"
-  loop: "{{ sem_helper_required_scripts | default(_sem_helper_required_scripts) }}"
-  register: _sem_helper_scripts_stat
-  when: _winrm_session_ok | default(false) | bool
-
-- name: 登记辅助脚本是否齐全
-  ansible.builtin.set_fact:
-    _sem_helpers_missing_before: >-
-      {{
-        _sem_helper_scripts_stat.results | default([])
-        | selectattr('stat', 'defined')
-        | selectattr('stat.exists', 'equalto', false)
-        | map(attribute='item')
-        | list
-      }}
-    _sem_helpers_need_deploy: >-
-      {{
-        (
-          _sem_helper_scripts_stat.results | default([])
-          | selectattr('stat', 'defined')
-          | selectattr('stat.exists', 'equalto', false)
-          | list
-          | length
-        ) > 0
-      }}
-  when:
-    - _winrm_session_ok | default(false) | bool
-    - _sem_helper_scripts_stat is defined
-
 - name: 部署 Semaphore Windows 辅助脚本（shared）
   ansible.windows.win_copy:
     src: "{{ sem_files_dir }}/"
     dest: C:\Windows\Temp\
   changed_when: false
-  register: _sem_helper_copy_shared
   when:
     - _winrm_session_ok | default(false) | bool
     - sem_files_dir is defined
-    - (_sem_helpers_need_deploy | default(true) | bool)
 
 - name: 部署设备类型辅助脚本（profile）
   ansible.windows.win_copy:
@@ -71,41 +27,6 @@
     - _winrm_session_ok | default(false) | bool
     - sem_profile_files_dir is defined
     - (sem_profile_files_dir | trim | length) > 0
-    - (_sem_helpers_need_deploy | default(true) | bool)
-
-- name: 部署后校验辅助脚本
-  ansible.windows.win_stat:
-    path: "C:\\Windows\\Temp\\{{ item }}"
-  loop: "{{ sem_helper_required_scripts | default(_sem_helper_required_scripts) }}"
-  register: _sem_helper_scripts_stat_after
-  when: _winrm_session_ok | default(false) | bool
-
-- name: 登记部署后仍缺失的辅助脚本
-  ansible.builtin.set_fact:
-    _sem_helpers_missing_after: >-
-      {{
-        _sem_helper_scripts_stat_after.results | default([])
-        | selectattr('stat', 'defined')
-        | selectattr('stat.exists', 'equalto', false)
-        | map(attribute='item')
-        | list
-      }}
-  when:
-    - _winrm_session_ok | default(false) | bool
-    - _sem_helper_scripts_stat_after is defined
-
-- name: 辅助脚本部署失败（目标机缺少 ps1）
-  ansible.builtin.fail:
-    msg: >-
-      Windows helper scripts missing on {{ inventory_hostname }} after deploy attempt.
-      Missing: {{ _sem_helpers_missing_after | default([]) | join(', ') }}.
-      Controller sem_files_dir={{ sem_files_dir | default('undefined') }}.
-      win_copy={{ _sem_helper_copy_shared | default({'skipped': true}) }}.
-      Ensure runner git pull and playbook path includes cursor-playbooks/shared/files.
-  when:
-    - _winrm_session_ok | default(false) | bool
-    - _sem_helper_scripts_stat_after is defined
-    - (_sem_helpers_missing_after | default([]) | length) > 0
 
 - name: DEBUG 辅助脚本部署
   ansible.builtin.debug:
@@ -113,7 +34,4 @@
       - "[DEBUG-DEPLOY] host={{ inventory_hostname }} dest=C:\\Windows\\Temp\\"
       - "[DEBUG-DEPLOY] shared_files={{ sem_files_dir | default('n/a') }}"
       - "[DEBUG-DEPLOY] profile_files={{ sem_profile_files_dir | default('(none)') }}"
-      - "[DEBUG-DEPLOY] need_deploy={{ _sem_helpers_need_deploy | default('n/a') }}"
-      - "[DEBUG-DEPLOY] missing_before={{ _sem_helpers_missing_before | default([]) }}"
-      - "[DEBUG-DEPLOY] missing_after={{ _sem_helpers_missing_after | default([]) }}"
   when: _winrm_session_ok | default(false) | bool
