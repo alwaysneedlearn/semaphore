@@ -80,7 +80,7 @@
         _nbt_need_reconfigure: >-
           {{
             (not (_nbt_service_path_stat.stat.exists | default(false)))
-            or ('RUNNING' not in ((_nbt_service_status | default({})).stdout | default('')))
+            or (((_nbt_service_status | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
             or (not (nbt_heartbeat_ok | default(false) | bool))
           }}
 
@@ -97,7 +97,7 @@
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
             {{ 'healthy' if not (_nbt_need_reconfigure | default(false) | bool)
-               else ('healthy' if ('RUNNING' in ((_nbt_service_status | default({})).stdout | default(''))) and (nbt_heartbeat_ok | default(false) | bool)
+               else ('healthy' if (((_nbt_service_status | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING') and (nbt_heartbeat_ok | default(false) | bool)
                else 'unhealthy') }}
           winrm_status: online
           api_status: >-

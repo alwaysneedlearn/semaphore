@@ -37,7 +37,7 @@
         semaphore_callback_row:
           hostname: "{{ _nbt_dev.hostname | default('', true) }}"
           ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_nbt_service_status.stdout | default(''))) and ((not (nbt_start_check_api | bool)) or (nbt_heartbeat_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if (((_nbt_service_status.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (nbt_start_check_api | bool)) or (nbt_heartbeat_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: online
           api_status: "{{ 'online' if ((not (nbt_start_check_api | bool)) or (nbt_heartbeat_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: ""

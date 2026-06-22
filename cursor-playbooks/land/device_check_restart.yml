@@ -115,11 +115,9 @@
         _land_gate_need: >-
           {{
             (not (_land_exe_stat.stat.exists | default(false)))
-            or (not (_land_proc_running | bool))
+            or ((_land_proc_out.split('|') | first) != 'RUNNING')
             or (not (land_api_status_ok | default(false) | bool))
           }}
-
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/assert_exe_present_require_redeploy.yml"
       when: _land_need_reconfigure | default(false) | bool
 
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
@@ -132,7 +130,7 @@
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
             {{ 'healthy' if not (_land_need_reconfigure | default(false) | bool)
-               else ('healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
+               else ('healthy' if (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
                else 'unhealthy') }}
           winrm_status: online
           api_status: >-

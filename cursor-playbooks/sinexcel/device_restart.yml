@@ -66,11 +66,11 @@
         semaphore_callback_row:
           hostname: "{{ _sinexcel_dev.hostname | default('', true) }}"
           ip: "{{ _sinexcel_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_ini_agent_process_after.stdout | default(''))) and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: online
           api_status: "{{ 'online' if ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: >-
-            {% if 'RUNNING' not in (_ini_agent_process_after.stdout | default('')) %}Process not running after restart
+            {% if ((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) != 'RUNNING' %}Process not running after restart
             {% elif (sinexcel_start_check_api | bool) and not (_sinexcel_kafka_api_ok | default(false) | bool) %}Kafka not enabled (EnableFlowInfoExtendedSqlite!=true)
             {% else %}{% endif %}
 

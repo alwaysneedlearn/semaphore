@@ -67,7 +67,7 @@
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: online
           api_status: "{{ 'online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: ""

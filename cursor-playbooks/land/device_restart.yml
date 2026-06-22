@@ -61,11 +61,11 @@
         semaphore_callback_row:
           hostname: "{{ _land_dev.hostname | default('', true) }}"
           ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if ('RUNNING' in (_land_process_after_restart.stdout | default(''))) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'offline' }}"
           abnormal_reason: >-
-            {% if 'RUNNING' not in (_land_process_after_restart.stdout | default('')) %}Restart failed: process not running
+            {% if ((_land_process_after_restart.stdout | default('') | trim).split('|') | first) != 'RUNNING' %}Restart failed: process not running
             {% elif (land_start_check_api | default(true) | bool) and not (land_api_status_ok | default(false) | bool) %}API QueryStatus failed after restart: http={{ _land_api_after_restart.status | default('n/a') }} real_status={{ land_api_real_status | default('n/a') }}
             {% else %}{% endif %}
 
