@@ -13,8 +13,8 @@ export_not_started: "{{ (lookup('env', 'EXPORT_NOT_STARTED') | default('', true)
 export_starting: "{{ (lookup('env', 'EXPORT_STARTING') | default('', true) | trim) | default('2', true) }}"
 export_started: "{{ (lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true) }}"
 # 启动验证：轮询直至 ExecResultData==3（默认与 LOG_POLL_RETRIES/DELAY 对齐）
-api_status_start_poll_retries: "{{ ((lookup('env', 'API_STATUS_START_POLL_RETRIES') | default('', true) | trim) | default((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('8', true), true)) | int }}"
-api_status_start_poll_delay: "{{ ((lookup('env', 'API_STATUS_START_POLL_DELAY') | default('', true) | trim) | default((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true), true)) | int }}"
+api_status_start_poll_retries: "{{ ((lookup('env', 'API_STATUS_START_POLL_RETRIES') | default('', true) | trim) | default((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('5', true), true)) | int }}"
+api_status_start_poll_delay: "{{ ((lookup('env', 'API_STATUS_START_POLL_DELAY') | default('', true) | trim) | default((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('8', true), true)) | int }}"
 
 # WinRM 超时：单主机慢响应时优先快速失败，避免拖慢整批执行
 ansible_winrm_connection_timeout: 25

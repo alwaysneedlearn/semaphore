@@ -38,7 +38,9 @@
       when: api_upload_started | default(false) | bool
       block:
         - name: WinRM 参考探测（仅填写 winrm_status，不改变 API 健康结论）
-          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "Patrol API 快路径 WinRM 参考"
 
         - name: 登记 Semaphore 状态回调行（API 健康快路径）
           ansible.builtin.set_fact:

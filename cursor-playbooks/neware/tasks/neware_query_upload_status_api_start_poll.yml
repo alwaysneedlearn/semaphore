@@ -16,7 +16,7 @@
             (lookup('env', 'API_STATUS_START_POLL_RETRIES') | default('', true) | trim)
             | default(
                 (lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim)
-                | default('8', true),
+                | default('5', true),
                 true
               )
           ) | int
@@ -29,7 +29,7 @@
             (lookup('env', 'API_STATUS_START_POLL_DELAY') | default('', true) | trim)
             | default(
                 (lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim)
-                | default('10', true),
+                | default('8', true),
                 true
               )
           ) | int

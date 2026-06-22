@@ -1,0 +1,25 @@
+---
+# 单次 win_ping 参考探测：失败不 end_host、不登记 unhealthy，仅供 API 快路径填写 winrm_status。
+# play 需 sem_tasks_dir；可选 winrm_probe_reference_label
+
+- name: "{{ winrm_probe_reference_label | default('WinRM 参考探测（单次 ping）') }}"
+  ansible.windows.win_ping:
+  register: _winrm_ping
+  failed_when: false
+  ignore_unreachable: true
+
+- ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_eval_ping_result.yml"
+
+- name: 登记 WinRM 参考会话（仅 ping 成功时）
+  ansible.builtin.set_fact:
+    _winrm_session_ok: true
+  when: _winrm_ping_ok | default(false) | bool
+
+- name: DEBUG WinRM 参考探测
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-WINRM] context=reference-only"
+      - "[DEBUG-WINRM] label={{ winrm_probe_reference_label | default('reference') }}"
+      - "[DEBUG-WINRM] ping_ok={{ _winrm_ping_ok | default(false) }}"
+      - "[DEBUG-WINRM] session_ok={{ _winrm_session_ok | default(false) }}"
+  when: _winrm_ping is defined
