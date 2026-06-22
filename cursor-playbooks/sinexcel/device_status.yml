@@ -66,6 +66,7 @@
 
     - name: 查询 SINEXCEL Kafka 配置（健康判定）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config.yml"
+      when: (_sinexcel_process_check.stdout | default('') | trim).split('|') | first == 'RUNNING'
       vars:
         sinexcel_kafka_register_api_after: false
 

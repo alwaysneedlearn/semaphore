@@ -31,6 +31,7 @@
       when: _nbt_service_status is defined
 
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
+      when: (_nbt_service_status.stdout | default('') | trim).split('|') | first == 'RUNNING'
 
     - ansible.builtin.set_fact:
         need_reconfigure: "{{ _nbt_need_reconfig | bool }}"

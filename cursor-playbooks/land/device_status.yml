@@ -65,7 +65,9 @@
 
     - name: 查询 LAND API 状态
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status.yml"
-      when: _land_exe_stat.stat.exists | default(false)
+      when:
+        - _land_exe_stat.stat.exists | default(false)
+        - (_land_process_check.stdout | default('') | trim).split('|') | first == 'RUNNING'
 
     - name: 状态判断并组装回调行
       ansible.builtin.set_fact:
