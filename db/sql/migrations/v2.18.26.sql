@@ -38,8 +38,8 @@ create table `project__device_operation_log` (
   `task_id` int null,
   `operation` varchar(32) not null,
   `result` varchar(32) not null,
-  `summary` text not null default '',
-  `steps_json` text not null default '[]',
+  `summary` text not null,
+  `steps_json` text not null,
   `created` datetime not null,
 
   key `project__device_operation_log_device_created_idx` (`project_id`, `device_id`, `created`),
