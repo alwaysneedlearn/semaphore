@@ -800,6 +800,57 @@ export default {
       return key ? this.$t(key) : action;
     },
 
+    deviceActionTemplateField(action) {
+      if (action === 'restart') {
+        return 'restart_template_id';
+      }
+      if (action === 'redeploy') {
+        return 'redeploy_template_id';
+      }
+      if (action === 'resend_data') {
+        return 'resend_data_template_id';
+      }
+      return null;
+    },
+
+    deviceActionTemplateConfigured(device, action) {
+      const profileId = device && device.device_profile_id;
+      const field = this.deviceActionTemplateField(action);
+      if (!profileId || !field) {
+        return false;
+      }
+      const settings = this.profileSettingsById[profileId];
+      const tplId = settings && settings[field];
+      return tplId != null && Number(tplId) > 0;
+    },
+
+    notifyDeviceActionTemplateMissing(action) {
+      const key = {
+        restart: 'deviceRestartTemplateMissing',
+        redeploy: 'deviceRedeployTemplateMissing',
+        resend_data: 'deviceResendTemplateMissing',
+      }[action];
+      if (!key) {
+        return;
+      }
+      EventBus.$emit('i-snackbar', {
+        color: 'warning',
+        text: this.$t(key),
+      });
+    },
+
+    bulkActionProfilesHaveTemplate(action, devices) {
+      const list = devices || [];
+      const profileIds = [...new Set(list.map((d) => d.device_profile_id || 0))];
+      if (!profileIds.length) {
+        return false;
+      }
+      return profileIds.every((pid) => {
+        const device = list.find((d) => (d.device_profile_id || 0) === pid);
+        return device && this.deviceActionTemplateConfigured(device, action);
+      });
+    },
+
     deviceProfileKey(device) {
       const profileId = device && device.device_profile_id;
       if (!profileId) {
@@ -814,13 +865,7 @@ export default {
     },
 
     deviceResendTemplateConfigured(device) {
-      const profileId = device && device.device_profile_id;
-      if (!profileId) {
-        return false;
-      }
-      const settings = this.profileSettingsById[profileId];
-      const tplId = settings && settings.resend_data_template_id;
-      return tplId != null && Number(tplId) > 0;
+      return this.deviceActionTemplateConfigured(device, 'resend_data');
     },
 
     filterDevicesReadyForResend(devices) {
@@ -844,10 +889,7 @@ export default {
         });
       }
       if (skippedNoTemplate > 0) {
-        EventBus.$emit('i-snackbar', {
-          color: 'warning',
-          text: this.$t('deviceResendTemplateMissing'),
-        });
+        this.notifyDeviceActionTemplateMissing('resend_data');
       }
     },
 
@@ -856,10 +898,7 @@ export default {
       const { ready, skippedUnsupported, skippedNoTemplate } = filtered;
       if (!ready.length) {
         if (skippedNoTemplate > 0) {
-          EventBus.$emit('i-snackbar', {
-            color: 'warning',
-            text: this.$t('deviceResendTemplateMissing'),
-          });
+          this.notifyDeviceActionTemplateMissing('resend_data');
         } else {
           EventBus.$emit('i-snackbar', {
             color: 'warning',
@@ -883,6 +922,12 @@ export default {
         return;
       }
       if (this.deviceActionNeedsConfirm(action)) {
+        const selected = new Set(this.selectedDeviceIds);
+        const devices = (this.items || []).filter((d) => selected.has(d.id));
+        if (!this.bulkActionProfilesHaveTemplate(action, devices)) {
+          this.notifyDeviceActionTemplateMissing(action);
+          return;
+        }
         this.pendingDeviceAction = action;
         this.pendingDeviceActionTarget = null;
         this.pendingBulkTaskCount = this.countProfileGroupsForSelection();
@@ -1214,6 +1259,12 @@ export default {
       if (action === 'resend_data') {
         this.openResendDialog([device]);
         return;
+      }
+      if (action === 'restart' || action === 'redeploy') {
+        if (!this.deviceActionTemplateConfigured(device, action)) {
+          this.notifyDeviceActionTemplateMissing(action);
+          return;
+        }
       }
       if (this.deviceActionNeedsConfirm(action)) {
         this.pendingDeviceAction = action;
