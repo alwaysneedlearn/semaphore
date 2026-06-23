@@ -9,6 +9,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
+    sem_operation_type: restart
     sem_debug_tag: SINEXCEL
     ini_agent_force_stop: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
@@ -76,6 +77,8 @@
             {% else %}{% endif %}
             {% endif %}
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
 - name: 写回 Semaphore 设备状态
@@ -86,3 +89,4 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

@@ -1,0 +1,43 @@
+---
+# Bulk PUT device restart/redeploy operation logs from localhost post_tasks.
+
+- ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_bulk_credentials.yml"
+
+- name: 汇总各主机操作记录
+  ansible.builtin.set_fact:
+    semaphore_operation_bulk_records: "{{ semaphore_operation_bulk_records | default([]) + [hostvars[item].semaphore_operation_record] }}"
+  loop: "{{ _sem_bulk_host_list | default([]) }}"
+  when: hostvars[item].semaphore_operation_record is defined
+
+- name: DEBUG 操作记录 bulk 回调
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-API] operation_bulk hosts={{ (_sem_bulk_host_list | default([]) | length) }}"
+      - "[DEBUG-API] operation_bulk records={{ (semaphore_operation_bulk_records | default([]) | length) }}"
+      - "[DEBUG-API] operation_bulk token_set={{ ((_sem_bulk_token | default('') | trim | length) > 0) | string }}"
+  when: semaphore_operation_bulk_records is defined
+
+- name: PUT Semaphore /devices/operations/bulk
+  ansible.builtin.uri:
+    url: "{{ _sem_bulk_url | regex_replace('/$', '') }}/api/project/{{ _sem_bulk_pid }}/devices/operations/bulk"
+    method: PUT
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ _sem_bulk_token }}"
+    body_format: json
+    body:
+      records: "{{ semaphore_operation_bulk_records | default([]) }}"
+    status_code: [200, 400, 401, 403, 404]
+  register: _sem_operation_bulk_put
+  failed_when: false
+  when:
+    - (_sem_bulk_pid | default('') | trim | length) > 0
+    - (_sem_bulk_token | default('') | trim | length) > 0
+    - (semaphore_operation_bulk_records | default([]) | length) > 0
+
+- name: DEBUG 操作记录 bulk PUT 响应
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-API] operation_bulk PUT http={{ _sem_operation_bulk_put.status | default('n/a') }}"
+      - "[DEBUG-API] operation_bulk PUT body={{ _sem_operation_bulk_put.content | default('') | truncate(1000, True) }}"
+  when: _sem_operation_bulk_put is defined and not (_sem_operation_bulk_put.skipped | default(false))

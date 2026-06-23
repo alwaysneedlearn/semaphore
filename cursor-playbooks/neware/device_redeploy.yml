@@ -7,6 +7,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: redeploy
     sem_debug_tag: NEWARE
     _exe_name_default: uu.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
@@ -78,6 +79,8 @@
       vars:
         _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+
     - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
 
 - name: 写回 Semaphore 设备状态
@@ -87,3 +90,4 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

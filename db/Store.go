@@ -328,6 +328,8 @@ type DeviceManager interface {
 	DeleteDeviceWinRMExecLog(projectID, deviceID, logID int) error
 	DeleteDeviceWinRMExecLogs(projectID, deviceID int, logIDs []int) (int, error)
 	ClearDeviceWinRMExecLogs(projectID, deviceID int) (int, error)
+	GetDeviceOperationLogs(projectID, deviceID, limit, offset int) (DeviceOperationLogList, error)
+	CreateDeviceOperationLogs(projectID int, logs []DeviceOperationLog) (int, error)
 	DeleteDevice(projectID, deviceID int) error
 	GetDeviceStats(projectID int) (DeviceStats, error)
 

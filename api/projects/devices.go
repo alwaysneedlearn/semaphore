@@ -1672,3 +1672,107 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	device.LastUpdated = &refreshed
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
+
+// GetDeviceOperationLogs returns restart/redeploy history for one device (last 30 days).
+func GetDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	device := helpers.GetFromContext(r, "device").(db.Device)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	list, err := helpers.Store(r).GetDeviceOperationLogs(project.ID, device.ID, limit, offset)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, list)
+}
+
+// BulkPutDeviceOperationLogs is the playbook callback for restart/redeploy step history.
+func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
+	project := helpers.GetFromContext(r, "project").(db.Project)
+	var body struct {
+		Records []db.DeviceOperationLogInput `json:"records"`
+	}
+	if !helpers.Bind(w, r, &body) {
+		return
+	}
+	if len(body.Records) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "No operation records provided",
+		})
+		return
+	}
+	store := helpers.Store(r)
+	devices, err := store.GetDevices(project.ID, db.RetrieveQueryParams{}, nil)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	byHostname := map[string]db.Device{}
+	byIP := map[string]db.Device{}
+	for _, dev := range devices {
+		if h := strings.TrimSpace(dev.Hostname); h != "" {
+			byHostname[h] = dev
+		}
+		if ip := strings.TrimSpace(dev.IPAddress); ip != "" {
+			byIP[ip] = dev
+		}
+	}
+	toSave := make([]db.DeviceOperationLog, 0, len(body.Records))
+	for _, rec := range body.Records {
+		ipKey := strings.TrimSpace(rec.IPAddress)
+		hostKey := strings.TrimSpace(rec.Hostname)
+		var dev db.Device
+		var ok bool
+		if ipKey != "" {
+			dev, ok = byIP[ipKey]
+		}
+		if !ok && hostKey != "" {
+			if d, ok2 := byHostname[hostKey]; ok2 {
+				dev, ok = d, true
+			} else if d, ok2 := byIP[hostKey]; ok2 {
+				dev, ok = d, true
+			}
+		}
+		if !ok {
+			continue
+		}
+		op := strings.TrimSpace(rec.Operation)
+		if op != db.DeviceOperationRestart && op != db.DeviceOperationRedeploy {
+			continue
+		}
+		result := strings.TrimSpace(rec.Result)
+		if result != db.DeviceOperationResultSuccess && result != db.DeviceOperationResultFailed {
+			if result == "" {
+				result = db.DeviceOperationResultFailed
+			} else {
+				continue
+			}
+		}
+		var taskID *int
+		if rec.TaskID > 0 {
+			tid := rec.TaskID
+			taskID = &tid
+		}
+		toSave = append(toSave, db.DeviceOperationLog{
+			DeviceID:  dev.ID,
+			TaskID:    taskID,
+			Operation: op,
+			Result:    result,
+			Summary:   strings.TrimSpace(rec.Summary),
+			Steps:     rec.Steps,
+		})
+	}
+	if len(toSave) == 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "No matching devices for operation records",
+		})
+		return
+	}
+	inserted, err := store.CreateDeviceOperationLogs(project.ID, toSave)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{"inserted": inserted})
+}

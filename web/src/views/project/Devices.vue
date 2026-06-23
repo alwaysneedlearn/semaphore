@@ -62,6 +62,13 @@
       :selected-device-ids="selectedDeviceIds"
       @imported="loadItems"
     />
+
+    <DeviceOperationHistoryDialog
+      v-model="operationHistoryDialog"
+      :project-id="projectId"
+      :device="operationHistoryDevice"
+    />
+
     <v-dialog v-model="reasonDialog" max-width="700">
       <v-card>
         <v-card-title>
@@ -486,6 +493,9 @@
               </v-list-item>
             </v-list>
           </v-menu>
+          <v-btn :title="$t('deviceDetailTitle')" @click="openOperationHistory(item)">
+            <v-icon>mdi-history</v-icon>
+          </v-btn>
           <v-btn :title="$t('deviceConfig')" @click="openConfigDialog(item)">
             <v-icon>mdi-cog</v-icon>
           </v-btn>
@@ -516,6 +526,7 @@ import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
 import DeviceWinrmConsoleDialog from '@/components/DeviceWinrmConsoleDialog.vue';
 import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 import DeviceImportExportDialog from '@/components/DeviceImportExportDialog.vue';
+import DeviceOperationHistoryDialog from '@/components/DeviceOperationHistoryDialog.vue';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
@@ -526,6 +537,7 @@ export default {
     DeviceWinrmConsoleDialog,
     DeviceProfilesForm,
     DeviceImportExportDialog,
+    DeviceOperationHistoryDialog,
   },
 
   data() {
@@ -542,6 +554,8 @@ export default {
       configDeviceName: '',
       winrmDialog: false,
       winrmDevice: null,
+      operationHistoryDialog: false,
+      operationHistoryDevice: null,
       reasonDialog: false,
       reasonError: '',
       reasonDeviceHostname: '',
@@ -1153,6 +1167,11 @@ export default {
       this.configDeviceId = device.id;
       this.configDeviceName = device.hostname;
       this.configDialog = true;
+    },
+
+    openOperationHistory(device) {
+      this.operationHistoryDevice = device;
+      this.operationHistoryDialog = true;
     },
     showWinrmConsole(device) {
       if (!device || !device.ip_address) {

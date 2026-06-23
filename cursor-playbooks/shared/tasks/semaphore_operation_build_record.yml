@@ -1,0 +1,110 @@
+---
+# Build semaphore_operation_record on each windows_hosts host after restart/redeploy.
+# Play vars: sem_operation_type = restart | redeploy
+
+- name: 组装设备操作步骤
+  ansible.builtin.set_fact:
+    semaphore_operation_steps: "{{ _op_steps }}"
+  vars:
+    _svc_out: "{{ ((_jhai_service_status | default(_nbt_service_status | default(_land_process_check | default(_sinexcel_process_check | default({}, true), true), true), true)).stdout | default('')) | trim }}"
+    _svc_running: "{{ (_svc_out.split('|') | first) == 'RUNNING' if (_svc_out | length > 0) else (final_start_ok | default(false) | bool) }}"
+    _op_steps: >-
+      {{
+        [{
+          'step': 'WinRM 建连',
+          'result': ('ok' if (_winrm_session_ok | default(false) | bool) else 'failed'),
+          'detail': (host_failure_reason | default('') | truncate(200, True) if not (_winrm_session_ok | default(false) | bool) else '')
+        }]
+        + (
+          [{
+            'step': '制品下发',
+            'result': ('ok' if (_redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
+            'detail': ('exe present after deploy' if (_redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')
+          }] if ((sem_operation_type | default('restart')) == 'redeploy' and (_redeploy_exe_stat_after is defined)) else []
+        )
+        + (
+          [{
+            'step': ('服务重启' if (_jhai_service_status is defined or _nbt_service_status is defined) else '进程启停'),
+            'result': ('ok' if (_svc_running | bool) else 'failed'),
+            'detail': (_svc_out | truncate(200, True))
+          }] if ((_svc_out | length > 0) or (final_start_ok is defined) or (_jhai_service_status is defined) or (_nbt_service_status is defined)) else []
+        )
+        + (
+          [{
+            'step': 'API/心跳验证',
+            'result': ('ok' if (jhai_upload_status_ok | default(nbt_heartbeat_ok | default(land_api_status_ok | default(_sinexcel_kafka_api_ok | default(final_start_ok | default(false), true), true), true), true) | bool) else 'failed'),
+            'detail': (
+              'upload_status code=' ~ (jhai_upload_status_code | default('n/a') | string)
+              if (jhai_upload_status_ok is defined) else (
+                'heartbeat ok=' ~ (nbt_heartbeat_ok | default(false) | string)
+                if (nbt_heartbeat_ok is defined) else (
+                  'land_api ok=' ~ (land_api_status_ok | default(false) | string)
+                  if (land_api_status_ok is defined) else (
+                    'kafka api ok=' ~ (_sinexcel_kafka_api_ok | default(false) | string)
+                    if (_sinexcel_kafka_api_ok is defined) else ''
+                  )
+                )
+              )
+            )
+          }] if (
+            jhai_upload_status_ok is defined or nbt_heartbeat_ok is defined
+            or land_api_status_ok is defined or _sinexcel_kafka_api_ok is defined
+            or final_start_ok is defined
+          ) else []
+        )
+        + (
+          [{
+            'step': '配置 API',
+            'result': ('ok' if (jhai_config_apis_ok | default(true) | bool) else 'failed'),
+            'detail': 'Kafka/resend HTTP APIs'
+          }] if (jhai_config_apis_ok is defined and (jhai_include_config_apis | default(false) | bool)) else []
+        )
+      }}
+
+- name: 计算操作结果摘要
+  ansible.builtin.set_fact:
+    _op_result: "{{ _result }}"
+    _op_summary: "{{ _summary | truncate(500, True) }}"
+    _op_hostname: "{{ _dev.hostname | default('', true) }}"
+    _op_ip: "{{ _dev.ip | default(inventory_hostname, true) }}"
+    _op_task_id: "{{ (semaphore_task_id | default(0)) | int }}"
+  vars:
+    _dev: "{{ _semaphore_device_rows | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+    _cb: "{{ semaphore_callback_row | default({}) }}"
+    _result: >-
+      {{
+        'failed' if (host_failure_reason is defined)
+        else (
+          'success' if ((_cb.device_status | default('unhealthy') | string) == 'healthy')
+          else 'failed'
+        )
+      }}
+    _summary: >-
+      {{
+        host_failure_reason | default('')
+        if (host_failure_reason is defined)
+        else (
+          (_cb.abnormal_reason | default('') | trim)
+          if ((_cb.abnormal_reason | default('') | trim) | length > 0)
+          else (
+            '操作成功' if ((_cb.device_status | default('unhealthy') | string) == 'healthy')
+            else '操作未达健康状态'
+          )
+        )
+      }}
+
+- name: 登记设备操作记录
+  ansible.builtin.set_fact:
+    semaphore_operation_record:
+      hostname: "{{ _op_hostname }}"
+      ip: "{{ _op_ip }}"
+      operation: "{{ sem_operation_type | default('restart') }}"
+      result: "{{ _op_result }}"
+      summary: "{{ _op_summary }}"
+      steps: "{{ (semaphore_operation_steps | default([])) + [_final_step] }}"
+      task_id: "{{ _op_task_id }}"
+  vars:
+    _final_step:
+      step: 最终结果
+      result: "{{ 'ok' if (_op_result == 'success') else 'failed' }}"
+      detail: "{{ _op_summary | truncate(200, True) }}"

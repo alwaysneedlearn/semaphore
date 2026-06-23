@@ -6,6 +6,7 @@
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: restart
     sem_debug_tag: JHAI
     jhai_service_stop_first: true
     jhai_include_config_apis: true
@@ -35,6 +36,8 @@
           api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool)) else 'offline') }}"
           abnormal_reason: "{{ host_failure_reason | default('') }}"
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
 - name: 写回 Semaphore 设备状态
@@ -45,3 +48,4 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"
