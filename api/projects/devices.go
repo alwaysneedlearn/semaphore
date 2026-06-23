@@ -1442,8 +1442,7 @@ func mergeDefaultConfigForDeviceAction(extraVars map[string]any, profileDefaultJ
 	server.MergeDefaultConfigForDeviceAction(extraVars, profileDefaultJSON, projectDefaultJSON)
 }
 
-// RunDeviceAction triggers the configured template for {stop, restart, redeploy,
-// status} on a specific device.
+// RunDeviceAction triggers the configured template for {restart, redeploy, status} on a specific device.
 func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	device := helpers.GetFromContext(r, "device").(db.Device)
@@ -1456,7 +1455,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch body.Action {
-	case db.DeviceActionStop, db.DeviceActionRestart,
+	case db.DeviceActionRestart,
 		db.DeviceActionRedeploy, db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
@@ -1530,7 +1529,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch body.Action {
-	case db.DeviceActionStop, db.DeviceActionRestart,
+	case db.DeviceActionRestart,
 		db.DeviceActionRedeploy, db.DeviceActionStatus:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{

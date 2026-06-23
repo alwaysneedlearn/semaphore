@@ -136,7 +136,6 @@ import { getErrorMessage } from '@/lib/error';
 import DeviceConfigItemsEditor from '@/components/DeviceConfigItemsEditor.vue';
 
 const TEMPLATE_ID_FIELDS = [
-  'stop_template_id',
   'restart_template_id',
   'status_template_id',
   'redeploy_template_id',
@@ -159,10 +158,9 @@ export default {
       saveError: null,
       defaultConfigItems: [],
       templateActions: [
-        { field: 'stop_template_id', label: 'Stop template' },
+        { field: 'status_template_id', label: 'Status / Patrol template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'redeploy_template_id', label: 'Redeploy template' },
-        { field: 'status_template_id', label: 'Status / Patrol template' },
       ],
     };
   },
@@ -290,6 +288,7 @@ export default {
       delete payload.default_ansible_winrm_server_cert_validation;
       delete payload.config_template_id;
       delete payload.discover_template_id;
+      payload.stop_template_id = null;
       return payload;
     },
     addDefaultConfigRow() {

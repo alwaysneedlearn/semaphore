@@ -159,9 +159,9 @@
             <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item @click="runBulkAction('stop')">
-            <v-list-item-icon><v-icon>mdi-stop</v-icon></v-list-item-icon>
-            <v-list-item-title>{{ $t('deviceStop') }}</v-list-item-title>
+          <v-list-item @click="runBulkAction('status')">
+            <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
           </v-list-item>
           <v-list-item @click="runBulkAction('restart')">
             <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
@@ -170,10 +170,6 @@
           <v-list-item @click="runBulkAction('redeploy')">
             <v-list-item-icon><v-icon>mdi-package-down</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceRedeploy') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="runBulkAction('status')">
-            <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
-            <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
           </v-list-item>
           <v-divider />
           <v-list-item @click="bulkDeleteDialog = true">
@@ -476,9 +472,9 @@
               </v-btn>
             </template>
             <v-list dense>
-              <v-list-item @click="runAction(item, 'stop')">
-                <v-list-item-icon><v-icon>mdi-stop</v-icon></v-list-item-icon>
-                <v-list-item-title>{{ $t('deviceStop') }}</v-list-item-title>
+              <v-list-item @click="runAction(item, 'status')">
+                <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
+                <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
               </v-list-item>
               <v-list-item @click="runAction(item, 'restart')">
                 <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
@@ -487,10 +483,6 @@
               <v-list-item @click="runAction(item, 'redeploy')">
                 <v-list-item-icon><v-icon>mdi-package-down</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceRedeploy') }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item @click="runAction(item, 'status')">
-                <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
-                <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
               </v-list-item>
             </v-list>
           </v-menu>
@@ -760,12 +752,11 @@ export default {
     },
 
     deviceActionNeedsConfirm(action) {
-      return action === 'stop' || action === 'restart' || action === 'redeploy';
+      return action === 'restart' || action === 'redeploy';
     },
 
     deviceActionLabel(action) {
       const key = {
-        stop: 'deviceStop',
         restart: 'deviceRestart',
         redeploy: 'deviceRedeploy',
       }[action];
