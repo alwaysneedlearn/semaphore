@@ -1438,19 +1438,8 @@ func parseDefaultDeviceConfigJSON(raw string) map[string]any {
 	return parsed
 }
 
-func buildCategorizedDeviceConfig(items []db.DeviceConfigItem) map[string]map[string]string {
-	categorized := map[string]map[string]string{}
-	for _, it := range items {
-		cat := strings.TrimSpace(it.Category)
-		if cat == "" {
-			cat = "default"
-		}
-		if categorized[cat] == nil {
-			categorized[cat] = map[string]string{}
-		}
-		categorized[cat][it.Key] = it.Value
-	}
-	return categorized
+func mergeDefaultConfigForDeviceAction(extraVars map[string]any, profileDefaultJSON, projectDefaultJSON string) {
+	server.MergeDefaultConfigForDeviceAction(extraVars, profileDefaultJSON, projectDefaultJSON)
 }
 
 // RunDeviceAction triggers the configured template for {stop, restart, redeploy,
@@ -1511,8 +1500,8 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 			helpers.WriteError(w, err)
 			return
 		}
-		cfg := buildCategorizedDeviceConfig(items)
-		mergeRestartRedeployConfigExtraVars(extraVars, []db.Device{device}, map[int]map[string]map[string]string{
+		cfg := server.BuildCategorizedDeviceConfig(items)
+		server.MergeRestartRedeployConfigExtraVars(extraVars, []db.Device{device}, map[int]map[string]map[string]string{
 			device.ID: cfg,
 		})
 	}
@@ -1640,9 +1629,9 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 					helpers.WriteError(w, itemErr)
 					return
 				}
-				configByDeviceID[d.ID] = buildCategorizedDeviceConfig(items)
+				configByDeviceID[d.ID] = server.BuildCategorizedDeviceConfig(items)
 			}
-			mergeRestartRedeployConfigExtraVars(extraVars, devs, configByDeviceID)
+			server.MergeRestartRedeployConfigExtraVars(extraVars, devs, configByDeviceID)
 		}
 		task, err := runDeviceTemplateWithProfileSettings(r, project, ps, body.Action, extraVars, tmpInventoryID)
 		if err != nil {

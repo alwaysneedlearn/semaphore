@@ -1,4 +1,4 @@
-package projects
+package server
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 
 func TestDeviceConfigCategorizedValuesLegacy(t *testing.T) {
 	raw := `{"SystemConfig":{"HistInterval":"15"},"Redeliver":{"startTime":"2026-5-24 10:10:10"}}`
-	got := deviceConfigCategorizedValues(raw)
+	got := DeviceConfigCategorizedValues(raw)
 	if got["SystemConfig"]["HistInterval"] != "15" {
 		t.Fatalf("SystemConfig: %+v", got)
 	}
@@ -19,7 +19,7 @@ func TestDeviceConfigCategorizedValuesLegacy(t *testing.T) {
 
 func TestDeviceConfigCategorizedValuesItems(t *testing.T) {
 	raw := `{"items":[{"category":"SystemConfig","key":"a","value":"1","remark":"note"}]}`
-	got := deviceConfigCategorizedValues(raw)
+	got := DeviceConfigCategorizedValues(raw)
 	if got["SystemConfig"]["a"] != "1" {
 		t.Fatalf("items: %+v", got)
 	}
@@ -27,7 +27,7 @@ func TestDeviceConfigCategorizedValuesItems(t *testing.T) {
 
 func TestMergeDefaultConfigForDeviceActionProfileFirst(t *testing.T) {
 	extra := map[string]any{}
-	mergeDefaultConfigForDeviceAction(extra,
+	MergeDefaultConfigForDeviceAction(extra,
 		`{"SystemConfig":{"HistInterval":"99"}}`,
 		`{"SystemConfig":{"HistInterval":"15"}}`,
 	)
@@ -43,7 +43,7 @@ func TestMergeDefaultConfigForDeviceActionProfileFirst(t *testing.T) {
 
 func TestMergeDefaultConfigForDeviceActionProjectFallback(t *testing.T) {
 	extra := map[string]any{}
-	mergeDefaultConfigForDeviceAction(extra, "", `{"SystemConfig":{"HistInterval":"15"}}`)
+	MergeDefaultConfigForDeviceAction(extra, "", `{"SystemConfig":{"HistInterval":"15"}}`)
 	dc := extra["default_config"].(map[string]any)
 	sc := dc["SystemConfig"].(map[string]string)
 	if sc["HistInterval"] != "15" {
@@ -55,7 +55,7 @@ func TestMergeRestartRedeployConfigExtraVarsSingle(t *testing.T) {
 	dev := db.Device{ID: 7, Hostname: "host-a", IPAddress: "10.0.0.7"}
 	cfg := map[string]map[string]string{"SystemConfig": {"k": "v"}}
 	extra := map[string]any{}
-	mergeRestartRedeployConfigExtraVars(extra, []db.Device{dev}, map[int]map[string]map[string]string{
+	MergeRestartRedeployConfigExtraVars(extra, []db.Device{dev}, map[int]map[string]map[string]string{
 		7: cfg,
 	})
 	if extra["config"] == nil {

@@ -1,4 +1,4 @@
-package projects
+package server
 
 import (
 	"encoding/json"
@@ -7,10 +7,9 @@ import (
 	"github.com/semaphoreui/semaphore/db"
 )
 
-// deviceConfigCategorizedValues parses profile default_config_json or builds from
-// device items shape for Ansible: { "SystemConfig": {"k":"v"}, "Redeliver": {...} }.
-// Supports legacy categorized object or {"items":[{"category","key","value","remark"},...]}.
-func deviceConfigCategorizedValues(raw string) map[string]map[string]string {
+// DeviceConfigCategorizedValues parses profile default_config_json for Ansible:
+// { "SystemConfig": {"k":"v"}, "Redeliver": {...} } or items-array shape.
+func DeviceConfigCategorizedValues(raw string) map[string]map[string]string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
@@ -66,7 +65,7 @@ func deviceConfigCategorizedValues(raw string) map[string]map[string]string {
 }
 
 func defaultConfigForPlaybook(raw string) map[string]any {
-	cat := deviceConfigCategorizedValues(raw)
+	cat := DeviceConfigCategorizedValues(raw)
 	if cat == nil {
 		return nil
 	}
@@ -77,9 +76,9 @@ func defaultConfigForPlaybook(raw string) map[string]any {
 	return out
 }
 
-// mergeDefaultConfigForDeviceAction sets extraVars["default_config"] from device-profile
-// default_config_json first, then project-level default_config_json (same as bulk actions).
-func mergeDefaultConfigForDeviceAction(extraVars map[string]any, profileDefaultJSON, projectDefaultJSON string) {
+// MergeDefaultConfigForDeviceAction sets extraVars["default_config"] from device-profile
+// default_config_json first, then project-level default_config_json.
+func MergeDefaultConfigForDeviceAction(extraVars map[string]any, profileDefaultJSON, projectDefaultJSON string) {
 	if defaultConfig := defaultConfigForPlaybook(profileDefaultJSON); defaultConfig != nil {
 		extraVars["default_config"] = defaultConfig
 		return
@@ -89,9 +88,25 @@ func mergeDefaultConfigForDeviceAction(extraVars map[string]any, profileDefaultJ
 	}
 }
 
-// mergeRestartRedeployConfigExtraVars adds per-device config maps for Ansible playbooks.
+// BuildCategorizedDeviceConfig groups device config items for Ansible extra-vars.
+func BuildCategorizedDeviceConfig(items []db.DeviceConfigItem) map[string]map[string]string {
+	categorized := map[string]map[string]string{}
+	for _, it := range items {
+		cat := strings.TrimSpace(it.Category)
+		if cat == "" {
+			cat = "default"
+		}
+		if categorized[cat] == nil {
+			categorized[cat] = map[string]string{}
+		}
+		categorized[cat][it.Key] = it.Value
+	}
+	return categorized
+}
+
+// MergeRestartRedeployConfigExtraVars adds per-device config maps for Ansible playbooks.
 // Single-device actions also receive legacy "config"; bulk uses configs_by_host keyed by IP and hostname.
-func mergeRestartRedeployConfigExtraVars(
+func MergeRestartRedeployConfigExtraVars(
 	extraVars map[string]any,
 	devices []db.Device,
 	configByDeviceID map[int]map[string]map[string]string,
@@ -125,4 +140,30 @@ func mergeRestartRedeployConfigExtraVars(
 			extraVars["config"] = cfg
 		}
 	}
+}
+
+// MergeDeviceActionConfigExtraVars adds default_config and optional per-device configs
+// (same shape as RunBulkDeviceAction / RunDeviceAction restart extra-vars).
+func MergeDeviceActionConfigExtraVars(
+	store db.Store,
+	projectID int,
+	extraVars map[string]any,
+	devices []db.Device,
+	profileDefaultJSON, projectDefaultJSON string,
+	includePerDeviceConfig bool,
+) error {
+	MergeDefaultConfigForDeviceAction(extraVars, profileDefaultJSON, projectDefaultJSON)
+	if !includePerDeviceConfig || len(devices) == 0 {
+		return nil
+	}
+	configByDeviceID := map[int]map[string]map[string]string{}
+	for _, d := range devices {
+		items, err := store.GetDeviceConfigItems(projectID, d.ID)
+		if err != nil {
+			return err
+		}
+		configByDeviceID[d.ID] = BuildCategorizedDeviceConfig(items)
+	}
+	MergeRestartRedeployConfigExtraVars(extraVars, devices, configByDeviceID)
+	return nil
 }
