@@ -89,13 +89,13 @@
           device_status: >-
             {{ 'unhealthy' if (host_failure_reason is defined)
                else ('healthy' if not (_jhai_need_reconfigure | default(false) | bool)
-               else ('healthy' if (((_jhai_service_status | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING') and (jhai_upload_status_ok | default(false) | bool)
+               else ('healthy' if (((_jhai_service_status | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING') and (jhai_upload_status_ok | default(false) | bool) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool))
                else 'unhealthy')) }}
           winrm_status: online
           api_status: >-
             {{ 'offline' if (host_failure_reason is defined)
                else ('online' if not (_jhai_need_reconfigure | default(false) | bool)
-               else ('online' if (jhai_upload_status_ok | default(false) | bool) else 'offline')) }}
+               else ('online' if (jhai_upload_status_ok | default(false) | bool) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool)) else 'offline')) }}
           abnormal_reason: "{{ host_failure_reason | default('') }}"
       when: semaphore_callback_row is not defined
 

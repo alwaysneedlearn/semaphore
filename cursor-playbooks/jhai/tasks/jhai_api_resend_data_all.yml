@@ -20,10 +20,30 @@
   failed_when: false
   when: jhai_resend_all_requested | default(false) | bool
 
+- name: JHAI 解析全量重传响应
+  ansible.builtin.include_tasks: jhai_parse_api_response.yml
+  vars:
+    _jhai_uri_result: "{{ _jhai_api_resend_all }}"
+  when:
+    - _jhai_api_resend_all is defined
+    - not (_jhai_api_resend_all.skipped | default(false))
+
+- name: JHAI 登记全量重传结果
+  ansible.builtin.set_fact:
+    jhai_resend_all_http_ok: "{{ _jhai_api_http_ok | bool }}"
+    jhai_resend_all_code: "{{ _jhai_api_code }}"
+    jhai_resend_all_msg: "{{ _jhai_api_msg }}"
+    jhai_resend_all_ok: "{{ _jhai_api_ok | bool }}"
+  when:
+    - _jhai_api_resend_all is defined
+    - not (_jhai_api_resend_all.skipped | default(false))
+
 - name: DEBUG JHAI 重传全部数据结果
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_all http={{ _jhai_api_resend_all.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_all code={{ jhai_resend_all_code | default('n/a') }} ok={{ jhai_resend_all_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_all msg={{ jhai_resend_all_msg | default('') | truncate(200, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_all body={{ _jhai_api_resend_all.content | default('') | truncate(800, True) }}"
   when:
     - _jhai_api_resend_all is defined

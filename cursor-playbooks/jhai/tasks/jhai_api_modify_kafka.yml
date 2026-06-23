@@ -21,10 +21,30 @@
   failed_when: false
   when: (jhai_modify_kafka_cfg.kafkaConnectionInfo | default('') | trim) | length > 0
 
+- name: JHAI 解析修改 Kafka 响应
+  ansible.builtin.include_tasks: jhai_parse_api_response.yml
+  vars:
+    _jhai_uri_result: "{{ _jhai_api_modify_kafka }}"
+  when:
+    - _jhai_api_modify_kafka is defined
+    - not (_jhai_api_modify_kafka.skipped | default(false))
+
+- name: JHAI 登记修改 Kafka 结果
+  ansible.builtin.set_fact:
+    jhai_modify_kafka_http_ok: "{{ _jhai_api_http_ok | bool }}"
+    jhai_modify_kafka_code: "{{ _jhai_api_code }}"
+    jhai_modify_kafka_msg: "{{ _jhai_api_msg }}"
+    jhai_modify_kafka_ok: "{{ _jhai_api_ok | bool }}"
+  when:
+    - _jhai_api_modify_kafka is defined
+    - not (_jhai_api_modify_kafka.skipped | default(false))
+
 - name: DEBUG JHAI 修改 Kafka 配置结果
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] modify_kafka http={{ _jhai_api_modify_kafka.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] modify_kafka code={{ jhai_modify_kafka_code | default('n/a') }} ok={{ jhai_modify_kafka_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] modify_kafka msg={{ jhai_modify_kafka_msg | default('') | truncate(200, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] modify_kafka body={{ _jhai_api_modify_kafka.content | default('') | truncate(800, True) }}"
   when:
     - _jhai_api_modify_kafka is defined

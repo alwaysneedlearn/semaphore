@@ -1,0 +1,18 @@
+---
+# Parse JHAI HTTP API JSON body. Success = HTTP 200 and JSON code==200.
+# Vars: _jhai_uri_result (ansible.builtin.uri register).
+
+- name: JHAI 解析 API 响应 JSON code
+  ansible.builtin.set_fact:
+    _jhai_api_http_ok: "{{ _p_http_ok | bool }}"
+    _jhai_api_code: "{{ _p_code }}"
+    _jhai_api_msg: "{{ _p_msg }}"
+    _jhai_api_ok: "{{ _p_ok | bool }}"
+  vars:
+    _p_http_ok: "{{ (_jhai_uri_result.status | default(0) | int) == 200 }}"
+    _p_body: "{{ _jhai_uri_result.content | default('') | string }}"
+    _p_code_match: "{{ _p_body | regex_search('\"code\"\\s*:\\s*([0-9]+)') }}"
+    _p_code: "{{ (_p_code_match | default('') | regex_replace('^.*:\\s*', '') | trim) if (_p_code_match | default('') | length > 0) else '-1' }}"
+    _p_msg: "{{ (_p_body | regex_search('\"msg\"\\s*:\\s*\"([^\"]*)\"') | default('') | regex_replace('^.*\"msg\"\\s*:\\s*\"', '') | regex_replace('\"$', '')) }}"
+    _p_ok: "{{ (_p_http_ok | bool) and ((_p_code | int) == 200) }}"
+  failed_when: false

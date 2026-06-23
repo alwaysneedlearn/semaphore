@@ -37,9 +37,9 @@
         semaphore_callback_row:
           hostname: "{{ _jhai_dev.hostname | default('', true) }}"
           ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if (((_jhai_service_status.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'healthy' if (((_jhai_service_status.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool)) else 'unhealthy' }}"
           winrm_status: online
-          api_status: "{{ 'online' if ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) else 'offline' }}"
+          api_status: "{{ 'online' if ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool)) else 'offline' }}"
           abnormal_reason: ""
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"

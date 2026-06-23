@@ -13,3 +13,14 @@
 
 - name: JHAI 全量重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_all.yml"
+
+- name: JHAI 汇总配置 API 结果
+  ansible.builtin.set_fact:
+    jhai_config_apis_ok: "{{ _jhai_cfg_apis_ok | bool }}"
+  vars:
+    _jhai_cfg_apis_ok: >-
+      {{
+        (jhai_modify_kafka_ok is not defined or (jhai_modify_kafka_ok | default(false) | bool))
+        and (jhai_resend_part_ok is not defined or (jhai_resend_part_ok | default(false) | bool))
+        and (jhai_resend_all_ok is not defined or (jhai_resend_all_ok | default(false) | bool))
+      }}

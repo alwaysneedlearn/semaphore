@@ -1,5 +1,5 @@
 ---
-# After service start: poll POST /api/get_upload_status until JSON code==200.
+# After service start: poll POST /api/get_upload_status until HTTP 200 and JSON code==200.
 
 - name: 启动后轮询 JHAI 上传心跳（get_upload_status）
   ansible.builtin.uri:
@@ -21,27 +21,24 @@
   retries: "{{ jhai_upload_status_start_poll_retries | default(6) | int }}"
   delay: "{{ jhai_upload_status_start_poll_delay | default(10) | int }}"
 
+- name: JHAI 解析启动后轮询响应
+  ansible.builtin.include_tasks: jhai_parse_api_response.yml
+  vars:
+    _jhai_uri_result: "{{ _jhai_upload_status }}"
+
 - name: JHAI 登记启动后轮询结果
   ansible.builtin.set_fact:
-    jhai_upload_status_http_ok: "{{ _hb_http_ok | bool }}"
-    jhai_upload_status_code: "{{ _hb_api_code }}"
-    jhai_upload_status_msg: "{{ _hb_api_msg }}"
-    jhai_upload_status_ok: "{{ _hb_ok | bool }}"
+    jhai_upload_status_http_ok: "{{ _jhai_api_http_ok | bool }}"
+    jhai_upload_status_code: "{{ _jhai_api_code }}"
+    jhai_upload_status_msg: "{{ _jhai_api_msg }}"
+    jhai_upload_status_ok: "{{ _jhai_api_ok | bool }}"
     _jhai_api_status: "{{ _jhai_upload_status }}"
-  vars:
-    _hb_http_ok: "{{ (_jhai_upload_status.status | default(0) | int) == 200 }}"
-    _hb_body: "{{ _jhai_upload_status.content | default('') | string }}"
-    _hb_code_match: "{{ _hb_body | regex_search('\"code\"\\s*:\\s*([0-9]+)') }}"
-    _hb_api_code: "{{ (_hb_code_match | default('') | regex_replace('^.*:\\s*', '') | trim) if (_hb_code_match | default('') | length > 0) else '-1' }}"
-    _hb_api_msg: "{{ (_hb_body | regex_search('\"msg\"\\s*:\\s*\"([^\"]*)\"') | default('') | regex_replace('^.*\"msg\"\\s*:\\s*\"', '') | regex_replace('\"$', '')) }}"
-    _hb_ok: "{{ (_hb_http_ok | bool) and ((_hb_api_code | int) == 200) }}"
-  failed_when: false
 
 - name: DEBUG JHAI 启动后上传心跳轮询
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] upload_status_poll retries={{ jhai_upload_status_start_poll_retries | default(6) }} delay_s={{ jhai_upload_status_start_poll_delay | default(10) }}"
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] upload_status_poll attempts={{ _jhai_upload_status.attempts | default(1) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] upload_status_poll ok={{ jhai_upload_status_ok | default(false) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] upload_status_poll code={{ jhai_upload_status_code | default('n/a') }} msg={{ jhai_upload_status_msg | default('') | truncate(120, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] upload_status_poll http_ok={{ jhai_upload_status_http_ok | default(false) }} code={{ jhai_upload_status_code | default('n/a') }} ok={{ jhai_upload_status_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] upload_status_poll msg={{ jhai_upload_status_msg | default('') | truncate(120, True) }}"
   when: _jhai_upload_status is defined

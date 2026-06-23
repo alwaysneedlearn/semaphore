@@ -32,11 +32,31 @@
     - (_jhai_resend_start | default('') | length) > 0
     - (_jhai_resend_end | default('') | length) > 0
 
+- name: JHAI 解析分段重传响应
+  ansible.builtin.include_tasks: jhai_parse_api_response.yml
+  vars:
+    _jhai_uri_result: "{{ _jhai_api_resend_part }}"
+  when:
+    - _jhai_api_resend_part is defined
+    - not (_jhai_api_resend_part.skipped | default(false))
+
+- name: JHAI 登记分段重传结果
+  ansible.builtin.set_fact:
+    jhai_resend_part_http_ok: "{{ _jhai_api_http_ok | bool }}"
+    jhai_resend_part_code: "{{ _jhai_api_code }}"
+    jhai_resend_part_msg: "{{ _jhai_api_msg }}"
+    jhai_resend_part_ok: "{{ _jhai_api_ok | bool }}"
+  when:
+    - _jhai_api_resend_part is defined
+    - not (_jhai_api_resend_part.skipped | default(false))
+
 - name: DEBUG JHAI 分段重传结果
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part start={{ _jhai_resend_start }} end={{ _jhai_resend_end }}"
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part http={{ _jhai_api_resend_part.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part code={{ jhai_resend_part_code | default('n/a') }} ok={{ jhai_resend_part_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part msg={{ jhai_resend_part_msg | default('') | truncate(200, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part body={{ _jhai_api_resend_part.content | default('') | truncate(800, True) }}"
   when:
     - _jhai_api_resend_part is defined

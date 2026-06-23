@@ -19,12 +19,12 @@
 
 ## HTTP API（默认端口 9002）
 
-| 接口 | 方法 | Body | 健康/成功 |
+| 接口 | 方法 | Body | 成功条件 |
 |------|------|------|-----------|
-| `/api/get_upload_status` | POST | `{}` | HTTP 200 且 JSON `code==200` |
-| `/api/modify_kafka_configuration` | POST | `{"kafkaConnectionInfo":"host:9092,..."}` | HTTP 200 |
-| `/api/resend_data_part` | POST | `{"testStartTime":"...","testEndTime":"..."}` | HTTP 200 |
-| `/api/resend_data_all` | POST | `{}` | HTTP 200 |
+| `/api/get_upload_status` | POST | `{}` | HTTP **200** 且 JSON **`code==200`** |
+| `/api/modify_kafka_configuration` | POST | `{"kafkaConnectionInfo":"host:9092,..."}` | HTTP **200** 且 JSON **`code==200`** |
+| `/api/resend_data_part` | POST | `{"testStartTime":"...","testEndTime":"..."}` | HTTP **200** 且 JSON **`code==200`** |
+| `/api/resend_data_all` | POST | `{}` | HTTP **200** 且 JSON **`code==200`** |
 
 设备 `api_port` 优先于变量组 `JHAI_API_PORT` / `API_PORT`。
 

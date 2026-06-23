@@ -1,5 +1,5 @@
 ---
-# POST /api/get_upload_status — upload heartbeat. Sets _jhai_upload_status, jhai_upload_status_*.
+# POST /api/get_upload_status — upload heartbeat. Sets jhai_upload_status_*.
 
 - name: JHAI 查询上传心跳（get_upload_status）
   ansible.builtin.uri:
@@ -15,18 +15,15 @@
   delegate_to: localhost
   failed_when: false
 
-- name: JHAI 解析上传心跳 JSON
-  ansible.builtin.set_fact:
-    jhai_upload_status_http_ok: "{{ _hb_http_ok | bool }}"
-    jhai_upload_status_code: "{{ _hb_api_code }}"
-    jhai_upload_status_msg: "{{ _hb_api_msg }}"
-    jhai_upload_status_ok: "{{ _hb_ok | bool }}"
-    _jhai_api_status: "{{ _jhai_upload_status }}"
+- name: JHAI 解析上传心跳响应
+  ansible.builtin.include_tasks: jhai_parse_api_response.yml
   vars:
-    _hb_http_ok: "{{ (_jhai_upload_status.status | default(0) | int) == 200 }}"
-    _hb_body: "{{ _jhai_upload_status.content | default('') | string }}"
-    _hb_code_match: "{{ _hb_body | regex_search('\"code\"\\s*:\\s*([0-9]+)') }}"
-    _hb_api_code: "{{ (_hb_code_match | default('') | regex_replace('^.*:\\s*', '') | trim) if (_hb_code_match | default('') | length > 0) else '-1' }}"
-    _hb_api_msg: "{{ (_hb_body | regex_search('\"msg\"\\s*:\\s*\"([^\"]*)\"') | default('') | regex_replace('^.*\"msg\"\\s*:\\s*\"', '') | regex_replace('\"$', '')) }}"
-    _hb_ok: "{{ (_hb_http_ok | bool) and ((_hb_api_code | int) == 200) }}"
-  failed_when: false
+    _jhai_uri_result: "{{ _jhai_upload_status }}"
+
+- name: JHAI 登记上传心跳结果
+  ansible.builtin.set_fact:
+    jhai_upload_status_http_ok: "{{ _jhai_api_http_ok | bool }}"
+    jhai_upload_status_code: "{{ _jhai_api_code }}"
+    jhai_upload_status_msg: "{{ _jhai_api_msg }}"
+    jhai_upload_status_ok: "{{ _jhai_api_ok | bool }}"
+    _jhai_api_status: "{{ _jhai_upload_status }}"
