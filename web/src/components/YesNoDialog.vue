@@ -7,6 +7,15 @@
       <v-card-title class="headline">{{ title }}</v-card-title>
 
       <v-card-text>
+        <v-alert
+          v-if="warningText"
+          type="warning"
+          dense
+          prominent
+          class="mb-3"
+        >
+          {{ warningText }}
+        </v-alert>
         <slot>{{ text }}</slot>
       </v-card-text>
 
@@ -44,6 +53,7 @@ export default {
     noButtonTitle: String,
     hideNoButton: Boolean,
     maxWidth: Number,
+    warningText: String,
   },
 
   data() {

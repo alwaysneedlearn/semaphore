@@ -192,6 +192,7 @@
     <YesNoDialog
       :title="$t('deviceActionConfirmTitle')"
       :text="deviceActionConfirmText"
+      :warning-text="$t('deviceActionRiskWarning')"
       v-model="deviceActionConfirmDialog"
       :yes-button-title="$t('confirmTask')"
       @yes="executePendingDeviceAction()"

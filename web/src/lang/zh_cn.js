@@ -471,6 +471,7 @@ export default {
   deviceOperationSuccess: '成功',
   deviceOperationFailed: '失败',
   deviceActionConfirmTitle: '确认设备操作',
+  deviceActionRiskWarning: '该操作有风险，请谨慎执行。',
   deviceActionConfirmSingle: '确认对 {host}（{ip}）执行「{action}」？',
   deviceActionConfirmBulk: '确认对已选 {count} 台设备执行「{action}」？',
   deviceActionConfirmMultiType: '所选设备包含 {n} 种设备类型，将创建 {n} 个独立任务。',

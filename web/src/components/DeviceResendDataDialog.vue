@@ -6,6 +6,9 @@
         {{ $t('deviceResendData') }}
       </v-card-title>
       <v-card-text>
+        <v-alert type="warning" dense prominent class="mb-3">
+          {{ $t('deviceActionRiskWarning') }}
+        </v-alert>
         <p v-if="deviceSummary" class="caption mb-3">{{ deviceSummary }}</p>
         <v-alert v-if="formatHint" type="info" dense text class="mb-3">
           {{ formatHint }}

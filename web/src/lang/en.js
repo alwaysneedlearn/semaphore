@@ -545,6 +545,7 @@ export default {
   deviceOperationSuccess: 'Success',
   deviceOperationFailed: 'Failed',
   deviceActionConfirmTitle: 'Confirm device action',
+  deviceActionRiskWarning: 'This operation is risky. Proceed with caution.',
   deviceActionConfirmSingle: 'Run "{action}" on {host} ({ip})?',
   deviceActionConfirmBulk: 'Run "{action}" on {count} selected device(s)?',
   deviceActionConfirmMultiType:
