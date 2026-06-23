@@ -6,17 +6,18 @@
     msg: "{{ _patrol_dbg_lines }}"
   vars:
     _tag: "{{ sem_debug_tag | default('DEVICE') }}"
-    _sem_dbg_path_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat, true), true) }}"
-    _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check | default(_nbt_service_status, true), true), true) }}"
+    _sem_dbg_path_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat | default(_jhai_start_exe_stat, true), true), true) }}"
+    _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check | default(_nbt_service_status | default(_jhai_service_status, true), true), true), true) }}"
     _sem_dbg_install_path: >-
       {% if service_path is defined and (service_path | string | trim) | length > 0 %}{{ service_path }}
       {% elif exe_path is defined %}{{ exe_path }}
       {% elif exe_dir is defined and exe_name is defined %}{{ [exe_dir, exe_name] | join('\\') }}
       {% else %}n/a{% endif %}
-    _sem_dbg_api_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(_nbt_target_host | default(inventory_hostname, true), true), true) }}"
+    _sem_dbg_api_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(_nbt_target_host | default(_jhai_target_host | default(inventory_hostname, true), true), true), true) }}"
     _sem_dbg_api_ok: >-
       {% if _sinexcel_kafka_api_ok is defined %}{{ _sinexcel_kafka_api_ok | default(false) }}
       {% elif _nbt_heartbeat is defined %}{{ nbt_heartbeat_ok | default(false) }}
+      {% elif _jhai_upload_status is defined %}{{ jhai_upload_status_ok | default(false) }}
       {% elif land_api_status_ok is defined %}{{ land_api_status_ok | default(false) }}
       {% elif _land_api_status_raw is defined %}{{ land_api_status_ok | default(false) }}
       {% else %}n/a{% endif %}
@@ -63,11 +64,21 @@
         )
         + (
           [
+            '[DEBUG-' ~ _tag ~ '] api POST ' ~ (jhai_api_scheme | default('http')) ~ '://' ~ (_jhai_target_host | default(inventory_hostname))
+              ~ ':' ~ (jhai_api_port | default(9002) | string) ~ (jhai_api_upload_status_path | default('/api/get_upload_status'))
+              ~ ' http=' ~ (_jhai_upload_status.status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] upload_status code=' ~ (jhai_upload_status_code | default('n/a') | string)
+              ~ ' msg=' ~ (jhai_upload_status_msg | default('') | truncate(120, True)),
+            '[DEBUG-' ~ _tag ~ '] upload_status ok=' ~ (jhai_upload_status_ok | default(false) | string)
+          ] if ((_tag == 'JHAI') and (_jhai_upload_status is defined)) else []
+        )
+        + (
+          [
             '[DEBUG-' ~ _tag ~ '] api_status_ok=' ~ (_sem_dbg_api_ok | string),
             '[DEBUG-' ~ _tag ~ '] need_reconfigure=' ~ (need_reconfigure | default(_nbt_need_reconfigure | default('n/a')) | string),
             '[DEBUG-' ~ _tag ~ '] abnormal_reason=' ~ (semaphore_callback_row.abnormal_reason | default('') | trim if (semaphore_callback_row is defined) else '')
-          ] if (_sinexcel_kafka_api_ok is defined or _nbt_heartbeat is defined or _land_api_status is defined
-                  or need_reconfigure is defined or _nbt_need_reconfigure is defined) else []
+          ] if (_sinexcel_kafka_api_ok is defined or _nbt_heartbeat is defined or _jhai_upload_status is defined
+                  or _land_api_status is defined or need_reconfigure is defined or _nbt_need_reconfigure is defined) else []
         )
         + (
           [
@@ -80,5 +91,5 @@
       }}
   when: >
     _sem_dbg_path_stat is defined or _sem_dbg_process is defined or _sinexcel_kafka_query_raw is defined or
-    _land_api_status is defined or _land_api_status_raw is defined or _nbt_heartbeat is defined or semaphore_callback_row is defined or
-    need_reconfigure is defined
+    _land_api_status is defined or _land_api_status_raw is defined or _nbt_heartbeat is defined or _jhai_upload_status is defined or
+    semaphore_callback_row is defined or need_reconfigure is defined
