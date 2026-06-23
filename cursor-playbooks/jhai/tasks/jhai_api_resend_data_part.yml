@@ -1,21 +1,16 @@
 ---
 # POST /api/resend_data_part — partial resend, no service restart.
+# Requires non-empty testStartTime and testEndTime (set by jhai_prepare_merged_cfg).
 
 - name: 准备 JHAI 配置分类
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
-  when: jhai_resend_part_cfg is not defined or jhai_resend_all_requested is not defined
-
-- name: DEBUG JHAI 跳过分段重传（全量重传优先）
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part skipped: ResendDataAll=true (full resend only)"
-  when: jhai_resend_all_requested | default(false) | bool
+  when: jhai_resend_part_requested is not defined
 
 - name: 解析 JHAI 分段重传时间
   ansible.builtin.set_fact:
     _jhai_resend_start: "{{ jhai_resend_part_cfg.testStartTime | default(jhai_resend_part_cfg.startTime | default('')) | trim }}"
     _jhai_resend_end: "{{ jhai_resend_part_cfg.testEndTime | default(jhai_resend_part_cfg.endTime | default('')) | trim }}"
-  when: not (jhai_resend_all_requested | default(false) | bool)
+  when: jhai_resend_part_requested | default(false) | bool
 
 - name: JHAI 分段重传数据（HTTP API）
   ansible.builtin.uri:
@@ -33,7 +28,7 @@
   delegate_to: localhost
   failed_when: false
   when:
-    - not (jhai_resend_all_requested | default(false) | bool)
+    - jhai_resend_part_requested | default(false) | bool
     - (_jhai_resend_start | default('') | length) > 0
     - (_jhai_resend_end | default('') | length) > 0
 

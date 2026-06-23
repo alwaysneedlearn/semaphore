@@ -1,19 +1,20 @@
 ---
 # Split merged_cfg by Semaphore category for JHAI HTTP API calls (no service restart).
-# ResendData.ResendDataAll=true → full resend only; partial time range is ignored.
+# ResendData.ResendDataAll=true → full resend only; partial requires testStartTime + testEndTime.
 
 - name: 拆分 JHAI 配置分类
   ansible.builtin.set_fact:
     jhai_modify_kafka_cfg: "{{ merged_cfg.ModifyKafka | default(merged_cfg.KafkaConfig | default({})) }}"
     jhai_resend_all_requested: "{{ _jhai_resend_all_requested | bool }}"
+    jhai_resend_part_requested: "{{ _jhai_resend_part_requested | bool }}"
     jhai_resend_part_cfg: "{{ _jhai_resend_part_effective }}"
-    jhai_resend_all_cfg: "{{ merged_cfg.ResendDataAll | default({}) }}"
   vars:
     _jhai_resend_data_cfg: "{{ merged_cfg.ResendData | default({}) }}"
     _jhai_resend_part_cat: "{{ merged_cfg.ResendDataPart | default({}) }}"
-    _jhai_resend_all_cat: "{{ merged_cfg.ResendDataAll | default({}) }}"
-    _jhai_resend_all_flag_rd: "{{ _jhai_resend_data_cfg.ResendDataAll | default(_jhai_resend_part_cat.ResendDataAll | default(false, true), true) | bool }}"
-    _jhai_resend_all_flag_cat: "{{ (_jhai_resend_all_cat | length) > 0 }}"
-    _jhai_resend_all_requested: "{{ (_jhai_resend_all_flag_rd | bool) or (_jhai_resend_all_flag_cat | bool) }}"
+    _jhai_resend_all_requested: "{{ _jhai_resend_data_cfg.ResendDataAll | default(_jhai_resend_part_cat.ResendDataAll | default(false, true), true) | bool }}"
     _jhai_resend_part_raw: "{{ _jhai_resend_part_cat if (_jhai_resend_part_cat | length > 0) else _jhai_resend_data_cfg }}"
-    _jhai_resend_part_effective: "{{ {} if (_jhai_resend_all_requested | bool) else _jhai_resend_part_raw }}"
+    _jhai_part_start: "{{ _jhai_resend_part_raw.testStartTime | default(_jhai_resend_part_raw.startTime | default('')) | trim }}"
+    _jhai_part_end: "{{ _jhai_resend_part_raw.testEndTime | default(_jhai_resend_part_raw.endTime | default('')) | trim }}"
+    _jhai_resend_part_has_times: "{{ ((_jhai_part_start | length) > 0) and ((_jhai_part_end | length) > 0) }}"
+    _jhai_resend_part_requested: "{{ (not (_jhai_resend_all_requested | bool)) and (_jhai_resend_part_has_times | bool) }}"
+    _jhai_resend_part_effective: "{{ _jhai_resend_part_raw if (_jhai_resend_part_requested | bool) else {} }}"

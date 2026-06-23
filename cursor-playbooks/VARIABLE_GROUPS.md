@@ -135,7 +135,7 @@ SEMAPHORE_API_TOKEN=<token>
 TDENGINE_TAG_SUPPLIER=jhai
 ```
 
-设备配置分类：`ModifyKafka.kafkaConnectionInfo`、`ResendData.ResendDataAll=true`（全量重传，忽略时间段）、`ResendData`/`ResendDataPart` 的 `testStartTime`/`testEndTime`（分段重传）、或独立 `ResendDataAll` 分类（非空即全量）。详见 [`jhai/README.md`](jhai/README.md)。
+设备配置分类：`ModifyKafka.kafkaConnectionInfo`、`ResendData.ResendDataAll=true`（全量重传，忽略时间段）、`ResendData`/`ResendDataPart` 的 `testStartTime` 与 `testEndTime`（**均有值**时分段重传）。详见 [`jhai/README.md`](jhai/README.md)。
 
 ### NEWARE
 

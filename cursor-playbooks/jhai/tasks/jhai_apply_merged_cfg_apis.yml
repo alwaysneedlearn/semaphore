@@ -9,7 +9,7 @@
 
 - name: JHAI 分段重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_part.yml"
-  when: not (jhai_resend_all_requested | default(false) | bool)
+  when: jhai_resend_part_requested | default(false) | bool
 
 - name: JHAI 全量重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_all.yml"
