@@ -69,35 +69,6 @@
       :device="operationHistoryDevice"
     />
 
-    <v-dialog v-model="reasonDialog" max-width="700">
-      <v-card>
-        <v-card-title>
-          {{ $t('deviceAbnormalReason') }} - {{ reasonDeviceHostname }}
-        </v-card-title>
-        <v-card-text>
-          <v-alert dense type="warning" v-if="reasonError">{{ reasonError }}</v-alert>
-          <div class="mb-2">
-            <strong>{{ $t('deviceStatus') }}:</strong> {{ reasonData.device_status || '-' }}
-          </div>
-          <div class="mb-4">
-            <strong>{{ $t('deviceAbnormalReason') }}:</strong>
-            {{ reasonData.abnormal_reason || $t('deviceReasonEmpty') }}
-          </div>
-          <v-data-table
-            :headers="reasonHeaders"
-            :items="reasonData.logs || []"
-            dense
-            hide-default-footer
-            :items-per-page="Number.MAX_VALUE"
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn text @click="reasonDialog = false">{{ $t('close') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <v-toolbar flat>
       <v-app-bar-nav-icon @click="showDrawer()"></v-app-bar-nav-icon>
       <v-toolbar-title>{{ $t('devices') }}</v-toolbar-title>
@@ -499,13 +470,6 @@
           <v-btn :title="$t('deviceConfig')" @click="openConfigDialog(item)">
             <v-icon>mdi-cog</v-icon>
           </v-btn>
-          <v-btn
-            :title="$t('deviceAbnormalReason')"
-            :disabled="item.device_status === 'healthy'"
-            @click="openReasonDialog(item)"
-          >
-            <v-icon>mdi-alert-circle-outline</v-icon>
-          </v-btn>
           <v-btn :title="$t('edit')" @click="editItem(item.id)">
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
@@ -556,18 +520,6 @@ export default {
       winrmDevice: null,
       operationHistoryDialog: false,
       operationHistoryDevice: null,
-      reasonDialog: false,
-      reasonError: '',
-      reasonDeviceHostname: '',
-      reasonData: {},
-      reasonHeaders: [
-        { text: this.$i18n.t('deviceLastUpdated'), value: 'created' },
-        { text: this.$i18n.t('deviceStatus'), value: 'status' },
-        { text: this.$i18n.t('deviceRdpStatus'), value: 'rdp_status' },
-        { text: this.$i18n.t('deviceWinrmStatus'), value: 'winrm_status' },
-        { text: this.$i18n.t('deviceApiStatus'), value: 'api_status' },
-        { text: this.$i18n.t('deviceAbnormalReason'), value: 'abnormal_reason' },
-      ],
       selectedDeviceIds: [],
       totalDevices: 0,
       devicesLoading: false,
@@ -1194,18 +1146,6 @@ export default {
       }
       if (this.winrmDevice && this.winrmDevice.id === device.id) {
         this.winrmDevice = { ...this.winrmDevice, ...device };
-      }
-    },
-    async openReasonDialog(device) {
-      this.reasonDialog = true;
-      this.reasonDeviceHostname = device.hostname;
-      this.reasonError = '';
-      this.reasonData = {};
-      try {
-        const res = await axios.get(`${this.getItemsUrl()}/${device.id}/status/reason`);
-        this.reasonData = res.data || {};
-      } catch (e) {
-        this.reasonError = getErrorMessage(e);
       }
     },
   },

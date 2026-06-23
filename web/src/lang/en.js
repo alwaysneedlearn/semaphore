@@ -580,8 +580,6 @@ export default {
   deviceTaskQueuedSuffix: 'queued',
   deviceTasksQueuedPrefix: 'Tasks',
   deviceTasksQueuedSuffix: 'queued (one per device type)',
-  deviceAbnormalReason: 'Abnormal reason',
-  deviceReasonEmpty: 'No abnormal reason recorded.',
   deviceBulkOps: 'Bulk operations',
   deviceBulkDeleteConfirm: 'Delete {count} selected devices?',
   deviceFilterHostname: 'Filter by hostname',

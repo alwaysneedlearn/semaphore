@@ -232,23 +232,6 @@ func GetDevice(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
 
-func GetDeviceStatusReason(w http.ResponseWriter, r *http.Request) {
-	device := helpers.GetFromContext(r, "device").(db.Device)
-	normalizeDeviceStatuses(&device)
-	logs, err := helpers.Store(r).GetDeviceStatusCallbackLogs(device.ProjectID, device.ID, 20)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"hostname":        device.Hostname,
-		"device_status":   device.DeviceStatus,
-		"abnormal_reason": device.AbnormalReason,
-		"last_updated":    device.LastUpdated,
-		"logs":            logs,
-	})
-}
-
 // GetDeviceStatsHandler returns aggregate counts for the project's devices.
 func GetDeviceStatsHandler(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)

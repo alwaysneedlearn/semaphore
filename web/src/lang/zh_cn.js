@@ -505,8 +505,6 @@ export default {
   deviceTaskQueuedSuffix: '已排队',
   deviceTasksQueuedPrefix: '任务',
   deviceTasksQueuedSuffix: '已排队（按设备类型各一任务）',
-  deviceAbnormalReason: '异常原因',
-  deviceReasonEmpty: '未记录异常原因',
   deviceBulkOps: '批量操作',
   deviceBulkDeleteConfirm: '确认删除已选 {count} 台设备？',
   deviceFilterHostname: '按主机名筛选',
