@@ -8,6 +8,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: JHAI
+    sem_operation_type: restart
     jhai_service_stop_first: true
     jhai_include_config_apis: true
     _devices_from_extra: "{{ devices | default([]) }}"
@@ -78,6 +79,11 @@
             or (not (jhai_upload_status_ok | default(false) | bool))
           }}
 
+    - name: 标记 restart 已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: _jhai_need_reconfigure | default(false) | bool
+
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_service_stop_start.yml"
       when: _jhai_need_reconfigure | default(false) | bool
 
@@ -99,6 +105,9 @@
           abnormal_reason: "{{ host_failure_reason | default('') }}"
       when: semaphore_callback_row is not defined
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: sem_operation_restart_performed | default(false) | bool
+
 - name: 写回 Semaphore 设备状态
   hosts: localhost
   gather_facts: false
@@ -107,3 +116,4 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

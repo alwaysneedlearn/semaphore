@@ -7,6 +7,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: restart
     sem_debug_tag: NEWARE
     _exe_name_default: uu.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
@@ -192,6 +193,8 @@
       when: not (api_upload_status_ok | default(false) | bool)
 
     - block:
+        - ansible.builtin.set_fact:
+            sem_operation_restart_performed: true
         - ansible.builtin.include_tasks: tasks/neware_config_start_verify.yml
       when: need_reconfigure | default(false) | bool
       rescue:
@@ -215,6 +218,9 @@
           abnormal_reason: "{{ host_failure_reason | default('') }}"
       when: semaphore_callback_row is not defined
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: sem_operation_restart_performed | default(false) | bool
+
     - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
       when: semaphore_callback_row is defined
 
@@ -225,3 +231,4 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

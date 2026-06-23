@@ -10,6 +10,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: SINEXCEL
+    sem_operation_type: restart
     ini_agent_force_stop: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
@@ -121,6 +122,11 @@
             )
           }}
 
+    - name: 标记 restart 已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: _sinexcel_need_reconfigure | default(false) | bool
+
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_config_stop_start.yml"
       when: _sinexcel_need_reconfigure | default(false) | bool
 
@@ -142,6 +148,9 @@
           abnormal_reason: "{{ host_failure_reason | default('') }}"
       when: semaphore_callback_row is not defined
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: sem_operation_restart_performed | default(false) | bool
+
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
       when: _sinexcel_need_reconfigure | default(false) | bool
 
@@ -153,3 +162,4 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"
