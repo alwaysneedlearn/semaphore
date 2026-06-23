@@ -1,11 +1,15 @@
 ---
 # Apply Kafka / resend HTTP APIs from merged_cfg (never restarts the Windows service).
 
+- name: 准备 JHAI 合并配置（Kafka / 重传分类）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
+
 - name: JHAI 应用配置（Kafka / 重传，仅 HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_modify_kafka.yml"
 
 - name: JHAI 分段重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_part.yml"
+  when: not (jhai_resend_all_requested | default(false) | bool)
 
 - name: JHAI 全量重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_all.yml"

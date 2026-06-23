@@ -57,7 +57,8 @@ TDENGINE_TAG_SUPPLIER=jhai
 | Category | 字段 | API |
 |----------|------|-----|
 | `ModifyKafka` 或 `KafkaConfig` | `kafkaConnectionInfo` | `POST /api/modify_kafka_configuration` |
-| `ResendDataPart` 或 `ResendData` | `testStartTime`, `testEndTime` | `POST /api/resend_data_part` |
+| `ResendData` | `ResendDataAll: true` | `POST /api/resend_data_all`（**忽略**同分类下的 `testStartTime`/`testEndTime`） |
+| `ResendDataPart` 或 `ResendData` | `testStartTime`, `testEndTime` | `POST /api/resend_data_part`（`ResendDataAll` 为 true 时不执行） |
 | `ResendDataAll` | 任意非空分类 | `POST /api/resend_data_all` |
 
 `device_restart` / `device_check_restart` 在服务 **Running** 后调用上述 API（`jhai_include_config_apis=true`）。修改 Kafka / 重传**不会**再次 restart 服务。

@@ -3,7 +3,7 @@
 
 - name: 准备 JHAI 配置分类
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
-  when: jhai_resend_all_cfg is not defined
+  when: jhai_resend_all_requested is not defined
 
 - name: JHAI 重传全部数据（HTTP API）
   ansible.builtin.uri:
@@ -18,7 +18,7 @@
   register: _jhai_api_resend_all
   delegate_to: localhost
   failed_when: false
-  when: (jhai_resend_all_cfg | default({}) | length) > 0
+  when: jhai_resend_all_requested | default(false) | bool
 
 - name: DEBUG JHAI 重传全部数据结果
   ansible.builtin.debug:
