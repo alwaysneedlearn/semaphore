@@ -193,6 +193,8 @@
       when: not (api_upload_status_ok | default(false) | bool)
 
     - block:
+        - ansible.builtin.set_fact:
+            sem_operation_restart_performed: true
         - ansible.builtin.include_tasks: tasks/neware_config_start_verify.yml
       when: need_reconfigure | default(false) | bool
       rescue:

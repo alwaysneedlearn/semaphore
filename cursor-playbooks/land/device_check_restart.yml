@@ -113,6 +113,11 @@
             or (not (land_api_status_ok | default(false) | bool))
           }}
 
+    - name: 标记 restart 已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: _land_need_reconfigure | default(false) | bool
+
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
       when: _land_need_reconfigure | default(false) | bool
 

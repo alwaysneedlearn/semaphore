@@ -8,6 +8,7 @@
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_operation_type: redeploy
+    sem_operation_force_log: true
     sem_debug_tag: NEWARE
     _exe_name_default: uu.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"

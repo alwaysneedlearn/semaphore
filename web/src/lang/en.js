@@ -520,7 +520,7 @@ export default {
   deviceRedeploy: 'Redeploy',
   deviceDetailTitle: 'Device details',
   deviceOperationStatus: 'Status check',
-  deviceOperationHistoryHint: 'Unhealthy outcomes from status patrol, restart, redeploy, and check-restart for the last 30 days (playbook callbacks).',
+  deviceOperationHistoryHint: 'Last 30 days: all restart/redeploy runs; status patrol and check-restart when unhealthy or restart executed (playbook callbacks).',
   deviceOperationHistoryEmpty: 'No operation history',
   deviceOperationSummary: 'Summary',
   deviceOperationStep: 'Step',

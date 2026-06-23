@@ -79,6 +79,11 @@
             or (not (jhai_upload_status_ok | default(false) | bool))
           }}
 
+    - name: 标记 restart 已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: _jhai_need_reconfigure | default(false) | bool
+
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_service_stop_start.yml"
       when: _jhai_need_reconfigure | default(false) | bool
 

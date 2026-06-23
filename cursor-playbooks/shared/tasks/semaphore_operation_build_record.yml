@@ -1,14 +1,24 @@
 ---
-# Build semaphore_operation_record when semaphore_callback_row.device_status is unhealthy.
-# Play vars: sem_operation_type = restart | redeploy | status
+# Build semaphore_operation_record for device operation history.
+# Play vars:
+#   sem_operation_type = restart | redeploy | status
+#   sem_operation_force_log = true  → always log (manual restart/redeploy)
+#   sem_operation_restart_performed = true → check_restart ran restart
+# Logs when: force_log OR callback unhealthy OR restart_performed (check_restart).
 
 - name: 组装设备操作步骤
   ansible.builtin.set_fact:
     semaphore_operation_steps: "{{ _op_steps }}"
-  when: _cb_unhealthy | bool
+  when: _should_log | bool
   vars:
     _cb: "{{ semaphore_callback_row | default({}) }}"
     _cb_unhealthy: "{{ (_cb.device_status | default('') | string) == 'unhealthy' }}"
+    _should_log: >-
+      {{
+        (sem_operation_force_log | default(false) | bool)
+        or (_cb_unhealthy | bool)
+        or (sem_operation_restart_performed | default(false) | bool)
+      }}
     _op_type: "{{ sem_operation_type | default('restart') }}"
     _svc_out: "{{ ((_jhai_service_status | default(_nbt_service_status | default(_land_process_check | default(_sinexcel_process_check | default({}, true), true), true), true)).stdout | default('')) | trim }}"
     _svc_running: "{{ (_svc_out.split('|') | first) == 'RUNNING' if (_svc_out | length > 0) else (final_start_ok | default(false) | bool) }}"
@@ -97,16 +107,30 @@
 
 - name: 计算操作结果摘要
   ansible.builtin.set_fact:
-    _op_result: failed
+    _op_result: "{{ _result }}"
     _op_summary: "{{ _summary | truncate(500, True) }}"
     _op_hostname: "{{ _dev.hostname | default('', true) }}"
     _op_ip: "{{ _dev.ip | default(inventory_hostname, true) }}"
     _op_task_id: "{{ (semaphore_task_id | default(0)) | int }}"
-  when: _cb_unhealthy | bool
+  when: _should_log | bool
   vars:
     _cb: "{{ semaphore_callback_row | default({}) }}"
     _cb_unhealthy: "{{ (_cb.device_status | default('') | string) == 'unhealthy' }}"
+    _should_log: >-
+      {{
+        (sem_operation_force_log | default(false) | bool)
+        or (_cb_unhealthy | bool)
+        or (sem_operation_restart_performed | default(false) | bool)
+      }}
     _dev: "{{ _semaphore_device_rows | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+    _result: >-
+      {{
+        'failed' if (host_failure_reason is defined)
+        else (
+          'success' if ((_cb.device_status | default('unhealthy') | string) == 'healthy')
+          else 'failed'
+        )
+      }}
     _summary: >-
       {{
         host_failure_reason | default('')
@@ -114,7 +138,10 @@
         else (
           (_cb.abnormal_reason | default('') | trim)
           if ((_cb.abnormal_reason | default('') | trim) | length > 0)
-          else '设备状态 unhealthy'
+          else (
+            '操作成功' if ((_cb.device_status | default('unhealthy') | string) == 'healthy')
+            else '操作未达健康状态'
+          )
         )
       }}
 
@@ -128,11 +155,17 @@
       summary: "{{ _op_summary }}"
       steps: "{{ (semaphore_operation_steps | default([])) + [_final_step] }}"
       task_id: "{{ _op_task_id }}"
-  when: _cb_unhealthy | bool
+  when: _should_log | bool
   vars:
     _cb: "{{ semaphore_callback_row | default({}) }}"
     _cb_unhealthy: "{{ (_cb.device_status | default('') | string) == 'unhealthy' }}"
+    _should_log: >-
+      {{
+        (sem_operation_force_log | default(false) | bool)
+        or (_cb_unhealthy | bool)
+        or (sem_operation_restart_performed | default(false) | bool)
+      }}
     _final_step:
       step: 最终结果
-      result: failed
+      result: "{{ 'ok' if (_op_result == 'success') else 'failed' }}"
       detail: "{{ _op_summary | truncate(200, True) }}"

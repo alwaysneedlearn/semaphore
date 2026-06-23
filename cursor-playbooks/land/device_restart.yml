@@ -8,6 +8,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_operation_type: restart
+    sem_operation_force_log: true
     sem_debug_tag: LAND
     land_include_redeliver: true
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"

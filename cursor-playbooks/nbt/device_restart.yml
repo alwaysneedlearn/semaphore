@@ -7,6 +7,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_operation_type: restart
+    sem_operation_force_log: true
     sem_debug_tag: NBT
     nbt_service_stop_first: true
     nbt_include_reset_data: true

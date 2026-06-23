@@ -446,7 +446,7 @@ export default {
   deviceRedeploy: '重新部署',
   deviceDetailTitle: '设备详情',
   deviceOperationStatus: '状态检查',
-  deviceOperationHistoryHint: '近 30 天内结果为 unhealthy 的巡检、重新启动、重新部署与巡检重启记录（由 playbook 回调写入）。',
+  deviceOperationHistoryHint: '近 30 天：重新启动/重新部署每次均记录；状态巡检与巡检重启在 unhealthy 或执行了 restart 时记录（playbook 回调）。',
   deviceOperationHistoryEmpty: '暂无操作记录',
   deviceOperationSummary: '结果摘要',
   deviceOperationStep: '步骤',

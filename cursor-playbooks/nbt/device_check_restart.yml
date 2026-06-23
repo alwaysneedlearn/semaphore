@@ -82,6 +82,11 @@
             or (not (nbt_heartbeat_ok | default(false) | bool))
           }}
 
+    - name: 标记 restart 已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: _nbt_need_reconfigure | default(false) | bool
+
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_service_stop_start.yml"
       when: _nbt_need_reconfigure | default(false) | bool
 

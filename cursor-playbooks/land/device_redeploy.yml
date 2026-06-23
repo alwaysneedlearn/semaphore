@@ -8,6 +8,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_operation_type: redeploy
+    sem_operation_force_log: true
     sem_debug_tag: LAND
     land_include_redeliver: false
     redeploy_land_registry: true
