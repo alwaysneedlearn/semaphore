@@ -36,7 +36,7 @@
     stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
     stop_verify_process_name: "{{ process_name }}"
     sinexcel_start_check_api: "{{ ((lookup('env', 'SINEXCEL_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
-    sinexcel_include_retransmit: true
+    sinexcel_include_retransmit: false
     start_popup_match_mode: "{{ (lookup('env', 'START_POPUP_MATCH_MODE') | default('', true) | trim) | default('title_or_content', true) }}"
     exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"

@@ -38,7 +38,8 @@ type ProjectDeviceProfileSettings struct {
 	StatusTemplateID   *int `db:"status_template_id" json:"status_template_id,omitempty"`
 	RedeployTemplateID *int `db:"redeploy_template_id" json:"redeploy_template_id,omitempty"`
 	CheckRestartTemplateID *int `db:"check_restart_template_id" json:"check_restart_template_id,omitempty"`
-	ConfigTemplateID   *int `db:"config_template_id" json:"config_template_id,omitempty"`
+	ConfigTemplateID       *int `db:"config_template_id" json:"config_template_id,omitempty"`
+	ResendDataTemplateID   *int `db:"resend_data_template_id" json:"resend_data_template_id,omitempty"`
 
 	DefaultInventoryID                      *int   `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
 	DefaultAnsibleUser                      string `db:"default_ansible_user" json:"default_ansible_user"`
@@ -68,6 +69,8 @@ func (s ProjectDeviceProfileSettings) TemplateIDForAction(action DeviceAction) *
 		return s.RedeployTemplateID
 	case DeviceActionStatus:
 		return s.StatusTemplateID
+	case DeviceActionResendData:
+		return s.ResendDataTemplateID
 	}
 	return nil
 }

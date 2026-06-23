@@ -1,16 +1,14 @@
 ---
-- name: JHAI 重启服务（Kafka/重传走 HTTP API，不额外重启）
+- name: JHAI 重发数据（HTTP API，不重启服务）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
-    sem_operation_type: restart
+    sem_operation_type: resend_data
     sem_operation_force_log: true
     sem_debug_tag: JHAI
-    jhai_service_stop_first: true
-    jhai_include_config_apis: false
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
@@ -19,34 +17,33 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      ignore_unreachable: true
+
     - ansible.builtin.set_fact:
         _jhai_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
         _jhai_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_service_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_apply_merged_cfg_apis.yml"
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _jhai_dev.hostname | default('', true) }}"
           ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (((_jhai_service_status.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool)) else 'unhealthy') }}"
-          winrm_status: online
-          api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if ((not (jhai_start_check_api | bool)) or (jhai_upload_status_ok | default(false) | bool)) and ((not (jhai_include_config_apis | default(false) | bool)) or (jhai_config_apis_ok | default(true) | bool)) else 'offline') }}"
-          abnormal_reason: "{{ host_failure_reason | default('') }}"
+          device_status: "{{ 'healthy' if (jhai_config_apis_ok | default(false) | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if (jhai_config_apis_ok | default(false) | bool) else 'offline' }}"
+          abnormal_reason: "{{ '' if (jhai_config_apis_ok | default(false) | bool) else 'JHAI resend/config API failed' }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
-
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost
   gather_facts: false
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

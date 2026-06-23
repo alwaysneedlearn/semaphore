@@ -1,7 +1,7 @@
 ---
 # Build semaphore_operation_record for device operation history.
 # Play vars:
-#   sem_operation_type = restart | redeploy | status
+#   sem_operation_type = restart | redeploy | status | resend_data
 #   sem_operation_force_log = true  → always log (manual restart/redeploy)
 #   sem_operation_restart_performed = true → check_restart ran restart
 # Logs when: force_log OR callback unhealthy OR restart_performed (check_restart).
@@ -99,7 +99,70 @@
           }] if (jhai_config_apis_ok is defined and (jhai_include_config_apis | default(false) | bool)) else []
         )
       }}
-    _op_steps: "{{ _status_steps if (_op_type == 'status') else _action_steps }}"
+    _resend_steps: >-
+      {{
+        [{
+          'step': 'WinRM 建连',
+          'result': ('ok' if (_winrm_session_ok | default(false) | bool) else 'failed'),
+          'detail': (host_failure_reason | default('') | truncate(200, True) if not (_winrm_session_ok | default(false) | bool) else '')
+        }]
+        + (
+          [{
+            'step': '写 INI 时间范围',
+            'result': ('ok' if (final_start_ok | default(false) | bool) else 'failed'),
+            'detail': 'HisDataFromTime/HisDataToTime'
+          },
+          {
+            'step': '进程启停',
+            'result': ('ok' if (final_start_ok | default(false) | bool) else 'failed'),
+            'detail': ''
+          }] if (final_start_ok is defined) else []
+        )
+        + [{
+          'step': '重发 API',
+          'result': >-
+            {{
+              'ok' if (
+                (
+                  jhai_config_apis_ok
+                  if (jhai_config_apis_ok is defined)
+                  else (
+                    land_redeliver_ok
+                    if (land_redeliver_ok is defined)
+                    else (
+                      sinexcel_retransmit_ok
+                      if (sinexcel_retransmit_ok is defined)
+                      else (
+                        nbt_reset_data_ok
+                        if (nbt_reset_data_ok is defined)
+                        else (final_start_ok | default(false))
+                      )
+                    )
+                  )
+                ) | default(false) | bool
+              ) else 'failed'
+            }},
+          'detail': >-
+            {{
+              'JHAI config/resend APIs'
+              if (jhai_config_apis_ok is defined) else (
+                'LAND Redeliver'
+                if (land_redeliver_ok is defined) else (
+                  'SINEXCEL Retransmit'
+                  if (sinexcel_retransmit_ok is defined) else (
+                    'NBT ResetData'
+                    if (nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
+                  )
+                )
+              )
+            }}
+        }]
+      }}
+    _op_steps: >-
+      {{
+        _status_steps if (_op_type == 'status')
+        else (_resend_steps if (_op_type == 'resend_data') else _action_steps)
+      }}
 
 - name: 登记设备操作记录
   ansible.builtin.set_fact:

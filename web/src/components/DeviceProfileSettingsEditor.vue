@@ -140,6 +140,7 @@ const TEMPLATE_ID_FIELDS = [
   'status_template_id',
   'redeploy_template_id',
   'check_restart_template_id',
+  'resend_data_template_id',
 ];
 
 export default {
@@ -161,6 +162,7 @@ export default {
         { field: 'status_template_id', label: 'Status / Patrol template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'redeploy_template_id', label: 'Redeploy template' },
+        { field: 'resend_data_template_id', label: 'Resend data template' },
       ],
     };
   },

@@ -144,12 +144,14 @@ export default {
     operationLabel(op) {
       if (op === 'redeploy') return this.$t('deviceRedeploy');
       if (op === 'status') return this.$t('deviceOperationStatus');
+      if (op === 'resend_data') return this.$t('deviceResendData');
       return this.$t('deviceRestart');
     },
 
     operationColor(op) {
       if (op === 'redeploy') return 'deep-purple';
       if (op === 'status') return 'orange';
+      if (op === 'resend_data') return 'teal';
       return 'primary';
     },
 

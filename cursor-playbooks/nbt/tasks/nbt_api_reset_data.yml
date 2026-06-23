@@ -1,5 +1,5 @@
 ---
-# GET /ResetData?StartDate=&EndDate= after healthy restart.
+# GET /ResetData?StartDate=&EndDate= (HTTP API, no service restart required).
 # Play vars: nbt_reset_data_cfg or merged_cfg.ResetData, nbt_api_reset_data_path, _nbt_target_host.
 
 - name: 准备 NBT 配置分类
@@ -25,7 +25,7 @@
         ((_nbt_reset_end | regex_search(_nbt_reset_date_pattern) | default('', true) | length) > 0)
       }}
 
-- name: 数据重传：API ResetData（重启后）
+- name: 数据重传：API ResetData
   ansible.builtin.uri:
     url: >-
       {{ nbt_api_scheme }}://{{ _nbt_target_host }}:{{ nbt_api_port }}{{ nbt_api_reset_data_path }}?StartDate={{ _nbt_reset_start | urlencode }}&EndDate={{ _nbt_reset_end | urlencode }}
@@ -57,6 +57,17 @@
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data http_status={{ _nbt_api_reset_data.status | default('skipped') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data response_body={{ _nbt_api_reset_data.content | default('') | truncate(1500, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] reset_data IsSuccess={{ (_nbt_api_reset_data.content | default('{}') | from_json).IsSuccess | default('n/a') }}"
+  when:
+    - _nbt_api_reset_data is defined
+    - not (_nbt_api_reset_data.skipped | default(false))
+
+- name: 汇总 NBT ResetData 结果
+  ansible.builtin.set_fact:
+    nbt_reset_data_ok: >-
+      {{
+        ((_nbt_api_reset_data.status | default(0) | int) == 200)
+        and ((_nbt_api_reset_data.content | default('{}') | from_json).IsSuccess | default(false) | bool)
+      }}
   when:
     - _nbt_api_reset_data is defined
     - not (_nbt_api_reset_data.skipped | default(false))

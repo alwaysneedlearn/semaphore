@@ -1,0 +1,59 @@
+---
+- name: LAND 重发数据（HTTP Redeliver，不重启服务）
+  hosts: windows_hosts
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: resend_data
+    sem_operation_force_log: true
+    sem_debug_tag: LAND
+    land_api_scheme: "{{ (lookup('env', 'LAND_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
+    land_api_port: "{{ ((lookup('env', 'LAND_API_PORT') | default('', true) | trim) | default('8080', true)) | int }}"
+    land_api_redeliver_path: "{{ (lookup('env', 'LAND_API_REDELIVER_PATH') | default('', true) | trim) | default('/SyncLims/Redeliver', true) }}"
+    land_api_timeout: "{{ ((lookup('env', 'LAND_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
+    land_api_token: "{{ (lookup('env', 'LAND_API_TOKEN') | default('', true) | trim) | default('landapi', true) }}"
+    land_api_verify_tls: "{{ ((lookup('env', 'LAND_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
+
+  tasks:
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      ignore_unreachable: true
+
+    - ansible.builtin.set_fact:
+        _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+        _land_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_prepare_merged_cfg.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_redeliver.yml"
+
+    - ansible.builtin.set_fact:
+        land_redeliver_ok: "{{ (_land_api_redeliver is defined) and not (_land_api_redeliver.skipped | default(false)) and ((_land_api_redeliver.status | default(0) | int) == 200) }}"
+
+  post_tasks:
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _land_dev.hostname | default('', true) }}"
+          ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if (land_redeliver_ok | default(false) | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if (land_redeliver_ok | default(false) | bool) else 'offline' }}"
+          abnormal_reason: "{{ '' if (land_redeliver_ok | default(false) | bool) else 'LAND Redeliver API failed or invalid time range' }}"
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

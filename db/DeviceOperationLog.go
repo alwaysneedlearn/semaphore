@@ -3,9 +3,10 @@ package db
 import "time"
 
 const (
-	DeviceOperationRestart  = "restart"
-	DeviceOperationRedeploy = "redeploy"
-	DeviceOperationStatus   = "status"
+	DeviceOperationRestart   = "restart"
+	DeviceOperationRedeploy  = "redeploy"
+	DeviceOperationStatus    = "status"
+	DeviceOperationResendData = "resend_data"
 
 	DeviceOperationResultSuccess = "success"
 	DeviceOperationResultFailed  = "failed"

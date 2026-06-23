@@ -141,6 +141,13 @@
             <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
           </v-list-item>
+          <v-list-item
+            v-if="selectionHasResendData"
+            @click="runBulkAction('resend_data')"
+          >
+            <v-list-item-icon><v-icon>mdi-database-sync</v-icon></v-list-item-icon>
+            <v-list-item-title>{{ $t('deviceResendData') }}</v-list-item-title>
+          </v-list-item>
           <v-list-item @click="runBulkAction('restart')">
             <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceRestart') }}</v-list-item-title>
@@ -454,6 +461,13 @@
                 <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
               </v-list-item>
+              <v-list-item
+                v-if="deviceHasResendData(item)"
+                @click="runAction(item, 'resend_data')"
+              >
+                <v-list-item-icon><v-icon>mdi-database-sync</v-icon></v-list-item-icon>
+                <v-list-item-title>{{ $t('deviceResendData') }}</v-list-item-title>
+              </v-list-item>
               <v-list-item @click="runAction(item, 'restart')">
                 <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceRestart') }}</v-list-item-title>
@@ -545,6 +559,7 @@ export default {
       pendingDeviceActionTarget: null,
       profilesList: [],
       profileById: {},
+      profileSettingsById: {},
       filters: {
         hostname: '',
         ip: '',
@@ -626,9 +641,18 @@ export default {
         || this.bulkLoading
         || this.selectAllFilteredLoading;
     },
+    selectionHasResendData() {
+      const selected = new Set(this.selectedDeviceIds);
+      return (this.items || []).some((d) => selected.has(d.id) && this.deviceHasResendData(d));
+    },
   },
 
   watch: {
+    deviceProfilesDialog(val, oldVal) {
+      if (oldVal && !val) {
+        this.loadDeviceProfiles();
+      }
+    },
     filters: {
       handler() {
         clearTimeout(this.filterDebounceTimer);
@@ -718,15 +742,26 @@ export default {
     },
 
     deviceActionNeedsConfirm(action) {
-      return action === 'restart' || action === 'redeploy';
+      return action === 'restart' || action === 'redeploy' || action === 'resend_data';
     },
 
     deviceActionLabel(action) {
       const key = {
         restart: 'deviceRestart',
         redeploy: 'deviceRedeploy',
+        resend_data: 'deviceResendData',
       }[action];
       return key ? this.$t(key) : action;
+    },
+
+    deviceHasResendData(device) {
+      const profileId = device && device.device_profile_id;
+      if (!profileId) {
+        return false;
+      }
+      const settings = this.profileSettingsById[profileId];
+      const tplId = settings && settings.resend_data_template_id;
+      return tplId != null && Number(tplId) > 0;
     },
 
     runBulkAction(action) {
@@ -885,9 +920,22 @@ export default {
         });
         this.profilesList = data || [];
         this.profileById = map;
+        const settingsMap = {};
+        await Promise.all((data || []).map(async (p) => {
+          try {
+            const { data: settings } = await axios.get(
+              `/api/project/${this.projectId}/devices/profiles/${p.id}/settings`,
+            );
+            settingsMap[p.id] = settings || {};
+          } catch (_) {
+            settingsMap[p.id] = {};
+          }
+        }));
+        this.profileSettingsById = settingsMap;
       } catch (_) {
         this.profilesList = [];
         this.profileById = {};
+        this.profileSettingsById = {};
       }
     },
 

@@ -10,7 +10,7 @@
     sem_operation_type: restart
     sem_operation_force_log: true
     sem_debug_tag: LAND
-    land_include_redeliver: true
+    land_include_redeliver: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     _exe_name_default: LHBTS.exe

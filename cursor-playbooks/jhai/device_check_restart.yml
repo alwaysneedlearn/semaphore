@@ -10,7 +10,7 @@
     sem_debug_tag: JHAI
     sem_operation_type: restart
     jhai_service_stop_first: true
-    jhai_include_config_apis: true
+    jhai_include_config_apis: false
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"

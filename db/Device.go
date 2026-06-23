@@ -45,8 +45,9 @@ const (
 	DeviceActionStop     DeviceAction = "stop"
 	DeviceActionRestart  DeviceAction = "restart"
 	DeviceActionRedeploy DeviceAction = "redeploy"
-	DeviceActionStatus   DeviceAction = "status"
-	DeviceActionConfig   DeviceAction = "config"
+	DeviceActionStatus    DeviceAction = "status"
+	DeviceActionResendData DeviceAction = "resend_data"
+	DeviceActionConfig    DeviceAction = "config"
 )
 
 // Device is a managed host belonging to a project.

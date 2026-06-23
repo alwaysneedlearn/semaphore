@@ -1425,7 +1425,7 @@ func mergeDefaultConfigForDeviceAction(extraVars map[string]any, profileDefaultJ
 	server.MergeDefaultConfigForDeviceAction(extraVars, profileDefaultJSON, projectDefaultJSON)
 }
 
-// RunDeviceAction triggers the configured template for {restart, redeploy, status} on a specific device.
+// RunDeviceAction triggers the configured template for {restart, redeploy, status, resend_data} on a specific device.
 func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	device := helpers.GetFromContext(r, "device").(db.Device)
@@ -1439,7 +1439,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 
 	switch body.Action {
 	case db.DeviceActionRestart,
-		db.DeviceActionRedeploy, db.DeviceActionStatus:
+		db.DeviceActionRedeploy, db.DeviceActionStatus, db.DeviceActionResendData:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Unsupported device action",
@@ -1476,7 +1476,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 
 	mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
 
-	if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
+	if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy || body.Action == db.DeviceActionResendData {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
 		if err != nil {
 			helpers.WriteError(w, err)
@@ -1513,7 +1513,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 	switch body.Action {
 	case db.DeviceActionRestart,
-		db.DeviceActionRedeploy, db.DeviceActionStatus:
+		db.DeviceActionRedeploy, db.DeviceActionStatus, db.DeviceActionResendData:
 	default:
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Unsupported device action",
@@ -1603,7 +1603,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 		}
 		extraVars := map[string]any{"devices": profilePayload}
 		mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
-		if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
+		if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy || body.Action == db.DeviceActionResendData {
 			configByDeviceID := map[int]map[string]map[string]string{}
 			for _, d := range devs {
 				items, itemErr := store.GetDeviceConfigItems(project.ID, d.ID)
@@ -1721,7 +1721,7 @@ func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		op := strings.TrimSpace(rec.Operation)
-		if op != db.DeviceOperationRestart && op != db.DeviceOperationRedeploy && op != db.DeviceOperationStatus {
+		if op != db.DeviceOperationRestart && op != db.DeviceOperationRedeploy && op != db.DeviceOperationStatus && op != db.DeviceOperationResendData {
 			continue
 		}
 		result := strings.TrimSpace(rec.Result)
