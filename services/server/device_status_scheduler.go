@@ -139,17 +139,7 @@ func (s *DeviceStatusScheduler) refreshProfile(ps db.ProjectDeviceProfileSetting
 	if templateID == nil || *templateID == 0 || len(profileDevices) == 0 {
 		return
 	}
-	includePerDeviceConfig := ps.CheckRestartTemplateID != nil &&
-		*ps.CheckRestartTemplateID > 0 &&
-		*templateID == *ps.CheckRestartTemplateID
-	s.enqueueTemplateWithDevices(
-		probeSettings,
-		*templateID,
-		profileDevices,
-		ps.DefaultConfigJSON,
-		projectSettings.DefaultConfigJSON,
-		includePerDeviceConfig,
-	)
+	s.enqueueTemplateWithDevices(probeSettings, *templateID, profileDevices)
 }
 
 func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings, now time.Time) {
@@ -182,17 +172,10 @@ func (s *DeviceStatusScheduler) refreshProject(settings db.ProjectDeviceSettings
 	if settings.StatusTemplateID == nil || *settings.StatusTemplateID == 0 {
 		return
 	}
-	s.enqueueTemplateWithDevices(settings, *settings.StatusTemplateID, devices, "", settings.DefaultConfigJSON, false)
+	s.enqueueTemplateWithDevices(settings, *settings.StatusTemplateID, devices)
 }
 
-func (s *DeviceStatusScheduler) enqueueTemplateWithDevices(
-	settings db.ProjectDeviceSettings,
-	templateID int,
-	devices []db.Device,
-	profileDefaultJSON string,
-	projectDefaultJSON string,
-	includePerDeviceConfig bool,
-) {
+func (s *DeviceStatusScheduler) enqueueTemplateWithDevices(settings db.ProjectDeviceSettings, templateID int, devices []db.Device) {
 	tpl, err := s.store.GetTemplate(settings.ProjectID, templateID)
 	if err != nil {
 		log.WithError(err).
@@ -219,21 +202,6 @@ func (s *DeviceStatusScheduler) enqueueTemplateWithDevices(
 	extraVars := map[string]any{
 		"devices":              devicePayload,
 		"semaphore_project_id": settings.ProjectID,
-	}
-	if err := MergeDeviceActionConfigExtraVars(
-		s.store,
-		settings.ProjectID,
-		extraVars,
-		devices,
-		profileDefaultJSON,
-		projectDefaultJSON,
-		includePerDeviceConfig,
-	); err != nil {
-		log.WithError(err).
-			WithField("project_id", settings.ProjectID).
-			WithField("template_id", templateID).
-			Warn("device status: failed to merge device config extra-vars")
-		return
 	}
 	InjectPlaybookCallbackVars(extraVars)
 	envBytes, err := json.Marshal(extraVars)

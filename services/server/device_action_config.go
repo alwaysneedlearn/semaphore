@@ -141,29 +141,3 @@ func MergeRestartRedeployConfigExtraVars(
 		}
 	}
 }
-
-// MergeDeviceActionConfigExtraVars adds default_config and optional per-device configs
-// (same shape as RunBulkDeviceAction / RunDeviceAction restart extra-vars).
-func MergeDeviceActionConfigExtraVars(
-	store db.Store,
-	projectID int,
-	extraVars map[string]any,
-	devices []db.Device,
-	profileDefaultJSON, projectDefaultJSON string,
-	includePerDeviceConfig bool,
-) error {
-	MergeDefaultConfigForDeviceAction(extraVars, profileDefaultJSON, projectDefaultJSON)
-	if !includePerDeviceConfig || len(devices) == 0 {
-		return nil
-	}
-	configByDeviceID := map[int]map[string]map[string]string{}
-	for _, d := range devices {
-		items, err := store.GetDeviceConfigItems(projectID, d.ID)
-		if err != nil {
-			return err
-		}
-		configByDeviceID[d.ID] = BuildCategorizedDeviceConfig(items)
-	}
-	MergeRestartRedeployConfigExtraVars(extraVars, devices, configByDeviceID)
-	return nil
-}

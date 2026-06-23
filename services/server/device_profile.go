@@ -164,7 +164,6 @@ func ProfileSettingsAsProjectDeviceSettings(ps db.ProjectDeviceProfileSettings) 
 		DefaultAnsibleWinRMScheme:               ps.DefaultAnsibleWinRMScheme,
 		DefaultAnsiblePort:                      ps.DefaultAnsiblePort,
 		DefaultAnsibleWinRMServerCertValidation: ps.DefaultAnsibleWinRMServerCertValidation,
-		DefaultConfigJSON:                       ps.DefaultConfigJSON,
 		StatusTemplateID:                        ps.StatusTemplateID,
 		StatusRefreshIntervalMin:                ps.StatusRefreshIntervalMin,
 		LastStatusRefreshAt:                     ps.LastStatusRefreshAt,
