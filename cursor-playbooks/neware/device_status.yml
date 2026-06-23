@@ -7,6 +7,7 @@
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: status
     sem_debug_tag: NEWARE
     # Variable Group 环境变量（非空）优先，否则使用下列默认值
     _exe_name_default: uu.exe
@@ -221,6 +222,9 @@
           ansible.builtin.debug:
             msg: "{{ _status_report_msg_lines }}"
 
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: semaphore_callback_row is defined
+
 - name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
   hosts: localhost
   gather_facts: false
@@ -230,3 +234,4 @@
   tasks:
     - name: 执行 bulk 回调
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

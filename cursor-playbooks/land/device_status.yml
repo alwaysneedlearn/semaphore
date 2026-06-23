@@ -8,6 +8,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: LAND
+    sem_operation_type: status
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     _exe_name_default: LHBTS.exe
@@ -147,6 +148,10 @@
 
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
+  post_tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: semaphore_callback_row is defined
+
 - name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
   hosts: localhost
   gather_facts: false
@@ -157,3 +162,4 @@
   tasks:
     - name: 执行 bulk 回调
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

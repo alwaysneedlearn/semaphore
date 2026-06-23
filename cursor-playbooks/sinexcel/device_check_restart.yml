@@ -122,11 +122,6 @@
             )
           }}
 
-    - name: 标记 restart 已执行（操作记录）
-      ansible.builtin.set_fact:
-        sem_operation_restart_performed: true
-      when: _sinexcel_need_reconfigure | default(false) | bool
-
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_config_stop_start.yml"
       when: _sinexcel_need_reconfigure | default(false) | bool
 
@@ -149,7 +144,7 @@
       when: semaphore_callback_row is not defined
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
-      when: sem_operation_restart_performed | default(false) | bool
+      when: semaphore_callback_row is defined
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
       when: _sinexcel_need_reconfigure | default(false) | bool

@@ -1673,7 +1673,7 @@ func ProbeDevice(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, device)
 }
 
-// GetDeviceOperationLogs returns restart/redeploy history for one device (last 30 days).
+// GetDeviceOperationLogs returns unhealthy operation history for one device (last 30 days).
 func GetDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	device := helpers.GetFromContext(r, "device").(db.Device)
@@ -1687,7 +1687,7 @@ func GetDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, list)
 }
 
-// BulkPutDeviceOperationLogs is the playbook callback for restart/redeploy step history.
+// BulkPutDeviceOperationLogs is the playbook callback for unhealthy operation step history.
 func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	var body struct {
@@ -1738,7 +1738,7 @@ func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		op := strings.TrimSpace(rec.Operation)
-		if op != db.DeviceOperationRestart && op != db.DeviceOperationRedeploy {
+		if op != db.DeviceOperationRestart && op != db.DeviceOperationRedeploy && op != db.DeviceOperationStatus {
 			continue
 		}
 		result := strings.TrimSpace(rec.Result)

@@ -1,14 +1,47 @@
 ---
-# Build semaphore_operation_record on each windows_hosts host after restart/redeploy.
-# Play vars: sem_operation_type = restart | redeploy
+# Build semaphore_operation_record when semaphore_callback_row.device_status is unhealthy.
+# Play vars: sem_operation_type = restart | redeploy | status
 
 - name: 组装设备操作步骤
   ansible.builtin.set_fact:
     semaphore_operation_steps: "{{ _op_steps }}"
+  when: _cb_unhealthy | bool
   vars:
+    _cb: "{{ semaphore_callback_row | default({}) }}"
+    _cb_unhealthy: "{{ (_cb.device_status | default('') | string) == 'unhealthy' }}"
+    _op_type: "{{ sem_operation_type | default('restart') }}"
     _svc_out: "{{ ((_jhai_service_status | default(_nbt_service_status | default(_land_process_check | default(_sinexcel_process_check | default({}, true), true), true), true)).stdout | default('')) | trim }}"
     _svc_running: "{{ (_svc_out.split('|') | first) == 'RUNNING' if (_svc_out | length > 0) else (final_start_ok | default(false) | bool) }}"
-    _op_steps: >-
+    _proc_out: "{{ ((status | default(check_result | default({}, true), true)).stdout | default('')) | trim }}"
+    _proc_running: "{{ 'NOT_RUNNING' not in _proc_out if (_proc_out | length > 0) else false }}"
+    _status_steps: >-
+      {{
+        [{
+          'step': 'WinRM',
+          'result': ('ok' if ((_cb.winrm_status | default('offline') | string) == 'online') else 'failed'),
+          'detail': ''
+        },
+        {
+          'step': 'API',
+          'result': ('ok' if ((_cb.api_status | default('offline') | string) == 'online') else 'failed'),
+          'detail': ''
+        }]
+        + (
+          [{
+            'step': '进程/服务',
+            'result': ('ok' if (_proc_running | bool) else 'failed'),
+            'detail': (_proc_out | truncate(200, True))
+          }] if (_proc_out | length > 0) else []
+        )
+        + (
+          [{
+            'step': '日志关键字',
+            'result': ('ok' if (log_status_ok | default(false) | bool) else 'failed'),
+            'detail': ''
+          }] if (log_status_ok is defined) else []
+        )
+      }}
+    _action_steps: >-
       {{
         [{
           'step': 'WinRM 建连',
@@ -20,7 +53,7 @@
             'step': '制品下发',
             'result': ('ok' if (_redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
             'detail': ('exe present after deploy' if (_redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')
-          }] if ((sem_operation_type | default('restart')) == 'redeploy' and (_redeploy_exe_stat_after is defined)) else []
+          }] if (_op_type == 'redeploy' and (_redeploy_exe_stat_after is defined)) else []
         )
         + (
           [{
@@ -60,25 +93,20 @@
           }] if (jhai_config_apis_ok is defined and (jhai_include_config_apis | default(false) | bool)) else []
         )
       }}
+    _op_steps: "{{ _status_steps if (_op_type == 'status') else _action_steps }}"
 
 - name: 计算操作结果摘要
   ansible.builtin.set_fact:
-    _op_result: "{{ _result }}"
+    _op_result: failed
     _op_summary: "{{ _summary | truncate(500, True) }}"
     _op_hostname: "{{ _dev.hostname | default('', true) }}"
     _op_ip: "{{ _dev.ip | default(inventory_hostname, true) }}"
     _op_task_id: "{{ (semaphore_task_id | default(0)) | int }}"
+  when: _cb_unhealthy | bool
   vars:
-    _dev: "{{ _semaphore_device_rows | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
     _cb: "{{ semaphore_callback_row | default({}) }}"
-    _result: >-
-      {{
-        'failed' if (host_failure_reason is defined)
-        else (
-          'success' if ((_cb.device_status | default('unhealthy') | string) == 'healthy')
-          else 'failed'
-        )
-      }}
+    _cb_unhealthy: "{{ (_cb.device_status | default('') | string) == 'unhealthy' }}"
+    _dev: "{{ _semaphore_device_rows | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
     _summary: >-
       {{
         host_failure_reason | default('')
@@ -86,10 +114,7 @@
         else (
           (_cb.abnormal_reason | default('') | trim)
           if ((_cb.abnormal_reason | default('') | trim) | length > 0)
-          else (
-            '操作成功' if ((_cb.device_status | default('unhealthy') | string) == 'healthy')
-            else '操作未达健康状态'
-          )
+          else '设备状态 unhealthy'
         )
       }}
 
@@ -103,8 +128,11 @@
       summary: "{{ _op_summary }}"
       steps: "{{ (semaphore_operation_steps | default([])) + [_final_step] }}"
       task_id: "{{ _op_task_id }}"
+  when: _cb_unhealthy | bool
   vars:
+    _cb: "{{ semaphore_callback_row | default({}) }}"
+    _cb_unhealthy: "{{ (_cb.device_status | default('') | string) == 'unhealthy' }}"
     _final_step:
       step: 最终结果
-      result: "{{ 'ok' if (_op_result == 'success') else 'failed' }}"
+      result: failed
       detail: "{{ _op_summary | truncate(200, True) }}"

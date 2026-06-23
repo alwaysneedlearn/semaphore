@@ -193,8 +193,6 @@
       when: not (api_upload_status_ok | default(false) | bool)
 
     - block:
-        - ansible.builtin.set_fact:
-            sem_operation_restart_performed: true
         - ansible.builtin.include_tasks: tasks/neware_config_start_verify.yml
       when: need_reconfigure | default(false) | bool
       rescue:
@@ -219,7 +217,7 @@
       when: semaphore_callback_row is not defined
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
-      when: sem_operation_restart_performed | default(false) | bool
+      when: semaphore_callback_row is defined
 
     - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
       when: semaphore_callback_row is defined

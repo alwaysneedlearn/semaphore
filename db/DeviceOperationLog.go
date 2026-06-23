@@ -5,6 +5,7 @@ import "time"
 const (
 	DeviceOperationRestart  = "restart"
 	DeviceOperationRedeploy = "redeploy"
+	DeviceOperationStatus   = "status"
 
 	DeviceOperationResultSuccess = "success"
 	DeviceOperationResultFailed  = "failed"

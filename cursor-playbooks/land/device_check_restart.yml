@@ -113,11 +113,6 @@
             or (not (land_api_status_ok | default(false) | bool))
           }}
 
-    - name: 标记 restart 已执行（操作记录）
-      ansible.builtin.set_fact:
-        sem_operation_restart_performed: true
-      when: _land_need_reconfigure | default(false) | bool
-
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
       when: _land_need_reconfigure | default(false) | bool
 
@@ -141,7 +136,7 @@
       when: semaphore_callback_row is not defined
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
-      when: sem_operation_restart_performed | default(false) | bool
+      when: semaphore_callback_row is defined
 
 - name: 写回 Semaphore 设备状态
   hosts: localhost
