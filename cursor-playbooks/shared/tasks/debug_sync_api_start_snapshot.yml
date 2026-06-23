@@ -11,7 +11,7 @@
       {% elif exe_path is defined %}{{ exe_path }}
       {% elif exe_dir is defined and exe_name is defined %}{{ [exe_dir, exe_name] | join('\\') }}
       {% else %}n/a{% endif %}
-    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat | default(_jhai_start_exe_stat, true), true), true) }}"
+    _sem_dbg_exe_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat, true), true) }}"
     _sem_dbg_exe_after: "{{ _land_exe_stat_after_extract | default(_sinexcel_exe_stat_after_extract | default(_redeploy_exe_stat_after)) }}"
     _sem_dbg_need_reconfigure: "{{ _land_need_reconfigure | default(_sinexcel_need_reconfigure | default(_nbt_need_reconfigure | default(_jhai_need_reconfigure, true), true), true) }}"
     _sem_dbg_process_out: >-

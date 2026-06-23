@@ -6,7 +6,7 @@
     msg: "{{ _patrol_dbg_lines }}"
   vars:
     _tag: "{{ sem_debug_tag | default('DEVICE') }}"
-    _sem_dbg_path_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat | default(_jhai_start_exe_stat, true), true), true) }}"
+    _sem_dbg_path_stat: "{{ _land_exe_stat | default(_sinexcel_exe_stat | default(_nbt_service_path_stat, true), true) }}"
     _sem_dbg_process: "{{ _land_process_check | default(_sinexcel_process_check | default(_nbt_process_check | default(_nbt_service_status | default(_jhai_service_status, true), true), true), true) }}"
     _sem_dbg_install_path: >-
       {% if service_path is defined and (service_path | string | trim) | length > 0 %}{{ service_path }}
