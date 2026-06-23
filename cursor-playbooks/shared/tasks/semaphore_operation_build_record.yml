@@ -102,6 +102,11 @@
     _resend_steps: >-
       {{
         [{
+          'step': '时间范围',
+          'result': 'ok',
+          'detail': (sem_resend_range_display | default('') | truncate(200, True))
+        }]
+        + [{
           'step': 'WinRM 建连',
           'result': ('ok' if (_winrm_session_ok | default(false) | bool) else 'failed'),
           'detail': (host_failure_reason | default('') | truncate(200, True) if not (_winrm_session_ok | default(false) | bool) else '')
@@ -188,11 +193,21 @@
         host_failure_reason | default('')
         if (host_failure_reason is defined)
         else (
-          (_cb.abnormal_reason | default('') | trim)
-          if ((_cb.abnormal_reason | default('') | trim) | length > 0)
-          else (
-            '操作成功' if (_device_status == 'healthy')
-            else '操作未达健康状态'
+          (
+            ('重发范围: ' ~ (sem_resend_range_display | default('') | trim) ~ ' | ')
+            if (
+              (sem_operation_type | default('') | string) == 'resend_data'
+              and ((sem_resend_range_display | default('') | trim) | length > 0)
+            )
+            else ''
+          )
+          + (
+            (_cb.abnormal_reason | default('') | trim)
+            if ((_cb.abnormal_reason | default('') | trim) | length > 0)
+            else (
+              '操作成功' if (_device_status == 'healthy')
+              else '操作未达健康状态'
+            )
           )
         )
       }}

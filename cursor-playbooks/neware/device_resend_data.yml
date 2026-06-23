@@ -29,10 +29,8 @@
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
-    default_cfg: "{{ default_config | default({}) }}"
-    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
-    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
-    merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
+    merged_cfg: "{{ {} }}"
+    merged_system_config: "{{ {} }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
     log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
     log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
@@ -44,6 +42,7 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resend_apply_from_params.yml"
     - block:
         - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
       ignore_unreachable: true

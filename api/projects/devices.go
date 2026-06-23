@@ -1431,7 +1431,8 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
 
 	var body struct {
-		Action db.DeviceAction `json:"action"`
+		Action db.DeviceAction              `json:"action"`
+		Resend *server.ResendRangeInput     `json:"resend,omitempty"`
 	}
 	if !helpers.Bind(w, r, &body) {
 		return
@@ -1474,9 +1475,33 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
+	if body.Action != db.DeviceActionResendData {
+		mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
+	}
 
-	if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy || body.Action == db.DeviceActionResendData {
+	if body.Action == db.DeviceActionResendData {
+		prof, profErr := helpers.Store(r).GetDeviceProfile(project.ID, device.DeviceProfileID)
+		if profErr != nil {
+			helpers.WriteError(w, profErr)
+			return
+		}
+		if err := server.ValidateResendForProfile(prof); err != nil {
+			helpers.WriteError(w, err)
+			return
+		}
+		if body.Resend == nil {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "resend time range is required",
+			})
+			return
+		}
+		params, err := server.BuildResendParams(prof.ProfileKey, *body.Resend)
+		if err != nil {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		server.MergeResendParamsExtraVars(extraVars, params)
+	} else if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
 		items, err := helpers.Store(r).GetDeviceConfigItems(project.ID, device.ID)
 		if err != nil {
 			helpers.WriteError(w, err)
@@ -1505,8 +1530,9 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	var body struct {
-		Action    db.DeviceAction `json:"action"`
-		DeviceIDs []int           `json:"device_ids"`
+		Action    db.DeviceAction          `json:"action"`
+		DeviceIDs []int                    `json:"device_ids"`
+		Resend    *server.ResendRangeInput `json:"resend,omitempty"`
 	}
 	if !helpers.Bind(w, r, &body) {
 		return
@@ -1602,8 +1628,32 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		extraVars := map[string]any{"devices": profilePayload}
-		mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
-		if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy || body.Action == db.DeviceActionResendData {
+		if body.Action == db.DeviceActionResendData {
+			prof, profErr := helpers.Store(r).GetDeviceProfile(project.ID, profileID)
+			if profErr != nil {
+				helpers.WriteError(w, profErr)
+				return
+			}
+			if err := server.ValidateResendForProfile(prof); err != nil {
+				helpers.WriteError(w, err)
+				return
+			}
+			if body.Resend == nil {
+				helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+					"error": "resend time range is required",
+				})
+				return
+			}
+			params, err := server.BuildResendParams(prof.ProfileKey, *body.Resend)
+			if err != nil {
+				helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			server.MergeResendParamsExtraVars(extraVars, params)
+		} else {
+			mergeDefaultConfigForDeviceAction(extraVars, ps.DefaultConfigJSON, settings.DefaultConfigJSON)
+		}
+		if body.Action == db.DeviceActionRestart || body.Action == db.DeviceActionRedeploy {
 			configByDeviceID := map[int]map[string]map[string]string{}
 			for _, d := range devs {
 				items, itemErr := store.GetDeviceConfigItems(project.ID, d.ID)

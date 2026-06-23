@@ -181,6 +181,14 @@
       @yes="executePendingBulkAction()"
     />
 
+    <DeviceResendDataDialog
+      v-model="resendDataDialog"
+      :devices="pendingResendDevices"
+      :profile-by-id="profileById"
+      :loading="bulkLoading || busyId != null"
+      @submit="executeResendSubmit"
+    />
+
     <YesNoDialog
       :title="$t('deviceActionConfirmTitle')"
       :text="deviceActionConfirmText"
@@ -505,6 +513,7 @@ import DeviceWinrmConsoleDialog from '@/components/DeviceWinrmConsoleDialog.vue'
 import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 import DeviceImportExportDialog from '@/components/DeviceImportExportDialog.vue';
 import DeviceOperationHistoryDialog from '@/components/DeviceOperationHistoryDialog.vue';
+import DeviceResendDataDialog from '@/components/DeviceResendDataDialog.vue';
 import { getErrorMessage } from '@/lib/error';
 
 export default {
@@ -516,6 +525,7 @@ export default {
     DeviceProfilesForm,
     DeviceImportExportDialog,
     DeviceOperationHistoryDialog,
+    DeviceResendDataDialog,
   },
 
   data() {
@@ -534,6 +544,8 @@ export default {
       winrmDevice: null,
       operationHistoryDialog: false,
       operationHistoryDevice: null,
+      resendDataDialog: false,
+      pendingResendDevices: [],
       selectedDeviceIds: [],
       totalDevices: 0,
       devicesLoading: false,
@@ -742,7 +754,7 @@ export default {
     },
 
     deviceActionNeedsConfirm(action) {
-      return action === 'restart' || action === 'redeploy' || action === 'resend_data';
+      return action === 'restart' || action === 'redeploy';
     },
 
     deviceActionLabel(action) {
@@ -765,6 +777,19 @@ export default {
     },
 
     runBulkAction(action) {
+      if (action === 'resend_data') {
+        const selected = new Set(this.selectedDeviceIds);
+        const devices = (this.items || []).filter(
+          (d) => selected.has(d.id) && this.deviceHasResendData(d),
+        );
+        if (!devices.length) {
+          EventBus.$emit('i-snackbar', { color: 'warning', text: this.$t('deviceResendNoEligible') });
+          return;
+        }
+        this.pendingResendDevices = devices;
+        this.resendDataDialog = true;
+        return;
+      }
       if (this.deviceActionNeedsConfirm(action)) {
         this.pendingDeviceAction = action;
         this.pendingDeviceActionTarget = null;
@@ -1094,6 +1119,14 @@ export default {
     },
 
     runAction(device, action) {
+      if (action === 'resend_data') {
+        if (!this.deviceHasResendData(device)) {
+          return;
+        }
+        this.pendingResendDevices = [device];
+        this.resendDataDialog = true;
+        return;
+      }
       if (this.deviceActionNeedsConfirm(action)) {
         this.pendingDeviceAction = action;
         this.pendingDeviceActionTarget = device;
@@ -1102,6 +1135,35 @@ export default {
         return;
       }
       this.executeDeviceAction(device, action);
+    },
+
+    async executeResendSubmit(resend) {
+      const devices = this.pendingResendDevices || [];
+      if (!devices.length) {
+        return;
+      }
+      const deviceIds = devices.map((d) => d.id);
+      const single = devices.length === 1 ? devices[0] : null;
+      if (single) {
+        this.busyId = single.id;
+      } else {
+        this.bulkLoading = true;
+      }
+      try {
+        const res = await axios.post(`${this.getItemsUrl()}/actions/bulk`, {
+          action: 'resend_data',
+          device_ids: deviceIds,
+          resend,
+        });
+        this.resendDataDialog = false;
+        this.pendingResendDevices = [];
+        this.notifyDeviceTasksFromResponse(res.data);
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.busyId = null;
+        this.bulkLoading = false;
+      }
     },
 
     async executeDeviceAction(device, action) {

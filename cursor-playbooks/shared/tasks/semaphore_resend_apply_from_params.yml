@@ -1,0 +1,66 @@
+---
+# Map task extra-var resend_params (from API) to per-type playbook facts.
+# Does not read device profile / device categorized config for time range.
+# Sets sem_resend_range_display for operation history.
+
+- name: 校验重发参数 resend_params
+  ansible.builtin.assert:
+    that:
+      - resend_params is defined
+      - (resend_params.profile_key | default('') | trim | length) > 0
+    fail_msg: "resend_params missing in task extra-vars (use UI resend dialog)"
+
+- name: 登记重发时间范围（操作历史）
+  ansible.builtin.set_fact:
+    sem_resend_range_display: >-
+      {{
+        resend_params.display | default('')
+        if (resend_params.full | default(false) | bool)
+        else (
+          (resend_params.start | default('') | string) ~ ' → ' ~ (resend_params.end | default('') | string)
+        )
+      }}
+
+- name: JHAI 重发参数
+  ansible.builtin.set_fact:
+    jhai_resend_all_requested: "{{ resend_params.full | default(false) | bool }}"
+    jhai_resend_part_requested: "{{ not (resend_params.full | default(false) | bool) }}"
+    jhai_resend_part_cfg:
+      testStartTime: "{{ resend_params.start | default('') }}"
+      testEndTime: "{{ resend_params.end | default('') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'JHAI'
+
+- name: LAND 重发参数
+  ansible.builtin.set_fact:
+    land_redeliver_cfg:
+      startTime: "{{ resend_params.start | default('') }}"
+      endTime: "{{ resend_params.end | default('') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'LAND'
+
+- name: SINEXCEL 重发参数
+  ansible.builtin.set_fact:
+    sinexcel_retransmit_cfg:
+      StartTime: "{{ resend_params.start | default('') }}"
+      EndTime: "{{ resend_params.end | default('') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'SINEXCEL'
+
+- name: NBT 重发参数
+  ansible.builtin.set_fact:
+    nbt_reset_data_cfg:
+      StartDate: "{{ resend_params.start | default('') }}"
+      EndDate: "{{ resend_params.end | default('') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'NBT'
+
+- name: NEWARE 重发参数
+  ansible.builtin.set_fact:
+    his_data_from_time: "{{ resend_params.start | default('') }}"
+    his_data_to_time: "{{ resend_params.end | default('') }}"
+    merged_system_config: >-
+      {{
+        (merged_system_config | default({}))
+        | combine({
+            'HisDataFromTime': (resend_params.start | default('')),
+            'HisDataToTime': (resend_params.end | default(''))
+          }, recursive=True)
+      }}
+  when: (resend_params.profile_key | default('') | upper) == 'NEWARE'
