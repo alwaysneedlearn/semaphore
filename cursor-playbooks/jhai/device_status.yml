@@ -1,0 +1,127 @@
+---
+- name: JHAI 状态巡检（上传心跳 API 优先 + 服务参考）
+  hosts: windows_hosts
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_files_dir: "{{ playbook_dir }}/files"
+    sem_debug_tag: JHAI
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - name: 解析当前设备信息
+      ansible.builtin.set_fact:
+        _jhai_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+        _jhai_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+
+    - name: JHAI 上传心跳 API（Patrol 首要判定）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_upload_status_check.yml"
+
+    - name: JHAI 上传心跳已健康（跳过 WinRM/服务参考）
+      when: jhai_upload_status_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "JHAI Patrol API 快路径"
+
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _jhai_dev.hostname | default('', true) }}"
+              ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: >-
+                {{
+                  'WinRM unreachable (upload status healthy; reference only)'
+                  if not (_winrm_session_ok | default(false) | bool)
+                  else ''
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: JHAI 上传心跳 API 不可达或非 200 — 快速失败
+      when: not (jhai_upload_status_http_ok | default(false) | bool)
+      block:
+        - name: 登记 Semaphore 状态回调行（API 快速失败）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _jhai_dev.hostname | default('', true) }}"
+              ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: >-
+                {{
+                  'Upload status API unreachable: ' ~ (_jhai_upload_status.msg | default('connection failed') | string)
+                  if (_jhai_upload_status.status | default(0) | int) in [0, -1]
+                  else 'Upload status API HTTP ' ~ (_jhai_upload_status.status | default(0) | string) ~ ' (expected 200)'
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 快速失败 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: JHAI 上传心跳 HTTP 200 但业务未达健康 — WinRM/服务参考检查
+      when:
+        - jhai_upload_status_http_ok | default(false) | bool
+        - not (jhai_upload_status_ok | default(false) | bool)
+      block:
+        - name: WinRM 建连（含重试）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+        - name: WinRM 未连通则不再执行本主机后续步骤
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+        - name: 部署 Windows 启动辅助脚本
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+        - ansible.builtin.include_tasks: tasks/resolve_jhai_service_install.yml
+
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_windows_service_status.yml"
+
+        - name: 状态判断并组装回调行（参考路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: "{{ _jhai_need_reconfig | bool }}"
+            semaphore_callback_row:
+              hostname: "{{ _jhai_dev.hostname | default('', true) }}"
+              ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+              device_status: "{{ 'healthy' if not (_jhai_need_reconfig | bool) else 'unhealthy' }}"
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: "{{ 'online' if not (_jhai_need_reconfig | bool) else 'offline' }}"
+              abnormal_reason: "{{ _jhai_abnormal_reason | trim }}"
+          vars:
+            _jhai_svc_out: "{{ ((_jhai_service_status | default({})).stdout | default('')) | trim }}"
+            _jhai_svc_running: "{{ (_jhai_svc_out.split('|') | first) == 'RUNNING' }}"
+            _jhai_need_reconfig: >-
+              {{
+                (not (_jhai_svc_running | bool))
+                or not (jhai_upload_status_ok | default(false) | bool)
+              }}
+            _jhai_abnormal_reason: >-
+              {% if not (_jhai_svc_running | bool) %}Service not running: {{ service_name }} ({{ _jhai_svc_out }})
+              {% elif not (jhai_upload_status_ok | default(false) | bool) %}Upload status unhealthy: code={{ jhai_upload_status_code | default('n/a') }} msg={{ jhai_upload_status_msg | default('') | truncate(120, True) }}
+              {% else %}{% endif %}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+- name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_files_dir: "{{ playbook_dir }}/files"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

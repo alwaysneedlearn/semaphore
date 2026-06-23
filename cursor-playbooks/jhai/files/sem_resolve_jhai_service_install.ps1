@@ -1,0 +1,88 @@
+# Resolve JHAI service exe under JHAI_SERVICE_BASE_DIR.
+# JHAI_SERVICE_EXE_NAME = exe file (SERVICE_NAME); JHAI_SERVICE_NAME = Windows service (optional subdir).
+# Env: JHAI_SERVICE_BASE_DIR, JHAI_SERVICE_NAME, JHAI_SERVICE_EXE_NAME,
+#      JHAI_SERVICE_SCAN_MAX_DEPTH, JHAI_SERVICE_SCAN_LATEST
+
+$ErrorActionPreference = 'Continue'
+$base = [string]$env:JHAI_SERVICE_BASE_DIR
+if ($null -eq $base) { $base = '' }
+$base = $base.Trim().TrimEnd('\')
+$winSvcName = [string]$env:JHAI_SERVICE_NAME
+if ($null -eq $winSvcName) { $winSvcName = '' }
+$winSvcName = $winSvcName.Trim()
+$exeName = [string]$env:JHAI_SERVICE_EXE_NAME
+if ($null -eq $exeName) { $exeName = '' }
+$exeName = $exeName.Trim()
+if (-not $exeName.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
+  if ($exeName.Length -gt 0) { $exeName = $exeName + '.exe' }
+}
+$exeStem = ''
+if ($exeName.Length -gt 0) {
+  $exeStem = [IO.Path]::GetFileNameWithoutExtension($exeName)
+}
+$maxDepth = 3
+if (-not [string]::IsNullOrWhiteSpace($env:JHAI_SERVICE_SCAN_MAX_DEPTH)) {
+  [void][int]::TryParse($env:JHAI_SERVICE_SCAN_MAX_DEPTH, [ref]$maxDepth)
+  if ($maxDepth -lt 0) { $maxDepth = 0 }
+}
+$scanLatest = $true
+$scanLatestRaw = [string]$env:JHAI_SERVICE_SCAN_LATEST
+if (-not [string]::IsNullOrWhiteSpace($scanLatestRaw)) {
+  $scanLatest = $scanLatestRaw -match '^(?i:true|1|yes)$'
+}
+
+function Test-ExeAt([string]$Dir) {
+  if ([string]::IsNullOrWhiteSpace($Dir) -or [string]::IsNullOrWhiteSpace($exeName)) { return $null }
+  $p = Join-Path $Dir $exeName
+  if (Test-Path -LiteralPath $p) { return $p }
+  return $null
+}
+
+$resolved = $null
+$source = 'not_found'
+
+if ($base.Length -gt 0 -and $exeName.Length -gt 0) {
+  $resolved = Test-ExeAt $base
+  if ($resolved) { $source = 'exe_in_base_dir' }
+
+  if (-not $resolved -and $exeStem.Length -gt 0) {
+    $resolved = Test-ExeAt (Join-Path $base $exeStem)
+    if ($resolved) { $source = 'exe_in_exe_stem_subdir' }
+  }
+
+  if (-not $resolved -and $winSvcName.Length -gt 0) {
+    $resolved = Test-ExeAt (Join-Path $base $winSvcName)
+    if ($resolved) { $source = 'exe_in_windows_service_subdir' }
+  }
+
+  if (-not $resolved -and (Test-Path -LiteralPath $base)) {
+    $hits = @(
+      Get-ChildItem -LiteralPath $base -Filter $exeName -File -Recurse -Depth $maxDepth -ErrorAction SilentlyContinue
+    )
+    if ($hits.Count -gt 0) {
+      if ($scanLatest) {
+        $pick = $hits | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+      } else {
+        $pick = $hits | Select-Object -First 1
+      }
+      $resolved = $pick.FullName
+      $source = 'scan_under_base'
+    }
+  }
+}
+
+if ($resolved) {
+  $installDir = Split-Path -Parent $resolved
+  Write-Output "SERVICE_EXE_PATH=$resolved"
+  Write-Output "SERVICE_INSTALL_DIR=$installDir"
+  Write-Output "SERVICE_BASE_DIR=$base"
+  Write-Output "SERVICE_RESOLVE_SOURCE=$source"
+  exit 0
+}
+
+Write-Output 'SERVICE_EXE_PATH='
+Write-Output 'SERVICE_INSTALL_DIR='
+Write-Output "SERVICE_BASE_DIR=$base"
+Write-Output "SERVICE_RESOLVE_SOURCE=$source"
+Write-Output "SERVICE_EXE_NOT_FOUND|base=$base|exe=$exeName|win_service=$winSvcName|depth=$maxDepth"
+exit 0

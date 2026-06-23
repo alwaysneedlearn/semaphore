@@ -1,0 +1,14 @@
+---
+# Start JHAI Windows service. Vars: service_name, install_path / service_exe_path (optional pre-check).
+
+- name: JHAI 启动前检查服务 exe 是否存在
+  ansible.builtin.include_tasks: jhai_abort_if_service_exe_missing_at_start.yml
+
+- name: 启动 JHAI Windows 服务
+  ansible.windows.win_service:
+    name: "{{ service_name }}"
+    state: started
+  register: _jhai_service_start_action
+
+- name: 确认 JHAI 服务已启动
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_windows_service_status.yml"

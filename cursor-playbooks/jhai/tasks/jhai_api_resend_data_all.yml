@@ -1,0 +1,30 @@
+---
+# POST /api/resend_data_all — full resend, no service restart.
+
+- name: 准备 JHAI 配置分类
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
+  when: jhai_resend_all_cfg is not defined
+
+- name: JHAI 重传全部数据（HTTP API）
+  ansible.builtin.uri:
+    url: "{{ jhai_api_scheme }}://{{ _jhai_target_host }}:{{ jhai_api_port }}{{ jhai_api_resend_all_path }}"
+    method: POST
+    body_format: json
+    body: {}
+    timeout: "{{ jhai_api_timeout }}"
+    validate_certs: "{{ jhai_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 500, 502, 503]
+  register: _jhai_api_resend_all
+  delegate_to: localhost
+  failed_when: false
+  when: (jhai_resend_all_cfg | default({}) | length) > 0
+
+- name: DEBUG JHAI 重传全部数据结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_all http={{ _jhai_api_resend_all.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_all body={{ _jhai_api_resend_all.content | default('') | truncate(800, True) }}"
+  when:
+    - _jhai_api_resend_all is defined
+    - not (_jhai_api_resend_all.skipped | default(false))

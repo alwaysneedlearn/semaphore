@@ -1,0 +1,109 @@
+---
+- name: JHAI 巡检重启（上传心跳 API 优先；不健康仅服务 restart）
+  hosts: windows_hosts
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_files_dir: "{{ playbook_dir }}/files"
+    sem_debug_tag: JHAI
+    jhai_service_stop_first: true
+    jhai_include_config_apis: true
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
+
+  tasks:
+    - name: 解析当前设备信息
+      ansible.builtin.set_fact:
+        _jhai_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+        _jhai_target_host: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+
+    - name: JHAI 上传心跳 API（巡检重启首要判定）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_upload_status_check.yml"
+
+    - name: JHAI 上传心跳已健康（跳过 restart）
+      when: jhai_upload_status_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "JHAI check_restart API 快路径"
+
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            _jhai_need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _jhai_dev.hostname | default('', true) }}"
+              ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: ""
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: JHAI 上传心跳未通过 — 标记需要 restart
+      ansible.builtin.set_fact:
+        _jhai_need_reconfigure: true
+      when: not (jhai_upload_status_ok | default(false) | bool)
+
+    - name: WinRM 建连（含重试）
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+    - name: WinRM 未连通则不再执行本主机后续步骤
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+    - name: 部署 Windows 启动辅助脚本
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+    - ansible.builtin.include_tasks: tasks/resolve_jhai_service_install.yml
+
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_windows_service_status.yml"
+
+    - name: JHAI 参考判定是否 restart
+      when:
+        - _jhai_need_reconfigure | default(false) | bool
+        - jhai_upload_status_http_ok | default(false) | bool
+        - not (jhai_upload_status_ok | default(false) | bool)
+      ansible.builtin.set_fact:
+        _jhai_need_reconfigure: >-
+          {{
+            (((_jhai_service_status | default({})).stdout | default('') | trim).split('|') | first) != 'RUNNING')
+            or (not (jhai_upload_status_ok | default(false) | bool))
+          }}
+
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_service_stop_start.yml"
+      when: _jhai_need_reconfigure | default(false) | bool
+
+  post_tasks:
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _jhai_dev.hostname | default('', true) }}"
+          ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+          device_status: >-
+            {{ 'unhealthy' if (host_failure_reason is defined)
+               else ('healthy' if not (_jhai_need_reconfigure | default(false) | bool)
+               else ('healthy' if (((_jhai_service_status | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING') and (jhai_upload_status_ok | default(false) | bool)
+               else 'unhealthy')) }}
+          winrm_status: online
+          api_status: >-
+            {{ 'offline' if (host_failure_reason is defined)
+               else ('online' if not (_jhai_need_reconfigure | default(false) | bool)
+               else ('online' if (jhai_upload_status_ok | default(false) | bool) else 'offline')) }}
+          abnormal_reason: "{{ host_failure_reason | default('') }}"
+      when: semaphore_callback_row is not defined
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"

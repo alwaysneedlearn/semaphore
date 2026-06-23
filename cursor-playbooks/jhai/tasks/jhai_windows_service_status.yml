@@ -1,0 +1,18 @@
+---
+# Query JHAI Windows service. Sets _jhai_service_status (stdout RUNNING|NOT_RUNNING|NOT_FOUND).
+
+- name: 查询 JHAI Windows 服务状态
+  ansible.windows.win_shell: |
+    $name = '{{ service_name }}'
+    $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
+    if ($null -eq $svc) {
+      "NOT_FOUND|name=$name"
+    } elseif ($svc.Status -eq 'Running') {
+      "RUNNING|name=$name|status=$($svc.Status)|display=$($svc.DisplayName)"
+    } else {
+      "NOT_RUNNING|name=$name|status=$($svc.Status)|display=$($svc.DisplayName)"
+    }
+  register: _jhai_service_status
+  changed_when: false
+  ignore_unreachable: true
+  failed_when: false

@@ -1,0 +1,44 @@
+---
+# Resolve JHAI service exe under SERVICE_PATH + SERVICE_NAME.exe.
+
+- name: JHAI 解析服务 exe 路径（SERVICE_PATH 目录 + SERVICE_NAME）
+  environment:
+    JHAI_SERVICE_BASE_DIR: "{{ service_base_dir | default(service_path, true) }}"
+    JHAI_SERVICE_NAME: "{{ service_name }}"
+    JHAI_SERVICE_EXE_NAME: "{{ service_exe_name }}"
+    JHAI_SERVICE_SCAN_MAX_DEPTH: "{{ jhai_service_scan_max_depth | default(((lookup('env', 'JHAI_SERVICE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int) | string }}"
+    JHAI_SERVICE_SCAN_LATEST: "{{ (jhai_service_scan_latest | default(((lookup('env', 'JHAI_SERVICE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool)) | string | lower }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_resolve_jhai_service_install.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: _jhai_resolve_service_install
+  changed_when: false
+
+- name: JHAI 登记解析后的服务路径
+  ansible.builtin.set_fact:
+    _jhai_resolve_exe_line: "{{ (_jhai_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_EXE_PATH=') | list | first) | default('SERVICE_EXE_PATH=', true) }}"
+    _jhai_resolve_install_line: "{{ (_jhai_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_INSTALL_DIR=') | list | first) | default('SERVICE_INSTALL_DIR=', true) }}"
+    _jhai_resolve_base_line: "{{ (_jhai_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_BASE_DIR=') | list | first) | default('SERVICE_BASE_DIR=', true) }}"
+    _jhai_resolve_source_line: "{{ (_jhai_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_RESOLVE_SOURCE=') | list | first) | default('SERVICE_RESOLVE_SOURCE=', true) }}"
+
+- name: JHAI 应用解析后的服务安装路径
+  ansible.builtin.set_fact:
+    service_exe_path: "{{ (_jhai_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) }}"
+    service_path: "{{ (_jhai_resolve_install_line | regex_replace('^SERVICE_INSTALL_DIR=', '') | trim) }}"
+    install_path: "{{ (_jhai_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) }}"
+    service_parent_dir: "{{ (_jhai_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}"
+    _jhai_service_resolve_source: "{{ (_jhai_resolve_source_line | regex_replace('^SERVICE_RESOLVE_SOURCE=', '') | trim) }}"
+    jhai_service_exe_resolved: "{{ ((_jhai_resolve_exe_line | regex_replace('^SERVICE_EXE_PATH=', '') | trim) | length) > 0 }}"
+    redeploy_zip_dest: "{{ (_jhai_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}\\{{ zip_name | default('jhai.zip', true) }}"
+    redeploy_extract_dest: "{{ (_jhai_resolve_base_line | regex_replace('^SERVICE_BASE_DIR=', '') | trim) }}"
+
+- name: JHAI DEBUG 服务路径解析
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-JHAI] service_base_dir={{ service_base_dir | default(service_path, true) }}"
+      - "[DEBUG-JHAI] windows_service_name={{ service_name }} exe_file={{ service_exe_name | default('') }}"
+      - "[DEBUG-JHAI] resolve_source={{ _jhai_service_resolve_source | default('n/a') }} exe_resolved={{ jhai_service_exe_resolved | default(false) }}"
+      - "[DEBUG-JHAI] service_exe_path={{ service_exe_path | default('') }}"
+      - "[DEBUG-JHAI] install_path={{ install_path | default('') }}"

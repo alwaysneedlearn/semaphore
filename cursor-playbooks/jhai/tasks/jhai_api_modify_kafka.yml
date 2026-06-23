@@ -1,0 +1,31 @@
+---
+# POST /api/modify_kafka_configuration — no service restart.
+
+- name: 准备 JHAI 配置分类
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
+  when: jhai_modify_kafka_cfg is not defined
+
+- name: JHAI 修改 Kafka 配置（HTTP API）
+  ansible.builtin.uri:
+    url: "{{ jhai_api_scheme }}://{{ _jhai_target_host }}:{{ jhai_api_port }}{{ jhai_api_modify_kafka_path }}"
+    method: POST
+    body_format: json
+    body:
+      kafkaConnectionInfo: "{{ jhai_modify_kafka_cfg.kafkaConnectionInfo | default('') | trim }}"
+    timeout: "{{ jhai_api_timeout }}"
+    validate_certs: "{{ jhai_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 500, 502, 503]
+  register: _jhai_api_modify_kafka
+  delegate_to: localhost
+  failed_when: false
+  when: (jhai_modify_kafka_cfg.kafkaConnectionInfo | default('') | trim) | length > 0
+
+- name: DEBUG JHAI 修改 Kafka 配置结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] modify_kafka http={{ _jhai_api_modify_kafka.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] modify_kafka body={{ _jhai_api_modify_kafka.content | default('') | truncate(800, True) }}"
+  when:
+    - _jhai_api_modify_kafka is defined
+    - not (_jhai_api_modify_kafka.skipped | default(false))

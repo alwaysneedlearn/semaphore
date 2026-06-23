@@ -1,0 +1,27 @@
+---
+# Before win_service start: abort when resolved service exe path is missing.
+
+- name: JHAI 启动前检查服务程序文件
+  ansible.windows.win_stat:
+    path: "{{ _jhai_start_exe_path }}"
+  register: _jhai_start_exe_stat
+  vars:
+    _jhai_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
+  when: (_jhai_start_exe_path | default('', true) | trim) | length > 0
+
+- name: JHAI 服务程序不存在则中止启动
+  when:
+    - (_jhai_start_exe_path | default('', true) | trim) | length > 0
+    - _jhai_start_exe_stat is defined
+    - not (_jhai_start_exe_stat.stat.exists | default(false) | bool)
+  vars:
+    _jhai_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
+  block:
+    - name: 登记 JHAI 启动失败原因（服务程序不存在）
+      ansible.builtin.set_fact:
+        start_aborted_exe_missing: true
+        final_start_ok: false
+        host_failure_reason: "服务程序不存在，无法启动: {{ _jhai_start_exe_path }} — 请先执行重新部署 (redeploy)"
+
+    - name: JHAI 服务程序不存在 — 结束本主机后续任务
+      ansible.builtin.meta: end_host

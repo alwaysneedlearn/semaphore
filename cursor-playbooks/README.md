@@ -10,7 +10,8 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 | **`neware/`** | NEWARE playbooks (`device_*.yml`), NEWARE-only `tasks/` + `files/` |
 | **`land/`** | LAND playbooks and LAND-only logic |
 | **`sinexcel/`** | SINEXCEL (LAND lifecycle + HTTP API config; no INI) |
-| **`nbt/`** | NBT (same pattern as sinexcel) |
+| **`nbt/`** | NBT (Windows service + heartbeat API) |
+| **`jhai/`** | JHAI (`UploaderServiceDaemon` + BTS upload HTTP API) |
 | **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 
 **Semaphore templates** examples:
@@ -19,11 +20,12 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 - `cursor-playbooks/land/device_status.yml`
 - `cursor-playbooks/sinexcel/device_status.yml`
 - `cursor-playbooks/nbt/device_status.yml`
+- `cursor-playbooks/jhai/device_status.yml`
 - `cursor-playbooks/device_discovery.yml`
 
 Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NEWARE also sets `sem_profile_tasks_dir` / `sem_profile_files_dir` for type-specific tasks (e.g. TDengine).
 
-**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-NEWARE]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
+**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 
 ## Documentation
 
@@ -32,6 +34,7 @@ Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NE
 - **LAND:** [`land/README.md`](land/README.md)
 - **SINEXCEL:** [`sinexcel/README.md`](sinexcel/README.md)
 - **NBT:** [`nbt/README.md`](nbt/README.md)
+- **JHAI:** [`jhai/README.md`](jhai/README.md)
 - **Shared tasks:** [`shared/README.md`](shared/README.md)
 - **Cloud agent:** `AGENTS.md` (Devices section)
 

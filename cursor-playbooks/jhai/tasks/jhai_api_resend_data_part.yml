@@ -1,0 +1,40 @@
+---
+# POST /api/resend_data_part — partial resend, no service restart.
+
+- name: 准备 JHAI 配置分类
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
+  when: jhai_resend_part_cfg is not defined
+
+- name: 解析 JHAI 分段重传时间
+  ansible.builtin.set_fact:
+    _jhai_resend_start: "{{ jhai_resend_part_cfg.testStartTime | default(jhai_resend_part_cfg.startTime | default('')) | trim }}"
+    _jhai_resend_end: "{{ jhai_resend_part_cfg.testEndTime | default(jhai_resend_part_cfg.endTime | default('')) | trim }}"
+
+- name: JHAI 分段重传数据（HTTP API）
+  ansible.builtin.uri:
+    url: "{{ jhai_api_scheme }}://{{ _jhai_target_host }}:{{ jhai_api_port }}{{ jhai_api_resend_part_path }}"
+    method: POST
+    body_format: json
+    body:
+      testStartTime: "{{ _jhai_resend_start }}"
+      testEndTime: "{{ _jhai_resend_end }}"
+    timeout: "{{ jhai_api_timeout }}"
+    validate_certs: "{{ jhai_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 500, 502, 503]
+  register: _jhai_api_resend_part
+  delegate_to: localhost
+  failed_when: false
+  when:
+    - (_jhai_resend_start | length) > 0
+    - (_jhai_resend_end | length) > 0
+
+- name: DEBUG JHAI 分段重传结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part start={{ _jhai_resend_start }} end={{ _jhai_resend_end }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part http={{ _jhai_api_resend_part.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('JHAI') }}] resend_part body={{ _jhai_api_resend_part.content | default('') | truncate(800, True) }}"
+  when:
+    - _jhai_api_resend_part is defined
+    - not (_jhai_api_resend_part.skipped | default(false))

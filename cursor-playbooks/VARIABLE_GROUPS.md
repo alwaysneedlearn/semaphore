@@ -6,7 +6,7 @@ Semaphore **变量组**通过模板绑定的 **Environment** 注入 Ansible `loo
 
 | 原则 | 说明 |
 |------|------|
-| **一类型一组** | LAND / SINEXCEL / NBT / NEWARE 各建 **独立变量组**，绑定到该类型的 Status / Start / Stop / Restart / Redeploy 模板。不要混用跨类型默认值。 |
+| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE 各建 **独立变量组**，绑定到该类型的 Status / Start / Stop / Restart / Redeploy 模板。不要混用跨类型默认值。 |
 | **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退、浅层扫描（SINEXCEL）。 |
 | **SINEXCEL 安装路径** | **变量组即可**：`EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 在各盘符下自动找最新 exe，**不必**逐台配 `Install.ExeDir` / `ExePath`。 |
 | **Install（可选）** | 仅当某台机无法被盘符扫描覆盖时，才在设备/类型配置里写 **`Install`** / **`Paths`** 覆盖。见 [`sinexcel/README.md`](sinexcel/README.md)。 |
@@ -117,6 +117,25 @@ Redeploy：控制器 `{{ ZIP_PATH }}/{{ ZIP_NAME }}` → 目标 `D:\MES\数据�
 TDengine：任务日志搜 **`[DEBUG-TDENGINE]`**；未配置 `TDENGINE_URL` 时会打印 `TDengine publish skipped`。
 
 详见 [`nbt/README.md`](nbt/README.md)。
+
+### JHAI
+
+JHAI 为 **Windows 服务** `UploaderServiceDaemon` + **BTS 上传 HTTP API**（默认 **9002**）。**Kafka 修改 / 数据重传仅调 API，不 restart 服务**。
+
+```env
+SERVICE_NAME=BTS.Uploader.Service
+JHAI_SERVICE_NAME=UploaderServiceDaemon
+SERVICE_PATH=D:\BTS
+ZIP_NAME=jhai.zip
+ZIP_PATH=/root/jhai/pkg
+JHAI_API_PORT=9002
+API_PORT=9002
+JHAI_START_CHECK_API=true
+SEMAPHORE_API_TOKEN=<token>
+TDENGINE_TAG_SUPPLIER=jhai
+```
+
+设备配置分类：`ModifyKafka.kafkaConnectionInfo`、`ResendDataPart.testStartTime`/`testEndTime`、`ResendDataAll`（非空即调全量重传）。详见 [`jhai/README.md`](jhai/README.md)。
 
 ### NEWARE
 
