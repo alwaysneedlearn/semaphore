@@ -38,6 +38,15 @@
       :title="$t('deleteDevice')"
       :text="$t('askDeleteDevice')"
       v-model="deleteItemDialog"
+      @yes="deleteItemFinalDialog = true"
+    />
+
+    <YesNoDialog
+      :title="$t('deviceDeleteConfirmAgainTitle')"
+      :text="deviceDeleteFinalText"
+      :warning-text="$t('deviceDeleteRiskWarning')"
+      v-model="deleteItemFinalDialog"
+      :yes-button-title="$t('delete')"
       @yes="deleteItem(itemId)"
     />
 
@@ -171,6 +180,15 @@
       :title="$t('deleteDevice')"
       :text="$t('deviceBulkDeleteConfirm', { count: selectedDeviceIds.length })"
       v-model="bulkDeleteDialog"
+      @yes="bulkDeleteFinalDialog = true"
+    />
+
+    <YesNoDialog
+      :title="$t('deviceDeleteConfirmAgainTitle')"
+      :text="$t('deviceBulkDeleteConfirmAgain', { count: selectedDeviceIds.length })"
+      :warning-text="$t('deviceDeleteRiskWarning')"
+      v-model="bulkDeleteFinalDialog"
+      :yes-button-title="$t('delete')"
       @yes="bulkDelete()"
     />
 
@@ -564,6 +582,8 @@ export default {
       bulkLoading: false,
       selectAllFilteredLoading: false,
       bulkDeleteDialog: false,
+      bulkDeleteFinalDialog: false,
+      deleteItemFinalDialog: false,
       bulkActionConfirmDialog: false,
       pendingBulkAction: null,
       pendingBulkTaskCount: 0,
@@ -635,6 +655,17 @@ export default {
         text += ` ${this.$t('deviceActionConfirmMultiType', { n })}`;
       }
       return text;
+    },
+    deviceDeleteFinalText() {
+      const id = this.itemId;
+      const item = (this.items || []).find((d) => d.id === id);
+      if (!item) {
+        return this.$t('deviceDeleteConfirmAgainText');
+      }
+      return this.$t('deviceDeleteConfirmAgainSingle', {
+        host: item.hostname || '—',
+        ip: item.ip_address || '—',
+      });
     },
     hasActiveFilters() {
       const f = this.filters || {};
