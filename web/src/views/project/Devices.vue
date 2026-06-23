@@ -489,7 +489,7 @@
                 <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
               </v-list-item>
               <v-list-item
-                v-if="deviceHasResendData(item)"
+                v-if="deviceSupportsResendData(item)"
                 @click="runAction(item, 'resend_data')"
               >
                 <v-list-item-icon><v-icon>mdi-database-sync</v-icon></v-list-item-icon>
@@ -534,6 +534,8 @@ import DeviceImportExportDialog from '@/components/DeviceImportExportDialog.vue'
 import DeviceOperationHistoryDialog from '@/components/DeviceOperationHistoryDialog.vue';
 import DeviceResendDataDialog from '@/components/DeviceResendDataDialog.vue';
 import { getErrorMessage } from '@/lib/error';
+
+const RESEND_DATA_PROFILE_KEYS = new Set(['JHAI', 'LAND', 'SINEXCEL', 'NBT', 'NEWARE']);
 
 export default {
   mixins: [ItemListPageBase],
@@ -687,7 +689,7 @@ export default {
     },
     selectionHasResendData() {
       const selected = new Set(this.selectedDeviceIds);
-      return (this.items || []).some((d) => selected.has(d.id) && this.deviceHasResendData(d));
+      return (this.items || []).some((d) => selected.has(d.id) && this.deviceSupportsResendData(d));
     },
   },
 
@@ -798,7 +800,20 @@ export default {
       return key ? this.$t(key) : action;
     },
 
-    deviceHasResendData(device) {
+    deviceProfileKey(device) {
+      const profileId = device && device.device_profile_id;
+      if (!profileId) {
+        return '';
+      }
+      return String(this.profileById[profileId] || '').toUpperCase();
+    },
+
+    deviceSupportsResendData(device) {
+      const key = this.deviceProfileKey(device);
+      return key !== '' && RESEND_DATA_PROFILE_KEYS.has(key);
+    },
+
+    deviceResendTemplateConfigured(device) {
       const profileId = device && device.device_profile_id;
       if (!profileId) {
         return false;
@@ -808,18 +823,63 @@ export default {
       return tplId != null && Number(tplId) > 0;
     },
 
+    filterDevicesReadyForResend(devices) {
+      const supported = (devices || []).filter((d) => this.deviceSupportsResendData(d));
+      if (!supported.length) {
+        return { ready: [], skippedUnsupported: (devices || []).length };
+      }
+      const ready = supported.filter((d) => this.deviceResendTemplateConfigured(d));
+      return {
+        ready,
+        skippedUnsupported: (devices || []).length - supported.length,
+        skippedNoTemplate: supported.length - ready.length,
+      };
+    },
+
+    notifyResendSelectionIssues({ skippedUnsupported, skippedNoTemplate }) {
+      if (skippedUnsupported > 0) {
+        EventBus.$emit('i-snackbar', {
+          color: 'warning',
+          text: this.$t('deviceResendUnsupportedSkipped', { count: skippedUnsupported }),
+        });
+      }
+      if (skippedNoTemplate > 0) {
+        EventBus.$emit('i-snackbar', {
+          color: 'warning',
+          text: this.$t('deviceResendTemplateMissing'),
+        });
+      }
+    },
+
+    openResendDialog(devices) {
+      const filtered = this.filterDevicesReadyForResend(devices);
+      const { ready, skippedUnsupported, skippedNoTemplate } = filtered;
+      if (!ready.length) {
+        if (skippedNoTemplate > 0) {
+          EventBus.$emit('i-snackbar', {
+            color: 'warning',
+            text: this.$t('deviceResendTemplateMissing'),
+          });
+        } else {
+          EventBus.$emit('i-snackbar', {
+            color: 'warning',
+            text: this.$t('deviceResendNoEligible'),
+          });
+        }
+        return;
+      }
+      if (skippedUnsupported > 0 || skippedNoTemplate > 0) {
+        this.notifyResendSelectionIssues({ skippedUnsupported, skippedNoTemplate });
+      }
+      this.pendingResendDevices = ready;
+      this.resendDataDialog = true;
+    },
+
     runBulkAction(action) {
       if (action === 'resend_data') {
         const selected = new Set(this.selectedDeviceIds);
-        const devices = (this.items || []).filter(
-          (d) => selected.has(d.id) && this.deviceHasResendData(d),
-        );
-        if (!devices.length) {
-          EventBus.$emit('i-snackbar', { color: 'warning', text: this.$t('deviceResendNoEligible') });
-          return;
-        }
-        this.pendingResendDevices = devices;
-        this.resendDataDialog = true;
+        const devices = (this.items || []).filter((d) => selected.has(d.id));
+        this.openResendDialog(devices);
         return;
       }
       if (this.deviceActionNeedsConfirm(action)) {
@@ -1152,11 +1212,7 @@ export default {
 
     runAction(device, action) {
       if (action === 'resend_data') {
-        if (!this.deviceHasResendData(device)) {
-          return;
-        }
-        this.pendingResendDevices = [device];
-        this.resendDataDialog = true;
+        this.openResendDialog([device]);
         return;
       }
       if (this.deviceActionNeedsConfirm(action)) {
