@@ -22,7 +22,7 @@
     - name: 解析当前设备信息
       ansible.builtin.set_fact:
         _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _nbt_target_host: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+        _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
 
     - name: NBT 心跳 API（巡检重启首要判定）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
@@ -62,9 +62,6 @@
 
     - name: 部署 Windows 启动辅助脚本
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-
-    - ansible.builtin.set_fact:
-        _nbt_target_host: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
 
     - ansible.builtin.include_tasks: tasks/resolve_nbt_service_install.yml
 
