@@ -142,7 +142,7 @@ _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length
 ### Bulk PUT execution
 
 - **Bulk PUT** only in a **`hosts: localhost` second play** after all `windows_hosts` hosts have **`semaphore_callback_row`** (play1 **`post_tasks` 登记** or failure-path **`set_fact`** before `end_host`). **Do not** use `run_once` bulk in play1 post_tasks (batch race). **Do not** include **`semaphore_bulk_put_immediate.yml`** (removed; file kept for reference only).
-- When all hosts `end_host` early, play1 post_tasks may skip; **second play** still bulk PUTs from **`hostvars`** (and **`semaphore_callback_winrm_fallback_missing_rows.yml`** for missing rows).
+- When all hosts `end_host` early, play1 post_tasks may skip; **second play** still bulk PUTs from **`hostvars`** (and **`semaphore_callback_winrm_fallback_missing_rows.yml`** for missing rows). **`semaphore_operation_ensure_host_records.yml`** runs before operation-log bulk PUT for the same reason (unhealthy patrol / early `end_host` paths).
 - **`semaphore_callback_winrm_fallback_missing_rows.yml`** runs in **`semaphore_bulk_put_from_hostvars.yml`** only.
 - **Requires** env **`SEMAPHORE_API_TOKEN`**; optional `SEMAPHORE_URL` (default `http://127.0.0.1:3000`); **`semaphore_project_id`** from Semaphore extra-vars.
 

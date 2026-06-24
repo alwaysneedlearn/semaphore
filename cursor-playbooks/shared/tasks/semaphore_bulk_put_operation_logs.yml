@@ -3,6 +3,8 @@
 
 - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_bulk_credentials.yml"
 
+- ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_ensure_host_records.yml"
+
 - name: 汇总各主机操作记录
   ansible.builtin.set_fact:
     semaphore_operation_bulk_records: "{{ semaphore_operation_bulk_records | default([]) + [hostvars[item].semaphore_operation_record] }}"

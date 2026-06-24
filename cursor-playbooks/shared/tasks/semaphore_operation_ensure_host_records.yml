@@ -1,0 +1,19 @@
+---
+# end_host 会跳过 windows_hosts play 的 post_tasks，导致 semaphore_operation_record 未登记。
+# 在 localhost bulk 阶段按 hostvars 补建（delegate 到目标主机以复用 semaphore_operation_build_record.yml）。
+
+- name: 补建缺失操作记录（end_host 跳过 post_tasks）
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  block:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+  loop: "{{ _sem_bulk_host_list | default([]) }}"
+  when:
+    - hostvars[item].semaphore_operation_record is not defined
+    - hostvars[item].semaphore_callback_row is defined
+    - >-
+      (hostvars[item].sem_operation_force_log | default(false) | bool)
+      or (
+        (hostvars[item].semaphore_callback_row | default({})).device_status | default('') | string == 'unhealthy'
+      )
+      or (hostvars[item].sem_operation_restart_performed | default(false) | bool)
