@@ -1752,6 +1752,7 @@ func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	toSave := make([]db.DeviceOperationLog, 0, len(body.Records))
+	rejected := make([]map[string]string, 0)
 	for _, rec := range body.Records {
 		ipKey := strings.TrimSpace(rec.IPAddress)
 		hostKey := strings.TrimSpace(rec.Hostname)
@@ -1768,10 +1769,21 @@ func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !ok {
+			rejected = append(rejected, map[string]string{
+				"ip":       ipKey,
+				"hostname": hostKey,
+				"reason":   "device not found in project",
+			})
 			continue
 		}
 		op := strings.TrimSpace(rec.Operation)
 		if op != db.DeviceOperationRestart && op != db.DeviceOperationRedeploy && op != db.DeviceOperationStatus && op != db.DeviceOperationResendData {
+			rejected = append(rejected, map[string]string{
+				"ip":        ipKey,
+				"hostname":  hostKey,
+				"operation": op,
+				"reason":    "invalid operation",
+			})
 			continue
 		}
 		result := strings.TrimSpace(rec.Result)
@@ -1779,6 +1791,12 @@ func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 			if result == "" {
 				result = db.DeviceOperationResultFailed
 			} else {
+				rejected = append(rejected, map[string]string{
+					"ip":       ipKey,
+					"hostname": hostKey,
+					"result":   result,
+					"reason":   "invalid result",
+				})
 				continue
 			}
 		}
@@ -1797,8 +1815,9 @@ func BulkPutDeviceOperationLogs(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if len(toSave) == 0 {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "No matching devices for operation records",
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]any{
+			"error":    "No matching devices for operation records",
+			"rejected": rejected,
 		})
 		return
 	}

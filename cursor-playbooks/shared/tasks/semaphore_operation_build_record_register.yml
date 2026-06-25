@@ -53,10 +53,19 @@
       step: 最终结果
       result: "{{ 'ok' if (_result | string == 'success') else 'failed' }}"
       detail: "{{ _summary | truncate(200, True) }}"
+    _sem_ip_rec: "{{ (_dev.ip | default('', true) | trim) or (_sem_inv_host | string) }}"
+    _sem_hostname_rec: >-
+      {{
+        (_h._sem_display_hostname | default('', true) | trim)
+        or (_dev.hostname | default('', true) | trim)
+        or (_h.device_hostname | default('', true) | trim)
+        or _sem_ip_rec
+      }}
+    _op_from_host: "{{ _h.sem_operation_type | default('', true) | string | trim }}"
     _record:
-      hostname: "{{ _dev.hostname | default('', true) }}"
-      ip: "{{ _dev.ip | default(_sem_inv_host, true) }}"
-      operation: "{{ _h.sem_operation_type | default('restart') | string }}"
+      hostname: "{{ _sem_hostname_rec }}"
+      ip: "{{ _sem_ip_rec }}"
+      operation: "{{ _op_from_host if (_op_from_host | length > 0) else 'restart' }}"
       result: "{{ _result }}"
       summary: "{{ _summary_short }}"
       steps: "{{ (_h.semaphore_operation_steps | default([])) + [_final_step] }}"

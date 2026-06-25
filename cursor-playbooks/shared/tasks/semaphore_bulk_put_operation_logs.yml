@@ -17,6 +17,7 @@
       - "[DEBUG-API] operation_bulk hosts={{ (_sem_bulk_host_list | default([]) | length) }}"
       - "[DEBUG-API] operation_bulk records={{ (semaphore_operation_bulk_records | default([]) | length) }}"
       - "[DEBUG-API] operation_bulk token_set={{ ((_sem_bulk_token | default('') | trim | length) > 0) | string }}"
+      - "[DEBUG-API] operation_bulk sample={{ (semaphore_operation_bulk_records | default([]) | first) | default({}) }}"
   when: semaphore_operation_bulk_records is defined
 
 - name: PUT Semaphore /devices/operations/bulk
