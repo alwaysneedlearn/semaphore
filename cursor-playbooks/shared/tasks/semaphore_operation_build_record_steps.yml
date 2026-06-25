@@ -8,15 +8,17 @@
   delegate_to: "{{ _sem_delegate_host | default(omit) }}"
   delegate_facts: "{{ (_sem_delegate_host is defined) | bool }}"
   when: >-
-    (sem_operation_force_log | default(false) | bool)
-    or ((semaphore_callback_row | default({})).device_status | default("") | string == "unhealthy")
-    or (sem_operation_restart_performed | default(false) | bool)
+    (_h.sem_operation_force_log | default(false) | bool)
+    or ((_h.semaphore_callback_row | default({})).device_status | default('') | string == 'unhealthy')
+    or (_h.sem_operation_restart_performed | default(false) | bool)
   vars:
-    _cb: "{{ semaphore_callback_row | default({}) }}"
-    _op_type: "{{ sem_operation_type | default('restart') | string }}"
-    _svc_out: "{{ ((_jhai_service_status | default(_nbt_service_status | default(_land_process_check | default(_sinexcel_process_check | default({}, true), true), true), true)).stdout | default('')) | trim }}"
-    _svc_running: "{{ ((_svc_out.split('|') | first | string | trim) == 'RUNNING') if (_svc_out | length > 0) else (final_start_ok | default(false) | bool) }}"
-    _proc_out: "{{ ((status | default(check_result | default({}, true), true)).stdout | default('')) | trim }}"
+    _sem_inv_host: "{{ _sem_delegate_host | default(inventory_hostname) }}"
+    _h: "{{ hostvars[_sem_inv_host] }}"
+    _cb: "{{ _h.semaphore_callback_row | default({}) }}"
+    _op_type: "{{ _h.sem_operation_type | default('restart') | string }}"
+    _svc_out: "{{ ((_h._jhai_service_status | default(_h._nbt_service_status | default(_h._land_process_check | default(_h._sinexcel_process_check | default({}, true), true), true), true)).stdout | default('')) | trim }}"
+    _svc_running: "{{ ((_svc_out.split('|') | first | string | trim) == 'RUNNING') if (_svc_out | length > 0) else (_h.final_start_ok | default(false) | bool) }}"
+    _proc_out: "{{ ((_h.status | default(_h.check_result | default({}, true), true)).stdout | default('')) | trim }}"
     _proc_running: "{{ 'NOT_RUNNING' not in (_proc_out | string) if (_proc_out | length > 0) else false }}"
     _status_steps: >-
       {{
@@ -40,61 +42,61 @@
         + (
           [{
             'step': '日志关键字',
-            'result': ('ok' if (log_status_ok | default(false) | bool) else 'failed'),
+            'result': ('ok' if (_h.log_status_ok | default(false) | bool) else 'failed'),
             'detail': ''
-          }] if (log_status_ok is defined) else []
+          }] if (_h.log_status_ok is defined) else []
         )
       }}
     _action_steps: >-
       {{
         [{
           'step': 'WinRM 建连',
-          'result': ('ok' if (_winrm_session_ok | default(false) | bool) else 'failed'),
-          'detail': (host_failure_reason | default('') | truncate(200, True) if not (_winrm_session_ok | default(false) | bool) else '')
+          'result': ('ok' if (_h._winrm_session_ok | default(false) | bool) else 'failed'),
+          'detail': (_h.host_failure_reason | default('') | truncate(200, True) if not (_h._winrm_session_ok | default(false) | bool) else '')
         }]
         + (
           [{
             'step': '制品下发',
-            'result': ('ok' if (_redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
-            'detail': ('exe present after deploy' if (_redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')
-          }] if (_op_type == 'redeploy' and (_redeploy_exe_stat_after is defined)) else []
+            'result': ('ok' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
+            'detail': ('exe present after deploy' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')
+          }] if (_op_type == 'redeploy' and (_h._redeploy_exe_stat_after is defined)) else []
         )
         + (
           [{
-            'step': ('服务重启' if (_jhai_service_status is defined or _nbt_service_status is defined) else '进程启停'),
+            'step': ('服务重启' if (_h._jhai_service_status is defined or _h._nbt_service_status is defined) else '进程启停'),
             'result': ('ok' if (_svc_running | bool) else 'failed'),
             'detail': (_svc_out | truncate(200, True))
-          }] if ((_svc_out | length > 0) or (final_start_ok is defined) or (_jhai_service_status is defined) or (_nbt_service_status is defined)) else []
+          }] if ((_svc_out | length > 0) or (_h.final_start_ok is defined) or (_h._jhai_service_status is defined) or (_h._nbt_service_status is defined)) else []
         )
         + (
           [{
             'step': 'API/心跳验证',
-            'result': ('ok' if (jhai_upload_status_ok | default(nbt_heartbeat_ok | default(land_api_status_ok | default(_sinexcel_kafka_api_ok | default(final_start_ok | default(false), true), true), true), true) | bool) else 'failed'),
+            'result': ('ok' if (_h.jhai_upload_status_ok | default(_h.nbt_heartbeat_ok | default(_h.land_api_status_ok | default(_h._sinexcel_kafka_api_ok | default(_h.final_start_ok | default(false), true), true), true), true) | bool) else 'failed'),
             'detail': (
-              'upload_status code=' ~ (jhai_upload_status_code | default('n/a') | string)
-              if (jhai_upload_status_ok is defined) else (
-                'heartbeat ok=' ~ (nbt_heartbeat_ok | default(false) | string)
-                if (nbt_heartbeat_ok is defined) else (
-                  'land_api ok=' ~ (land_api_status_ok | default(false) | string)
-                  if (land_api_status_ok is defined) else (
-                    'kafka api ok=' ~ (_sinexcel_kafka_api_ok | default(false) | string)
-                    if (_sinexcel_kafka_api_ok is defined) else ''
+              'upload_status code=' ~ (_h.jhai_upload_status_code | default('n/a') | string)
+              if (_h.jhai_upload_status_ok is defined) else (
+                'heartbeat ok=' ~ (_h.nbt_heartbeat_ok | default(false) | string)
+                if (_h.nbt_heartbeat_ok is defined) else (
+                  'land_api ok=' ~ (_h.land_api_status_ok | default(false) | string)
+                  if (_h.land_api_status_ok is defined) else (
+                    'kafka api ok=' ~ (_h._sinexcel_kafka_api_ok | default(false) | string)
+                    if (_h._sinexcel_kafka_api_ok is defined) else ''
                   )
                 )
               )
             )
           }] if (
-            jhai_upload_status_ok is defined or nbt_heartbeat_ok is defined
-            or land_api_status_ok is defined or _sinexcel_kafka_api_ok is defined
-            or final_start_ok is defined
+            _h.jhai_upload_status_ok is defined or _h.nbt_heartbeat_ok is defined
+            or _h.land_api_status_ok is defined or _h._sinexcel_kafka_api_ok is defined
+            or _h.final_start_ok is defined
           ) else []
         )
         + (
           [{
             'step': '配置 API',
-            'result': ('ok' if (jhai_config_apis_ok | default(true) | bool) else 'failed'),
+            'result': ('ok' if (_h.jhai_config_apis_ok | default(true) | bool) else 'failed'),
             'detail': 'Kafka/resend HTTP APIs'
-          }] if (jhai_config_apis_ok is defined and (jhai_include_config_apis | default(false) | bool)) else []
+          }] if (_h.jhai_config_apis_ok is defined and (_h.jhai_include_config_apis | default(false) | bool)) else []
         )
       }}
     _resend_steps: >-
@@ -102,24 +104,24 @@
         [{
           'step': '时间范围',
           'result': 'ok',
-          'detail': (sem_resend_range_display | default('') | truncate(200, True))
+          'detail': (_h.sem_resend_range_display | default('') | truncate(200, True))
         }]
         + [{
           'step': 'WinRM 建连',
-          'result': ('ok' if (_winrm_session_ok | default(false) | bool) else 'failed'),
-          'detail': (host_failure_reason | default('') | truncate(200, True) if not (_winrm_session_ok | default(false) | bool) else '')
+          'result': ('ok' if (_h._winrm_session_ok | default(false) | bool) else 'failed'),
+          'detail': (_h.host_failure_reason | default('') | truncate(200, True) if not (_h._winrm_session_ok | default(false) | bool) else '')
         }]
         + (
           [{
             'step': '写 INI 时间范围',
-            'result': ('ok' if (final_start_ok | default(false) | bool) else 'failed'),
+            'result': ('ok' if (_h.final_start_ok | default(false) | bool) else 'failed'),
             'detail': 'HisDataFromTime/HisDataToTime'
           },
           {
             'step': '进程启停',
-            'result': ('ok' if (final_start_ok | default(false) | bool) else 'failed'),
+            'result': ('ok' if (_h.final_start_ok | default(false) | bool) else 'failed'),
             'detail': ''
-          }] if (final_start_ok is defined) else []
+          }] if (_h.final_start_ok is defined) else []
         )
         + [{
           'step': '重发 API',
@@ -127,18 +129,18 @@
             {{
               'ok' if (
                 (
-                  jhai_config_apis_ok
-                  if (jhai_config_apis_ok is defined)
+                  _h.jhai_config_apis_ok
+                  if (_h.jhai_config_apis_ok is defined)
                   else (
-                    land_redeliver_ok
-                    if (land_redeliver_ok is defined)
+                    _h.land_redeliver_ok
+                    if (_h.land_redeliver_ok is defined)
                     else (
-                      sinexcel_retransmit_ok
-                      if (sinexcel_retransmit_ok is defined)
+                      _h.sinexcel_retransmit_ok
+                      if (_h.sinexcel_retransmit_ok is defined)
                       else (
-                        nbt_reset_data_ok
-                        if (nbt_reset_data_ok is defined)
-                        else (final_start_ok | default(false))
+                        _h.nbt_reset_data_ok
+                        if (_h.nbt_reset_data_ok is defined)
+                        else (_h.final_start_ok | default(false))
                       )
                     )
                   )
@@ -148,13 +150,13 @@
           'detail': >-
             {{
               'JHAI config/resend APIs'
-              if (jhai_config_apis_ok is defined) else (
+              if (_h.jhai_config_apis_ok is defined) else (
                 'LAND Redeliver'
-                if (land_redeliver_ok is defined) else (
+                if (_h.land_redeliver_ok is defined) else (
                   'SINEXCEL Retransmit'
-                  if (sinexcel_retransmit_ok is defined) else (
+                  if (_h.sinexcel_retransmit_ok is defined) else (
                     'NBT ResetData'
-                    if (nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
+                    if (_h.nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
                   )
                 )
               )

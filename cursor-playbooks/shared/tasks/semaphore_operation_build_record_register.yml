@@ -8,16 +8,18 @@
   delegate_to: "{{ _sem_delegate_host | default(omit) }}"
   delegate_facts: "{{ (_sem_delegate_host is defined) | bool }}"
   when: >-
-    (sem_operation_force_log | default(false) | bool)
-    or ((semaphore_callback_row | default({})).device_status | default("") | string == "unhealthy")
-    or (sem_operation_restart_performed | default(false) | bool)
+    (_h.sem_operation_force_log | default(false) | bool)
+    or ((_h.semaphore_callback_row | default({})).device_status | default('') | string == 'unhealthy')
+    or (_h.sem_operation_restart_performed | default(false) | bool)
   vars:
-    _cb: "{{ semaphore_callback_row | default({}) }}"
-    _dev: "{{ _semaphore_device_rows | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+    _sem_inv_host: "{{ _sem_delegate_host | default(inventory_hostname) }}"
+    _h: "{{ hostvars[_sem_inv_host] }}"
+    _cb: "{{ _h.semaphore_callback_row | default({}) }}"
+    _dev: "{{ _h._semaphore_device_rows | default([]) | selectattr('ip', 'equalto', _sem_inv_host) | list | first | default(_h._semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', _sem_inv_host) | list | first, true) | default({}) }}"
     _device_status: "{{ _cb.device_status | default('unhealthy') | string }}"
     _result: >-
       {{
-        'failed' if (host_failure_reason is defined)
+        'failed' if (_h.host_failure_reason is defined)
         else (
           'success' if (_device_status == 'healthy')
           else 'failed'
@@ -25,14 +27,14 @@
       }}
     _summary: >-
       {{
-        host_failure_reason | default('')
-        if (host_failure_reason is defined)
+        _h.host_failure_reason | default('')
+        if (_h.host_failure_reason is defined)
         else (
           (
-            ('重发范围: ' ~ (sem_resend_range_display | default('') | trim) ~ ' | ')
+            ('重发范围: ' ~ (_h.sem_resend_range_display | default('') | trim) ~ ' | ')
             if (
-              (sem_operation_type | default('') | string) == 'resend_data'
-              and ((sem_resend_range_display | default('') | trim) | length > 0)
+              (_h.sem_operation_type | default('') | string) == 'resend_data'
+              and ((_h.sem_resend_range_display | default('') | trim) | length > 0)
             )
             else ''
           )
@@ -53,9 +55,9 @@
       detail: "{{ _summary | truncate(200, True) }}"
     _record:
       hostname: "{{ _dev.hostname | default('', true) }}"
-      ip: "{{ _dev.ip | default(inventory_hostname, true) }}"
-      operation: "{{ sem_operation_type | default('restart') | string }}"
+      ip: "{{ _dev.ip | default(_sem_inv_host, true) }}"
+      operation: "{{ _h.sem_operation_type | default('restart') | string }}"
       result: "{{ _result }}"
       summary: "{{ _summary_short }}"
-      steps: "{{ (semaphore_operation_steps | default([])) + [_final_step] }}"
-      task_id: "{{ (semaphore_task_id | default(0)) | int }}"
+      steps: "{{ (_h.semaphore_operation_steps | default([])) + [_final_step] }}"
+      task_id: "{{ (_h.semaphore_task_id | default(semaphore_task_id | default(0))) | int }}"
