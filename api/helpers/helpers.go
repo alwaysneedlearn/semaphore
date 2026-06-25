@@ -24,7 +24,9 @@ type H map[string]any
 func Bind(w http.ResponseWriter, r *http.Request, out any) bool {
 	err := json.NewDecoder(r.Body).Decode(out)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": err.Error(),
+		})
 	}
 
 	return err == nil

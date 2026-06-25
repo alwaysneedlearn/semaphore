@@ -1,6 +1,12 @@
 package db
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
 
 const (
 	DeviceOperationRestart   = "restart"
@@ -48,4 +54,50 @@ type DeviceOperationLogInput struct {
 	Summary   string                `json:"summary"`
 	Steps     []DeviceOperationStep `json:"steps"`
 	TaskID    int                   `json:"task_id"`
+}
+
+// UnmarshalJSON accepts task_id as JSON number or numeric string (Ansible often quotes ints).
+func (in *DeviceOperationLogInput) UnmarshalJSON(data []byte) error {
+	type payload struct {
+		Hostname  string                `json:"hostname"`
+		IPAddress string                `json:"ip"`
+		Operation string                `json:"operation"`
+		Result    string                `json:"result"`
+		Summary   string                `json:"summary"`
+		Steps     []DeviceOperationStep `json:"steps"`
+		TaskID    json.RawMessage       `json:"task_id"`
+	}
+	var p payload
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	in.Hostname = p.Hostname
+	in.IPAddress = p.IPAddress
+	in.Operation = p.Operation
+	in.Result = p.Result
+	in.Summary = p.Summary
+	in.Steps = p.Steps
+	if len(p.TaskID) == 0 {
+		return nil
+	}
+	var tid int
+	if err := json.Unmarshal(p.TaskID, &tid); err == nil {
+		in.TaskID = tid
+		return nil
+	}
+	var tidStr string
+	if err := json.Unmarshal(p.TaskID, &tidStr); err == nil {
+		tidStr = strings.TrimSpace(tidStr)
+		if tidStr == "" {
+			in.TaskID = 0
+			return nil
+		}
+		n, err := strconv.Atoi(tidStr)
+		if err != nil {
+			return fmt.Errorf("task_id: %w", err)
+		}
+		in.TaskID = n
+		return nil
+	}
+	return fmt.Errorf("task_id must be a number or numeric string")
 }

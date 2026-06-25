@@ -43,4 +43,5 @@
     msg:
       - "[DEBUG-API] operation_bulk PUT http={{ _sem_operation_bulk_put.status | default('n/a') }}"
       - "[DEBUG-API] operation_bulk PUT body={{ _sem_operation_bulk_put.content | default('') | truncate(1000, True) }}"
+      - "[DEBUG-API] operation_bulk PUT rejected={{ (_sem_operation_bulk_put.json.rejected | default([])) if ((_sem_operation_bulk_put.status | default(0) | int) == 400) else [] }}"
   when: _sem_operation_bulk_put is defined and not (_sem_operation_bulk_put.skipped | default(false))

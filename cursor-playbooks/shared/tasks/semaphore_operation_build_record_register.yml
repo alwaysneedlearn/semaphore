@@ -69,4 +69,4 @@
       result: "{{ _result }}"
       summary: "{{ _summary_short }}"
       steps: "{{ (_h.semaphore_operation_steps | default([])) + [_final_step] }}"
-      task_id: "{{ (_h.semaphore_task_id | default(semaphore_task_id | default(0))) | int }}"
+      task_id: {{ (_h.semaphore_task_id | default(semaphore_task_id | default(0))) | int }}
