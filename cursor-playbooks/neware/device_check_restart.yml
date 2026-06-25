@@ -40,9 +40,7 @@
     log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
 
   tasks:
-    - name: 解析当前设备信息
-      ansible.builtin.set_fact:
-        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
 
     # --- 必要：BTSClient 数据上报 API（controller HTTP，不依赖 WinRM）---
     - name: 数据上报状态 API（巡检重启首要判定）
@@ -65,7 +63,7 @@
             log_status_ok: true
             upload_health_via_api: true
             semaphore_callback_row:
-              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              hostname: "{{ _sem_display_hostname }}"
               ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: healthy
               winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
@@ -114,7 +112,7 @@
     - name: 登记 Semaphore 状态回调行（WinRM/进程采集不可达）
       ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ _sem_dev.hostname | default('', true) }}"
+          hostname: "{{ _sem_display_hostname }}"
           ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
           device_status: unhealthy
           api_status: offline
@@ -204,7 +202,7 @@
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ _sem_dev.hostname | default('', true) }}"
+          hostname: "{{ _sem_display_hostname }}"
           ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
             {{ 'unhealthy' if host_failure_reason is defined

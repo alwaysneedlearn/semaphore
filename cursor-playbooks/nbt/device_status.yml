@@ -14,10 +14,7 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - name: 解析当前设备信息
-      ansible.builtin.set_fact:
-        _nbt_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _nbt_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
 
     - name: NBT 心跳 API（Patrol 首要判定）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/nbt_api_heartbeat_check.yml"
@@ -34,8 +31,8 @@
           ansible.builtin.set_fact:
             need_reconfigure: false
             semaphore_callback_row:
-              hostname: "{{ _nbt_dev.hostname | default('', true) }}"
-              ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: healthy
               winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
               api_status: online
@@ -57,8 +54,8 @@
         - name: 登记 Semaphore 状态回调行（API 快速失败）
           ansible.builtin.set_fact:
             semaphore_callback_row:
-              hostname: "{{ _nbt_dev.hostname | default('', true) }}"
-              ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: unhealthy
               winrm_status: offline
               api_status: offline
@@ -100,8 +97,8 @@
           ansible.builtin.set_fact:
             need_reconfigure: "{{ _nbt_need_reconfig | bool }}"
             semaphore_callback_row:
-              hostname: "{{ _nbt_dev.hostname | default('', true) }}"
-              ip: "{{ _nbt_dev.ip | default(inventory_hostname, true) }}"
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: "{{ 'healthy' if not (_nbt_need_reconfig | bool) else 'unhealthy' }}"
               winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
               api_status: "{{ 'online' if not (_nbt_need_reconfig | bool) else 'offline' }}"

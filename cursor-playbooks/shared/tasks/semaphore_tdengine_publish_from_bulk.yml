@@ -119,7 +119,7 @@
       {%- else -%}
       {%- set _reason = '设备异常' -%}
       {%- endif -%}
-      {%- set _cn = (((item.hostname | default('') | trim) or (item.ip | default(''))) | string) | replace("'", "''") -%}
+      {%- set _cn = (((item.hostname | default('') | trim) or (item.name | default('') | trim) or (item.ip | default(''))) | string) | replace("'", "''") -%}
       {%- set _ip = (item.ip | default(item.hostname | default('')) | string) | replace("'", "''") -%}
       {%- set _reason_esc = _reason | replace("'", "''") -%}
       {%- set _tuple = "('" ~ _ts_esc ~ "','" ~ _cn ~ "','" ~ _ip ~ "','" ~ _td_mapped ~ "','" ~ _now_esc ~ "','" ~ _now_esc ~ "','" ~ _reason_esc ~ "')" -%}

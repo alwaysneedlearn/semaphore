@@ -22,9 +22,7 @@
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
-    - name: 解析当前设备信息
-      ansible.builtin.set_fact:
-        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
 
     # --- 必要：BTSClient 数据上报 API（controller HTTP，不依赖 WinRM）---
     - name: 数据上报状态 API（Patrol 首要判定）
@@ -47,7 +45,7 @@
             log_status_ok: true
             upload_health_via_api: true
             semaphore_callback_row:
-              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              hostname: "{{ _sem_display_hostname }}"
               ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: healthy
               winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
@@ -74,7 +72,7 @@
         - name: 登记 Semaphore 状态回调行（API 快速失败）
           ansible.builtin.set_fact:
             semaphore_callback_row:
-              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              hostname: "{{ _sem_display_hostname }}"
               ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: unhealthy
               winrm_status: offline
@@ -137,7 +135,7 @@
         - name: 登记 Semaphore 回调行（WinRM/进程采集不可达）
           ansible.builtin.set_fact:
             semaphore_callback_row:
-              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              hostname: "{{ _sem_display_hostname }}"
               ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: unhealthy
               winrm_status: offline
@@ -183,7 +181,7 @@
         - name: 登记 Semaphore 状态回调行（参考路径）
           ansible.builtin.set_fact:
             semaphore_callback_row:
-              hostname: "{{ _sem_dev.hostname | default('', true) }}"
+              hostname: "{{ _sem_display_hostname }}"
               ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: >-
                 {{ 'unhealthy' if status is not defined or ('stdout' not in status)

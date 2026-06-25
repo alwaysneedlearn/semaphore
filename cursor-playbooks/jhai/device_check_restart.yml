@@ -19,10 +19,7 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
-    - name: 解析当前设备信息
-      ansible.builtin.set_fact:
-        _jhai_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
-        _jhai_target_host: "{{ ((_semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({})).ip | default(inventory_hostname, true)) }}"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
 
     - name: JHAI 上传心跳 API（巡检重启首要判定）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_upload_status_check.yml"
@@ -39,8 +36,8 @@
           ansible.builtin.set_fact:
             _jhai_need_reconfigure: false
             semaphore_callback_row:
-              hostname: "{{ _jhai_dev.hostname | default('', true) }}"
-              ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: healthy
               winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
               api_status: online
@@ -90,8 +87,8 @@
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ _jhai_dev.hostname | default('', true) }}"
-          ip: "{{ _jhai_dev.ip | default(inventory_hostname, true) }}"
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
           device_status: >-
             {{ 'unhealthy' if (host_failure_reason is defined)
                else ('healthy' if not (_jhai_need_reconfigure | default(false) | bool)

@@ -1,0 +1,36 @@
+---
+# Resolve device row for inventory_hostname (usually device IP).
+# Order: extra-var devices[] → inventory host vars device_hostname / device_name → IP.
+
+- name: 解析当前设备信息（devices extra-vars 或 inventory device_hostname）
+  ansible.builtin.set_fact:
+    _sem_dev: "{{ _sem_dev_resolved }}"
+    _sem_display_hostname: "{{ _sem_hostname_eff }}"
+    _sem_target_host: "{{ (_sem_dev_resolved.ip | default('', true) | trim) or (inventory_hostname | string) }}"
+  vars:
+    _sem_row_from_extra: "{{ _semaphore_device_rows | default([]) | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}, true) }}"
+    _sem_hv: "{{ hostvars[inventory_hostname] | default({}, true) }}"
+    _sem_dev_resolved: >-
+      {{
+        _sem_row_from_extra if (_sem_row_from_extra | length > 0) else {
+          'ip': inventory_hostname,
+          'hostname': (_sem_hv.device_hostname | default('', true)),
+          'name': (_sem_hv.device_name | default('', true))
+        }
+      }}
+    _sem_hostname_eff: >-
+      {{
+        (_sem_dev_resolved.hostname | default('', true) | trim)
+        or (_sem_dev_resolved.name | default('', true) | trim)
+        or (_sem_hv.device_hostname | default('', true) | trim)
+        or (_sem_hv.device_name | default('', true) | trim)
+        or (inventory_hostname | string)
+      }}
+
+- name: 登记 API/Agent 目标主机别名（兼容各类型 task）
+  ansible.builtin.set_fact:
+    _jhai_target_host: "{{ _sem_target_host }}"
+    _nbt_target_host: "{{ _sem_target_host }}"
+    _land_target_host: "{{ _sem_target_host }}"
+    _sinexcel_target_host: "{{ _sem_target_host }}"
+    _agent_target_host: "{{ _sem_target_host }}"

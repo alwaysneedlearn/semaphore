@@ -5,7 +5,7 @@
 - name: 登记 Semaphore 回调行（WinRM ping 建连失败）
   ansible.builtin.set_fact:
     semaphore_callback_row:
-      hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
+      hostname: "{{ _sem_display_hostname | default((_sem_dev | default({})).hostname | default(hostvars[inventory_hostname].device_hostname | default('', true), true), true) }}"
       ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
       device_status: unhealthy
       status: unhealthy

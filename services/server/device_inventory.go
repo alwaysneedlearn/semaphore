@@ -76,6 +76,12 @@ func BuildDeviceInventoryLine(dev db.Device, settings db.ProjectDeviceSettings) 
 	parts = append(parts, "ansible_port="+strconv.Itoa(port))
 	parts = append(parts, "ansible_winrm_server_cert_validation="+certValidation)
 	parts = append(parts, "rdp_port="+strconv.Itoa(db.EffectiveDeviceRDPPort(dev)))
+	if hn := strings.TrimSpace(dev.Hostname); hn != "" {
+		parts = append(parts, "device_hostname="+hn)
+	}
+	if name := strings.TrimSpace(dev.Name); name != "" {
+		parts = append(parts, "device_name="+name)
+	}
 	if ap := db.EffectiveDeviceAPIPortForInventory(dev); ap > 0 {
 		parts = append(parts, "api_port="+strconv.Itoa(ap))
 	}

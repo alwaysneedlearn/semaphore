@@ -14,13 +14,23 @@
   when: hostvars[item].semaphore_callback_row is defined
   vars:
     _sem_row: "{{ hostvars[item].semaphore_callback_row }}"
+    _sem_host_eff_name: >-
+      {{
+        (_sem_row.hostname | default('') | trim)
+        or (hostvars[item].device_hostname | default('') | trim)
+        or (hostvars[item].device_name | default('') | trim)
+        or (hostvars[item]._sem_display_hostname | default('') | trim)
+        or item
+      }}
     _sem_bulk_item: >-
       {{
         _sem_row
         | combine(
             {
               'device_status': (_sem_row.device_status | default(_sem_row.status | default('unhealthy')) | string | trim),
-              'status': (_sem_row.device_status | default(_sem_row.status | default('unhealthy')) | string | trim)
+              'status': (_sem_row.device_status | default(_sem_row.status | default('unhealthy')) | string | trim),
+              'hostname': _sem_host_eff_name,
+              'ip': (_sem_row.ip | default(item, true) | string | trim) or item
             },
             recursive=True
           )

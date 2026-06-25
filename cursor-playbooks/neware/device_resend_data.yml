@@ -39,6 +39,7 @@
     log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
 
   tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
@@ -68,14 +69,12 @@
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ (_sem_dev | default({})).hostname | default('', true) }}"
-          ip: "{{ (_sem_dev | default({})).ip | default(inventory_hostname, true) }}"
+          hostname: "{{ _sem_display_hostname | default((_sem_dev | default({})).hostname | default('', true), true) }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (final_start_ok | default(false) | bool) else 'unhealthy') }}"
           api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if (final_start_ok | default(false) | bool) else 'offline') }}"
           winrm_status: online
           abnormal_reason: "{{ host_failure_reason | default('') }}"
-      vars:
-        _sem_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
 

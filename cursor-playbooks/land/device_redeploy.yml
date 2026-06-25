@@ -45,6 +45,7 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
 
   tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
@@ -55,11 +56,9 @@
         redeploy_zip_src: "{{ zip_src_controller }}"
         redeploy_extract_dest: "{{ exe_dir }}"
 
-    - ansible.builtin.set_fact:
-        _land_dev: "{{ _semaphore_device_rows | selectattr('ip', 'equalto', inventory_hostname) | list | first | default(_semaphore_device_rows | selectattr('hostname', 'equalto', inventory_hostname) | list | first, true) | default({}) }}"
 
     - ansible.builtin.set_fact:
-        _land_target_host: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
+        _land_target_host: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
@@ -67,8 +66,8 @@
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
-          hostname: "{{ _land_dev.hostname | default('', true) }}"
-          ip: "{{ _land_dev.ip | default(inventory_hostname, true) }}"
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'healthy' if (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'unhealthy' }}"
           winrm_status: online
           api_status: "{{ 'online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool)) else 'offline' }}"

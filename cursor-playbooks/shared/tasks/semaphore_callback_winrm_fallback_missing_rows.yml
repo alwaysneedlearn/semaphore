@@ -17,9 +17,19 @@
   loop: "{{ _sem_bulk_host_list | default(groups['windows_hosts'] | default([])) }}"
   when:
     - hostvars[item].semaphore_callback_row is not defined
-    - hostvars[item]._semaphore_device_rows is defined
+    - >-
+      (hostvars[item]._semaphore_device_rows is defined)
+      or ((hostvars[item].device_hostname | default('') | trim) | length > 0)
   vars:
-    _sem_fb_dev: "{{ hostvars[item]._semaphore_device_rows | selectattr('ip', 'equalto', item) | list | first | default(hostvars[item]._semaphore_device_rows | selectattr('hostname', 'equalto', item) | list | first, true) }}"
+    _sem_fb_dev: >-
+      {{
+        hostvars[item]._semaphore_device_rows | default([]) | selectattr('ip', 'equalto', item) | list | first
+        | default(hostvars[item]._semaphore_device_rows | default([]) | selectattr('hostname', 'equalto', item) | list | first, true)
+        | default({
+            'ip': item,
+            'hostname': (hostvars[item].device_hostname | default(item, true))
+          }, true)
+      }}
     _sem_fb_ping_msg: "{{ (hostvars[item]._winrm_ping.msg | default('') | string) | trim }}"
     _sem_fb_reason: >-
       {% if _sem_fb_ping_msg | length > 0 %}
