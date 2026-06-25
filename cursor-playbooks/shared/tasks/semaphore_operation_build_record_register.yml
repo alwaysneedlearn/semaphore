@@ -62,11 +62,22 @@
         or _sem_ip_rec
       }}
     _op_from_host: "{{ _h.sem_operation_type | default('', true) | string | trim }}"
-    _record:
+    _record_base:
       hostname: "{{ _sem_hostname_rec }}"
       ip: "{{ _sem_ip_rec }}"
       operation: "{{ _op_from_host if (_op_from_host | length > 0) else 'restart' }}"
       result: "{{ _result }}"
       summary: "{{ _summary_short }}"
       steps: "{{ (_h.semaphore_operation_steps | default([])) + [_final_step] }}"
-      task_id: {{ (_h.semaphore_task_id | default(semaphore_task_id | default(0))) | int }}
+    _record: >-
+      {{
+        _record_base
+        | combine(
+            {
+              'task_id': (
+                (_h.semaphore_task_id | default(semaphore_task_id | default(0)))
+                | int
+              )
+            }
+          )
+      }}
