@@ -125,42 +125,38 @@
         )
         + [{
           'step': '重发 API',
-          'result': >-
-            {{
-              'ok' if (
-                (
-                  _h.jhai_config_apis_ok
-                  if (_h.jhai_config_apis_ok is defined)
+          'result': ('ok' if (
+            (
+              _h.jhai_config_apis_ok
+              if (_h.jhai_config_apis_ok is defined)
+              else (
+                _h.land_redeliver_ok
+                if (_h.land_redeliver_ok is defined)
+                else (
+                  _h.sinexcel_retransmit_ok
+                  if (_h.sinexcel_retransmit_ok is defined)
                   else (
-                    _h.land_redeliver_ok
-                    if (_h.land_redeliver_ok is defined)
-                    else (
-                      _h.sinexcel_retransmit_ok
-                      if (_h.sinexcel_retransmit_ok is defined)
-                      else (
-                        _h.nbt_reset_data_ok
-                        if (_h.nbt_reset_data_ok is defined)
-                        else (_h.final_start_ok | default(false))
-                      )
-                    )
-                  )
-                ) | default(false) | bool
-              ) else 'failed'
-            }},
-          'detail': >-
-            {{
-              'JHAI config/resend APIs'
-              if (_h.jhai_config_apis_ok is defined) else (
-                'LAND Redeliver'
-                if (_h.land_redeliver_ok is defined) else (
-                  'SINEXCEL Retransmit'
-                  if (_h.sinexcel_retransmit_ok is defined) else (
-                    'NBT ResetData'
-                    if (_h.nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
+                    _h.nbt_reset_data_ok
+                    if (_h.nbt_reset_data_ok is defined)
+                    else (_h.final_start_ok | default(false))
                   )
                 )
               )
-            }}
+            ) | default(false) | bool
+          ) else 'failed'),
+          'detail': (
+            'JHAI config/resend APIs'
+            if (_h.jhai_config_apis_ok is defined) else (
+              'LAND Redeliver'
+              if (_h.land_redeliver_ok is defined) else (
+                'SINEXCEL Retransmit'
+                if (_h.sinexcel_retransmit_ok is defined) else (
+                  'NBT ResetData'
+                  if (_h.nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
+                )
+              )
+            )
+          )
         }]
       }}
     _op_steps: >-
