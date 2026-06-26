@@ -66,7 +66,7 @@
                 dt = datetime.now(timezone.utc)
             else:
                 dt = datetime.now(timezone.utc)
-        print(f"{dt.strftime('%Y-%m-%d %H:%M:%S')}.{dt.microsecond // 1000:03d}")
+        print(dt.strftime('%Y-%m-%d %H:%M:%S'))
   environment:
     TDENGINE_TIMEZONE: "{{ _td_timezone }}"
   register: _td_now_cmd
