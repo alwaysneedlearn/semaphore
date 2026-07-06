@@ -1,0 +1,35 @@
+---
+# LAND redeploy: resolve installer exe on controller and copy destination on target.
+# INSTALLER_EXE_NAME (or ZIP_NAME) = file base with .exe; ZIP_PATH = dir or full .exe path.
+# LAND_INSTALLER_DEST = optional full dest path on Windows host.
+
+- name: 规范化 LAND 安装程序文件名
+  ansible.builtin.set_fact:
+    _installer_name_raw: >-
+      {{
+        (lookup('env', 'INSTALLER_EXE_NAME') | default('', true) | trim)
+        if ((lookup('env', 'INSTALLER_EXE_NAME') | default('', true) | trim) | length > 0)
+        else (
+          (lookup('env', 'ZIP_NAME') | default('', true) | trim)
+          if ((lookup('env', 'ZIP_NAME') | default('', true) | trim) | length > 0)
+          else 'LHBTS.exe'
+        )
+      }}
+    _installer_path_raw: "{{ (lookup('env', 'ZIP_PATH') | default('', true) | trim) | default('/root/neware/dbwb', true) }}"
+
+- name: 登记 LAND 安装程序路径变量
+  ansible.builtin.set_fact:
+    land_installer_filename: "{{ _installer_name_raw | regex_replace('(?i)\\.exe$', '') ~ '.exe' }}"
+    land_installer_src_controller: >-
+      {{
+        _installer_path_raw
+        if (_installer_path_raw is match('(?i).*\\.exe$'))
+        else (_installer_path_raw | regex_replace('/$', '') ~ '/' ~ (_installer_name_raw | regex_replace('(?i)\\.exe$', '') ~ '.exe'))
+      }}
+    land_installer_dest: >-
+      {{
+        (lookup('env', 'LAND_INSTALLER_DEST') | default('', true) | trim)
+        if ((lookup('env', 'LAND_INSTALLER_DEST') | default('', true) | trim) | length > 0)
+        else (exe_dir ~ '\\' ~ (_installer_name_raw | regex_replace('(?i)\\.exe$', '') ~ '.exe'))
+      }}
+    land_installer_dest_dir: "{{ land_installer_dest | regex_replace('\\\\[^\\\\]+$', '') }}"

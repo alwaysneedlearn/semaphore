@@ -7,6 +7,7 @@ LAND device type uses API-first status/config with optional Windows process cont
 - `device_status.yml` — check exe existence + process running + API status, then bulk callback
 - `device_stop.yml` — graceful stop (CloseMainWindow + popup confirm), optional API check, then bulk callback
 - `device_restart.yml` — graceful stop then ModifyConfig + interactive start (same stop path as `device_stop.yml`)
+- `device_redeploy.yml` — copy installer **exe** to target path, run GUI wizard (`LHBTS 安装` → **升级** → `提示` → **确认** → wait 5s → `LHBTS 安装` → **确定**), then ModifyConfig + stop/start verify
 - `device_check_restart_redeploy.yml` — check process/API health; when unhealthy, graceful stop + ModifyConfig + start, then bulk callback
 
 Start/restart flow now follows the NEWARE-style skeleton: pre-check health first, run reconfigure only when needed, then start+verify. LAND substitutes API-based steps for NEWARE file/log steps (health via `QueryStatus`, config via `ModifyConfig`).
@@ -22,7 +23,9 @@ sem_files_dir: "{{ playbook_dir }}/../shared/files"
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
-**Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`**). **`EXE_DIR`** use `D:\` or `F:\` (not `D:` alone — or rely on script mapping `D:` → `D:\`). **`EXE_DIR_FALLBACK_DRIVES=D,F`**: probes `LHBTS\LHBTS.exe` on each drive before picking the first existing disk. **`ZIP_NAME`** = archive base **without** `.zip` (e.g. `LHBTS5.1.4.4`); controller file = `{{ ZIP_PATH }}/LHBTS5.1.4.4.zip`, target on host = `{{ exe_dir }}\LHBTS5.1.4.4.zip`. **`APP_DIR`** is the unzip folder (`LHBTS`), not `ZIP_NAME`.
+**Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`**). **`EXE_DIR`** use `D:\` or `F:\` (not `D:` alone — or rely on script mapping `D:` → `D:\`). **`EXE_DIR_FALLBACK_DRIVES=D,F`**: probes `LHBTS\LHBTS.exe` on each drive before picking the first existing disk.
+
+**Redeploy (GUI installer):** copy installer exe from controller (`ZIP_PATH` + `INSTALLER_EXE_NAME` or `ZIP_NAME`, e.g. `LHBTS_Setup.exe`) to **`LAND_INSTALLER_DEST`** or default `{{ EXE_DIR }}\{installer}.exe`. Interactive desktop session clicks: `LHBTS 安装` / **升级** → `提示` / **确认** → wait **`LAND_INSTALL_MIDDLE_WAIT_SECONDS`** (default **5**) → `LHBTS 安装` / **确定**. No zip extract, no `HKCU\Software\LH` registry. Scripts: `sem_land_gui_installer_interactive.ps1`, `sem_land_gui_installer_worker.ps1`.
 
 ## Runner 部署（必做）
 
@@ -59,8 +62,15 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `EXE_DIR_FALLBACK_DRIVES` | empty (`preferred,E,C`) | Drive try order when preferred disk missing, e.g. **`D,F,E,C`** for D or F installs |
 | `APP_DIR` | `LHBTS` | Install folder under `exe_dir` (unzip creates `{{ exe_dir }}\LHBTS\`) |
 | `EXE_NAME` | `LHBTS.exe` | LAND executable file name (GUI + API on typical installs) |
-| `ZIP_NAME` | `land` | Zip base name **without** `.zip` (e.g. `LHBTS5.1.4.4`); legacy values ending in `.zip` are stripped once |
-| `ZIP_PATH` | `/root/neware/dbwb` | Controller directory **or** full path to `.zip` file |
+| `ZIP_NAME` | `land` | Legacy name; redeploy prefers **`INSTALLER_EXE_NAME`** (installer `.exe` base name) |
+| `INSTALLER_EXE_NAME` | (`ZIP_NAME` or `LHBTS.exe`) | Installer exe file name on controller |
+| `ZIP_PATH` | `/root/neware/dbwb` | Controller directory **or** full path to installer `.exe` |
+| `LAND_INSTALLER_DEST` | `{{ EXE_DIR }}\{installer}.exe` | Target path for copied installer exe |
+| `LAND_INSTALL_MIDDLE_WAIT_SECONDS` | `5` | Wait between 确认 and final 确定 |
+| `LAND_INSTALL_TASK_TIMEOUT_SECONDS` | `180` | Interactive scheduled-task timeout |
+| `LAND_INSTALL_DLG1_TITLE` / `_BUTTON` | `LHBTS 安装` / `升级` | GUI wizard step 1 (override if UI text differs) |
+| `LAND_INSTALL_DLG2_TITLE` / `_BUTTON` | `提示` / `确认` | Step 2 |
+| `LAND_INSTALL_DLG3_TITLE` / `_BUTTON` | `LHBTS 安装` / `确定` | Step 3 |
 | `EXE_ARGS` | empty | Optional executable arguments |
 | `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |
 | `LAND_API_SCHEME` | `http` | API scheme (`http`/`https`) |

@@ -1,0 +1,70 @@
+---
+# LAND redeploy: copy installer exe → interactive GUI wizard (升级/确认/确定).
+# Sets _redeploy_exe_stat_after for operation log + post verify.
+
+- ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_prepare_installer_vars.yml"
+
+- name: 重新部署：创建安装程序目标目录
+  ansible.windows.win_file:
+    path: "{{ land_installer_dest_dir }}"
+    state: directory
+
+- name: 重新部署：复制安装程序 exe 到目标路径
+  ansible.windows.win_copy:
+    src: "{{ land_installer_src_controller }}"
+    dest: "{{ land_installer_dest }}"
+  register: _land_installer_copy
+
+- name: 重新部署：获取当前登录用户（GUI 安装）
+  ansible.windows.win_shell: |
+    $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+        if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+      } |
+      Where-Object { $_ } |
+      Select-Object -First 1
+    if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
+  register: _land_install_get_user
+  changed_when: false
+
+- name: 重新部署：规范化 GUI 安装用户
+  ansible.builtin.set_fact:
+    _land_install_profile_user: "{{ (_land_install_get_user.stdout_lines | default([]) | last | default(_land_install_get_user.stdout | default(''))) | trim }}"
+
+- name: 重新部署：执行 GUI 安装向导
+  environment:
+    LAND_INSTALLER_EXE_PATH: "{{ land_installer_dest }}"
+    SEMAPHORE_PROFILE_USER: "{{ _land_install_profile_user }}"
+    LAND_INSTALL_MIDDLE_WAIT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_MIDDLE_WAIT_SECONDS') | default('', true) | trim) | default('5', true)) }}"
+    LAND_INSTALL_TASK_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('180', true)) }}"
+    LAND_INSTALL_STEP_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_STEP_TIMEOUT_SECONDS') | default('', true) | trim) | default('90', true)) }}"
+    LAND_INSTALL_DLG1_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG1_TITLE') | default('', true) | trim) | default('LHBTS 安装', true) }}"
+    LAND_INSTALL_DLG1_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG1_BUTTON') | default('', true) | trim) | default('升级', true) }}"
+    LAND_INSTALL_DLG2_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG2_TITLE') | default('', true) | trim) | default('提示', true) }}"
+    LAND_INSTALL_DLG2_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG2_BUTTON') | default('', true) | trim) | default('确认', true) }}"
+    LAND_INSTALL_DLG3_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG3_TITLE') | default('', true) | trim) | default('LHBTS 安装', true) }}"
+    LAND_INSTALL_DLG3_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG3_BUTTON') | default('', true) | trim) | default('确定', true) }}"
+  ansible.windows.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_land_gui_installer_interactive.ps1
+  register: _land_gui_install
+  failed_when: >
+    _land_gui_install is defined and 'stdout' in _land_gui_install and
+    ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
+
+- name: DEBUG LAND GUI 安装结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] gui_install src={{ land_installer_src_controller }}"
+      - "[DEBUG-LAND] gui_install dest={{ land_installer_dest }}"
+      - "[DEBUG-LAND] gui_install user={{ _land_install_profile_user }}"
+      - "[DEBUG-LAND] gui_install stdout={{ (_land_gui_install.stdout | default('') | string) | truncate(2000, True) }}"
+
+- name: 重新部署：安装后检查程序文件
+  ansible.windows.win_stat:
+    path: "{{ exe_path }}"
+  register: _redeploy_exe_stat_after
+
+- name: 重新部署：程序文件不存在则失败
+  ansible.builtin.fail:
+    msg: "Install path not found after LAND GUI installer: {{ exe_path }}"
+  when: not (_redeploy_exe_stat_after.stat.exists | default(false))

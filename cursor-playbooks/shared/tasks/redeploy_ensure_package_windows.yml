@@ -2,7 +2,7 @@
 # Ensure install package on target Windows host. Copy from controller only when zip missing on target.
 # Play vars: redeploy_zip_dest, redeploy_zip_src, redeploy_extract_dest,
 # install_path (NBT service_path) or exe_path (legacy)
-# Optional: redeploy_land_registry (bool) — set LH registry keys before extract (LAND).
+# LAND redeploy uses land_redeploy_gui_install.yml (GUI installer), not this task.
 
 - name: 重新部署：检查目标机程序是否存在
   ansible.windows.win_stat:
@@ -41,26 +41,6 @@
   when: >
     not (_redeploy_exe_stat.stat.exists | default(false)) and
     'ZIP_FOUND' in (_redeploy_zip_local_check.stdout | default(''))
-
-- name: 重新部署：解压前确保 LH 注册表项存在（LAND）
-  when:
-    - redeploy_land_registry | default(false) | bool
-    - not (_redeploy_exe_stat.stat.exists | default(false))
-  block:
-    - name: 确保 HKCU\Software\LH\ProjectFlag 存在
-      ansible.windows.win_regedit:
-        path: HKCU:\SOFTWARE\LH
-        name: ProjectFlag
-        data: ""
-        type: string
-        state: present
-    - name: 确保 HKCU\Software\LH\ProjectType 存在
-      ansible.windows.win_regedit:
-        path: HKCU:\SOFTWARE\LH
-        name: ProjectType
-        data: "0"
-        type: string
-        state: present
 
 - name: 重新部署：解压程序包
   ansible.windows.win_shell: |
