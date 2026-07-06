@@ -68,9 +68,6 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_INSTALLER_DEST` | (Desktop) | Explicit full path on target; overrides desktop default |
 | `LAND_INSTALLER_USE_DESKTOP` | `true` | `false` → copy to `{{ EXE_DIR }}\{installer}.exe` instead |
 | `LAND_INSTALL_STEP_TIMEOUT_SECONDS` | `90` | Max wait per dialog (poll until window/button appears) |
-| `LAND_INSTALL_CLICK_SETTLE_MS` | `500` | Pause after each successful click |
-| `LAND_INSTALL_COORD_MOVE_DELAY_MS` | `400` | Pause after moving mouse before coord click |
-| `LAND_INSTALL_POLL_DELAY_MS` | `400` | Poll interval between dialog/button retries |
 | `LAND_INSTALL_TASK_TIMEOUT_SECONDS` | `180` | Interactive scheduled-task timeout |
 | `LAND_INSTALL_DLG1_TITLE` / `_BUTTON` | `LHBTS 安装` / `升级` | Step 1 — custom UI; coord fallback **32%, 93%** |
 | `LAND_INSTALL_DLG2_TITLE` / `_BUTTON` | `提示` / `确定` | Step 2 — standard popup; **GetDlgItem(IDOK)** + text match (never clicks 取消) |
