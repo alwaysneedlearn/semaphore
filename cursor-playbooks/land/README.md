@@ -27,6 +27,8 @@ LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
 **Redeploy (GUI installer):** copy installer exe from controller to **current interactive user's Desktop** by default (`C:\Users\{user}\Desktop\{installer}.exe`). Override with **`LAND_INSTALLER_DEST`** or set **`LAND_INSTALLER_USE_DESKTOP=false`** to use `{{ EXE_DIR }}\{installer}.exe`. Wizard clicks: `LHBTS 安装` / **升级** → `提示` / **确定** → poll until `LHBTS 安装` / **确定** (no fixed 5s wait; each step uses **`LAND_INSTALL_STEP_TIMEOUT_SECONDS`** poll). No zip extract, no `HKCU\Software\LH` registry.
 
+**Semaphore vs manual test:** WinRM runs `sem_land_gui_installer_interactive.ps1`, which must launch `sem_land_gui_installer_worker.ps1` in the **logged-in desktop user's session** (scheduled task / schtasks `/IT` / WTS user-session fallback). **Manual** `powershell -File sem_land_gui_installer_worker.ps1` in RDP skips that layer and only works while you are at the desktop. Error **`0x800710E0`** / `scheduled_task_never_started_worker` means the worker never started in the interactive session — keep **Lenovo RDP logged on** (Active or Disconnected, not signed out) when redeploy runs; check task log for `INSTALL_SESSION_DIAG` and `INSTALL_WORKER_BOOT_OK|mode=...`.
+
 ## Runner 部署（必做）
 
 日志若出现 `included: .../neware/tasks/winrm_ensure_reachable.yml` 或 `land/tasks/winrm_connect_one_attempt.yml`，说明 **runner 上的文件不是当前 develop**，与仓库代码无关。
