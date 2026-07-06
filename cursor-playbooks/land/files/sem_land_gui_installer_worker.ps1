@@ -197,6 +197,12 @@ public class SemaphoreLandGuiInstaller {
         public int Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT {
+        public int X;
+        public int Y;
+    }
+
     public const uint BM_CLICK = 0x00F5;
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_KEYUP = 0x0101;
