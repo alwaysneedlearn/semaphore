@@ -1,5 +1,6 @@
 # LAND GUI installer: launch installer exe and click through wizard buttons (interactive session).
 param(
+  [string]$ConfigFileArg = '',
   [string]$InstallerPathArg = '',
   [string]$LogFileArg = '',
   [string]$Dlg1TitleArg = 'LHBTS 安装',
@@ -17,8 +18,63 @@ function Write-InstallLine {
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   $out = "[$ts] $Line"
   Write-Output $out
-  if (-not [string]::IsNullOrWhiteSpace($LogFileArg)) {
-    Add-Content -LiteralPath $LogFileArg -Value $out -Encoding UTF8 -ErrorAction SilentlyContinue
+  if (-not [string]::IsNullOrWhiteSpace($script:LogFileArg)) {
+    try {
+      Add-Content -LiteralPath $script:LogFileArg -Value $out -Encoding UTF8 -ErrorAction Stop
+    } catch {
+      Write-Output "INSTALL_LOG_APPEND_FAILED|path=$script:LogFileArg|msg=$($_.Exception.Message)"
+    }
+  }
+}
+
+function Initialize-LandInstallFromConfig {
+  param([string]$Path)
+  if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+  if (-not (Test-Path -LiteralPath $Path)) { return $false }
+  try {
+    $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 -ErrorAction Stop
+    $cfg = $raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  if ($cfg.log_file) { $script:LogFileArg = [string]$cfg.log_file }
+  if ($cfg.installer_path) { $script:InstallerPathArg = [string]$cfg.installer_path }
+  if ($cfg.dlg1_title) { $script:Dlg1TitleArg = [string]$cfg.dlg1_title }
+  if ($cfg.dlg1_button) { $script:Dlg1ButtonArg = [string]$cfg.dlg1_button }
+  if ($cfg.dlg2_title) { $script:Dlg2TitleArg = [string]$cfg.dlg2_title }
+  if ($cfg.dlg2_button) { $script:Dlg2ButtonArg = [string]$cfg.dlg2_button }
+  if ($cfg.dlg3_title) { $script:Dlg3TitleArg = [string]$cfg.dlg3_title }
+  if ($cfg.dlg3_button) { $script:Dlg3ButtonArg = [string]$cfg.dlg3_button }
+  if ($cfg.step_timeout_seconds) { $script:StepTimeoutArg = [string]$cfg.step_timeout_seconds }
+  if ($cfg.click_settle_ms) { $script:ClickSettleMsArg = [string]$cfg.click_settle_ms }
+  return $true
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
+  if (Initialize-LandInstallFromConfig -Path $ConfigFileArg) {
+    $InstallerPathArg = $script:InstallerPathArg
+    $LogFileArg = $script:LogFileArg
+    $Dlg1TitleArg = $script:Dlg1TitleArg
+    $Dlg1ButtonArg = $script:Dlg1ButtonArg
+    $Dlg2TitleArg = $script:Dlg2TitleArg
+    $Dlg2ButtonArg = $script:Dlg2ButtonArg
+    $Dlg3TitleArg = $script:Dlg3TitleArg
+    $Dlg3ButtonArg = $script:Dlg3ButtonArg
+    $StepTimeoutArg = $script:StepTimeoutArg
+    $ClickSettleMsArg = $script:ClickSettleMsArg
+  }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($script:LogFileArg)) {
+  try {
+    $boot = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_WORKER_BOOT|config=$ConfigFileArg|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+    if (Test-Path -LiteralPath $script:LogFileArg) {
+      Add-Content -LiteralPath $script:LogFileArg -Value $boot -Encoding UTF8 -ErrorAction Stop
+    } else {
+      $boot | Out-File -LiteralPath $script:LogFileArg -Encoding UTF8 -Force -ErrorAction Stop
+    }
+  } catch {
+    Write-Output "INSTALL_WORKER_BOOT_FAILED|msg=$($_.Exception.Message)"
   }
 }
 

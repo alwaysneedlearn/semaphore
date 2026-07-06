@@ -28,7 +28,12 @@
     $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
       ForEach-Object {
         $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
-        if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+        if ($o -and $o.ReturnValue -eq 0 -and $o.User) {
+          $user = $o.User.Trim()
+          $dom = [string]$o.Domain
+          $dom = $dom.Trim()
+          if ($dom.Length -gt 0) { "$dom\$user" } else { ".\$user" }
+        }
       } |
       Where-Object { $_ } |
       Select-Object -First 1
