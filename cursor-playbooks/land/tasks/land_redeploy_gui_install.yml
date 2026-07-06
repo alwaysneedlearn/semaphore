@@ -2,6 +2,13 @@
 # LAND redeploy: GUI wizard after graceful stop (requires land_redeploy_copy_installer.yml first).
 # Sets _redeploy_exe_stat_after for operation log.
 
+- name: 重新部署：安装程序路径未登记则失败
+  ansible.builtin.fail:
+    msg: >-
+      land_installer_dest is not set — land_redeploy_copy_installer.yml must run
+      before GUI install (graceful stop phase).
+  when: (land_installer_dest | default('') | trim | length) == 0
+
 - name: 重新部署：执行 GUI 安装向导
   environment:
     LAND_INSTALLER_EXE_PATH: "{{ land_installer_dest }}"

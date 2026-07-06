@@ -36,10 +36,39 @@
     or ('DESKTOP_RESOLVE_FAILED' in (_land_installer_dest_cmd.stdout | default('')))
     or ('DEST_RESOLVE_FAILED' in (_land_installer_dest_cmd.stdout | default('')))
 
+- name: DEBUG LAND 安装程序目标路径解析
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] installer_dest_resolve rc={{ _land_installer_dest_cmd.rc | default('n/a') }}"
+      - "[DEBUG-LAND] installer_dest_resolve stdout={{ (_land_installer_dest_cmd.stdout | default('') | string) | truncate(500, True) }}"
+  when: _land_installer_dest_cmd is defined
+
 - name: 重新部署：登记安装程序目标路径
   ansible.builtin.set_fact:
-    land_installer_dest: "{{ (_land_installer_dest_cmd.stdout_lines | default([]) | last | default(_land_installer_dest_cmd.stdout | default(''))) | trim }}"
-    land_installer_dest_dir: "{{ land_installer_dest | regex_replace('\\\\[^\\\\]+$', '') }}"
+    land_installer_dest: "{{ _land_installer_dest_resolved }}"
+    land_installer_dest_dir: "{{ _land_installer_dest_resolved | regex_replace('\\\\[^\\\\]+$', '') }}"
+  vars:
+    _land_installer_dest_resolved: >-
+      {{
+        (
+          _land_installer_dest_cmd.stdout_lines | default([])
+          | map('trim')
+          | reject('equalto', '')
+          | reject('search', '_FAILED')
+          | list
+          | last
+          | default('')
+        )
+        | trim
+      }}
+
+- name: 重新部署：安装程序目标路径无效则失败
+  ansible.builtin.fail:
+    msg: >-
+      Could not resolve installer dest path (user={{ _land_install_profile_user }},
+      stdout={{ (_land_installer_dest_cmd.stdout | default('') | string) | truncate(300, True) }}).
+      Ensure deploy_sem_windows_helper_scripts ran and sem_land_resolve_installer_dest.ps1 exists.
+  when: (land_installer_dest | default('') | trim | length) == 0
 
 - name: 重新部署：检查目标机安装程序是否已存在
   ansible.windows.win_stat:
