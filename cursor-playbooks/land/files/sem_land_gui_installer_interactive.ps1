@@ -11,7 +11,7 @@ $installerPath = $installerPath.Trim()
 
 function Get-EnvOrDefault {
   param([string]$Name, [string]$Default)
-  $v = [string]$env:$Name
+  $v = [string][Environment]::GetEnvironmentVariable($Name)
   if ($null -eq $v) { return $Default }
   $v = $v.Trim()
   if ($v.Length -eq 0) { return $Default }
