@@ -146,9 +146,26 @@ public class SemaphoreLandGuiInstaller {
     [DllImport("user32.dll")]
     public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int X, int Y);
+
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
     public const uint BM_CLICK = 0x00F5;
-    public const uint WM_GETTEXT = 0x000D;
-    public const uint WM_GETTEXTLENGTH = 0x000E;
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
     public const int SW_RESTORE = 9;
 
     public static bool TitleMatches(string title, string titlePart) {
@@ -185,15 +202,19 @@ public class SemaphoreLandGuiInstaller {
 
     public static string GetControlText(IntPtr hWnd) {
         if (hWnd == IntPtr.Zero) { return string.Empty; }
-        StringBuilder sb = new StringBuilder(256);
+        StringBuilder sb = new StringBuilder(512);
         GetWindowText(hWnd, sb, sb.Capacity);
-        string text = sb.ToString();
-        if (!string.IsNullOrEmpty(text)) { return text; }
-        int len = (int)SendMessage(hWnd, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
-        if (len <= 0) { return string.Empty; }
-        StringBuilder sb2 = new StringBuilder(len + 2);
-        SendMessageText(hWnd, WM_GETTEXT, (IntPtr)(len + 1), sb2);
-        return sb2.ToString();
+        return sb.ToString();
+    }
+
+    public static void ClickHwndCenter(IntPtr hWnd) {
+        RECT r;
+        if (!GetWindowRect(hWnd, out r)) { return; }
+        int x = (r.Left + r.Right) / 2;
+        int y = (r.Top + r.Bottom) / 2;
+        SetCursorPos(x, y);
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
     }
 
     public static string GetClassNameText(IntPtr hWnd) {
@@ -316,8 +337,9 @@ public class SemaphoreLandGuiInstaller {
             string btnLabel = GetControlText(btn);
             SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+            ClickHwndCenter(btn);
             string title = GetControlText(hwnd);
-            detail = "title=" + title + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode;
+            detail = "title=" + title + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm+mouse";
             return true;
         } catch (Exception ex) {
             detail = "exception=" + ex.GetType().Name + "|msg=" + ex.Message;
