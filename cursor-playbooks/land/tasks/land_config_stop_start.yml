@@ -1,6 +1,6 @@
 ---
-# LAND: API modify → graceful stop → [redeploy GUI installer] → start → API retry → optional Redeliver.
-# Redeploy: set land_include_gui_installer=true (device_redeploy.yml).
+# LAND: API modify → [redeploy copy installer] → graceful stop → [GUI installer] → start → API retry.
+# Redeploy: land_include_gui_installer=true (device_redeploy.yml).
 # Requires play vars: merged_cfg, exe_path, process_name, land_* API vars, _land_target_host, _land_dev
 
 - name: LAND 重启前检查进程
@@ -15,6 +15,10 @@
   when: >-
     (merged_cfg.SystemConfig | default({}) | length) > 0
     and (((_land_process_before.stdout | default('') | trim).split('|') | first) == 'RUNNING')
+
+- name: 重新部署：复制安装程序到桌面（优雅停止前）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_copy_installer.yml"
+  when: land_include_gui_installer | default(false) | bool
 
 - name: LAND 优雅停止
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
@@ -31,10 +35,12 @@
     if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
   register: get_username_result
   changed_when: false
+  when: not (land_include_gui_installer | default(false) | bool)
 
 - name: 规范化启动用户
   ansible.builtin.set_fact:
     _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+  when: not (land_include_gui_installer | default(false) | bool)
 
 - name: 重新部署：GUI 安装程序（优雅停止后、交互启动前）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_gui_install.yml"
