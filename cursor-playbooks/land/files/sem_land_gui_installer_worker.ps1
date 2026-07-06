@@ -1,14 +1,15 @@
-# LAND GUI installer: launch installer exe and click through wizard buttons.
-# Env:
-#   LAND_INSTALLER_EXE_PATH (required)
-#   LAND_INSTALL_DLG1_TITLE / LAND_INSTALL_DLG1_BUTTON (default LHBTS 安装 / 升级)
-#   LAND_INSTALL_DLG2_TITLE / LAND_INSTALL_DLG2_BUTTON (default 提示 / 确认)
-#   LAND_INSTALL_DLG3_TITLE / LAND_INSTALL_DLG3_BUTTON (default LHBTS 安装 / 确定)
-#   LAND_INSTALL_STEP_TIMEOUT_SECONDS (default 90 per dialog; step 3 waits for dialog, no fixed sleep)
-#   LogFileArg (optional)
-
+# LAND GUI installer: launch installer exe and click through wizard buttons (interactive session).
 param(
-  [string]$LogFileArg = ''
+  [string]$InstallerPathArg = '',
+  [string]$LogFileArg = '',
+  [string]$Dlg1TitleArg = 'LHBTS 安装',
+  [string]$Dlg1ButtonArg = '升级',
+  [string]$Dlg2TitleArg = '提示',
+  [string]$Dlg2ButtonArg = '确认',
+  [string]$Dlg3TitleArg = 'LHBTS 安装',
+  [string]$Dlg3ButtonArg = '确定',
+  [string]$StepTimeoutArg = '90',
+  [string]$ClickSettleMsArg = '400'
 )
 
 function Write-InstallLine {
@@ -21,43 +22,32 @@ function Write-InstallLine {
   }
 }
 
-$installerPath = [string]$env:LAND_INSTALLER_EXE_PATH
+$installerPath = $InstallerPathArg
+if ([string]::IsNullOrWhiteSpace($installerPath)) {
+  $installerPath = [string]$env:LAND_INSTALLER_EXE_PATH
+}
 if ($null -eq $installerPath) { $installerPath = '' }
 $installerPath = $installerPath.Trim()
+
 if ($installerPath.Length -eq 0 -or -not (Test-Path -LiteralPath $installerPath)) {
   Write-InstallLine "INSTALL_ERROR|reason=installer_exe_missing|path=$installerPath"
   exit 1
 }
 
 [int]$stepTimeout = 90
-$stepTimeoutRaw = [string]$env:LAND_INSTALL_STEP_TIMEOUT_SECONDS
-if (-not [string]::IsNullOrWhiteSpace($stepTimeoutRaw)) {
-  [int]::TryParse($stepTimeoutRaw, [ref]$stepTimeout) | Out-Null
-}
+[int]::TryParse($StepTimeoutArg, [ref]$stepTimeout) | Out-Null
 if ($stepTimeout -lt 10) { $stepTimeout = 10 }
 
 [int]$settleMs = 400
-$settleRaw = [string]$env:LAND_INSTALL_CLICK_SETTLE_MS
-if (-not [string]::IsNullOrWhiteSpace($settleRaw)) {
-  [int]::TryParse($settleRaw, [ref]$settleMs) | Out-Null
-}
+[int]::TryParse($ClickSettleMsArg, [ref]$settleMs) | Out-Null
 if ($settleMs -lt 0) { $settleMs = 0 }
 
-function Get-EnvOrDefault {
-  param([string]$Name, [string]$Default)
-  $v = [string]$env:$Name
-  if ($null -eq $v) { return $Default }
-  $v = $v.Trim()
-  if ($v.Length -eq 0) { return $Default }
-  return $v
-}
-
-$dlg1Title = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_TITLE' -Default 'LHBTS 安装'
-$dlg1Button = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_BUTTON' -Default '升级'
-$dlg2Title = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_TITLE' -Default '提示'
-$dlg2Button = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_BUTTON' -Default '确认'
-$dlg3Title = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_TITLE' -Default 'LHBTS 安装'
-$dlg3Button = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_BUTTON' -Default '确定'
+$dlg1Title = $Dlg1TitleArg
+$dlg1Button = $Dlg1ButtonArg
+$dlg2Title = $Dlg2TitleArg
+$dlg2Button = $Dlg2ButtonArg
+$dlg3Title = $Dlg3TitleArg
+$dlg3Button = $Dlg3ButtonArg
 
 if (-not ([System.Management.Automation.PSTypeName]'SemaphoreLandGuiInstaller').Type) {
   Add-Type @"
@@ -180,6 +170,9 @@ function Wait-For-LandDialog {
       Write-InstallLine "DIALOG_VISIBLE|title_part=$TitlePart|attempt=$attempt"
       return $true
     }
+    if (($attempt % 10) -eq 0) {
+      Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|attempt=$attempt"
+    }
     Start-Sleep -Milliseconds 400
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_WAIT_TIMEOUT|title_part=$TitlePart|attempts=$attempt"
@@ -202,10 +195,39 @@ function Wait-Click-LandDialog {
       Write-InstallLine "DIALOG_CLICKED|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       return $true
     }
+    if (($attempt % 10) -eq 0) {
+      Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|last=$detail"
+    }
     Start-Sleep -Milliseconds 500
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_TIMEOUT|title_part=$TitlePart|button=$ButtonText|attempts=$attempt|last=$detail"
   return $false
+}
+
+function Start-LandInstallerGui {
+  param([string]$LiteralPath, [string]$WorkDir)
+  try {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $LiteralPath
+    $psi.WorkingDirectory = $WorkDir
+    $psi.UseShellExecute = $true
+    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $pid = if ($proc) { $proc.Id } else { 0 }
+    Write-InstallLine "INSTALLER_LAUNCHED|exe=$LiteralPath|pid=$pid|mode=UseShellExecute"
+    return $true
+  } catch {
+    Write-InstallLine "INSTALL_ERROR|reason=launch_failed|msg=$($_.Exception.Message)"
+    return $false
+  }
+}
+
+function Test-InstallerProcessRunning {
+  param([string]$LiteralPath)
+  $name = [System.IO.Path]::GetFileName($LiteralPath)
+  $cim = Get-CimInstance Win32_Process -Filter "Name='$name'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) }
+  return @($cim).Count -gt 0
 }
 
 $workDir = [System.IO.Path]::GetDirectoryName($installerPath)
@@ -213,24 +235,18 @@ if ([string]::IsNullOrWhiteSpace($workDir)) {
   $workDir = (Get-Location).Path
 }
 
-Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir"
+Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir|session=interactive"
 
-$procName = [System.IO.Path]::GetFileNameWithoutExtension($installerPath)
-$running = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
-if ($running.Count -eq 0) {
-  try {
-    Start-Process -FilePath $installerPath -WorkingDirectory $workDir | Out-Null
-    Write-InstallLine "INSTALLER_LAUNCHED|exe=$installerPath"
-    if (-not (Wait-For-LandDialog -TitlePart $dlg1Title -TimeoutSec $stepTimeout)) {
-      Write-InstallLine 'INSTALL_FAILED|step=launch_wait_dlg1'
-      exit 1
-    }
-  } catch {
-    Write-InstallLine "INSTALL_ERROR|reason=launch_failed|msg=$($_.Exception.Message)"
+if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
+  if (-not (Start-LandInstallerGui -LiteralPath $installerPath -WorkDir $workDir)) {
+    exit 1
+  }
+  if (-not (Wait-For-LandDialog -TitlePart $dlg1Title -TimeoutSec $stepTimeout)) {
+    Write-InstallLine 'INSTALL_FAILED|step=launch_wait_dlg1'
     exit 1
   }
 } else {
-  Write-InstallLine "INSTALLER_ALREADY_RUNNING|proc=$procName|count=$($running.Count)"
+  Write-InstallLine "INSTALLER_ALREADY_RUNNING|path=$installerPath"
 }
 
 if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout)) {

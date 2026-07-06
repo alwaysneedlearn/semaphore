@@ -15,6 +15,7 @@
     SEMAPHORE_PROFILE_USER: "{{ _land_install_profile_user | default(_reconfig_profile_user) }}"
     LAND_INSTALL_TASK_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('180', true)) }}"
     LAND_INSTALL_STEP_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_STEP_TIMEOUT_SECONDS') | default('', true) | trim) | default('90', true)) }}"
+    LAND_INSTALL_CLICK_SETTLE_MS: "{{ ((lookup('env', 'LAND_INSTALL_CLICK_SETTLE_MS') | default('', true) | trim) | default('400', true)) }}"
     LAND_INSTALL_DLG1_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG1_TITLE') | default('', true) | trim) | default('LHBTS 安装', true) }}"
     LAND_INSTALL_DLG1_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG1_BUTTON') | default('', true) | trim) | default('升级', true) }}"
     LAND_INSTALL_DLG2_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG2_TITLE') | default('', true) | trim) | default('提示', true) }}"
@@ -25,7 +26,11 @@
   register: _land_gui_install
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
-    ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
+    (
+      ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
+      or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
+      or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))
+    )
 
 - name: DEBUG LAND GUI 安装结果
   ansible.builtin.debug:
