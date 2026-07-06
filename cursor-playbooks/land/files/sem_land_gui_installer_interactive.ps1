@@ -249,6 +249,7 @@ try {
   $deadline = (Get-Date).AddSeconds($timeoutSec)
   $logComplete = $false
   $lastLineCount = 0
+  $taskStateLogged = $false
   do {
     Start-Sleep -Seconds 2
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$lastLineCount)
@@ -260,12 +261,21 @@ try {
     if ($task -and $task.State -ne 'Running') {
       Start-Sleep -Seconds 2
       Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$lastLineCount)
-      $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
-      if ($taskInfo) {
-        $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
-        Write-Output "INSTALL_TASK_STATE|name=$taskName|state=$($task.State)|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)"
-        if ($lastHex -eq '800710E0') {
-          Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
+      if (-not $taskStateLogged) {
+        $taskStateLogged = $true
+        $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+        if ($taskInfo) {
+          $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
+          Write-Output "INSTALL_TASK_STATE|name=$taskName|state=$($task.State)|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)"
+          if ($lastHex -eq '800710E0') {
+            Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
+          }
+          if ($lastHex -eq 'C000013A') {
+            Write-Output 'INSTALL_TASK_HINT|code=0xC000013A|meaning=worker进程异常退出(脚本错误或原生调用崩溃)'
+          }
+          if (($lastHex -eq 'C000013A') -and -not (Test-InstallLogTerminalLine -Path $outFile)) {
+            break
+          }
         }
       }
       if (Test-InstallLogTerminalLine -Path $outFile) {

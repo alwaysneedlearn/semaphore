@@ -106,207 +106,17 @@ $dlg3Title = $Dlg3TitleArg
 $dlg3Button = $Dlg3ButtonArg
 
 if (-not ([System.Management.Automation.PSTypeName]'SemaphoreLandGuiInstaller').Type) {
-  Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-
-public class SemaphoreLandGuiInstaller {
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    public static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool IsIconic(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    [DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-    public const uint BM_CLICK = 0x00F5;
-    public const int SW_RESTORE = 9;
-
-    public static bool TitleMatches(string title, string titlePart) {
-        if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
-        return title.IndexOf(titlePart, StringComparison.Ordinal) >= 0;
-    }
-
-    public static string NormalizeButtonText(string text) {
-        if (string.IsNullOrEmpty(text)) { return string.Empty; }
-        return text.Replace("&", string.Empty).Trim();
-    }
-
-    public static bool TextMatchesButton(string label, string buttonText) {
-        if (string.IsNullOrEmpty(buttonText)) { return false; }
-        if (string.IsNullOrEmpty(label)) { return false; }
-        string normLabel = NormalizeButtonText(label);
-        string normBtn = NormalizeButtonText(buttonText);
-        if (normLabel == normBtn) { return true; }
-        if (normLabel.IndexOf(normBtn, StringComparison.Ordinal) >= 0) { return true; }
-        if (label == buttonText) { return true; }
-        if (label.IndexOf(buttonText, StringComparison.Ordinal) >= 0) { return true; }
-        return false;
-    }
-
-    public static bool IsButtonClass(string className) {
-        if (string.IsNullOrEmpty(className)) { return false; }
-        if (string.Equals(className, "Button", StringComparison.OrdinalIgnoreCase)) { return true; }
-        if (string.Equals(className, "SysButton", StringComparison.OrdinalIgnoreCase)) { return true; }
-        if (string.Equals(className, "TButton", StringComparison.OrdinalIgnoreCase)) { return true; }
-        if (string.Equals(className, "TNewButton", StringComparison.OrdinalIgnoreCase)) { return true; }
-        if (className.EndsWith("Button", StringComparison.OrdinalIgnoreCase)) { return true; }
-        return false;
-    }
-
-    public static IntPtr FindTopLevelWindowByTitle(string titlePart) {
-        IntPtr found = IntPtr.Zero;
-        EnumWindows((hWnd, lParam) => {
-            if (!IsWindowVisible(hWnd)) { return true; }
-            StringBuilder sb = new StringBuilder(512);
-            GetWindowText(hWnd, sb, sb.Capacity);
-            string title = sb.ToString();
-            if (TitleMatches(title, titlePart)) {
-                found = hWnd;
-                return false;
-            }
-            return true;
-        }, IntPtr.Zero);
-        return found;
-    }
-
-    private static void FindButtonDeepWorker(IntPtr hwnd, string buttonText, ref IntPtr found) {
-        if (found != IntPtr.Zero || hwnd == IntPtr.Zero) { return; }
-        EnumChildWindows(hwnd, (child, lParam) => {
-            if (found != IntPtr.Zero) { return false; }
-            StringBuilder cls = new StringBuilder(64);
-            GetClassName(child, cls, cls.Capacity);
-            string className = cls.ToString();
-            StringBuilder txt = new StringBuilder(256);
-            GetWindowText(child, txt, txt.Capacity);
-            string label = txt.ToString();
-            if (IsButtonClass(className) && TextMatchesButton(label, buttonText)) {
-                found = child;
-                return false;
-            }
-            FindButtonDeepWorker(child, buttonText, ref found);
-            return found == IntPtr.Zero;
-        }, IntPtr.Zero);
-    }
-
-    public static IntPtr FindButtonByTextDeep(IntPtr parent, string buttonText) {
-        IntPtr found = IntPtr.Zero;
-        FindButtonDeepWorker(parent, buttonText, ref found);
-        return found;
-    }
-
-    private static void FindLastTNewButtonWorker(IntPtr hwnd, ref IntPtr last) {
-        if (hwnd == IntPtr.Zero) { return; }
-        EnumChildWindows(hwnd, (child, lParam) => {
-            StringBuilder cls = new StringBuilder(64);
-            GetClassName(child, cls, cls.Capacity);
-            string className = cls.ToString();
-            if (string.Equals(className, "TNewButton", StringComparison.OrdinalIgnoreCase) && IsWindowVisible(child)) {
-                last = child;
-            }
-            FindLastTNewButtonWorker(child, ref last);
-            return true;
-        }, IntPtr.Zero);
-    }
-
-    public static IntPtr FindLastVisibleTNewButton(IntPtr parent) {
-        IntPtr last = IntPtr.Zero;
-        FindLastTNewButtonWorker(parent, ref last);
-        return last;
-    }
-
-    public static string ScanClickableControls(IntPtr parent, int maxItems) {
-        if (parent == IntPtr.Zero || maxItems <= 0) { return string.Empty; }
-        StringBuilder sb = new StringBuilder();
-        int count = 0;
-        ScanClickableWorker(parent, sb, ref count, maxItems);
-        return sb.ToString();
-    }
-
-    private static void ScanClickableWorker(IntPtr hwnd, StringBuilder sb, ref int count, int maxItems) {
-        if (hwnd == IntPtr.Zero || count >= maxItems) { return; }
-        EnumChildWindows(hwnd, (child, lParam) => {
-            if (count >= maxItems) { return false; }
-            StringBuilder cls = new StringBuilder(64);
-            GetClassName(child, cls, cls.Capacity);
-            string className = cls.ToString();
-            StringBuilder txt = new StringBuilder(256);
-            GetWindowText(child, txt, txt.Capacity);
-            string label = txt.ToString();
-            if (!string.IsNullOrEmpty(label) && (IsButtonClass(className) || label.Length <= 32)) {
-                if (sb.Length > 0) { sb.Append(';'); }
-                sb.Append(label);
-                sb.Append('@');
-                sb.Append(className);
-                count++;
-            }
-            ScanClickableWorker(child, sb, ref count, maxItems);
-            return true;
-        }, IntPtr.Zero);
-    }
-
-    public static bool ClickDialogButton(string titlePart, string buttonText, out string detail) {
-        detail = string.Empty;
-        IntPtr hwnd = FindTopLevelWindowByTitle(titlePart);
-        if (hwnd == IntPtr.Zero) {
-            detail = "window_not_found";
-            return false;
-        }
-        if (IsIconic(hwnd) || !IsWindowVisible(hwnd)) {
-            ShowWindow(hwnd, SW_RESTORE);
-        }
-        SetForegroundWindow(hwnd);
-        IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
-        string clickMode = "text_match";
-        if (btn == IntPtr.Zero) {
-            btn = FindLastVisibleTNewButton(hwnd);
-            if (btn != IntPtr.Zero) {
-                clickMode = "fallback_last_TNewButton";
-            }
-        }
-        if (btn == IntPtr.Zero) {
-            string scan = ScanClickableControls(hwnd, 12);
-            detail = string.IsNullOrEmpty(scan) ? "button_not_found" : ("button_not_found|scan=" + scan);
-            return false;
-        }
-        StringBuilder bcls = new StringBuilder(64);
-        GetClassName(btn, bcls, bcls.Capacity);
-        StringBuilder blbl = new StringBuilder(256);
-        GetWindowText(btn, blbl, blbl.Capacity);
-        SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-        PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-        StringBuilder tsb = new StringBuilder(512);
-        GetWindowText(hwnd, tsb, tsb.Capacity);
-        detail = "title=" + tsb.ToString() + "|btn=" + blbl.ToString() + "|class=" + bcls.ToString() + "|mode=" + clickMode;
-        return true;
-    }
-}
-"@
+  $win32Cs = 'C:\Windows\Temp\sem_land_gui_installer_win32.cs'
+  if (-not (Test-Path -LiteralPath $win32Cs)) {
+    Write-InstallLine "INSTALL_ERROR|reason=win32_helper_missing|path=$win32Cs"
+    exit 1
+  }
+  try {
+    Add-Type -Path $win32Cs -ErrorAction Stop
+  } catch {
+    Write-InstallLine "INSTALL_ERROR|reason=add_type_failed|msg=$($_.Exception.Message)"
+    exit 1
+  }
 }
 
 function Wait-For-LandDialog {
@@ -318,7 +128,12 @@ function Wait-For-LandDialog {
   $attempt = 0
   do {
     $attempt++
-    $hwnd = [SemaphoreLandGuiInstaller]::FindTopLevelWindowByTitle($TitlePart)
+    try {
+      $hwnd = [SemaphoreLandGuiInstaller]::FindTopLevelWindowByTitle($TitlePart)
+    } catch {
+      Write-InstallLine "DIALOG_ERROR|phase=wait_visible|title_part=$TitlePart|msg=$($_.Exception.Message)"
+      return $false
+    }
     if ($hwnd -ne [IntPtr]::Zero) {
       Write-InstallLine "DIALOG_VISIBLE|title_part=$TitlePart|attempt=$attempt"
       return $true
@@ -343,7 +158,13 @@ function Wait-Click-LandDialog {
   do {
     $attempt++
     $detail = ''
-    $ok = [SemaphoreLandGuiInstaller]::ClickDialogButton($TitlePart, $ButtonText, [ref]$detail)
+    $ok = $false
+    try {
+      $ok = [SemaphoreLandGuiInstaller]::ClickDialogButton($TitlePart, $ButtonText, [ref]$detail)
+    } catch {
+      $detail = "ps_exception=$($_.Exception.Message)"
+      $ok = $false
+    }
     if ($ok) {
       Write-InstallLine "DIALOG_CLICKED|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       return $true
