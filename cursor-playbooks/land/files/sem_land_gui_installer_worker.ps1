@@ -6,14 +6,14 @@ param(
   [string]$Dlg1TitleArg = 'LHBTS 安装',
   [string]$Dlg1ButtonArg = '升级',
   [string]$Dlg2TitleArg = '提示',
-  [string]$Dlg2ButtonArg = '确认',
+  [string]$Dlg2ButtonArg = '确定',
   [string]$Dlg3TitleArg = 'LHBTS 安装',
   [string]$Dlg3ButtonArg = '确定',
   [string]$StepTimeoutArg = '90',
-  [string]$ClickSettleMsArg = '1500',
-  [string]$CoordMoveDelayMsArg = '1200',
-  [string]$PollDelayMsArg = '800',
-  [string]$Dlg1CoordXPct = '18',
+  [string]$ClickSettleMsArg = '500',
+  [string]$CoordMoveDelayMsArg = '400',
+  [string]$PollDelayMsArg = '400',
+  [string]$Dlg1CoordXPct = '32',
   [string]$Dlg1CoordYPct = '93',
   [string]$Dlg2CoordXPct = '0',
   [string]$Dlg2CoordYPct = '0',
@@ -118,7 +118,7 @@ if ($installerPath.Length -eq 0 -or -not (Test-Path -LiteralPath $installerPath)
 [int]::TryParse($StepTimeoutArg, [ref]$stepTimeout) | Out-Null
 if ($stepTimeout -lt 10) { $stepTimeout = 10 }
 
-[int]$settleMs = 1500
+[int]$settleMs = 500
 [int]::TryParse($ClickSettleMsArg, [ref]$settleMs) | Out-Null
 if ($settleMs -lt 0) { $settleMs = 0 }
 
@@ -129,14 +129,14 @@ $dlg2Button = $Dlg2ButtonArg
 $dlg3Title = $Dlg3TitleArg
 $dlg3Button = $Dlg3ButtonArg
 
-[int]$dlg1CoordX = 18
+[int]$dlg1CoordX = 32
 [int]$dlg1CoordY = 93
 [int]$dlg2CoordX = 0
 [int]$dlg2CoordY = 0
 [int]$dlg3CoordX = 83
 [int]$dlg3CoordY = 93
-[int]$coordMoveDelayMs = 1200
-[int]$pollDelayMs = 800
+[int]$coordMoveDelayMs = 400
+[int]$pollDelayMs = 400
 [int]::TryParse($CoordMoveDelayMsArg, [ref]$coordMoveDelayMs) | Out-Null
 [int]::TryParse($PollDelayMsArg, [ref]$pollDelayMs) | Out-Null
 if ($coordMoveDelayMs -lt 0) { $coordMoveDelayMs = 0 }
@@ -232,7 +232,7 @@ public class SemaphoreLandGuiInstaller {
     public static uint InstallerProcessId = 0;
     public static int FallbackCoordXPct = 0;
     public static int FallbackCoordYPct = 0;
-    public static int CoordMoveDelayMs = 1200;
+    public static int CoordMoveDelayMs = 400;
 
     public static bool TitleMatches(string title, string titlePart) {
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
@@ -538,8 +538,8 @@ function Wait-Click-LandDialog {
     [int]$TimeoutSec,
     [int]$CoordXPct = 0,
     [int]$CoordYPct = 0,
-    [int]$CoordMoveDelayMs = 1200,
-    [int]$PollDelayMs = 800
+    [int]$CoordMoveDelayMs = 400,
+    [int]$PollDelayMs = 400
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   $attempt = 0
