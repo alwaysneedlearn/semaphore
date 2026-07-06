@@ -26,6 +26,12 @@ $dlg3Title = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_TITLE' -Default 'LHBTS �
 $dlg3Button = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_BUTTON' -Default '确定'
 $stepTimeout = Get-EnvOrDefault -Name 'LAND_INSTALL_STEP_TIMEOUT_SECONDS' -Default '90'
 $clickSettleMs = Get-EnvOrDefault -Name 'LAND_INSTALL_CLICK_SETTLE_MS' -Default '400'
+$dlg1CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_COORD_X_PCT' -Default '20'
+$dlg1CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_COORD_Y_PCT' -Default '88'
+$dlg2CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_X_PCT' -Default '55'
+$dlg2CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_Y_PCT' -Default '58'
+$dlg3CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_X_PCT' -Default '50'
+$dlg3CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_Y_PCT' -Default '88'
 
 [int]$timeoutSec = 180
 $timeoutRaw = [string]$env:LAND_INSTALL_TASK_TIMEOUT_SECONDS
@@ -198,6 +204,12 @@ $config = [ordered]@{
   dlg3_button = $dlg3Button
   step_timeout_seconds = $stepTimeout
   click_settle_ms = $clickSettleMs
+  dlg1_coord_x_pct = $dlg1CoordX
+  dlg1_coord_y_pct = $dlg1CoordY
+  dlg2_coord_x_pct = $dlg2CoordX
+  dlg2_coord_y_pct = $dlg2CoordY
+  dlg3_coord_x_pct = $dlg3CoordX
+  dlg3_coord_y_pct = $dlg3CoordY
 }
 try {
   ($config | ConvertTo-Json -Compress) | Out-File -LiteralPath $configPath -Encoding UTF8 -Force

@@ -22,6 +22,12 @@
     LAND_INSTALL_DLG2_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG2_BUTTON') | default('', true) | trim) | default('确认', true) }}"
     LAND_INSTALL_DLG3_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG3_TITLE') | default('', true) | trim) | default('LHBTS 安装', true) }}"
     LAND_INSTALL_DLG3_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG3_BUTTON') | default('', true) | trim) | default('确定', true) }}"
+    LAND_INSTALL_DLG1_COORD_X_PCT: "{{ (lookup('env', 'LAND_INSTALL_DLG1_COORD_X_PCT') | default('', true) | trim) | default('20', true) }}"
+    LAND_INSTALL_DLG1_COORD_Y_PCT: "{{ (lookup('env', 'LAND_INSTALL_DLG1_COORD_Y_PCT') | default('', true) | trim) | default('88', true) }}"
+    LAND_INSTALL_DLG2_COORD_X_PCT: "{{ (lookup('env', 'LAND_INSTALL_DLG2_COORD_X_PCT') | default('', true) | trim) | default('55', true) }}"
+    LAND_INSTALL_DLG2_COORD_Y_PCT: "{{ (lookup('env', 'LAND_INSTALL_DLG2_COORD_Y_PCT') | default('', true) | trim) | default('58', true) }}"
+    LAND_INSTALL_DLG3_COORD_X_PCT: "{{ (lookup('env', 'LAND_INSTALL_DLG3_COORD_X_PCT') | default('', true) | trim) | default('50', true) }}"
+    LAND_INSTALL_DLG3_COORD_Y_PCT: "{{ (lookup('env', 'LAND_INSTALL_DLG3_COORD_Y_PCT') | default('', true) | trim) | default('88', true) }}"
   ansible.windows.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_land_gui_installer_interactive.ps1
   register: _land_gui_install
   failed_when: >
