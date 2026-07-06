@@ -269,8 +269,8 @@ function Start-LandInstallerGui {
     $psi.UseShellExecute = $true
     $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
     $proc = [System.Diagnostics.Process]::Start($psi)
-    $pid = if ($proc) { $proc.Id } else { 0 }
-    Write-InstallLine "INSTALLER_LAUNCHED|exe=$LiteralPath|pid=$pid|mode=UseShellExecute"
+    $procId = if ($proc) { $proc.Id } else { 0 }
+    Write-InstallLine "INSTALLER_LAUNCHED|exe=$LiteralPath|pid=$procId|mode=UseShellExecute"
     return $true
   } catch {
     Write-InstallLine "INSTALL_ERROR|reason=launch_failed|msg=$($_.Exception.Message)"
