@@ -218,6 +218,7 @@ public class SemaphoreLandGuiInstaller {
     public static uint InstallerProcessId = 0;
     public static int FallbackCoordXPct = 0;
     public static int FallbackCoordYPct = 0;
+    public static bool RequireFinalWizardScreen = false;
 
     public static bool TitleMatches(string title, string titlePart) {
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
@@ -436,6 +437,50 @@ public class SemaphoreLandGuiInstaller {
         return partial;
     }
 
+    public static bool HasVisibleButtonText(IntPtr parent, string buttonText) {
+        if (parent == IntPtr.Zero || string.IsNullOrEmpty(buttonText)) { return false; }
+        var queue = new Queue<IntPtr>();
+        queue.Enqueue(parent);
+        while (queue.Count > 0) {
+            IntPtr hwnd = queue.Dequeue();
+            foreach (IntPtr child in GetChildWindows(hwnd)) {
+                string className = GetClassNameText(child);
+                string label = GetControlText(child);
+                if (IsButtonClass(className) && IsWindowVisible(child) && TextMatchesButton(label, buttonText)) {
+                    return true;
+                }
+                queue.Enqueue(child);
+            }
+        }
+        return false;
+    }
+
+    public static int CountVisibleButtons(IntPtr parent) {
+        if (parent == IntPtr.Zero) { return 0; }
+        int count = 0;
+        var queue = new Queue<IntPtr>();
+        queue.Enqueue(parent);
+        while (queue.Count > 0) {
+            IntPtr hwnd = queue.Dequeue();
+            foreach (IntPtr child in GetChildWindows(hwnd)) {
+                string className = GetClassNameText(child);
+                if (IsButtonClass(className) && IsWindowVisible(child)) {
+                    count++;
+                }
+                queue.Enqueue(child);
+            }
+        }
+        return count;
+    }
+
+    public static bool IsFinalInstallWizardReady(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero) { return false; }
+        if (!HasVisibleButtonText(hwnd, "确定")) { return false; }
+        if (HasVisibleButtonText(hwnd, "升级")) { return false; }
+        if (HasVisibleButtonText(hwnd, "卸载")) { return false; }
+        return true;
+    }
+
     public static IntPtr FindLastVisibleButton(IntPtr parent) {
         if (parent == IntPtr.Zero) { return IntPtr.Zero; }
         IntPtr last = IntPtr.Zero;
@@ -510,6 +555,11 @@ public class SemaphoreLandGuiInstaller {
             }
             SetForegroundWindow(hwnd);
             string wizardClass = GetClassNameText(hwnd);
+            if (RequireFinalWizardScreen && !IsFinalInstallWizardReady(hwnd)) {
+                string scan = ScanWindowTree(hwnd, 12);
+                detail = "wizard_not_final|title=" + GetControlText(hwnd) + "|buttons=" + CountVisibleButtons(hwnd) + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
+                return false;
+            }
             IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
             string clickMode = "text_match";
             if (btn == IntPtr.Zero) {
@@ -588,7 +638,8 @@ function Wait-Click-LandDialog {
     [string]$ButtonText,
     [int]$TimeoutSec,
     [int]$CoordXPct = 0,
-    [int]$CoordYPct = 0
+    [int]$CoordYPct = 0,
+    [switch]$RequireFinalWizard
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   $attempt = 0
@@ -598,6 +649,7 @@ function Wait-Click-LandDialog {
     $ok = $false
     [SemaphoreLandGuiInstaller]::FallbackCoordXPct = $CoordXPct
     [SemaphoreLandGuiInstaller]::FallbackCoordYPct = $CoordYPct
+    [SemaphoreLandGuiInstaller]::RequireFinalWizardScreen = $RequireFinalWizard.IsPresent
     try {
       $ok = [SemaphoreLandGuiInstaller]::ClickDialogButton($TitlePart, $ButtonText, [ref]$detail)
     } catch {
@@ -708,8 +760,8 @@ if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -T
   exit 1
 }
 
-Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=poll"
-if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY)) {
+Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button"
+if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -RequireFinalWizard)) {
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
 }

@@ -71,7 +71,7 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_INSTALL_TASK_TIMEOUT_SECONDS` | `180` | Interactive scheduled-task timeout |
 | `LAND_INSTALL_DLG1_TITLE` / `_BUTTON` | `LHBTS 安装` / `升级` | Step 1 — custom UI; coord fallback **32%, 93%** |
 | `LAND_INSTALL_DLG2_TITLE` / `_BUTTON` | `提示` / `确定` | Step 2 — standard popup; **GetDlgItem(IDOK)** + text match (never clicks 取消) |
-| `LAND_INSTALL_DLG3_TITLE` / `_BUTTON` | `LHBTS 安装` / `确定` | Step 3 — single button; coord fallback **83%, 93%** |
+| `LAND_INSTALL_DLG3_TITLE` / `_BUTTON` | `LHBTS 安装` / `确定` | Step 3 — clicks only when **升级/卸载 gone** (final single 确定); coord **83%, 93%** |
 | `LAND_INSTALL_DLG1_COORD_X_PCT` / `_Y_PCT` | `32` / `93` | Client-area % for step 1 coord fallback |
 | `LAND_INSTALL_DLG2_COORD_X_PCT` / `_Y_PCT` | `0` / `0` | Step 2 coord disabled |
 | `LAND_INSTALL_DLG3_COORD_X_PCT` / `_Y_PCT` | `83` / `93` | Client-area % for step 3 coord fallback |
