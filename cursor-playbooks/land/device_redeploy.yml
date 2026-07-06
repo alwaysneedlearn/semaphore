@@ -11,6 +11,7 @@
     sem_operation_force_log: true
     sem_debug_tag: LAND
     land_include_redeliver: false
+    land_include_gui_installer: true
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LAND', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     _exe_name_default: LHBTS.exe
@@ -54,7 +55,6 @@
     - ansible.builtin.set_fact:
         _land_target_host: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
 
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_gui_install.yml"
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_config_stop_start.yml"
 
   post_tasks:

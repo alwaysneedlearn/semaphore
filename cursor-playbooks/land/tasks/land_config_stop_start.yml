@@ -1,5 +1,6 @@
 ---
-# LAND: API modify → graceful stop → start → API retry → optional Redeliver. No zip.
+# LAND: API modify → graceful stop → [redeploy GUI installer] → start → API retry → optional Redeliver.
+# Redeploy: set land_include_gui_installer=true (device_redeploy.yml).
 # Requires play vars: merged_cfg, exe_path, process_name, land_* API vars, _land_target_host, _land_dev
 
 - name: LAND 重启前检查进程
@@ -34,6 +35,10 @@
 - name: 规范化启动用户
   ansible.builtin.set_fact:
     _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+- name: 重新部署：GUI 安装程序（优雅停止后、交互启动前）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_gui_install.yml"
+  when: land_include_gui_installer | default(false) | bool
 
 - name: 启动程序
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"

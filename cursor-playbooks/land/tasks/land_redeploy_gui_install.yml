@@ -4,6 +4,11 @@
 
 - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_prepare_installer_vars.yml"
 
+- name: 重新部署：复用已解析的桌面用户
+  ansible.builtin.set_fact:
+    _land_install_profile_user: "{{ _reconfig_profile_user }}"
+  when: (_reconfig_profile_user | default('') | trim | length) > 0
+
 - name: 重新部署：获取当前登录用户（GUI 安装）
   ansible.windows.win_shell: |
     $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
@@ -16,10 +21,12 @@
     if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
   register: _land_install_get_user
   changed_when: false
+  when: (_reconfig_profile_user | default('') | trim | length) == 0
 
 - name: 重新部署：规范化 GUI 安装用户
   ansible.builtin.set_fact:
     _land_install_profile_user: "{{ (_land_install_get_user.stdout_lines | default([]) | last | default(_land_install_get_user.stdout | default(''))) | trim }}"
+  when: (_reconfig_profile_user | default('') | trim | length) == 0
 
 - name: 重新部署：解析安装程序目标路径（默认登录用户桌面）
   ansible.windows.win_shell: |
