@@ -25,7 +25,7 @@ LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
 **Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`**). **`EXE_DIR`** use `D:\` or `F:\` (not `D:` alone — or rely on script mapping `D:` → `D:\`). **`EXE_DIR_FALLBACK_DRIVES=D,F`**: probes `LHBTS\LHBTS.exe` on each drive before picking the first existing disk.
 
-**Redeploy (GUI installer):** copy installer exe from controller (`ZIP_PATH` + `INSTALLER_EXE_NAME` or `ZIP_NAME`, e.g. `LHBTS_Setup.exe`) to **`LAND_INSTALLER_DEST`** or default `{{ EXE_DIR }}\{installer}.exe`. Interactive desktop session clicks: `LHBTS 安装` / **升级** → `提示` / **确认** → wait **`LAND_INSTALL_MIDDLE_WAIT_SECONDS`** (default **5**) → `LHBTS 安装` / **确定**. No zip extract, no `HKCU\Software\LH` registry. Scripts: `sem_land_gui_installer_interactive.ps1`, `sem_land_gui_installer_worker.ps1`.
+**Redeploy (GUI installer):** copy installer exe from controller to **current interactive user's Desktop** by default (`C:\Users\{user}\Desktop\{installer}.exe`). Override with **`LAND_INSTALLER_DEST`** or set **`LAND_INSTALLER_USE_DESKTOP=false`** to use `{{ EXE_DIR }}\{installer}.exe`. Wizard clicks: `LHBTS 安装` / **升级** → `提示` / **确认** → poll until `LHBTS 安装` / **确定** (no fixed 5s wait; each step uses **`LAND_INSTALL_STEP_TIMEOUT_SECONDS`** poll). No zip extract, no `HKCU\Software\LH` registry.
 
 ## Runner 部署（必做）
 
@@ -65,8 +65,10 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `ZIP_NAME` | `land` | Legacy name; redeploy prefers **`INSTALLER_EXE_NAME`** (installer `.exe` base name) |
 | `INSTALLER_EXE_NAME` | (`ZIP_NAME` or `LHBTS.exe`) | Installer exe file name on controller |
 | `ZIP_PATH` | `/root/neware/dbwb` | Controller directory **or** full path to installer `.exe` |
-| `LAND_INSTALLER_DEST` | `{{ EXE_DIR }}\{installer}.exe` | Target path for copied installer exe |
-| `LAND_INSTALL_MIDDLE_WAIT_SECONDS` | `5` | Wait between 确认 and final 确定 |
+| `LAND_INSTALLER_DEST` | (Desktop) | Explicit full path on target; overrides desktop default |
+| `LAND_INSTALLER_USE_DESKTOP` | `true` | `false` → copy to `{{ EXE_DIR }}\{installer}.exe` instead |
+| `LAND_INSTALL_STEP_TIMEOUT_SECONDS` | `90` | Max wait per dialog (poll until window/button appears) |
+| `LAND_INSTALL_CLICK_SETTLE_MS` | `400` | Short pause after each click (not a fixed 5s) |
 | `LAND_INSTALL_TASK_TIMEOUT_SECONDS` | `180` | Interactive scheduled-task timeout |
 | `LAND_INSTALL_DLG1_TITLE` / `_BUTTON` | `LHBTS 安装` / `升级` | GUI wizard step 1 (override if UI text differs) |
 | `LAND_INSTALL_DLG2_TITLE` / `_BUTTON` | `提示` / `确认` | Step 2 |

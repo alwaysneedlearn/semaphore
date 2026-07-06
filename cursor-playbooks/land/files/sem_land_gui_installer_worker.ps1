@@ -4,8 +4,7 @@
 #   LAND_INSTALL_DLG1_TITLE / LAND_INSTALL_DLG1_BUTTON (default LHBTS 安装 / 升级)
 #   LAND_INSTALL_DLG2_TITLE / LAND_INSTALL_DLG2_BUTTON (default 提示 / 确认)
 #   LAND_INSTALL_DLG3_TITLE / LAND_INSTALL_DLG3_BUTTON (default LHBTS 安装 / 确定)
-#   LAND_INSTALL_MIDDLE_WAIT_SECONDS (default 5)
-#   LAND_INSTALL_STEP_TIMEOUT_SECONDS (default 90 per dialog)
+#   LAND_INSTALL_STEP_TIMEOUT_SECONDS (default 90 per dialog; step 3 waits for dialog, no fixed sleep)
 #   LogFileArg (optional)
 
 param(
@@ -30,19 +29,19 @@ if ($installerPath.Length -eq 0 -or -not (Test-Path -LiteralPath $installerPath)
   exit 1
 }
 
-[int]$middleWait = 5
-$middleRaw = [string]$env:LAND_INSTALL_MIDDLE_WAIT_SECONDS
-if (-not [string]::IsNullOrWhiteSpace($middleRaw)) {
-  [int]::TryParse($middleRaw, [ref]$middleWait) | Out-Null
-}
-if ($middleWait -lt 0) { $middleWait = 0 }
-
 [int]$stepTimeout = 90
 $stepTimeoutRaw = [string]$env:LAND_INSTALL_STEP_TIMEOUT_SECONDS
 if (-not [string]::IsNullOrWhiteSpace($stepTimeoutRaw)) {
   [int]::TryParse($stepTimeoutRaw, [ref]$stepTimeout) | Out-Null
 }
 if ($stepTimeout -lt 10) { $stepTimeout = 10 }
+
+[int]$settleMs = 400
+$settleRaw = [string]$env:LAND_INSTALL_CLICK_SETTLE_MS
+if (-not [string]::IsNullOrWhiteSpace($settleRaw)) {
+  [int]::TryParse($settleRaw, [ref]$settleMs) | Out-Null
+}
+if ($settleMs -lt 0) { $settleMs = 0 }
 
 function Get-EnvOrDefault {
   param([string]$Name, [string]$Default)
@@ -167,6 +166,26 @@ public class SemaphoreLandGuiInstaller {
 "@
 }
 
+function Wait-For-LandDialog {
+  param(
+    [string]$TitlePart,
+    [int]$TimeoutSec
+  )
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  $attempt = 0
+  do {
+    $attempt++
+    $hwnd = [SemaphoreLandGuiInstaller]::FindTopLevelWindowByTitle($TitlePart)
+    if ($hwnd -ne [IntPtr]::Zero) {
+      Write-InstallLine "DIALOG_VISIBLE|title_part=$TitlePart|attempt=$attempt"
+      return $true
+    }
+    Start-Sleep -Milliseconds 400
+  } while ((Get-Date) -lt $deadline)
+  Write-InstallLine "DIALOG_WAIT_TIMEOUT|title_part=$TitlePart|attempts=$attempt"
+  return $false
+}
+
 function Wait-Click-LandDialog {
   param(
     [string]$TitlePart,
@@ -202,7 +221,10 @@ if ($running.Count -eq 0) {
   try {
     Start-Process -FilePath $installerPath -WorkingDirectory $workDir | Out-Null
     Write-InstallLine "INSTALLER_LAUNCHED|exe=$installerPath"
-    Start-Sleep -Seconds 3
+    if (-not (Wait-For-LandDialog -TitlePart $dlg1Title -TimeoutSec $stepTimeout)) {
+      Write-InstallLine 'INSTALL_FAILED|step=launch_wait_dlg1'
+      exit 1
+    }
   } catch {
     Write-InstallLine "INSTALL_ERROR|reason=launch_failed|msg=$($_.Exception.Message)"
     exit 1
@@ -215,17 +237,15 @@ if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -T
   Write-InstallLine 'INSTALL_FAILED|step=1'
   exit 1
 }
-Start-Sleep -Seconds 2
+if ($settleMs -gt 0) { Start-Sleep -Milliseconds $settleMs }
 
 if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout)) {
   Write-InstallLine 'INSTALL_FAILED|step=2'
   exit 1
 }
-Start-Sleep -Seconds 2
+if ($settleMs -gt 0) { Start-Sleep -Milliseconds $settleMs }
 
-Write-InstallLine "INSTALL_WAIT|seconds=$middleWait"
-Start-Sleep -Seconds $middleWait
-
+Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=poll"
 if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout)) {
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
