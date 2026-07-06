@@ -207,6 +207,9 @@ public class SemaphoreLandGuiInstaller {
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr GetDlgItem(IntPtr hDlg, int nIDDlgItem);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT {
         public int Left;
@@ -228,6 +231,8 @@ public class SemaphoreLandGuiInstaller {
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
     public const int VK_RETURN = 0x0D;
     public const int SW_RESTORE = 9;
+    public const int IDOK = 1;
+    public const int IDCANCEL = 2;
 
     public static uint InstallerProcessId = 0;
     public static int FallbackCoordXPct = 0;
@@ -373,8 +378,65 @@ public class SemaphoreLandGuiInstaller {
         return best;
     }
 
+    public static bool IsCancelButtonText(string label) {
+        if (string.IsNullOrEmpty(label)) { return false; }
+        string norm = NormalizeButtonText(label);
+        return norm == "取消" || norm.IndexOf("取消", StringComparison.Ordinal) >= 0
+            || norm.Equals("Cancel", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsWarningDialog(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero) { return false; }
+        string title = GetControlText(hwnd);
+        if (!string.IsNullOrEmpty(title) && title.IndexOf("警告", StringComparison.Ordinal) >= 0) {
+            return true;
+        }
+        var queue = new Queue<IntPtr>();
+        queue.Enqueue(hwnd);
+        while (queue.Count > 0) {
+            IntPtr node = queue.Dequeue();
+            foreach (IntPtr child in GetChildWindows(node)) {
+                string className = GetClassNameText(child);
+                if (string.Equals(className, "Static", StringComparison.OrdinalIgnoreCase)) {
+                    string body = GetControlText(child);
+                    if (!string.IsNullOrEmpty(body) && body.IndexOf("警告", StringComparison.Ordinal) >= 0) {
+                        return true;
+                    }
+                }
+                queue.Enqueue(child);
+            }
+        }
+        return false;
+    }
+
+    public static IntPtr FindStandardDialogButton(IntPtr hwnd, string buttonText) {
+        if (hwnd == IntPtr.Zero || string.IsNullOrEmpty(buttonText)) { return IntPtr.Zero; }
+        string norm = NormalizeButtonText(buttonText);
+        int[] ids;
+        if (norm == "确定" || norm == "确认" || norm.Equals("OK", StringComparison.OrdinalIgnoreCase)) {
+            ids = new int[] { IDOK };
+        } else if (IsCancelButtonText(buttonText)) {
+            ids = new int[] { IDCANCEL };
+        } else {
+            return IntPtr.Zero;
+        }
+        foreach (int id in ids) {
+            IntPtr item = GetDlgItem(hwnd, id);
+            if (item == IntPtr.Zero || !IsWindowVisible(item)) { continue; }
+            string label = GetControlText(item);
+            if (string.IsNullOrEmpty(label) || TextMatchesButton(label, buttonText)) {
+                return item;
+            }
+        }
+        return IntPtr.Zero;
+    }
+
     public static IntPtr FindButtonByTextDeep(IntPtr parent, string buttonText) {
         if (parent == IntPtr.Zero || string.IsNullOrEmpty(buttonText)) { return IntPtr.Zero; }
+        IntPtr stdBtn = FindStandardDialogButton(parent, buttonText);
+        if (stdBtn != IntPtr.Zero) { return stdBtn; }
+        IntPtr exact = IntPtr.Zero;
+        IntPtr partial = IntPtr.Zero;
         var queue = new Queue<IntPtr>();
         queue.Enqueue(parent);
         while (queue.Count > 0) {
@@ -382,13 +444,20 @@ public class SemaphoreLandGuiInstaller {
             foreach (IntPtr child in GetChildWindows(hwnd)) {
                 string className = GetClassNameText(child);
                 string label = GetControlText(child);
-                if (IsButtonClass(className) && TextMatchesButton(label, buttonText)) {
-                    return child;
+                if (IsButtonClass(className) && IsWindowVisible(child)) {
+                    string normLabel = NormalizeButtonText(label);
+                    string normBtn = NormalizeButtonText(buttonText);
+                    if (normLabel == normBtn) {
+                        exact = child;
+                    } else if (partial == IntPtr.Zero && TextMatchesButton(label, buttonText)) {
+                        partial = child;
+                    }
                 }
                 queue.Enqueue(child);
             }
         }
-        return IntPtr.Zero;
+        if (exact != IntPtr.Zero) { return exact; }
+        return partial;
     }
 
     public static IntPtr FindLastVisibleButton(IntPtr parent) {
@@ -455,6 +524,11 @@ public class SemaphoreLandGuiInstaller {
                 detail = "window_not_found|installer_pid=" + InstallerProcessId;
                 return false;
             }
+            if (IsWarningDialog(hwnd)) {
+                string warnTitle = GetControlText(hwnd);
+                detail = "warning_dialog_abort|title=" + warnTitle;
+                return false;
+            }
             if (IsIconic(hwnd) || !IsWindowVisible(hwnd)) {
                 ShowWindow(hwnd, SW_RESTORE);
             }
@@ -462,12 +536,6 @@ public class SemaphoreLandGuiInstaller {
             string wizardClass = GetClassNameText(hwnd);
             IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
             string clickMode = "text_match";
-            if (btn == IntPtr.Zero) {
-                btn = FindLastVisibleButton(hwnd);
-                if (btn != IntPtr.Zero) {
-                    clickMode = "fallback_last_button";
-                }
-            }
             if (btn == IntPtr.Zero) {
                 string scan = ScanWindowTree(hwnd, 20);
                 if (FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
@@ -481,6 +549,16 @@ public class SemaphoreLandGuiInstaller {
             }
             string btnClass = GetClassNameText(btn);
             string btnLabel = GetControlText(btn);
+            string normWanted = NormalizeButtonText(buttonText);
+            string normGot = NormalizeButtonText(btnLabel);
+            if ((normWanted == "确定" || normWanted == "确认") && IsCancelButtonText(btnLabel)) {
+                detail = "wrong_button_abort|wanted=" + buttonText + "|got=" + btnLabel + "|wizard_class=" + wizardClass;
+                return false;
+            }
+            if (normWanted.IndexOf("升级", StringComparison.Ordinal) >= 0 && IsCancelButtonText(btnLabel)) {
+                detail = "wrong_button_abort|wanted=" + buttonText + "|got=" + btnLabel + "|wizard_class=" + wizardClass;
+                return false;
+            }
             SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             ClickHwndCenter(btn);
@@ -559,6 +637,10 @@ function Wait-Click-LandDialog {
     if ($ok) {
       Write-InstallLine "DIALOG_CLICKED|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       return $true
+    }
+    if ($detail -match 'warning_dialog_abort|wrong_button_abort') {
+      Write-InstallLine "DIALOG_ABORT|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
+      return $false
     }
     if (($attempt % 10) -eq 0) {
       Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|last=$detail"
