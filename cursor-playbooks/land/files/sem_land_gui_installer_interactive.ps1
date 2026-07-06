@@ -25,13 +25,17 @@ $dlg2Button = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_BUTTON' -Default '确认
 $dlg3Title = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_TITLE' -Default 'LHBTS 安装'
 $dlg3Button = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_BUTTON' -Default '确定'
 $stepTimeout = Get-EnvOrDefault -Name 'LAND_INSTALL_STEP_TIMEOUT_SECONDS' -Default '90'
-$clickSettleMs = Get-EnvOrDefault -Name 'LAND_INSTALL_CLICK_SETTLE_MS' -Default '400'
+$clickSettleMs = Get-EnvOrDefault -Name 'LAND_INSTALL_CLICK_SETTLE_MS' -Default '1500'
+$coordMoveDelayMs = Get-EnvOrDefault -Name 'LAND_INSTALL_COORD_MOVE_DELAY_MS' -Default '1200'
+$pollDelayMs = Get-EnvOrDefault -Name 'LAND_INSTALL_POLL_DELAY_MS' -Default '800'
 $dlg1CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_COORD_X_PCT' -Default '18'
 $dlg1CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_COORD_Y_PCT' -Default '93'
-$dlg2CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_X_PCT' -Default '55'
-$dlg2CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_Y_PCT' -Default '58'
-$dlg3CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_X_PCT' -Default '50'
-$dlg3CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_Y_PCT' -Default '88'
+# Step 2 (提示 popup): use Win32 button text match only — coord 0 disables fallback click.
+$dlg2CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_X_PCT' -Default '0'
+$dlg2CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_Y_PCT' -Default '0'
+# Step 3 (single 确定): same client-area position as 取消 on step 1 (right).
+$dlg3CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_X_PCT' -Default '83'
+$dlg3CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_Y_PCT' -Default '93'
 
 [int]$timeoutSec = 180
 $timeoutRaw = [string]$env:LAND_INSTALL_TASK_TIMEOUT_SECONDS
@@ -204,6 +208,8 @@ $config = [ordered]@{
   dlg3_button = $dlg3Button
   step_timeout_seconds = $stepTimeout
   click_settle_ms = $clickSettleMs
+  coord_move_delay_ms = $coordMoveDelayMs
+  poll_delay_ms = $pollDelayMs
   dlg1_coord_x_pct = $dlg1CoordX
   dlg1_coord_y_pct = $dlg1CoordY
   dlg2_coord_x_pct = $dlg2CoordX

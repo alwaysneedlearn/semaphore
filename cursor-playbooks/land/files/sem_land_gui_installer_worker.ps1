@@ -10,13 +10,15 @@ param(
   [string]$Dlg3TitleArg = 'LHBTS 安装',
   [string]$Dlg3ButtonArg = '确定',
   [string]$StepTimeoutArg = '90',
-  [string]$ClickSettleMsArg = '400',
-  [string]$Dlg1CoordXPct = '20',
-  [string]$Dlg1CoordYPct = '88',
-  [string]$Dlg2CoordXPct = '55',
-  [string]$Dlg2CoordYPct = '58',
-  [string]$Dlg3CoordXPct = '50',
-  [string]$Dlg3CoordYPct = '88'
+  [string]$ClickSettleMsArg = '1500',
+  [string]$CoordMoveDelayMsArg = '1200',
+  [string]$PollDelayMsArg = '800',
+  [string]$Dlg1CoordXPct = '18',
+  [string]$Dlg1CoordYPct = '93',
+  [string]$Dlg2CoordXPct = '0',
+  [string]$Dlg2CoordYPct = '0',
+  [string]$Dlg3CoordXPct = '83',
+  [string]$Dlg3CoordYPct = '93'
 )
 
 function Write-InstallLine {
@@ -53,6 +55,8 @@ function Initialize-LandInstallFromConfig {
   if ($cfg.dlg3_button) { $script:Dlg3ButtonArg = [string]$cfg.dlg3_button }
   if ($cfg.step_timeout_seconds) { $script:StepTimeoutArg = [string]$cfg.step_timeout_seconds }
   if ($cfg.click_settle_ms) { $script:ClickSettleMsArg = [string]$cfg.click_settle_ms }
+  if ($cfg.coord_move_delay_ms) { $script:CoordMoveDelayMsArg = [string]$cfg.coord_move_delay_ms }
+  if ($cfg.poll_delay_ms) { $script:PollDelayMsArg = [string]$cfg.poll_delay_ms }
   if ($cfg.dlg1_coord_x_pct) { $script:Dlg1CoordXPct = [string]$cfg.dlg1_coord_x_pct }
   if ($cfg.dlg1_coord_y_pct) { $script:Dlg1CoordYPct = [string]$cfg.dlg1_coord_y_pct }
   if ($cfg.dlg2_coord_x_pct) { $script:Dlg2CoordXPct = [string]$cfg.dlg2_coord_x_pct }
@@ -74,6 +78,8 @@ if (-not [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
     $Dlg3ButtonArg = $script:Dlg3ButtonArg
     $StepTimeoutArg = $script:StepTimeoutArg
     $ClickSettleMsArg = $script:ClickSettleMsArg
+    $CoordMoveDelayMsArg = $script:CoordMoveDelayMsArg
+    $PollDelayMsArg = $script:PollDelayMsArg
     $Dlg1CoordXPct = $script:Dlg1CoordXPct
     $Dlg1CoordYPct = $script:Dlg1CoordYPct
     $Dlg2CoordXPct = $script:Dlg2CoordXPct
@@ -112,7 +118,7 @@ if ($installerPath.Length -eq 0 -or -not (Test-Path -LiteralPath $installerPath)
 [int]::TryParse($StepTimeoutArg, [ref]$stepTimeout) | Out-Null
 if ($stepTimeout -lt 10) { $stepTimeout = 10 }
 
-[int]$settleMs = 400
+[int]$settleMs = 1500
 [int]::TryParse($ClickSettleMsArg, [ref]$settleMs) | Out-Null
 if ($settleMs -lt 0) { $settleMs = 0 }
 
@@ -123,12 +129,18 @@ $dlg2Button = $Dlg2ButtonArg
 $dlg3Title = $Dlg3TitleArg
 $dlg3Button = $Dlg3ButtonArg
 
-[int]$dlg1CoordX = 20
-[int]$dlg1CoordY = 88
-[int]$dlg2CoordX = 55
-[int]$dlg2CoordY = 58
-[int]$dlg3CoordX = 50
-[int]$dlg3CoordY = 88
+[int]$dlg1CoordX = 18
+[int]$dlg1CoordY = 93
+[int]$dlg2CoordX = 0
+[int]$dlg2CoordY = 0
+[int]$dlg3CoordX = 83
+[int]$dlg3CoordY = 93
+[int]$coordMoveDelayMs = 1200
+[int]$pollDelayMs = 800
+[int]::TryParse($CoordMoveDelayMsArg, [ref]$coordMoveDelayMs) | Out-Null
+[int]::TryParse($PollDelayMsArg, [ref]$pollDelayMs) | Out-Null
+if ($coordMoveDelayMs -lt 0) { $coordMoveDelayMs = 0 }
+if ($pollDelayMs -lt 200) { $pollDelayMs = 200 }
 [int]::TryParse($Dlg1CoordXPct, [ref]$dlg1CoordX) | Out-Null
 [int]::TryParse($Dlg1CoordYPct, [ref]$dlg1CoordY) | Out-Null
 [int]::TryParse($Dlg2CoordXPct, [ref]$dlg2CoordX) | Out-Null
@@ -181,6 +193,12 @@ public class SemaphoreLandGuiInstaller {
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
     [DllImport("user32.dll")]
+    public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+    [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int X, int Y);
 
     [DllImport("user32.dll")]
@@ -214,6 +232,7 @@ public class SemaphoreLandGuiInstaller {
     public static uint InstallerProcessId = 0;
     public static int FallbackCoordXPct = 0;
     public static int FallbackCoordYPct = 0;
+    public static int CoordMoveDelayMs = 1200;
 
     public static bool TitleMatches(string title, string titlePart) {
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
@@ -264,15 +283,22 @@ public class SemaphoreLandGuiInstaller {
         mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
     }
 
-    public static void ClickWindowAtPercent(IntPtr hWnd, int xPct, int yPct) {
-        RECT r;
-        if (!GetWindowRect(hWnd, out r)) { return; }
-        int x = r.Left + (r.Right - r.Left) * xPct / 100;
-        int y = r.Top + (r.Bottom - r.Top) * yPct / 100;
+    public static string ClickWindowAtPercent(IntPtr hWnd, int xPct, int yPct) {
+        RECT cr;
+        if (!GetClientRect(hWnd, out cr)) { return "coord_failed=no_client_rect"; }
+        POINT pt = new POINT();
+        pt.X = cr.Left + (cr.Right - cr.Left) * xPct / 100;
+        pt.Y = cr.Top + (cr.Bottom - cr.Top) * yPct / 100;
+        if (!ClientToScreen(hWnd, ref pt)) { return "coord_failed=client_to_screen"; }
         SetForegroundWindow(hWnd);
-        SetCursorPos(x, y);
+        SetCursorPos(pt.X, pt.Y);
+        if (CoordMoveDelayMs > 0) {
+            System.Threading.Thread.Sleep(CoordMoveDelayMs);
+        }
         mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(120);
         mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+        return "screen_x=" + pt.X + "|screen_y=" + pt.Y + "|client_x_pct=" + xPct + "|client_y_pct=" + yPct;
     }
 
     public static string GetClassNameText(IntPtr hWnd) {
@@ -445,8 +471,8 @@ public class SemaphoreLandGuiInstaller {
             if (btn == IntPtr.Zero) {
                 string scan = ScanWindowTree(hwnd, 20);
                 if (FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
-                    ClickWindowAtPercent(hwnd, FallbackCoordXPct, FallbackCoordYPct);
-                    detail = "coord_click|wizard_class=" + wizardClass + "|x_pct=" + FallbackCoordXPct + "|y_pct=" + FallbackCoordYPct + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
+                    string coordDetail = ClickWindowAtPercent(hwnd, FallbackCoordXPct, FallbackCoordYPct);
+                    detail = "coord_click|wizard_class=" + wizardClass + "|" + coordDetail + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
                     return true;
                 }
                 TryKeyboardReturn(hwnd);
@@ -458,6 +484,9 @@ public class SemaphoreLandGuiInstaller {
             SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             ClickHwndCenter(btn);
+            if (CoordMoveDelayMs > 0) {
+                System.Threading.Thread.Sleep(CoordMoveDelayMs / 2);
+            }
             string title = GetControlText(hwnd);
             detail = "title=" + title + "|wizard_class=" + wizardClass + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm+mouse";
             return true;
@@ -508,7 +537,9 @@ function Wait-Click-LandDialog {
     [string]$ButtonText,
     [int]$TimeoutSec,
     [int]$CoordXPct = 0,
-    [int]$CoordYPct = 0
+    [int]$CoordYPct = 0,
+    [int]$CoordMoveDelayMs = 1200,
+    [int]$PollDelayMs = 800
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   $attempt = 0
@@ -518,6 +549,7 @@ function Wait-Click-LandDialog {
     $ok = $false
     [SemaphoreLandGuiInstaller]::FallbackCoordXPct = $CoordXPct
     [SemaphoreLandGuiInstaller]::FallbackCoordYPct = $CoordYPct
+    [SemaphoreLandGuiInstaller]::CoordMoveDelayMs = $CoordMoveDelayMs
     try {
       $ok = [SemaphoreLandGuiInstaller]::ClickDialogButton($TitlePart, $ButtonText, [ref]$detail)
     } catch {
@@ -531,7 +563,7 @@ function Wait-Click-LandDialog {
     if (($attempt % 10) -eq 0) {
       Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|last=$detail"
     }
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds $PollDelayMs
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_TIMEOUT|title_part=$TitlePart|button=$ButtonText|attempts=$attempt|last=$detail"
   return $false
@@ -608,20 +640,20 @@ if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
   Set-LandInstallerProcessId -LiteralPath $installerPath
 }
 
-if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY)) {
+if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY -CoordMoveDelayMs $coordMoveDelayMs -PollDelayMs $pollDelayMs)) {
   Write-InstallLine 'INSTALL_FAILED|step=1'
   exit 1
 }
 if ($settleMs -gt 0) { Start-Sleep -Milliseconds $settleMs }
 
-if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY)) {
+if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY -CoordMoveDelayMs $coordMoveDelayMs -PollDelayMs $pollDelayMs)) {
   Write-InstallLine 'INSTALL_FAILED|step=2'
   exit 1
 }
 if ($settleMs -gt 0) { Start-Sleep -Milliseconds $settleMs }
 
 Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=poll"
-if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY)) {
+if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -CoordMoveDelayMs $coordMoveDelayMs -PollDelayMs $pollDelayMs)) {
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
 }
