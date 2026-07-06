@@ -10,9 +10,6 @@ param(
   [string]$Dlg3TitleArg = 'LHBTS 安装',
   [string]$Dlg3ButtonArg = '确定',
   [string]$StepTimeoutArg = '90',
-  [string]$ClickSettleMsArg = '500',
-  [string]$CoordMoveDelayMsArg = '400',
-  [string]$PollDelayMsArg = '400',
   [string]$Dlg1CoordXPct = '32',
   [string]$Dlg1CoordYPct = '93',
   [string]$Dlg2CoordXPct = '0',
@@ -54,15 +51,12 @@ function Initialize-LandInstallFromConfig {
   if ($cfg.dlg3_title) { $script:Dlg3TitleArg = [string]$cfg.dlg3_title }
   if ($cfg.dlg3_button) { $script:Dlg3ButtonArg = [string]$cfg.dlg3_button }
   if ($cfg.step_timeout_seconds) { $script:StepTimeoutArg = [string]$cfg.step_timeout_seconds }
-  if ($cfg.click_settle_ms) { $script:ClickSettleMsArg = [string]$cfg.click_settle_ms }
-  if ($cfg.coord_move_delay_ms) { $script:CoordMoveDelayMsArg = [string]$cfg.coord_move_delay_ms }
-  if ($cfg.poll_delay_ms) { $script:PollDelayMsArg = [string]$cfg.poll_delay_ms }
-  if ($cfg.dlg1_coord_x_pct) { $script:Dlg1CoordXPct = [string]$cfg.dlg1_coord_x_pct }
-  if ($cfg.dlg1_coord_y_pct) { $script:Dlg1CoordYPct = [string]$cfg.dlg1_coord_y_pct }
-  if ($cfg.dlg2_coord_x_pct) { $script:Dlg2CoordXPct = [string]$cfg.dlg2_coord_x_pct }
-  if ($cfg.dlg2_coord_y_pct) { $script:Dlg2CoordYPct = [string]$cfg.dlg2_coord_y_pct }
-  if ($cfg.dlg3_coord_x_pct) { $script:Dlg3CoordXPct = [string]$cfg.dlg3_coord_x_pct }
-  if ($cfg.dlg3_coord_y_pct) { $script:Dlg3CoordYPct = [string]$cfg.dlg3_coord_y_pct }
+  if ($null -ne $cfg.dlg1_coord_x_pct) { $script:Dlg1CoordXPct = [string]$cfg.dlg1_coord_x_pct }
+  if ($null -ne $cfg.dlg1_coord_y_pct) { $script:Dlg1CoordYPct = [string]$cfg.dlg1_coord_y_pct }
+  if ($null -ne $cfg.dlg2_coord_x_pct) { $script:Dlg2CoordXPct = [string]$cfg.dlg2_coord_x_pct }
+  if ($null -ne $cfg.dlg2_coord_y_pct) { $script:Dlg2CoordYPct = [string]$cfg.dlg2_coord_y_pct }
+  if ($null -ne $cfg.dlg3_coord_x_pct) { $script:Dlg3CoordXPct = [string]$cfg.dlg3_coord_x_pct }
+  if ($null -ne $cfg.dlg3_coord_y_pct) { $script:Dlg3CoordYPct = [string]$cfg.dlg3_coord_y_pct }
   return $true
 }
 
@@ -77,9 +71,6 @@ if (-not [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
     $Dlg3TitleArg = $script:Dlg3TitleArg
     $Dlg3ButtonArg = $script:Dlg3ButtonArg
     $StepTimeoutArg = $script:StepTimeoutArg
-    $ClickSettleMsArg = $script:ClickSettleMsArg
-    $CoordMoveDelayMsArg = $script:CoordMoveDelayMsArg
-    $PollDelayMsArg = $script:PollDelayMsArg
     $Dlg1CoordXPct = $script:Dlg1CoordXPct
     $Dlg1CoordYPct = $script:Dlg1CoordYPct
     $Dlg2CoordXPct = $script:Dlg2CoordXPct
@@ -118,10 +109,6 @@ if ($installerPath.Length -eq 0 -or -not (Test-Path -LiteralPath $installerPath)
 [int]::TryParse($StepTimeoutArg, [ref]$stepTimeout) | Out-Null
 if ($stepTimeout -lt 10) { $stepTimeout = 10 }
 
-[int]$settleMs = 500
-[int]::TryParse($ClickSettleMsArg, [ref]$settleMs) | Out-Null
-if ($settleMs -lt 0) { $settleMs = 0 }
-
 $dlg1Title = $Dlg1TitleArg
 $dlg1Button = $Dlg1ButtonArg
 $dlg2Title = $Dlg2TitleArg
@@ -135,12 +122,6 @@ $dlg3Button = $Dlg3ButtonArg
 [int]$dlg2CoordY = 0
 [int]$dlg3CoordX = 83
 [int]$dlg3CoordY = 93
-[int]$coordMoveDelayMs = 400
-[int]$pollDelayMs = 400
-[int]::TryParse($CoordMoveDelayMsArg, [ref]$coordMoveDelayMs) | Out-Null
-[int]::TryParse($PollDelayMsArg, [ref]$pollDelayMs) | Out-Null
-if ($coordMoveDelayMs -lt 0) { $coordMoveDelayMs = 0 }
-if ($pollDelayMs -lt 200) { $pollDelayMs = 200 }
 [int]::TryParse($Dlg1CoordXPct, [ref]$dlg1CoordX) | Out-Null
 [int]::TryParse($Dlg1CoordYPct, [ref]$dlg1CoordY) | Out-Null
 [int]::TryParse($Dlg2CoordXPct, [ref]$dlg2CoordX) | Out-Null
@@ -237,7 +218,6 @@ public class SemaphoreLandGuiInstaller {
     public static uint InstallerProcessId = 0;
     public static int FallbackCoordXPct = 0;
     public static int FallbackCoordYPct = 0;
-    public static int CoordMoveDelayMs = 400;
 
     public static bool TitleMatches(string title, string titlePart) {
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
@@ -297,11 +277,7 @@ public class SemaphoreLandGuiInstaller {
         if (!ClientToScreen(hWnd, ref pt)) { return "coord_failed=client_to_screen"; }
         SetForegroundWindow(hWnd);
         SetCursorPos(pt.X, pt.Y);
-        if (CoordMoveDelayMs > 0) {
-            System.Threading.Thread.Sleep(CoordMoveDelayMs);
-        }
         mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-        System.Threading.Thread.Sleep(120);
         mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
         return "screen_x=" + pt.X + "|screen_y=" + pt.Y + "|client_x_pct=" + xPct + "|client_y_pct=" + yPct;
     }
@@ -562,9 +538,6 @@ public class SemaphoreLandGuiInstaller {
             SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             ClickHwndCenter(btn);
-            if (CoordMoveDelayMs > 0) {
-                System.Threading.Thread.Sleep(CoordMoveDelayMs / 2);
-            }
             string title = GetControlText(hwnd);
             detail = "title=" + title + "|wizard_class=" + wizardClass + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm+mouse";
             return true;
@@ -600,10 +573,10 @@ function Wait-For-LandDialog {
       Write-InstallLine "DIALOG_VISIBLE|title_part=$TitlePart|attempt=$attempt"
       return $true
     }
-    if (($attempt % 10) -eq 0) {
+    if (($attempt % 50) -eq 0) {
       Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|attempt=$attempt"
     }
-    Start-Sleep -Milliseconds 400
+    [System.Threading.Thread]::Sleep(0)
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_WAIT_TIMEOUT|title_part=$TitlePart|attempts=$attempt"
   return $false
@@ -615,9 +588,7 @@ function Wait-Click-LandDialog {
     [string]$ButtonText,
     [int]$TimeoutSec,
     [int]$CoordXPct = 0,
-    [int]$CoordYPct = 0,
-    [int]$CoordMoveDelayMs = 400,
-    [int]$PollDelayMs = 400
+    [int]$CoordYPct = 0
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   $attempt = 0
@@ -627,7 +598,6 @@ function Wait-Click-LandDialog {
     $ok = $false
     [SemaphoreLandGuiInstaller]::FallbackCoordXPct = $CoordXPct
     [SemaphoreLandGuiInstaller]::FallbackCoordYPct = $CoordYPct
-    [SemaphoreLandGuiInstaller]::CoordMoveDelayMs = $CoordMoveDelayMs
     try {
       $ok = [SemaphoreLandGuiInstaller]::ClickDialogButton($TitlePart, $ButtonText, [ref]$detail)
     } catch {
@@ -642,10 +612,10 @@ function Wait-Click-LandDialog {
       Write-InstallLine "DIALOG_ABORT|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       return $false
     }
-    if (($attempt % 10) -eq 0) {
+    if (($attempt % 50) -eq 0) {
       Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|last=$detail"
     }
-    Start-Sleep -Milliseconds $PollDelayMs
+    [System.Threading.Thread]::Sleep(0)
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_TIMEOUT|title_part=$TitlePart|button=$ButtonText|attempts=$attempt|last=$detail"
   return $false
@@ -662,13 +632,19 @@ function Start-LandInstallerGui {
     $proc = [System.Diagnostics.Process]::Start($psi)
     $script:landInstallerPid = if ($proc) { [int]$proc.Id } else { 0 }
     if ($script:landInstallerPid -eq 0) {
-      Start-Sleep -Seconds 2
       $procName = [System.IO.Path]::GetFileName($LiteralPath)
-      $cim = Get-CimInstance Win32_Process -Filter "Name='$procName'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) } |
-        Sort-Object CreationDate -Descending |
-        Select-Object -First 1
-      if ($cim) { $script:landInstallerPid = [int]$cim.ProcessId }
+      $pidDeadline = (Get-Date).AddSeconds(10)
+      do {
+        $cim = Get-CimInstance Win32_Process -Filter "Name='$procName'" -ErrorAction SilentlyContinue |
+          Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) } |
+          Sort-Object CreationDate -Descending |
+          Select-Object -First 1
+        if ($cim) {
+          $script:landInstallerPid = [int]$cim.ProcessId
+          break
+        }
+        [System.Threading.Thread]::Sleep(0)
+      } while ((Get-Date) -lt $pidDeadline)
     }
     [SemaphoreLandGuiInstaller]::InstallerProcessId = [uint32]$script:landInstallerPid
     Write-InstallLine "INSTALLER_LAUNCHED|exe=$LiteralPath|pid=$($script:landInstallerPid)|mode=UseShellExecute"
@@ -722,20 +698,18 @@ if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
   Set-LandInstallerProcessId -LiteralPath $installerPath
 }
 
-if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY -CoordMoveDelayMs $coordMoveDelayMs -PollDelayMs $pollDelayMs)) {
+if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY)) {
   Write-InstallLine 'INSTALL_FAILED|step=1'
   exit 1
 }
-if ($settleMs -gt 0) { Start-Sleep -Milliseconds $settleMs }
 
-if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY -CoordMoveDelayMs $coordMoveDelayMs -PollDelayMs $pollDelayMs)) {
+if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY)) {
   Write-InstallLine 'INSTALL_FAILED|step=2'
   exit 1
 }
-if ($settleMs -gt 0) { Start-Sleep -Milliseconds $settleMs }
 
 Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=poll"
-if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -CoordMoveDelayMs $coordMoveDelayMs -PollDelayMs $pollDelayMs)) {
+if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY)) {
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
 }
