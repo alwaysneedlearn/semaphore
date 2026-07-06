@@ -155,6 +155,9 @@ public class SemaphoreLandGuiInstaller {
     [DllImport("user32.dll")]
     public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT {
         public int Left;
@@ -164,9 +167,14 @@ public class SemaphoreLandGuiInstaller {
     }
 
     public const uint BM_CLICK = 0x00F5;
+    public const uint WM_KEYDOWN = 0x0100;
+    public const uint WM_KEYUP = 0x0101;
     public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    public const int VK_RETURN = 0x0D;
     public const int SW_RESTORE = 9;
+
+    public static uint InstallerProcessId = 0;
 
     public static bool TitleMatches(string title, string titlePart) {
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
@@ -234,17 +242,59 @@ public class SemaphoreLandGuiInstaller {
     }
 
     public static IntPtr FindTopLevelWindowByTitle(string titlePart) {
-        IntPtr found = IntPtr.Zero;
+        return FindWizardWindow(titlePart);
+    }
+
+    public static int CountDescendants(IntPtr parent) {
+        int count = 0;
+        var queue = new Queue<IntPtr>();
+        queue.Enqueue(parent);
+        while (queue.Count > 0) {
+            IntPtr hwnd = queue.Dequeue();
+            List<IntPtr> kids = GetChildWindows(hwnd);
+            count += kids.Count;
+            foreach (IntPtr child in kids) {
+                queue.Enqueue(child);
+            }
+        }
+        return count;
+    }
+
+    public static IntPtr FindWizardWindow(string titlePart) {
+        IntPtr best = IntPtr.Zero;
+        int bestScore = -1;
         EnumWindows((hWnd, lParam) => {
             if (!IsWindowVisible(hWnd)) { return true; }
             string title = GetControlText(hWnd);
-            if (TitleMatches(title, titlePart)) {
-                found = hWnd;
-                return false;
+            if (!TitleMatches(title, titlePart)) { return true; }
+            if (InstallerProcessId != 0) {
+                uint pid;
+                GetWindowThreadProcessId(hWnd, out pid);
+                if (pid != InstallerProcessId) { return true; }
+            }
+            int score = CountDescendants(hWnd);
+            if (score > bestScore) {
+                bestScore = score;
+                best = hWnd;
             }
             return true;
         }, IntPtr.Zero);
-        return found;
+        if (best != IntPtr.Zero) { return best; }
+        if (InstallerProcessId == 0) { return IntPtr.Zero; }
+        bestScore = -1;
+        EnumWindows((hWnd, lParam) => {
+            if (!IsWindowVisible(hWnd)) { return true; }
+            uint pid;
+            GetWindowThreadProcessId(hWnd, out pid);
+            if (pid != InstallerProcessId) { return true; }
+            int score = CountDescendants(hWnd);
+            if (score > bestScore) {
+                bestScore = score;
+                best = hWnd;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return best;
     }
 
     public static IntPtr FindButtonByTextDeep(IntPtr parent, string buttonText) {
@@ -265,7 +315,7 @@ public class SemaphoreLandGuiInstaller {
         return IntPtr.Zero;
     }
 
-    public static IntPtr FindLastVisibleTNewButton(IntPtr parent) {
+    public static IntPtr FindLastVisibleButton(IntPtr parent) {
         if (parent == IntPtr.Zero) { return IntPtr.Zero; }
         IntPtr last = IntPtr.Zero;
         var queue = new Queue<IntPtr>();
@@ -274,7 +324,7 @@ public class SemaphoreLandGuiInstaller {
             IntPtr hwnd = queue.Dequeue();
             foreach (IntPtr child in GetChildWindows(hwnd)) {
                 string className = GetClassNameText(child);
-                if (string.Equals(className, "TNewButton", StringComparison.OrdinalIgnoreCase) && IsWindowVisible(child)) {
+                if (IsButtonClass(className) && IsWindowVisible(child)) {
                     last = child;
                 }
                 queue.Enqueue(child);
@@ -283,7 +333,11 @@ public class SemaphoreLandGuiInstaller {
         return last;
     }
 
-    public static string ScanClickableControls(IntPtr parent, int maxItems) {
+    public static IntPtr FindLastVisibleTNewButton(IntPtr parent) {
+        return FindLastVisibleButton(parent);
+    }
+
+    public static string ScanWindowTree(IntPtr parent, int maxItems) {
         if (parent == IntPtr.Zero || maxItems <= 0) { return string.Empty; }
         StringBuilder sb = new StringBuilder();
         int count = 0;
@@ -295,42 +349,53 @@ public class SemaphoreLandGuiInstaller {
                 if (count >= maxItems) { break; }
                 string className = GetClassNameText(child);
                 string label = GetControlText(child);
-                if (!string.IsNullOrEmpty(label) && (IsButtonClass(className) || label.Length <= 32)) {
-                    if (sb.Length > 0) { sb.Append(';'); }
-                    sb.Append(label);
-                    sb.Append('@');
-                    sb.Append(className);
-                    count++;
-                }
+                if (sb.Length > 0) { sb.Append(';'); }
+                sb.Append(string.IsNullOrEmpty(label) ? "(empty)" : label);
+                sb.Append('@');
+                sb.Append(className);
+                count++;
                 queue.Enqueue(child);
             }
         }
         return sb.ToString();
     }
 
+    public static string ScanClickableControls(IntPtr parent, int maxItems) {
+        return ScanWindowTree(parent, maxItems);
+    }
+
+    public static void TryKeyboardReturn(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero) { return; }
+        SetForegroundWindow(hwnd);
+        PostMessage(hwnd, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
+        PostMessage(hwnd, WM_KEYUP, (IntPtr)VK_RETURN, IntPtr.Zero);
+    }
+
     public static bool ClickDialogButton(string titlePart, string buttonText, out string detail) {
         detail = string.Empty;
         try {
-            IntPtr hwnd = FindTopLevelWindowByTitle(titlePart);
+            IntPtr hwnd = FindWizardWindow(titlePart);
             if (hwnd == IntPtr.Zero) {
-                detail = "window_not_found";
+                detail = "window_not_found|installer_pid=" + InstallerProcessId;
                 return false;
             }
             if (IsIconic(hwnd) || !IsWindowVisible(hwnd)) {
                 ShowWindow(hwnd, SW_RESTORE);
             }
             SetForegroundWindow(hwnd);
+            string wizardClass = GetClassNameText(hwnd);
             IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
             string clickMode = "text_match";
             if (btn == IntPtr.Zero) {
-                btn = FindLastVisibleTNewButton(hwnd);
+                btn = FindLastVisibleButton(hwnd);
                 if (btn != IntPtr.Zero) {
-                    clickMode = "fallback_last_TNewButton";
+                    clickMode = "fallback_last_button";
                 }
             }
             if (btn == IntPtr.Zero) {
-                string scan = ScanClickableControls(hwnd, 12);
-                detail = string.IsNullOrEmpty(scan) ? "button_not_found" : ("button_not_found|scan=" + scan);
+                string scan = ScanWindowTree(hwnd, 20);
+                TryKeyboardReturn(hwnd);
+                detail = "button_not_found|wizard_class=" + wizardClass + "|installer_pid=" + InstallerProcessId + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan) + "|keyboard=VK_RETURN";
                 return false;
             }
             string btnClass = GetClassNameText(btn);
@@ -339,7 +404,7 @@ public class SemaphoreLandGuiInstaller {
             PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             ClickHwndCenter(btn);
             string title = GetControlText(hwnd);
-            detail = "title=" + title + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm+mouse";
+            detail = "title=" + title + "|wizard_class=" + wizardClass + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm+mouse";
             return true;
         } catch (Exception ex) {
             detail = "exception=" + ex.GetType().Name + "|msg=" + ex.Message;
@@ -422,13 +487,36 @@ function Start-LandInstallerGui {
     $psi.UseShellExecute = $true
     $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
     $proc = [System.Diagnostics.Process]::Start($psi)
-    $procId = if ($proc) { $proc.Id } else { 0 }
-    Write-InstallLine "INSTALLER_LAUNCHED|exe=$LiteralPath|pid=$procId|mode=UseShellExecute"
+    $script:landInstallerPid = if ($proc) { [int]$proc.Id } else { 0 }
+    if ($script:landInstallerPid -eq 0) {
+      Start-Sleep -Seconds 2
+      $procName = [System.IO.Path]::GetFileName($LiteralPath)
+      $cim = Get-CimInstance Win32_Process -Filter "Name='$procName'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) } |
+        Sort-Object CreationDate -Descending |
+        Select-Object -First 1
+      if ($cim) { $script:landInstallerPid = [int]$cim.ProcessId }
+    }
+    [SemaphoreLandGuiInstaller]::InstallerProcessId = [uint32]$script:landInstallerPid
+    Write-InstallLine "INSTALLER_LAUNCHED|exe=$LiteralPath|pid=$($script:landInstallerPid)|mode=UseShellExecute"
     return $true
   } catch {
     Write-InstallLine "INSTALL_ERROR|reason=launch_failed|msg=$($_.Exception.Message)"
     return $false
   }
+}
+
+function Set-LandInstallerProcessId {
+  param([string]$LiteralPath)
+  $script:landInstallerPid = 0
+  $procName = [System.IO.Path]::GetFileName($LiteralPath)
+  $cim = Get-CimInstance Win32_Process -Filter "Name='$procName'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) } |
+    Sort-Object CreationDate -Descending |
+    Select-Object -First 1
+  if ($cim) { $script:landInstallerPid = [int]$cim.ProcessId }
+  [SemaphoreLandGuiInstaller]::InstallerProcessId = [uint32]$script:landInstallerPid
+  Write-InstallLine "INSTALLER_PID_RESOLVED|pid=$($script:landInstallerPid)|path=$LiteralPath"
 }
 
 function Test-InstallerProcessRunning {
@@ -444,6 +532,8 @@ if ([string]::IsNullOrWhiteSpace($workDir)) {
   $workDir = (Get-Location).Path
 }
 
+$script:landInstallerPid = 0
+
 Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir|session=interactive"
 
 if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
@@ -456,6 +546,7 @@ if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
   }
 } else {
   Write-InstallLine "INSTALLER_ALREADY_RUNNING|path=$installerPath"
+  Set-LandInstallerProcessId -LiteralPath $installerPath
 }
 
 if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout)) {
