@@ -68,11 +68,16 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_INSTALLER_DEST` | (Desktop) | Explicit full path on target; overrides desktop default |
 | `LAND_INSTALLER_USE_DESKTOP` | `true` | `false` → copy to `{{ EXE_DIR }}\{installer}.exe` instead |
 | `LAND_INSTALL_STEP_TIMEOUT_SECONDS` | `90` | Max wait per dialog (poll until window/button appears) |
-| `LAND_INSTALL_CLICK_SETTLE_MS` | `400` | Short pause after each click (not a fixed 5s) |
+| `LAND_INSTALL_CLICK_SETTLE_MS` | `1500` | Pause after each successful click |
+| `LAND_INSTALL_COORD_MOVE_DELAY_MS` | `1200` | Pause after moving mouse before coord click (visible in RDP) |
+| `LAND_INSTALL_POLL_DELAY_MS` | `800` | Poll interval between dialog/button retries |
 | `LAND_INSTALL_TASK_TIMEOUT_SECONDS` | `180` | Interactive scheduled-task timeout |
-| `LAND_INSTALL_DLG1_TITLE` / `_BUTTON` | `LHBTS 安装` / `升级` | GUI wizard step 1 (override if UI text differs) |
-| `LAND_INSTALL_DLG2_TITLE` / `_BUTTON` | `提示` / `确认` | Step 2 |
-| `LAND_INSTALL_DLG3_TITLE` / `_BUTTON` | `LHBTS 安装` / `确定` | Step 3 |
+| `LAND_INSTALL_DLG1_TITLE` / `_BUTTON` | `LHBTS 安装` / `升级` | Step 1 — custom UI; coord fallback **18%, 93%** (left button) |
+| `LAND_INSTALL_DLG2_TITLE` / `_BUTTON` | `提示` / `确认` | Step 2 — standard popup; **Win32 text match** (coord `0` = disabled) |
+| `LAND_INSTALL_DLG3_TITLE` / `_BUTTON` | `LHBTS 安装` / `确定` | Step 3 — single button; coord fallback **83%, 93%** (same as 取消) |
+| `LAND_INSTALL_DLG1_COORD_X_PCT` / `_Y_PCT` | `18` / `93` | Client-area % for step 1 coord fallback |
+| `LAND_INSTALL_DLG2_COORD_X_PCT` / `_Y_PCT` | `0` / `0` | Step 2 coord disabled |
+| `LAND_INSTALL_DLG3_COORD_X_PCT` / `_Y_PCT` | `83` / `93` | Client-area % for step 3 coord fallback |
 | `EXE_ARGS` | empty | Optional executable arguments |
 | `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |
 | `LAND_API_SCHEME` | `http` | API scheme (`http`/`https`) |
