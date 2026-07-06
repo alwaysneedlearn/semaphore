@@ -283,6 +283,60 @@ function Start-LandGuiInstallViaSchTasks {
   }
 }
 
+function Test-LandInstallerExeRunning {
+  param([string]$LiteralPath)
+  if ([string]::IsNullOrWhiteSpace($LiteralPath)) { return $false }
+  $name = [System.IO.Path]::GetFileName($LiteralPath)
+  $cim = @(Get-CimInstance Win32_Process -Filter "Name='$name'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) })
+  return $cim.Count -gt 0
+}
+
+function Read-LandGuiInstallWorkerLock {
+  param([string]$Path = 'C:\Windows\Temp\sem_land_gui_install_worker.lock')
+  if (-not (Test-Path -LiteralPath $Path)) { return $null }
+  try {
+    $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 -ErrorAction Stop
+  } catch {
+    return $null
+  }
+  $info = @{ pid = 0; log = ''; config = ''; started = '' }
+  if ($raw -match 'pid=(\d+)') { $info.pid = [int]$Matches[1] }
+  if ($raw -match 'log=([^\r\n|]+)') { $info.log = [string]$Matches[1] }
+  if ($raw -match 'config=([^\r\n|]+)') { $info.config = [string]$Matches[1] }
+  if ($raw -match 'started=([^\r\n|]+)') { $info.started = [string]$Matches[1] }
+  return $info
+}
+
+function Write-LandGuiInstallWorkerLock {
+  param([int]$Pid, [string]$LogPath, [string]$ConfigPath)
+  $line = "pid=$Pid|log=$LogPath|config=$ConfigPath|started=$((Get-Date).ToString('o'))"
+  try {
+    $line | Out-File -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_worker.lock' -Encoding UTF8 -Force -ErrorAction Stop
+  } catch { }
+}
+
+function Remove-LandGuiInstallWorkerLock {
+  try {
+    Remove-Item -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_worker.lock' -Force -ErrorAction Stop
+  } catch { }
+}
+
+function Wait-LandGuiInstallFromExistingWorker {
+  param([string]$LogPath, [int]$TimeoutSec)
+  if ([string]::IsNullOrWhiteSpace($LogPath)) { return $false }
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  $lastLineCount = 0
+  do {
+    Write-InstallLogTail -Path $LogPath -LastLineCount ([ref]$lastLineCount)
+    if (Test-InstallLogTerminalLine -Path $LogPath) {
+      return $true
+    }
+    [System.Threading.Thread]::Sleep(200)
+  } while ((Get-Date) -lt $deadline)
+  return $false
+}
+
 function Test-InstallLogTerminalLine {
   param([string]$Path)
   if (-not (Test-Path -LiteralPath $Path)) { return $false }
@@ -429,18 +483,44 @@ try {
 
 Write-InstallBootstrapLog -Path $outFile -Line "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath"
 
+$existingLock = Read-LandGuiInstallWorkerLock
+if ($existingLock -and $existingLock.pid -gt 0) {
+  $lockProc = Get-Process -Id $existingLock.pid -ErrorAction SilentlyContinue
+  if ($lockProc -and -not $lockProc.HasExited) {
+    Write-Output "INSTALL_ALREADY_RUNNING|pid=$($existingLock.pid)|log=$($existingLock.log)|action=wait_existing_worker"
+    $outFile = if ($existingLock.log) { $existingLock.log } else { $outFile }
+    if (Wait-LandGuiInstallFromExistingWorker -LogPath $outFile -TimeoutSec $timeoutSec) {
+      if ((Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue | Out-String) -match 'INSTALL_COMPLETE') { exit 0 }
+    }
+    Write-Output 'INSTALL_ERROR|reason=existing_worker_no_complete'
+    exit 1
+  }
+  Remove-LandGuiInstallWorkerLock
+}
+
+if (Test-LandInstallerExeRunning -LiteralPath $installerPath) {
+  Write-Output "INSTALL_INSTALLER_ALREADY_RUNNING|path=$installerPath|action=single_worker_only"
+}
+
 $started = $false
 $lastStartError = ''
 $script:usedScheduledTaskName = ''
 $launchModes = @(
   @{ mode = 'scheduled_highest'; run_level = 'Highest' },
-  @{ mode = 'scheduled_limited'; run_level = 'Limited' },
-  @{ mode = 'schtasks_highest'; run_level = 'Highest' },
-  @{ mode = 'schtasks_limited'; run_level = 'Limited' },
   @{ mode = 'user_session'; run_level = '' }
 )
 foreach ($launch in $launchModes) {
   if ($started) { break }
+  if ($launch.mode -ne 'scheduled_highest') {
+    if (Test-InstallWorkerStarted -Path $outFile) {
+      $started = $true
+      break
+    }
+    if (Test-LandInstallerExeRunning -LiteralPath $installerPath) {
+      Write-Output "INSTALL_SKIP_LAUNCH|mode=$($launch.mode)|reason=installer_already_running"
+      break
+    }
+  }
   $mode = [string]$launch.mode
   $runLevel = [string]$launch.run_level
   if ($mode -eq 'user_session') {
@@ -449,35 +529,36 @@ foreach ($launch in $launchModes) {
       continue
     }
     $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
-  } elseif ($mode -like 'schtasks_*') {
-    $result = Start-LandGuiInstallViaSchTasks -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -RunLevel $runLevel
+  } elseif ($mode -eq 'user_session') {
+    if ($session.session_id -le 0) {
+      Write-Output 'INSTALL_TASK_START_SKIPPED|mode=user_session|reason=no_session_id'
+      continue
+    }
+    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
   } else {
     $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
   }
   if (-not $result.ok) {
     $lastStartError = [string]$result.error
     Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|run_level=$runLevel|error=$lastStartError"
-    if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
+    if ($mode -like 'scheduled_*') {
       Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-      if ($mode -eq 'scheduled_highest') {
-        $taskName = "LandGuiInstall-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-      }
     }
     continue
   }
   $earlyLineCount = 0
-  $bootDeadline = (Get-Date).AddSeconds(45)
+  $bootDeadline = (Get-Date).AddSeconds(60)
   do {
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
     if (Test-InstallWorkerStarted -Path $outFile) {
       $started = $true
       Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|user=$profileUser"
-      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
+      if ($mode -eq 'scheduled_highest') {
         $script:usedScheduledTaskName = $taskName
       }
       break
     }
-    if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
+    if ($mode -eq 'scheduled_highest') {
       $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
       if ($taskInfo) {
         $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
@@ -488,13 +569,14 @@ foreach ($launch in $launchModes) {
         }
       }
     }
-    [System.Threading.Thread]::Sleep(0)
-  } while ((Get-Date) -lt $bootDeadline)
-  if (-not $started -and ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*')) {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-    if ($mode -eq 'scheduled_highest') {
-      $taskName = "LandGuiInstall-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+    if (Test-LandInstallerExeRunning -LiteralPath $installerPath) {
+      Write-Output "INSTALL_INSTALLER_STARTED_DURING_BOOT|path=$installerPath|action=stop_extra_launch_modes"
+      break
     }
+    [System.Threading.Thread]::Sleep(200)
+  } while ((Get-Date) -lt $bootDeadline)
+  if (-not $started -and $mode -eq 'scheduled_highest') {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   }
 }
 
@@ -570,6 +652,7 @@ try {
   if (-not [string]::IsNullOrWhiteSpace($script:usedScheduledTaskName)) {
     Unregister-ScheduledTask -TaskName $script:usedScheduledTaskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   }
+  Remove-LandGuiInstallWorkerLock
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
 }
 

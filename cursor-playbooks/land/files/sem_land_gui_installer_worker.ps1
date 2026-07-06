@@ -586,10 +586,8 @@ public class SemaphoreLandGuiInstaller {
                 return false;
             }
             SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-            PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-            ClickHwndCenter(btn);
             string title = GetControlText(hwnd);
-            detail = "title=" + title + "|wizard_class=" + wizardClass + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm+mouse";
+            detail = "title=" + title + "|wizard_class=" + wizardClass + "|btn=" + btnLabel + "|class=" + btnClass + "|mode=" + clickMode + "|click=bm_once";
             return true;
         } catch (Exception ex) {
             detail = "exception=" + ex.GetType().Name + "|msg=" + ex.Message;
@@ -643,7 +641,14 @@ function Wait-Click-LandDialog {
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   $attempt = 0
+  $nextAttemptAt = [DateTime]::MinValue
+  $pollMs = 500
   do {
+    if ((Get-Date) -lt $nextAttemptAt) {
+      [System.Threading.Thread]::Sleep(50)
+      continue
+    }
+    $nextAttemptAt = (Get-Date).AddMilliseconds($pollMs)
     $attempt++
     $detail = ''
     $ok = $false
@@ -658,16 +663,19 @@ function Wait-Click-LandDialog {
     }
     if ($ok) {
       Write-InstallLine "DIALOG_CLICKED|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
+      [System.Threading.Thread]::Sleep(300)
       return $true
     }
     if ($detail -match 'warning_dialog_abort|wrong_button_abort') {
       Write-InstallLine "DIALOG_ABORT|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       return $false
     }
-    if (($attempt % 50) -eq 0) {
+    if (($attempt % 20) -eq 0) {
       Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|last=$detail"
     }
-    [System.Threading.Thread]::Sleep(0)
+    if ($detail -match 'wizard_not_final|window_not_found') {
+      $nextAttemptAt = (Get-Date).AddMilliseconds(200)
+    }
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_TIMEOUT|title_part=$TitlePart|button=$ButtonText|attempts=$attempt|last=$detail"
   return $false
@@ -734,6 +742,42 @@ if ([string]::IsNullOrWhiteSpace($workDir)) {
 }
 
 $script:landInstallerPid = 0
+$workerLockPath = 'C:\Windows\Temp\sem_land_gui_install_worker.lock'
+
+function Read-LandWorkerLock {
+  if (-not (Test-Path -LiteralPath $workerLockPath)) { return $null }
+  try {
+    $raw = Get-Content -LiteralPath $workerLockPath -Raw -Encoding UTF8 -ErrorAction Stop
+  } catch { return $null }
+  if ($raw -match 'pid=(\d+)') { return [int]$Matches[1] }
+  return $null
+}
+
+function Write-LandWorkerLock {
+  param([string]$LogFile)
+  $line = "pid=$PID|log=$LogFile|started=$((Get-Date).ToString('o'))"
+  try {
+    $line | Out-File -LiteralPath $workerLockPath -Encoding UTF8 -Force -ErrorAction Stop
+  } catch { }
+}
+
+function Remove-LandWorkerLock {
+  try {
+    Remove-Item -LiteralPath $workerLockPath -Force -ErrorAction Stop
+  } catch { }
+}
+
+$existingWorkerPid = Read-LandWorkerLock
+if ($existingWorkerPid -and $existingWorkerPid -ne $PID) {
+  $existingProc = Get-Process -Id $existingWorkerPid -ErrorAction SilentlyContinue
+  if ($existingProc -and -not $existingProc.HasExited) {
+    Write-InstallLine "INSTALL_ERROR|reason=worker_already_running|pid=$existingWorkerPid"
+    exit 1
+  }
+}
+Write-LandWorkerLock -LogFile $LogFileArg
+
+try {
 
 Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir|session=interactive"
 
@@ -768,3 +812,6 @@ if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -T
 
 Write-InstallLine 'INSTALL_COMPLETE'
 exit 0
+} finally {
+  Remove-LandWorkerLock
+}
