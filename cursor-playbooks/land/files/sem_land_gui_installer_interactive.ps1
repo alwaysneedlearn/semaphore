@@ -67,14 +67,220 @@ function Resolve-InteractiveProfileUserFromExplorer {
 
 function Test-ProfileUserInteractiveSession {
   param([string]$ShortName)
+  $ctx = Get-InteractiveExplorerContext -ShortName $ShortName
+  if (-not $ctx.ok) {
+    return @{ ok = $false; explorer_pid = 0; session_id = 0; session_state = '' }
+  }
+  return @{
+    ok = $true
+    explorer_pid = $ctx.explorer_pid
+    session_id = $ctx.session_id
+    session_state = $ctx.session_state
+  }
+}
+
+function Get-InteractiveExplorerContext {
+  param([string]$ShortName)
   $explorers = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue
   foreach ($e in $explorers) {
     $o = Invoke-CimMethod -InputObject $e -MethodName GetOwner -ErrorAction SilentlyContinue
-    if ($o -and $o.ReturnValue -eq 0 -and $o.User -and ($o.User.Trim() -ieq $ShortName)) {
-      return @{ ok = $true; explorer_pid = $e.ProcessId }
+    if (-not ($o -and $o.ReturnValue -eq 0 -and $o.User -and ($o.User.Trim() -ieq $ShortName))) { continue }
+    $sessionId = 0
+    try {
+      $sessionId = (Get-Process -Id $e.ProcessId -ErrorAction Stop).SessionId
+    } catch {
+      continue
+    }
+    $state = Get-UserSessionState -ShortName $ShortName -SessionId $sessionId
+    return @{
+      ok = $true
+      explorer_pid = [int]$e.ProcessId
+      session_id = [int]$sessionId
+      session_state = $state
+      domain = [string]$o.Domain
+      user = [string]$o.User
     }
   }
-  return @{ ok = $false; explorer_pid = 0 }
+  return @{ ok = $false; explorer_pid = 0; session_id = 0; session_state = '' }
+}
+
+function Get-UserSessionState {
+  param([string]$ShortName, [int]$SessionId)
+  try {
+    $raw = @(query user 2>$null)
+  } catch {
+    return 'unknown'
+  }
+  foreach ($line in $raw) {
+    if ($line -notmatch [regex]::Escape($ShortName)) { continue }
+    if ($line -match '>') { return 'Active' }
+    if ($line -match '(?i)\bActive\b|活动') { return 'Active' }
+    if ($line -match '(?i)\bDisc\b|断开') { return 'Disconnected' }
+  }
+  if ($SessionId -gt 0) { return "session_$SessionId" }
+  return 'unknown'
+}
+
+function Write-InteractiveSessionDiagnostics {
+  param([string]$ProfileUser, [hashtable]$Session)
+  $winrmUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+  Write-Output "INSTALL_SESSION_DIAG|winrm_user=$winrmUser|profile_user=$ProfileUser|explorer_pid=$($Session.explorer_pid)|session_id=$($Session.session_id)|session_state=$($Session.session_state)"
+  try {
+    $raw = @(query user 2>$null) | Where-Object { $_ -match '\S' }
+    if ($raw.Count -gt 0) {
+      Write-Output ("INSTALL_QUERY_USER|" + (($raw | Select-Object -First 6) -join ' || '))
+    }
+  } catch {
+    Write-Output "INSTALL_QUERY_USER|error=$($_.Exception.Message)"
+  }
+}
+
+function Remove-StaleLandGuiInstallTasks {
+  try {
+  $tasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'LandGuiInstall-*' })
+  foreach ($t in $tasks) {
+    try {
+      if ($t.State -eq 'Running') {
+        Stop-ScheduledTask -TaskName $t.TaskName -ErrorAction SilentlyContinue
+      }
+    } catch { }
+    Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+  }
+  if ($tasks.Count -gt 0) {
+    Write-Output "INSTALL_TASK_CLEANUP|removed=$($tasks.Count)"
+  }
+  } catch {
+    Write-Output "INSTALL_TASK_CLEANUP|error=$($_.Exception.Message)"
+  }
+}
+
+function Get-LandGuiWorkerCommandLine {
+  param([string]$ConfigPath)
+  $helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
+  return "-NoProfile -ExecutionPolicy Bypass -File `"$helper`" -ConfigFileArg `"$ConfigPath`""
+}
+
+function Start-LandGuiWorkerInUserSession {
+  param(
+    [int]$SessionId,
+    [string]$ConfigPath
+  )
+  if (-not ([System.Management.Automation.PSTypeName]'LandGuiUserSessionLaunch').Type) {
+    try {
+      Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class LandGuiUserSessionLaunch {
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    public static extern bool WTSQueryUserToken(uint SessionId, out IntPtr phUserToken);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool DuplicateTokenEx(IntPtr hExistingToken, uint dwDesiredAccess, IntPtr lpTokenAttributes, int impersonationLevel, int tokenType, out IntPtr phNewToken);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool CreateProcessWithTokenW(IntPtr hToken, uint dwLogonFlags, string lpApplicationName, string lpCommandLine, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct STARTUPINFO {
+        public int cb; public string lpReserved; public string lpDesktop; public string lpTitle;
+        public int dwX; public int dwY; public int dwXSize; public int dwYSize;
+        public int dwXCountChars; public int dwYCountChars; public int dwFillAttribute; public int dwFlags;
+        public short wShowWindow; public short cbReserved2;
+        public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION {
+        public IntPtr hProcess; public IntPtr hThread; public int dwProcessId; public int dwThreadId;
+    }
+    public const uint MAXIMUM_ALLOWED = 0x02000000;
+    public const int SecurityImpersonation = 2;
+    public const int TokenPrimary = 1;
+    public const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+    public const int STARTF_USESHOWWINDOW = 0x00000001;
+    public const short SW_SHOW = 5;
+    public static string Start(uint sessionId, string commandLine) {
+        IntPtr userToken = IntPtr.Zero;
+        IntPtr dupToken = IntPtr.Zero;
+        try {
+            if (!WTSQueryUserToken(sessionId, out userToken)) {
+                return "wts_query_user_token_failed|err=" + Marshal.GetLastWin32Error();
+            }
+            if (!DuplicateTokenEx(userToken, MAXIMUM_ALLOWED, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out dupToken)) {
+                return "duplicate_token_failed|err=" + Marshal.GetLastWin32Error();
+            }
+            STARTUPINFO si = new STARTUPINFO();
+            si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
+            si.lpDesktop = "winsta0\\default";
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_SHOW;
+            PROCESS_INFORMATION pi;
+            if (!CreateProcessWithTokenW(dupToken, 0, null, commandLine, CREATE_UNICODE_ENVIRONMENT, IntPtr.Zero, null, ref si, out pi)) {
+                return "create_process_failed|err=" + Marshal.GetLastWin32Error();
+            }
+            if (pi.hProcess != IntPtr.Zero) { CloseHandle(pi.hProcess); }
+            if (pi.hThread != IntPtr.Zero) { CloseHandle(pi.hThread); }
+            return "pid=" + pi.dwProcessId;
+        } finally {
+            if (userToken != IntPtr.Zero) { CloseHandle(userToken); }
+            if (dupToken != IntPtr.Zero) { CloseHandle(dupToken); }
+        }
+    }
+}
+"@ -ErrorAction Stop
+    } catch {
+      return @{ ok = $false; error = "add_type_failed|$($_.Exception.Message)" }
+    }
+  }
+  $helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
+  if (-not (Test-Path -LiteralPath $helper)) {
+    return @{ ok = $false; error = 'helper_missing' }
+  }
+  $psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $ConfigPath
+  $commandLine = "powershell.exe $psArgs"
+  try {
+    $detail = [LandGuiUserSessionLaunch]::Start([uint32]$SessionId, $commandLine)
+    Write-Output "INTERACTIVE_USER_SESSION_LAUNCH|session_id=$SessionId|$detail"
+    if ($detail -match '^pid=') {
+      return @{ ok = $true; error = '' }
+    }
+    return @{ ok = $false; error = $detail }
+  } catch {
+    return @{ ok = $false; error = $_.Exception.Message }
+  }
+}
+
+function Start-LandGuiInstallViaSchTasks {
+  param(
+    [string]$TaskName,
+    [string]$ProfileUser,
+    [string]$ConfigPath,
+    [string]$RunLevel
+  )
+  $helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
+  if (-not (Test-Path -LiteralPath $helper)) {
+    return @{ ok = $false; error = 'helper_missing' }
+  }
+  $psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $ConfigPath
+  $tr = "powershell.exe $psArgs"
+  $st = (Get-Date).AddSeconds(5).ToString('HH:mm')
+  $sd = (Get-Date).ToString('MM/dd/yyyy')
+  $rl = if ($RunLevel -eq 'Highest') { 'HIGHEST' } else { 'LIMITED' }
+  try {
+    $createArgs = @(
+      '/Create', '/F', '/TN', $TaskName,
+      '/TR', $tr,
+      '/SC', 'ONCE', '/ST', $st, '/SD', $sd,
+      '/RU', $ProfileUser, '/IT', '/RL', $rl
+    )
+    $create = Start-Process -FilePath 'schtasks.exe' -ArgumentList $createArgs -Wait -PassThru -NoNewWindow
+    if ($create.ExitCode -ne 0) {
+      return @{ ok = $false; error = "schtasks_create_exit=$($create.ExitCode)" }
+    }
+    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow
+    Write-Output "INTERACTIVE_SCHTASKS|name=$TaskName|user=$ProfileUser|run_level=$rl|run_exit=$($run.ExitCode)"
+    return @{ ok = $true; error = '' }
+  } catch {
+    return @{ ok = $false; error = $_.Exception.Message }
+  }
 }
 
 function Test-InstallLogTerminalLine {
@@ -149,14 +355,15 @@ function Start-LandGuiInstallScheduledTask {
     return @{ ok = $false; error = 'helper_missing'; helper = $helper }
   }
 
-  $psArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$helper`" -ConfigFileArg `"$ConfigPath`""
+  $psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $ConfigPath
   try {
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
     $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances StopExisting
     $principal = New-ScheduledTaskPrincipal -UserId $ProfileUser -LogonType Interactive -RunLevel $RunLevel
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
+    Start-Sleep -Seconds 2
     Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$ProfileUser|run_level=$RunLevel|config=$ConfigPath|log=$LogPath"
     return @{ ok = $true; error = '' }
   } catch {
@@ -188,6 +395,8 @@ if (-not $session.ok) {
   Write-Output 'INSTALL_ERROR|reason=no_interactive_session'
   exit 1
 }
+Write-InteractiveSessionDiagnostics -ProfileUser $profileUser -Session $session
+Remove-StaleLandGuiInstallTasks
 
 $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $configPath = "C:\Windows\Temp\sem_land_install_cfg_$ts.json"
@@ -222,39 +431,75 @@ Write-InstallBootstrapLog -Path $outFile -Line "INSTALL_SCHEDULED|task=$taskName
 
 $started = $false
 $lastStartError = ''
-foreach ($runLevel in @('Highest', 'Limited')) {
-  $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
+$script:usedScheduledTaskName = ''
+$launchModes = @(
+  @{ mode = 'scheduled_highest'; run_level = 'Highest' },
+  @{ mode = 'scheduled_limited'; run_level = 'Limited' },
+  @{ mode = 'schtasks_highest'; run_level = 'Highest' },
+  @{ mode = 'schtasks_limited'; run_level = 'Limited' },
+  @{ mode = 'user_session'; run_level = '' }
+)
+foreach ($launch in $launchModes) {
+  if ($started) { break }
+  $mode = [string]$launch.mode
+  $runLevel = [string]$launch.run_level
+  if ($mode -eq 'user_session') {
+    if ($session.session_id -le 0) {
+      Write-Output 'INSTALL_TASK_START_SKIPPED|mode=user_session|reason=no_session_id'
+      continue
+    }
+    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
+  } elseif ($mode -like 'schtasks_*') {
+    $result = Start-LandGuiInstallViaSchTasks -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -RunLevel $runLevel
+  } else {
+    $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
+  }
   if (-not $result.ok) {
     $lastStartError = [string]$result.error
-    Write-Output "INSTALL_TASK_START_FAILED|run_level=$runLevel|error=$lastStartError"
+    Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|run_level=$runLevel|error=$lastStartError"
+    if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
+      Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+      if ($mode -eq 'scheduled_highest') {
+        $taskName = "LandGuiInstall-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+      }
+    }
     continue
   }
   $earlyLineCount = 0
-  $bootDeadline = (Get-Date).AddSeconds(30)
+  $bootDeadline = (Get-Date).AddSeconds(45)
   do {
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
     if (Test-InstallWorkerStarted -Path $outFile) {
       $started = $true
+      Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|user=$profileUser"
+      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
+        $script:usedScheduledTaskName = $taskName
+      }
       break
+    }
+    if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
+      $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+      if ($taskInfo) {
+        $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
+        if ($lastHex -eq '800710E0' -and -not (Test-InstallWorkerStarted -Path $outFile)) {
+          Write-Output "INSTALL_TASK_EARLY_STATE|mode=$mode|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)"
+          Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
+          break
+        }
+      }
     }
     [System.Threading.Thread]::Sleep(0)
   } while ((Get-Date) -lt $bootDeadline)
-  if ($started) { break }
-  $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
-  if ($taskInfo) {
-    $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
-    Write-Output "INSTALL_TASK_EARLY_STATE|run_level=$runLevel|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)"
-    if ($lastHex -eq '800710E0') {
-      Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
+  if (-not $started -and ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*')) {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+    if ($mode -eq 'scheduled_highest') {
+      $taskName = "LandGuiInstall-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
     }
   }
-  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-  if ($runLevel -eq 'Limited') { break }
-  $taskName = "LandGuiInstall-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
 }
 
 if (-not $started) {
-  Write-Output "INSTALL_ERROR|reason=scheduled_task_never_started_worker|last_error=$lastStartError|user=$profileUser"
+  Write-Output "INSTALL_ERROR|reason=scheduled_task_never_started_worker|last_error=$lastStartError|user=$profileUser|hint=manual_ok_means_rdp_interactive_direct_worker|semaphore_needs_interactive_session"
   if (-not (Test-Path -LiteralPath $outFile)) {
     Write-Output "INSTALL_TASK_NO_OUTPUT|task=$taskName|timeout=0s|log=$outFile|hint=worker_never_booted"
   }
@@ -272,15 +517,18 @@ try {
       $logComplete = $true
       break
     }
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    $task = $null
+    if (-not [string]::IsNullOrWhiteSpace($script:usedScheduledTaskName)) {
+      $task = Get-ScheduledTask -TaskName $script:usedScheduledTaskName -ErrorAction SilentlyContinue
+    }
     if ($task -and $task.State -ne 'Running') {
       Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$lastLineCount)
       if (-not $taskStateLogged) {
         $taskStateLogged = $true
-        $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+        $taskInfo = Get-ScheduledTaskInfo -TaskName $script:usedScheduledTaskName -ErrorAction SilentlyContinue
         if ($taskInfo) {
           $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
-          Write-Output "INSTALL_TASK_STATE|name=$taskName|state=$($task.State)|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)"
+          Write-Output "INSTALL_TASK_STATE|name=$($script:usedScheduledTaskName)|state=$($task.State)|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|last_run=$($taskInfo.LastRunTime)"
           if ($lastHex -eq '800710E0') {
             Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
           }
@@ -319,7 +567,9 @@ try {
   Write-Output 'INSTALL_ERROR|reason=task_failed'
   exit 1
 } finally {
-  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+  if (-not [string]::IsNullOrWhiteSpace($script:usedScheduledTaskName)) {
+    Unregister-ScheduledTask -TaskName $script:usedScheduledTaskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+  }
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
 }
 
