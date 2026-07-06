@@ -192,7 +192,7 @@ public class SemaphoreLandGuiInstaller {
         int len = (int)SendMessage(hWnd, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
         if (len <= 0) { return string.Empty; }
         StringBuilder sb2 = new StringBuilder(len + 2);
-        SendMessage(hWnd, WM_GETTEXT, (IntPtr)(len + 1), sb2);
+        SendMessageText(hWnd, WM_GETTEXT, (IntPtr)(len + 1), sb2);
         return sb2.ToString();
     }
 
