@@ -141,6 +141,9 @@ public class SemaphoreLandGuiInstaller {
     [DllImport("user32.dll")]
     public static extern bool SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
     public const uint BM_CLICK = 0x00F5;
     public const int SW_RESTORE = 9;
 
@@ -149,9 +152,37 @@ public class SemaphoreLandGuiInstaller {
         return title.IndexOf(titlePart, StringComparison.Ordinal) >= 0;
     }
 
+    public static string NormalizeButtonText(string text) {
+        if (string.IsNullOrEmpty(text)) { return string.Empty; }
+        return text.Replace("&", string.Empty).Trim();
+    }
+
+    public static bool TextMatchesButton(string label, string buttonText) {
+        if (string.IsNullOrEmpty(buttonText)) { return false; }
+        if (string.IsNullOrEmpty(label)) { return false; }
+        string normLabel = NormalizeButtonText(label);
+        string normBtn = NormalizeButtonText(buttonText);
+        if (normLabel == normBtn) { return true; }
+        if (normLabel.IndexOf(normBtn, StringComparison.Ordinal) >= 0) { return true; }
+        if (label == buttonText) { return true; }
+        if (label.IndexOf(buttonText, StringComparison.Ordinal) >= 0) { return true; }
+        return false;
+    }
+
+    public static bool IsButtonClass(string className) {
+        if (string.IsNullOrEmpty(className)) { return false; }
+        if (string.Equals(className, "Button", StringComparison.OrdinalIgnoreCase)) { return true; }
+        if (string.Equals(className, "SysButton", StringComparison.OrdinalIgnoreCase)) { return true; }
+        if (string.Equals(className, "TButton", StringComparison.OrdinalIgnoreCase)) { return true; }
+        if (string.Equals(className, "TNewButton", StringComparison.OrdinalIgnoreCase)) { return true; }
+        if (className.EndsWith("Button", StringComparison.OrdinalIgnoreCase)) { return true; }
+        return false;
+    }
+
     public static IntPtr FindTopLevelWindowByTitle(string titlePart) {
         IntPtr found = IntPtr.Zero;
         EnumWindows((hWnd, lParam) => {
+            if (!IsWindowVisible(hWnd)) { return true; }
             StringBuilder sb = new StringBuilder(512);
             GetWindowText(hWnd, sb, sb.Capacity);
             string title = sb.ToString();
@@ -164,26 +195,79 @@ public class SemaphoreLandGuiInstaller {
         return found;
     }
 
-    public static IntPtr FindButtonByText(IntPtr parent, string buttonText) {
-        if (parent == IntPtr.Zero || string.IsNullOrEmpty(buttonText)) { return IntPtr.Zero; }
-        IntPtr found = IntPtr.Zero;
-        EnumChildWindows(parent, (hWnd, lParam) => {
+    private static void FindButtonDeepWorker(IntPtr hwnd, string buttonText, ref IntPtr found) {
+        if (found != IntPtr.Zero || hwnd == IntPtr.Zero) { return; }
+        EnumChildWindows(hwnd, (child, lParam) => {
+            if (found != IntPtr.Zero) { return false; }
             StringBuilder cls = new StringBuilder(64);
-            GetClassName(hWnd, cls, cls.Capacity);
+            GetClassName(child, cls, cls.Capacity);
             string className = cls.ToString();
-            if (!string.Equals(className, "Button", StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
             StringBuilder txt = new StringBuilder(256);
-            GetWindowText(hWnd, txt, txt.Capacity);
+            GetWindowText(child, txt, txt.Capacity);
             string label = txt.ToString();
-            if (label == buttonText || label.IndexOf(buttonText, StringComparison.Ordinal) >= 0) {
-                found = hWnd;
+            if (IsButtonClass(className) && TextMatchesButton(label, buttonText)) {
+                found = child;
                 return false;
             }
+            FindButtonDeepWorker(child, buttonText, ref found);
+            return found == IntPtr.Zero;
+        }, IntPtr.Zero);
+    }
+
+    public static IntPtr FindButtonByTextDeep(IntPtr parent, string buttonText) {
+        IntPtr found = IntPtr.Zero;
+        FindButtonDeepWorker(parent, buttonText, ref found);
+        return found;
+    }
+
+    private static void FindLastTNewButtonWorker(IntPtr hwnd, ref IntPtr last) {
+        if (hwnd == IntPtr.Zero) { return; }
+        EnumChildWindows(hwnd, (child, lParam) => {
+            StringBuilder cls = new StringBuilder(64);
+            GetClassName(child, cls, cls.Capacity);
+            string className = cls.ToString();
+            if (string.Equals(className, "TNewButton", StringComparison.OrdinalIgnoreCase) && IsWindowVisible(child)) {
+                last = child;
+            }
+            FindLastTNewButtonWorker(child, ref last);
             return true;
         }, IntPtr.Zero);
-        return found;
+    }
+
+    public static IntPtr FindLastVisibleTNewButton(IntPtr parent) {
+        IntPtr last = IntPtr.Zero;
+        FindLastTNewButtonWorker(parent, ref last);
+        return last;
+    }
+
+    public static string ScanClickableControls(IntPtr parent, int maxItems) {
+        if (parent == IntPtr.Zero || maxItems <= 0) { return string.Empty; }
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
+        ScanClickableWorker(parent, sb, ref count, maxItems);
+        return sb.ToString();
+    }
+
+    private static void ScanClickableWorker(IntPtr hwnd, StringBuilder sb, ref int count, int maxItems) {
+        if (hwnd == IntPtr.Zero || count >= maxItems) { return; }
+        EnumChildWindows(hwnd, (child, lParam) => {
+            if (count >= maxItems) { return false; }
+            StringBuilder cls = new StringBuilder(64);
+            GetClassName(child, cls, cls.Capacity);
+            string className = cls.ToString();
+            StringBuilder txt = new StringBuilder(256);
+            GetWindowText(child, txt, txt.Capacity);
+            string label = txt.ToString();
+            if (!string.IsNullOrEmpty(label) && (IsButtonClass(className) || label.Length <= 32)) {
+                if (sb.Length > 0) { sb.Append(';'); }
+                sb.Append(label);
+                sb.Append('@');
+                sb.Append(className);
+                count++;
+            }
+            ScanClickableWorker(child, sb, ref count, maxItems);
+            return true;
+        }, IntPtr.Zero);
     }
 
     public static bool ClickDialogButton(string titlePart, string buttonText, out string detail) {
@@ -197,15 +281,28 @@ public class SemaphoreLandGuiInstaller {
             ShowWindow(hwnd, SW_RESTORE);
         }
         SetForegroundWindow(hwnd);
-        IntPtr btn = FindButtonByText(hwnd, buttonText);
+        IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
+        string clickMode = "text_match";
         if (btn == IntPtr.Zero) {
-            detail = "button_not_found";
+            btn = FindLastVisibleTNewButton(hwnd);
+            if (btn != IntPtr.Zero) {
+                clickMode = "fallback_last_TNewButton";
+            }
+        }
+        if (btn == IntPtr.Zero) {
+            string scan = ScanClickableControls(hwnd, 12);
+            detail = string.IsNullOrEmpty(scan) ? "button_not_found" : ("button_not_found|scan=" + scan);
             return false;
         }
+        StringBuilder bcls = new StringBuilder(64);
+        GetClassName(btn, bcls, bcls.Capacity);
+        StringBuilder blbl = new StringBuilder(256);
+        GetWindowText(btn, blbl, blbl.Capacity);
         SendMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+        PostMessage(btn, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
         StringBuilder tsb = new StringBuilder(512);
         GetWindowText(hwnd, tsb, tsb.Capacity);
-        detail = "title=" + tsb.ToString();
+        detail = "title=" + tsb.ToString() + "|btn=" + blbl.ToString() + "|class=" + bcls.ToString() + "|mode=" + clickMode;
         return true;
     }
 }
