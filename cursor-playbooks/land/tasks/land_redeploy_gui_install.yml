@@ -48,7 +48,7 @@
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
     (
-      ('INSTALL_SCRIPT_REV=20260707-scheduled-stop-style-v2' not in (_land_gui_install.stdout | default('')))
+      ('INSTALL_SCRIPT_REV=20260707-schtasks-fallback-v3' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
       or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))
