@@ -79,6 +79,7 @@ rm -f neware/tasks/winrm_ensure_reachable.yml neware/tasks/winrm_gate_play_tasks
 | `LAND_INSTALL_DLG3_COORD_X_PCT` / `_Y_PCT` | `88` / `93` | Client-area % for step 3 coord fallback (final 确定) |
 | `EXE_ARGS` | empty | Optional executable arguments |
 | `PROCESS_NAME` | (`EXE_NAME` without `.exe`, default `LHBTS`) | Process name for `Get-Process` |
+| `LAND_RESTART_BLOCK_PROCESS_NAMES` | `LHANLS,LHCAL,LHProc` | Comma-separated related process names; if any is running before stop, restart/redeploy is skipped and marked failed |
 | `LAND_API_SCHEME` | `http` | API scheme (`http`/`https`) |
 | `LAND_API_PORT` | `8080` | API port |
 | `LAND_API_STATUS_PATH` | `/SyncLims/QueryStatus` | Query status endpoint |

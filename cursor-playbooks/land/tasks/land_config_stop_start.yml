@@ -10,87 +10,126 @@
   register: _land_process_before
   changed_when: false
 
-- name: LAND API 修改配置（停止前，进程在跑时）
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_before_stop.yml"
-  when: >-
-    (merged_cfg.SystemConfig | default({}) | length) > 0
-    and (((_land_process_before.stdout | default('') | trim).split('|') | first) == 'RUNNING')
-
-- name: 重新部署：复制安装程序到桌面（优雅停止前）
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_copy_installer.yml"
-  when: land_include_gui_installer | default(false) | bool
-
-- name: LAND 优雅停止
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
-
-- name: 获取当前登录用户
+- name: LAND 停止前检查关联进程
   ansible.windows.win_shell: |
-    $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
-      ForEach-Object {
-        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
-        if ($o -and $o.ReturnValue -eq 0 -and $o.User) {
-          $user = $o.User.Trim()
-          $dom = [string]$o.Domain
-          $dom = $dom.Trim()
-          if ($dom.Length -gt 0) { "$dom\$user" } else { ".\$user" }
-        }
-      } |
-      Where-Object { $_ } |
-      Select-Object -First 1
-    if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
-  register: get_username_result
+    $raw = "{{ (lookup('env', 'LAND_RESTART_BLOCK_PROCESS_NAMES') | default('', true) | trim) | default('LHANLS,LHCAL,LHProc', true) }}"
+    $names = @()
+    foreach ($n in ($raw -split ',')) {
+      $t = [string]$n
+      $t = $t.Trim()
+      if ($t.Length -gt 0) { $names += $t }
+    }
+    $running = @()
+    foreach ($name in $names) {
+      $p = Get-Process -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($null -ne $p) { $running += $name }
+    }
+    if ($running.Count -gt 0) {
+      Write-Output ("BLOCKED|" + ($running -join ','))
+    } else {
+      Write-Output "CLEAR|"
+    }
+  register: _land_related_process_check
   changed_when: false
-  when: not (land_include_gui_installer | default(false) | bool)
 
-- name: 规范化启动用户
+- name: LAND 命中关联进程保护（跳过重启/重部署）
   ansible.builtin.set_fact:
-    _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
-  when: not (land_include_gui_installer | default(false) | bool)
+    land_abort_due_related_process: true
+    host_failure_reason: >-
+      restart/redeploy skipped: related process running: {{
+        ((_land_related_process_check.stdout | default('') | trim).split('|') | last | default(''))
+      }}
+  when: ((_land_related_process_check.stdout | default('') | trim).split('|') | first) == 'BLOCKED'
 
-- name: 重新部署：GUI 安装程序（优雅停止后、交互启动前）
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_gui_install.yml"
-  when: land_include_gui_installer | default(false) | bool
-
-- name: 启动程序
-  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
-
-- name: 重启后确认进程状态
-  ansible.windows.win_shell: |
-    Start-Sleep -Seconds 3
-    $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
-  register: _land_process_after_restart
-  changed_when: false
-  when: not (start_aborted_exe_missing | default(false) | bool)
-
-- name: 重启后查询 LAND API 状态（轮询 QueryStatus）
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status_start_poll.yml"
-  when:
-    - not (start_aborted_exe_missing | default(false) | bool)
-    - land_start_check_api | default(true) | bool
-
-- name: 跳过启动后 LAND API 检查
+- name: LAND 停止前关联进程检查通过（继续重启/重部署）
   ansible.builtin.set_fact:
-    _land_api_after_restart:
-      status: 200
-      skipped: true
-      content: ""
-    land_api_status_ok: true
-  when:
-    - not (start_aborted_exe_missing | default(false) | bool)
-    - not (land_start_check_api | default(true) | bool)
+    land_abort_due_related_process: false
+  when: ((_land_related_process_check.stdout | default('') | trim).split('|') | first) != 'BLOCKED'
 
-- name: 启动后 API 修改配置重试
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
-  when:
-    - not (start_aborted_exe_missing | default(false) | bool)
-    - (merged_cfg.SystemConfig | default({}) | length) > 0
+- name: LAND 执行 stop/start 主流程
+  when: not (land_abort_due_related_process | default(false) | bool)
+  block:
+    - name: LAND API 修改配置（停止前，进程在跑时）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_before_stop.yml"
+      when: >-
+        (merged_cfg.SystemConfig | default({}) | length) > 0
+        and (((_land_process_before.stdout | default('') | trim).split('|') | first) == 'RUNNING')
 
-- name: 数据重传 Redeliver（restart 专用）
-  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_redeliver.yml"
-  when: >-
-    not (start_aborted_exe_missing | default(false) | bool)
-    and (merged_cfg.Redeliver | default({}) | length) > 0
-    and (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING')
-    and (land_api_status_ok | default(false) | bool)
-    and (land_include_redeliver | default(true) | bool)
+    - name: 重新部署：复制安装程序到桌面（优雅停止前）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_copy_installer.yml"
+      when: land_include_gui_installer | default(false) | bool
+
+    - name: LAND 优雅停止
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
+
+    - name: 获取当前登录用户
+      ansible.windows.win_shell: |
+        $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+          ForEach-Object {
+            $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+            if ($o -and $o.ReturnValue -eq 0 -and $o.User) {
+              $user = $o.User.Trim()
+              $dom = [string]$o.Domain
+              $dom = $dom.Trim()
+              if ($dom.Length -gt 0) { "$dom\$user" } else { ".\$user" }
+            }
+          } |
+          Where-Object { $_ } |
+          Select-Object -First 1
+        if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
+      register: get_username_result
+      changed_when: false
+      when: not (land_include_gui_installer | default(false) | bool)
+
+    - name: 规范化启动用户
+      ansible.builtin.set_fact:
+        _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+      when: not (land_include_gui_installer | default(false) | bool)
+
+    - name: 重新部署：GUI 安装程序（优雅停止后、交互启动前）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_gui_install.yml"
+      when: land_include_gui_installer | default(false) | bool
+
+    - name: 启动程序
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
+
+    - name: 重启后确认进程状态
+      ansible.windows.win_shell: |
+        Start-Sleep -Seconds 3
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+      register: _land_process_after_restart
+      changed_when: false
+      when: not (start_aborted_exe_missing | default(false) | bool)
+
+    - name: 重启后查询 LAND API 状态（轮询 QueryStatus）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status_start_poll.yml"
+      when:
+        - not (start_aborted_exe_missing | default(false) | bool)
+        - land_start_check_api | default(true) | bool
+
+    - name: 跳过启动后 LAND API 检查
+      ansible.builtin.set_fact:
+        _land_api_after_restart:
+          status: 200
+          skipped: true
+          content: ""
+        land_api_status_ok: true
+      when:
+        - not (start_aborted_exe_missing | default(false) | bool)
+        - not (land_start_check_api | default(true) | bool)
+
+    - name: 启动后 API 修改配置重试
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_modify_config_after_start_retry.yml"
+      when:
+        - not (start_aborted_exe_missing | default(false) | bool)
+        - (merged_cfg.SystemConfig | default({}) | length) > 0
+
+    - name: 数据重传 Redeliver（restart 专用）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_redeliver.yml"
+      when: >-
+        not (start_aborted_exe_missing | default(false) | bool)
+        and (merged_cfg.Redeliver | default({}) | length) > 0
+        and (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING')
+        and (land_api_status_ok | default(false) | bool)
+        and (land_include_redeliver | default(true) | bool)
