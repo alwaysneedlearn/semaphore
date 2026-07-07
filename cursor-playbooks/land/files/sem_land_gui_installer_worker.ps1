@@ -22,7 +22,11 @@ function Resolve-LandInstallLogFromConfigPath {
   param([string]$ConfigPath)
   if ([string]::IsNullOrWhiteSpace($ConfigPath)) { return '' }
   if ($ConfigPath -match 'sem_land_install_cfg_(\d+)\.json$') {
-    return "C:\Windows\Temp\sem_land_install_$($Matches[1]).log"
+    $ts = $Matches[1]
+    if ($ConfigPath -match '\\Users\\Public\\') {
+      return "C:\Users\Public\sem_land_install_$ts.log"
+    }
+    return "C:\Windows\Temp\sem_land_install_$ts.log"
   }
   return ''
 }
