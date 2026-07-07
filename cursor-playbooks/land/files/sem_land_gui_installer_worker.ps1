@@ -182,6 +182,7 @@ function Initialize-LandInstallFromConfig {
   if ($null -ne $cfg.dlg2_coord_y_pct) { $script:Dlg2CoordYPct = [string]$cfg.dlg2_coord_y_pct }
   if ($null -ne $cfg.dlg3_coord_x_pct) { $script:Dlg3CoordXPct = [string]$cfg.dlg3_coord_x_pct }
   if ($null -ne $cfg.dlg3_coord_y_pct) { $script:Dlg3CoordYPct = [string]$cfg.dlg3_coord_y_pct }
+  if ($cfg.expected_version) { $script:ExpectedInstallVersion = [string]$cfg.expected_version }
   return $true
 }
 
@@ -888,13 +889,73 @@ public class SemaphoreLandGuiInstaller {
 [SemaphoreLandGuiInstaller]::MinSecondsAfterStep2 = $minSecondsAfterStep2
 [SemaphoreLandGuiInstaller]::MinSecondsBeforeFinalFallback = $minSecondsBeforeFinalFallback
 
+$script:ExpectedInstallVersion = ''
+
+function Resolve-LandExpectedInstallVersion {
+  param([string]$InstallerPath)
+  if (-not [string]::IsNullOrWhiteSpace($script:ExpectedInstallVersion)) {
+    return $script:ExpectedInstallVersion.Trim()
+  }
+  $fromEnv = [string]$env:LAND_INSTALL_EXPECTED_VERSION
+  if ($null -eq $fromEnv) { $fromEnv = '' }
+  $fromEnv = $fromEnv.Trim()
+  if ($fromEnv.Length -gt 0) { return $fromEnv }
+  if ([string]::IsNullOrWhiteSpace($InstallerPath)) { return '' }
+  $name = [System.IO.Path]::GetFileName($InstallerPath)
+  if ($name -match '(?i)LHBTS[_-]?Setup[_-]?(\d+\.\d+\.\d+\.\d+)') {
+    return $Matches[1]
+  }
+  if ($name -match '(\d+\.\d+\.\d+\.\d+)') {
+    return $Matches[1]
+  }
+  return ''
+}
+
+function Get-LandInstallRegistryVersion {
+  try {
+    $item = Get-ItemProperty -Path 'HKCU:\Software\LH' -Name 'InstallVersion' -ErrorAction Stop
+    if ($null -eq $item) { return '' }
+    return ([string]$item.InstallVersion).Trim()
+  } catch {
+    return ''
+  }
+}
+
+function Wait-LandInstallRegistryVersion {
+  param(
+    [string]$Expected,
+    [int]$TimeoutSec = 30
+  )
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  $attempt = 0
+  do {
+    $attempt++
+    $ver = Get-LandInstallRegistryVersion
+    if ($ver.Length -gt 0) {
+      Write-InstallLine ('INSTALL_VERSION|registry=' + $ver + '|expected=' + $Expected + '|key=HKCU\Software\LH\InstallVersion|attempt=' + $attempt)
+      if ($Expected.Length -gt 0 -and $ver -ne $Expected) {
+        return @{ ok = $false; version = $ver; reason = 'version_mismatch' }
+      }
+      return @{ ok = $true; version = $ver; reason = '' }
+    }
+    if (($attempt % 10) -eq 0) {
+      Write-InstallLine ('INSTALL_VERSION_POLL|attempt=' + $attempt + '|expected=' + $Expected)
+    }
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+  Write-InstallLine ('INSTALL_VERSION|registry=|expected=' + $Expected + '|key=HKCU\Software\LH\InstallVersion|reason=timeout')
+  return @{ ok = $false; version = ''; reason = 'registry_timeout' }
+}
+
 function Wait-For-LandDialog {
   param(
     [string]$TitlePart,
     [int]$TimeoutSec
   )
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  $start = Get-Date
   $attempt = 0
+  $pollMs = 100
   do {
     $attempt++
     try {
@@ -904,13 +965,15 @@ function Wait-For-LandDialog {
       return $false
     }
     if ($hwnd -ne [IntPtr]::Zero) {
-      Write-InstallLine "DIALOG_VISIBLE|title_part=$TitlePart|attempt=$attempt"
+      $elapsed = [int]((Get-Date) - $start).TotalSeconds
+      Write-InstallLine "DIALOG_VISIBLE|title_part=$TitlePart|attempt=$attempt|elapsed_sec=$elapsed"
       return $true
     }
-    if (($attempt % 50) -eq 0) {
-      Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|attempt=$attempt"
+    if (($attempt % 10) -eq 0) {
+      $elapsed = [int]((Get-Date) - $start).TotalSeconds
+      Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|elapsed_sec=$elapsed"
     }
-    [System.Threading.Thread]::Sleep(0)
+    [System.Threading.Thread]::Sleep($pollMs)
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_WAIT_TIMEOUT|title_part=$TitlePart|attempts=$attempt"
   return $false
@@ -971,7 +1034,7 @@ function Wait-Click-LandDialog {
       Write-InstallLine "DIALOG_ABORT|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       return $false
     }
-    if (($attempt % 20) -eq 0) {
+    if (($attempt % 40) -eq 0) {
       Write-InstallLine "DIALOG_POLL|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|last=$detail"
     }
     if ($detail -match 'wizard_not_final|window_not_found') {
@@ -1240,6 +1303,20 @@ if (-not (Wait-For-LandInstallerFinished -LiteralPath $installerPath -WizardTitl
 }
 Write-InstallLine 'INSTALL_STEP_DONE|step=3'
 Write-LandInstallProgress -InstallerPath $installerPath -Step 3
+
+$expectedVersion = Resolve-LandExpectedInstallVersion -InstallerPath $installerPath
+$verResult = Wait-LandInstallRegistryVersion -Expected $expectedVersion -TimeoutSec 30
+if (-not $verResult.ok) {
+  if ($verResult.reason -eq 'version_mismatch') {
+    Write-InstallLine ('INSTALL_FAILED|step=version_verify|registry=' + $verResult.version + '|expected=' + $expectedVersion)
+    exit 1
+  }
+  if ($expectedVersion.Length -gt 0) {
+    Write-InstallLine ('INSTALL_FAILED|step=version_verify|reason=' + $verResult.reason + '|expected=' + $expectedVersion)
+    exit 1
+  }
+  Write-InstallLine 'INSTALL_WARN|step=version_verify|reason=registry_missing'
+}
 
 Write-InstallLine 'INSTALL_COMPLETE'
 Clear-LandInstallProgress -InstallerPath $installerPath

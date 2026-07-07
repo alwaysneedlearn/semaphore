@@ -3,7 +3,7 @@
 # Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
 # INSTALL_SCRIPT_REV bumps when launch logic changes — must appear in task stdout.
 
-Write-Output 'INSTALL_SCRIPT_REV=20260707-worker-utf8-fix-v7'
+Write-Output 'INSTALL_SCRIPT_REV=20260707-registry-version-v8'
 
 $SemLandTempDir = 'C:\Windows\Temp'
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
@@ -17,6 +17,21 @@ $profileUserHint = $profileUserHint.Trim()
 $installerPath = [string]$env:LAND_INSTALLER_EXE_PATH
 if ($null -eq $installerPath) { $installerPath = '' }
 $installerPath = $installerPath.Trim()
+
+function Resolve-LandExpectedInstallVersionFromInstaller {
+  param([string]$InstallerPath)
+  $fromEnv = Get-EnvOrDefault -Name 'LAND_INSTALL_EXPECTED_VERSION' -Default ''
+  if (-not [string]::IsNullOrWhiteSpace($fromEnv)) { return $fromEnv.Trim() }
+  if ([string]::IsNullOrWhiteSpace($InstallerPath)) { return '' }
+  $name = [System.IO.Path]::GetFileName($InstallerPath)
+  if ($name -match '(?i)LHBTS[_-]?Setup[_-]?(\d+\.\d+\.\d+\.\d+)') {
+    return $Matches[1]
+  }
+  if ($name -match '(\d+\.\d+\.\d+\.\d+)') {
+    return $Matches[1]
+  }
+  return ''
+}
 
 function Get-EnvOrDefault {
   param([string]$Name, [string]$Default)
@@ -629,10 +644,12 @@ $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $configPath = Join-Path $SemLandTempDir "sem_land_install_cfg_$ts.json"
 $outFile = Join-Path $SemLandTempDir "sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
+$expectedVersion = Resolve-LandExpectedInstallVersionFromInstaller -InstallerPath $installerPath
 
 $config = [ordered]@{
   installer_path = $installerPath
   log_file = $outFile
+  expected_version = $expectedVersion
   dlg1_title = $dlg1Title
   dlg1_button = $dlg1Button
   dlg2_title = $dlg2Title
@@ -655,7 +672,7 @@ try {
   exit 1
 }
 
-Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile"
+Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile|expected_version=$expectedVersion"
 
 Write-LandInstallActiveFile -ConfigPath $configPath -LogPath $outFile
 Grant-LandInstallLogWrite -LogPath $outFile

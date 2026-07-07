@@ -40,6 +40,7 @@
   environment:
     LAND_INSTALLER_EXE_PATH: "{{ land_installer_dest }}"
     SEMAPHORE_PROFILE_USER: "{{ _land_install_profile_user | default(_reconfig_profile_user) }}"
+    LAND_INSTALL_EXPECTED_VERSION: "{{ (lookup('env', 'LAND_INSTALL_EXPECTED_VERSION') | default('', true) | trim) }}"
     LAND_INSTALL_TASK_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('360', true)) }}"
     LAND_INSTALL_STEP_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_STEP_TIMEOUT_SECONDS') | default('', true) | trim) | default('90', true)) }}"
     LAND_INSTALL_DLG1_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG1_TITLE') | default('', true) | trim) | default('LHBTS 安装', true) }}"
@@ -63,7 +64,7 @@
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
     (
-      ('INSTALL_SCRIPT_REV=20260707-worker-utf8-fix-v7' not in (_land_gui_install.stdout | default('')))
+      ('INSTALL_SCRIPT_REV=20260707-registry-version-v8' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
       or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))
