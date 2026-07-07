@@ -129,13 +129,25 @@ $dlg3Button = $Dlg3ButtonArg
 [int]::TryParse($Dlg3CoordXPct, [ref]$dlg3CoordX) | Out-Null
 [int]::TryParse($Dlg3CoordYPct, [ref]$dlg3CoordY) | Out-Null
 
+[int]$minSecondsAfterStep2 = 3
+[int]$minSecondsBeforeFinalFallback = 45
+$minAfterStep2Raw = [string]$env:LAND_INSTALL_MIN_SECONDS_AFTER_STEP2
+if (-not [string]::IsNullOrWhiteSpace($minAfterStep2Raw)) {
+  [int]::TryParse($minAfterStep2Raw, [ref]$minSecondsAfterStep2) | Out-Null
+}
+$minFinalFallbackRaw = [string]$env:LAND_INSTALL_MIN_SECONDS_BEFORE_FINAL
+if (-not [string]::IsNullOrWhiteSpace($minFinalFallbackRaw)) {
+  [int]::TryParse($minFinalFallbackRaw, [ref]$minSecondsBeforeFinalFallback) | Out-Null
+}
+if ($minSecondsAfterStep2 -lt 1) { $minSecondsAfterStep2 = 1 }
+
 if (-not ([System.Management.Automation.PSTypeName]'SemaphoreLandGuiInstaller').Type) {
-  try {
-    Add-Type -TypeDefinition @"
+  $landInstallerTypeDef = @"
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Automation;
 
 public class SemaphoreLandGuiInstaller {
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
@@ -219,6 +231,10 @@ public class SemaphoreLandGuiInstaller {
     public static int FallbackCoordXPct = 0;
     public static int FallbackCoordYPct = 0;
     public static bool RequireFinalWizardScreen = false;
+    public static DateTime Step2CompletedUtc = DateTime.MinValue;
+    public static int MinSecondsAfterStep2 = 3;
+    public static int MinSecondsBeforeFinalFallback = 45;
+    public static bool UiAutomationEnabled = true;
 
     public static bool TitleMatches(string title, string titlePart) {
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(titlePart)) { return false; }
@@ -511,6 +527,68 @@ public class SemaphoreLandGuiInstaller {
         return count;
     }
 
+    public static bool UiTreeContainsName(AutomationElement root, string part, int depthLeft) {
+        if (root == null || depthLeft < 0 || string.IsNullOrEmpty(part)) { return false; }
+        try {
+            string name = root.Current.Name ?? string.Empty;
+            if (name.IndexOf(part, StringComparison.Ordinal) >= 0) { return true; }
+            AutomationElementCollection children = root.FindAll(TreeScope.Children, Condition.TrueCondition);
+            foreach (AutomationElement child in children) {
+                if (UiTreeContainsName(child, part, depthLeft - 1)) { return true; }
+            }
+        } catch { }
+        return false;
+    }
+
+    public static bool WpfUiContains(IntPtr hwnd, string part) {
+        if (!UiAutomationEnabled || hwnd == IntPtr.Zero || string.IsNullOrEmpty(part)) { return false; }
+        try {
+            AutomationElement el = AutomationElement.FromHandle(hwnd);
+            return UiTreeContainsName(el, part, 16);
+        } catch { return false; }
+    }
+
+    public static bool WpfWizardOnInitialButtonRow(IntPtr hwnd) {
+        return WpfUiContains(hwnd, "升级") || WpfUiContains(hwnd, "取消");
+    }
+
+    public static bool WpfWizardShowsCompleted(IntPtr hwnd) {
+        return WpfUiContains(hwnd, "已完成");
+    }
+
+    public static string DescribeWpfFinalReadiness(IntPtr hwnd) {
+        if (!IsWpfHwndWrapper(hwnd)) { return "phase=not_wpf"; }
+        if (Step2CompletedUtc != DateTime.MinValue) {
+            double sec = (DateTime.UtcNow - Step2CompletedUtc).TotalSeconds;
+            if (sec < MinSecondsAfterStep2) {
+                return "phase=after_step2_settle|elapsed_sec=" + sec.ToString("F1");
+            }
+        }
+        if (WpfWizardOnInitialButtonRow(hwnd)) { return "phase=initial_buttons|upgrade_or_cancel_visible"; }
+        if (WpfWizardShowsCompleted(hwnd)) { return "phase=completed_text"; }
+        if (!UiAutomationEnabled && Step2CompletedUtc != DateTime.MinValue) {
+            double sec = (DateTime.UtcNow - Step2CompletedUtc).TotalSeconds;
+            if (sec < MinSecondsBeforeFinalFallback) {
+                return "phase=installing_fallback|elapsed_sec=" + sec.ToString("F1");
+            }
+            return "phase=fallback_elapsed_ok|elapsed_sec=" + sec.ToString("F1");
+        }
+        return "phase=installing";
+    }
+
+    public static bool IsWpfFinalInstallScreenReady(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero || !IsWpfHwndWrapper(hwnd)) { return false; }
+        if (Step2CompletedUtc != DateTime.MinValue) {
+            if ((DateTime.UtcNow - Step2CompletedUtc).TotalSeconds < MinSecondsAfterStep2) { return false; }
+        }
+        if (WpfWizardOnInitialButtonRow(hwnd)) { return false; }
+        if (WpfWizardShowsCompleted(hwnd)) { return true; }
+        if (!UiAutomationEnabled && Step2CompletedUtc != DateTime.MinValue) {
+            return (DateTime.UtcNow - Step2CompletedUtc).TotalSeconds >= MinSecondsBeforeFinalFallback;
+        }
+        return false;
+    }
+
     public static bool IsFinalInstallWizardReady(IntPtr hwnd) {
         if (hwnd == IntPtr.Zero) { return false; }
         if (HasVisibleButtonText(hwnd, "升级")) { return false; }
@@ -518,8 +596,9 @@ public class SemaphoreLandGuiInstaller {
         if (HasVisibleButtonText(hwnd, "确定")) { return true; }
         int btnCount = CountVisibleButtons(hwnd);
         if (btnCount == 1) { return true; }
-        // WPF HwndWrapper installers often expose no child HWNDs; coord fallback is authoritative.
-        if (btnCount == 0 && IsWpfHwndWrapper(hwnd)) { return true; }
+        if (IsWpfHwndWrapper(hwnd)) {
+            return IsWpfFinalInstallScreenReady(hwnd);
+        }
         return false;
     }
 
@@ -597,24 +676,20 @@ public class SemaphoreLandGuiInstaller {
             }
             SetForegroundWindow(hwnd);
             string wizardClass = GetClassNameText(hwnd);
-            bool wpfEmptyTree = IsWpfHwndWrapper(hwnd) && CountDescendants(hwnd) == 0;
             if (RequireFinalWizardScreen && !IsFinalInstallWizardReady(hwnd)) {
                 string scan = ScanWindowTree(hwnd, 12);
-                detail = "wizard_not_final|title=" + GetControlText(hwnd) + "|buttons=" + CountVisibleButtons(hwnd) + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
+                string phase = IsWpfHwndWrapper(hwnd) ? DescribeWpfFinalReadiness(hwnd) : "phase=win32_enum";
+                detail = "wizard_not_final|" + phase + "|title=" + GetControlText(hwnd) + "|buttons=" + CountVisibleButtons(hwnd) + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
                 return false;
             }
             IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
             string clickMode = "text_match";
             if (btn == IntPtr.Zero) {
                 string scan = ScanWindowTree(hwnd, 20);
-                if (RequireFinalWizardScreen && wpfEmptyTree && FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
-                    string coordDetail = ClickWindowAtPercent(hwnd, FallbackCoordXPct, FallbackCoordYPct);
-                    detail = "coord_click|wizard_class=" + wizardClass + "|mode=wpf_final|" + coordDetail + "|scan=(empty_tree)";
-                    return true;
-                }
                 if (FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
                     string coordDetail = ClickWindowAtPercent(hwnd, FallbackCoordXPct, FallbackCoordYPct);
-                    detail = "coord_click|wizard_class=" + wizardClass + "|" + coordDetail + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
+                    string coordMode = RequireFinalWizardScreen ? "|mode=wpf_final" : string.Empty;
+                    detail = "coord_click|wizard_class=" + wizardClass + coordMode + "|" + coordDetail + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
                     return true;
                 }
                 TryKeyboardReturn(hwnd);
@@ -643,12 +718,17 @@ public class SemaphoreLandGuiInstaller {
         }
     }
 }
-"@ -ErrorAction Stop
+"@
+  try {
+    Add-Type -TypeDefinition $landInstallerTypeDef -ReferencedAssemblies @('UIAutomationClient', 'UIAutomationTypes', 'WindowsBase') -ErrorAction Stop
   } catch {
     Write-InstallLine "INSTALL_ERROR|reason=add_type_failed|msg=$($_.Exception.Message)"
     exit 1
   }
 }
+
+[SemaphoreLandGuiInstaller]::MinSecondsAfterStep2 = $minSecondsAfterStep2
+[SemaphoreLandGuiInstaller]::MinSecondsBeforeFinalFallback = $minSecondsBeforeFinalFallback
 
 function Wait-For-LandDialog {
   param(
@@ -710,6 +790,23 @@ function Wait-Click-LandDialog {
       $ok = $false
     }
     if ($ok) {
+      if ($RequireFinalWizard.IsPresent) {
+        [System.Threading.Thread]::Sleep(1200)
+        $reject = $false
+        try {
+          $postHwnd = [SemaphoreLandGuiInstaller]::FindWizardWindow($TitlePart)
+          if ($postHwnd -ne [IntPtr]::Zero -and [SemaphoreLandGuiInstaller]::WpfWizardOnInitialButtonRow($postHwnd)) {
+            Write-InstallLine "DIALOG_CLICK_REJECT|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|reason=post_click_initial_row|detail=likely_cancel_at_coord"
+            $reject = $true
+          }
+        } catch {
+          Write-InstallLine "DIALOG_CLICK_REJECT|title_part=$TitlePart|reason=post_click_check_failed|msg=$($_.Exception.Message)"
+        }
+        if ($reject) {
+          $ok = $false
+          continue
+        }
+      }
       Write-InstallLine "DIALOG_CLICKED|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|$detail"
       [System.Threading.Thread]::Sleep(300)
       return $true
@@ -727,6 +824,35 @@ function Wait-Click-LandDialog {
   } while ((Get-Date) -lt $deadline)
   Write-InstallLine "DIALOG_TIMEOUT|title_part=$TitlePart|button=$ButtonText|attempts=$attempt|last=$detail"
   return $false
+}
+
+function Wait-For-LandInstallerFinished {
+  param(
+    [string]$LiteralPath,
+    [string]$WizardTitle,
+    [int]$TimeoutSec
+  )
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  do {
+    if (-not (Test-InstallerProcessRunning -LiteralPath $LiteralPath)) {
+      return $true
+    }
+    try {
+      $hwnd = [SemaphoreLandGuiInstaller]::FindWizardWindow($WizardTitle)
+      if ($hwnd -eq [IntPtr]::Zero) { return $true }
+    } catch { }
+    [System.Threading.Thread]::Sleep(500)
+  } while ((Get-Date) -lt $deadline)
+  return $false
+}
+
+function Set-LandStep2CompletedClock {
+  [SemaphoreLandGuiInstaller]::Step2CompletedUtc = [DateTime]::UtcNow
+}
+
+function Set-LandStep2CompletedClockForResume {
+  $settle = [SemaphoreLandGuiInstaller]::MinSecondsAfterStep2 + 1
+  [SemaphoreLandGuiInstaller]::Step2CompletedUtc = [DateTime]::UtcNow.AddSeconds(-$settle)
 }
 
 function Start-LandInstallerGui {
@@ -906,6 +1032,11 @@ $installerAlreadyRunning = Test-InstallerProcessRunning -LiteralPath $installerP
 $resumeFromStep = 0
 if ($installerAlreadyRunning) {
   $resumeFromStep = Get-LastCompletedInstallStep -LogPath $LogFileArg -InstallerPath $installerPath
+  if ($resumeFromStep -ge 3) {
+    Write-InstallLine "INSTALL_RESUME|adjust=step3_not_trusted|reason=installer_still_running"
+    $resumeFromStep = 2
+    Write-LandInstallProgress -InstallerPath $installerPath -Step 2
+  }
   if ($resumeFromStep -lt 2 -and (Test-PromptDialogVisible)) {
     $resumeFromStep = 1
   }
@@ -913,6 +1044,9 @@ if ($installerAlreadyRunning) {
     Write-InstallLine "INSTALL_RESUME|from_step=$($resumeFromStep + 1)|reason=installer_already_running"
   }
 }
+
+[int]$step3Timeout = $stepTimeout * 2
+if ($step3Timeout -lt 120) { $step3Timeout = 120 }
 
 Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir|session=interactive"
 
@@ -948,13 +1082,22 @@ if ($resumeFromStep -lt 2) {
   }
   Write-InstallLine 'INSTALL_STEP_DONE|step=2'
   Write-LandInstallProgress -InstallerPath $installerPath -Step 2
+  Set-LandStep2CompletedClock
 } else {
   Write-InstallLine 'INSTALL_STEP_SKIP|step=2|reason=resume'
+  Set-LandStep2CompletedClockForResume
 }
 
-Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button"
-if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $stepTimeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -RequireFinalWizard)) {
+Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button|wait_for=已完成"
+if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $step3Timeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -RequireFinalWizard)) {
+  Write-LandInstallProgress -InstallerPath $installerPath -Step 2
   Write-InstallLine 'INSTALL_FAILED|step=3'
+  exit 1
+}
+
+if (-not (Wait-For-LandInstallerFinished -LiteralPath $installerPath -WizardTitle $dlg3Title -TimeoutSec 60)) {
+  Write-LandInstallProgress -InstallerPath $installerPath -Step 2
+  Write-InstallLine 'INSTALL_FAILED|step=3_verify|reason=installer_still_running'
   exit 1
 }
 Write-InstallLine 'INSTALL_STEP_DONE|step=3'
