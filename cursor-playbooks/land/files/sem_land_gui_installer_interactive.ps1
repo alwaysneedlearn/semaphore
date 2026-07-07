@@ -1,15 +1,11 @@
 # Run LAND GUI installer worker in logged-in desktop user's interactive session.
-# Pattern matches sem_stop_close_main_window_confirm_interactive.ps1 (single scheduled task).
-# Temp config/log/trace files live alongside deployed scripts (C:\Windows\Temp\).
+# Launch: (1) WTS user session CreateProcessWithTokenW, (2) scheduled task like stop script.
+# Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
 
-function Resolve-SemLandScriptTempDir {
-  if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
-    return $PSScriptRoot
-  }
-  return 'C:\Windows\Temp'
+$SemLandTempDir = 'C:\Windows\Temp'
+if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
+  $SemLandTempDir = $PSScriptRoot
 }
-
-$script:SemLandTempDir = Resolve-SemLandScriptTempDir
 
 $profileUserHint = [string]$env:SEMAPHORE_PROFILE_USER
 if ($null -eq $profileUserHint) { $profileUserHint = '' }
@@ -49,6 +45,8 @@ if (-not [string]::IsNullOrWhiteSpace($timeoutRaw)) {
 }
 if ($timeoutSec -lt 60) { $timeoutSec = 60 }
 
+$script:usedScheduledTaskName = ''
+
 function Resolve-InteractiveProfileUserFromExplorer {
   param([string]$HintUser)
   $short = ($HintUser -split '\\')[-1]
@@ -73,22 +71,44 @@ function Resolve-InteractiveProfileUserFromExplorer {
   return ''
 }
 
-function Test-ProfileUserInteractiveSession {
+function Get-InteractiveExplorerContext {
   param([string]$ShortName)
   $explorers = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue
   foreach ($e in $explorers) {
     $o = Invoke-CimMethod -InputObject $e -MethodName GetOwner -ErrorAction SilentlyContinue
-    if ($o -and $o.ReturnValue -eq 0 -and $o.User -and ($o.User.Trim() -ieq $ShortName)) {
-      return @{ ok = $true; explorer_pid = [int]$e.ProcessId }
+    if (-not ($o -and $o.ReturnValue -eq 0 -and $o.User -and ($o.User.Trim() -ieq $ShortName))) { continue }
+    $sessionId = 0
+    try {
+      $sessionId = (Get-Process -Id $e.ProcessId -ErrorAction Stop).SessionId
+    } catch {
+      continue
+    }
+    return @{
+      ok = $true
+      explorer_pid = [int]$e.ProcessId
+      session_id = [int]$sessionId
     }
   }
-  return @{ ok = $false; explorer_pid = 0 }
+  return @{ ok = $false; explorer_pid = 0; session_id = 0 }
+}
+
+function Test-ProfileUserInteractiveSession {
+  param([string]$ShortName)
+  $ctx = Get-InteractiveExplorerContext -ShortName $ShortName
+  if (-not $ctx.ok) {
+    return @{ ok = $false; explorer_pid = 0; session_id = 0 }
+  }
+  return @{
+    ok = $true
+    explorer_pid = $ctx.explorer_pid
+    session_id = $ctx.session_id
+  }
 }
 
 function Write-InteractiveSessionDiagnostics {
   param([string]$ProfileUser, [hashtable]$Session)
   $winrmUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-  Write-Output "INSTALL_SESSION_DIAG|winrm_user=$winrmUser|profile_user=$ProfileUser|explorer_pid=$($Session.explorer_pid)"
+  Write-Output "INSTALL_SESSION_DIAG|winrm_user=$winrmUser|profile_user=$ProfileUser|explorer_pid=$($Session.explorer_pid)|session_id=$($Session.session_id)"
   try {
     $raw = @(query user 2>$null) | Where-Object { $_ -match '\S' }
     if ($raw.Count -gt 0) {
@@ -118,88 +138,144 @@ function Remove-StaleLandGuiInstallTasks {
   }
 }
 
-function Get-SemLandInstallActivePath {
-  return (Join-Path $script:SemLandTempDir 'sem_land_install_active.json')
+function Get-LandGuiWorkerPsArgs {
+  param([string]$ConfigPath, [string]$LogPath)
+  $helper = Join-Path $SemLandTempDir 'sem_land_gui_installer_worker.ps1'
+  $psArgList = @(
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', "`"$helper`"",
+    '-ConfigFileArg', "`"$ConfigPath`"",
+    '-LogFileArg', "`"$LogPath`""
+  )
+  return ($psArgList -join ' ')
 }
 
-function Grant-LandInstallTempFileAccess {
-  param([string]$Path, [string]$Rights = 'R')
-  if ([string]::IsNullOrWhiteSpace($Path)) { return }
-  if (-not (Test-Path -LiteralPath $Path)) { return }
+function Ensure-LandGuiUserSessionLaunchType {
+  if (([System.Management.Automation.PSTypeName]'LandGuiUserSessionLaunch').Type) {
+    return $true
+  }
   try {
-    if ($Rights -eq 'M') {
-      & icacls.exe $Path /grant 'Users:(M)' /grant 'Everyone:(M)' 2>$null | Out-Null
-    } else {
-      & icacls.exe $Path /grant 'Users:(R)' /grant 'Everyone:(R)' 2>$null | Out-Null
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class LandGuiUserSessionLaunch {
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    public static extern bool WTSQueryUserToken(uint SessionId, out IntPtr phUserToken);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool DuplicateTokenEx(IntPtr hExistingToken, uint dwDesiredAccess, IntPtr lpTokenAttributes, int impersonationLevel, int tokenType, out IntPtr phNewToken);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool CreateProcessWithTokenW(IntPtr hToken, uint dwLogonFlags, string lpApplicationName, string lpCommandLine, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct STARTUPINFO {
+        public int cb; public string lpReserved; public string lpDesktop; public string lpTitle;
+        public int dwX; public int dwY; public int dwXSize; public int dwYSize;
+        public int dwXCountChars; public int dwYCountChars; public int dwFillAttribute; public int dwFlags;
+        public short wShowWindow; public short cbReserved2;
+        public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;
     }
-  } catch { }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION {
+        public IntPtr hProcess; public IntPtr hThread; public int dwProcessId; public int dwThreadId;
+    }
+    public const uint MAXIMUM_ALLOWED = 0x02000000;
+    public const int SecurityImpersonation = 2;
+    public const int TokenPrimary = 1;
+    public const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+    public const int STARTF_USESHOWWINDOW = 0x00000001;
+    public const short SW_SHOW = 5;
+    public static string Start(uint sessionId, string commandLine) {
+        IntPtr userToken = IntPtr.Zero;
+        IntPtr dupToken = IntPtr.Zero;
+        try {
+            if (!WTSQueryUserToken(sessionId, out userToken)) {
+                return "wts_query_user_token_failed|err=" + Marshal.GetLastWin32Error();
+            }
+            if (!DuplicateTokenEx(userToken, MAXIMUM_ALLOWED, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out dupToken)) {
+                return "duplicate_token_failed|err=" + Marshal.GetLastWin32Error();
+            }
+            STARTUPINFO si = new STARTUPINFO();
+            si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
+            si.lpDesktop = "winsta0\\default";
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_SHOW;
+            PROCESS_INFORMATION pi;
+            if (!CreateProcessWithTokenW(dupToken, 0, null, commandLine, CREATE_UNICODE_ENVIRONMENT, IntPtr.Zero, null, ref si, out pi)) {
+                return "create_process_failed|err=" + Marshal.GetLastWin32Error();
+            }
+            if (pi.hProcess != IntPtr.Zero) { CloseHandle(pi.hProcess); }
+            if (pi.hThread != IntPtr.Zero) { CloseHandle(pi.hThread); }
+            return "pid=" + pi.dwProcessId;
+        } finally {
+            if (userToken != IntPtr.Zero) { CloseHandle(userToken); }
+            if (dupToken != IntPtr.Zero) { CloseHandle(dupToken); }
+        }
+    }
+}
+"@ -ErrorAction Stop
+    return $true
+  } catch {
+    Write-Output "INSTALL_WTS_ADD_TYPE_FAILED|msg=$($_.Exception.Message)"
+    return $false
+  }
 }
 
-function New-LandInstallTaskBat {
+function Start-LandGuiWorkerInUserSession {
   param(
-    [string]$Timestamp,
-    [string]$WorkerPath,
+    [int]$SessionId,
     [string]$ConfigPath,
     [string]$LogPath
   )
-  $batPath = Join-Path $script:SemLandTempDir "sem_land_install_run_$Timestamp.bat"
-  $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
-  $content = @"
-@echo off
-echo BAT_START|ts=$Timestamp>>"$tracePath"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath"
-set RC=%ERRORLEVEL%
-echo BAT_END|ts=$Timestamp|rc=%RC%>>"$tracePath"
-exit /b %RC%
-"@
-  $content | Out-File -LiteralPath $batPath -Encoding ASCII -Force
-  return $batPath
-}
-
-function Get-LandInstallTaskCmdLine {
-  param([string]$BatPath)
-  return "/c `"$BatPath`""
-}
-
-function Grant-LandInstallConfigRead {
-  param([string]$ConfigPath)
-  Grant-LandInstallTempFileAccess -Path $ConfigPath -Rights 'R'
-}
-
-function Write-InstallTraceTail {
-  $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
-  if (-not (Test-Path -LiteralPath $tracePath)) {
-    Write-Output "INSTALL_TRACE_MISSING|path=$tracePath"
-    return
+  if (-not (Ensure-LandGuiUserSessionLaunchType)) {
+    return @{ ok = $false; error = 'wts_add_type_failed' }
   }
+  $helper = Join-Path $SemLandTempDir 'sem_land_gui_installer_worker.ps1'
+  if (-not (Test-Path -LiteralPath $helper)) {
+    return @{ ok = $false; error = "helper_missing|$helper" }
+  }
+  $psArgs = Get-LandGuiWorkerPsArgs -ConfigPath $ConfigPath -LogPath $LogPath
+  $commandLine = "powershell.exe $psArgs"
+  Write-Output "INSTALL_WTS_CMD|$commandLine"
   try {
-    $tail = @(Get-Content -LiteralPath $tracePath -ErrorAction Stop | Select-Object -Last 6)
-    if ($tail.Count -gt 0) {
-      Write-Output ("INSTALL_TRACE_TAIL|" + ($tail -join ' || '))
+    $detail = [LandGuiUserSessionLaunch]::Start([uint32]$SessionId, $commandLine)
+    Write-Output "INTERACTIVE_USER_SESSION_LAUNCH|session_id=$SessionId|$detail"
+    if ($detail -match '^pid=') {
+      return @{ ok = $true; error = '' }
     }
-  } catch { }
-}
-
-function Get-InstallLogTerminalStatus {
-  param([string]$Path)
-  if (-not (Test-Path -LiteralPath $Path)) { return 'pending' }
-  try {
-    $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
+    return @{ ok = $false; error = $detail }
   } catch {
-    return 'pending'
+    return @{ ok = $false; error = $_.Exception.Message }
   }
-  for ($i = $lines.Count - 1; $i -ge 0; $i--) {
-    $t = ([string]$lines[$i]).Trim()
-    if ($t -match '\bINSTALL_COMPLETE\b') { return 'complete' }
-    if ($t -match '\bINSTALL_FAILED\b') { return 'failed' }
-    if ($t -match '\bINSTALL_ERROR\b') { return 'failed' }
-  }
-  return 'pending'
 }
 
-function Test-InstallLogTerminalLine {
-  param([string]$Path)
-  return (Get-InstallLogTerminalStatus -Path $Path) -ne 'pending'
+function Start-LandGuiInstallScheduledTask {
+  param(
+    [string]$TaskName,
+    [string]$ProfileUser,
+    [string]$ConfigPath,
+    [string]$LogPath,
+    [string]$RunLevel
+  )
+  $helper = Join-Path $SemLandTempDir 'sem_land_gui_installer_worker.ps1'
+  if (-not (Test-Path -LiteralPath $helper)) {
+    return @{ ok = $false; error = "helper_missing|$helper" }
+  }
+  $psArgs = Get-LandGuiWorkerPsArgs -ConfigPath $ConfigPath -LogPath $LogPath
+  Write-Output "INSTALL_TASK_CMD|$psArgs"
+  try {
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs -WorkingDirectory $SemLandTempDir
+    $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances StopExisting
+    $principal = New-ScheduledTaskPrincipal -UserId $ProfileUser -LogonType Interactive -RunLevel $RunLevel
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+    Start-ScheduledTask -TaskName $TaskName
+    Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$ProfileUser|run_level=$RunLevel|config=$ConfigPath|log=$LogPath"
+    return @{ ok = $true; error = '' }
+  } catch {
+    return @{ ok = $false; error = $_.Exception.Message }
+  }
 }
 
 function Test-InstallWorkerStarted {
@@ -210,7 +286,18 @@ function Test-InstallWorkerStarted {
   } catch {
     return $false
   }
-  return ($text -match 'INSTALL_WORKER_BOOT\b|INSTALL_WORKER_START\b|WORKER_LINE0\b')
+  return ($text -match 'INSTALL_WORKER_BOOT\b|INSTALL_WORKER_START\b|INSTALL_START\b')
+}
+
+function Test-InstallLogTerminalLine {
+  param([string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) { return $false }
+  try {
+    $text = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  return ($text -match '\bINSTALL_COMPLETE\b|\bINSTALL_FAILED\b|\bINSTALL_ERROR\b')
 }
 
 function Write-InstallLogTail {
@@ -227,6 +314,15 @@ function Write-InstallLogTail {
     }
     $LastLineCount.Value = $lines.Count
   }
+}
+
+function Grant-LandInstallConfigRead {
+  param([string]$ConfigPath)
+  if ([string]::IsNullOrWhiteSpace($ConfigPath)) { return }
+  if (-not (Test-Path -LiteralPath $ConfigPath)) { return }
+  try {
+    & icacls.exe $ConfigPath /grant 'Users:(R)' /grant 'Everyone:(R)' 2>$null | Out-Null
+  } catch { }
 }
 
 if ([string]::IsNullOrWhiteSpace($profileUserHint)) {
@@ -257,11 +353,9 @@ Write-InteractiveSessionDiagnostics -ProfileUser $profileUser -Session $session
 Remove-StaleLandGuiInstallTasks
 
 $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$configPath = Join-Path $script:SemLandTempDir "sem_land_install_cfg_$ts.json"
-$outFile = Join-Path $script:SemLandTempDir "sem_land_install_$ts.log"
+$configPath = Join-Path $SemLandTempDir "sem_land_install_cfg_$ts.json"
+$outFile = Join-Path $SemLandTempDir "sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
-$activePath = Get-SemLandInstallActivePath
-$batPath = $null
 
 $config = [ordered]@{
   installer_path = $installerPath
@@ -283,119 +377,88 @@ $config = [ordered]@{
 try {
   ($config | ConvertTo-Json -Compress) | Out-File -LiteralPath $configPath -Encoding UTF8 -Force
   Grant-LandInstallConfigRead -ConfigPath $configPath
-  '' | Out-File -LiteralPath $outFile -Encoding UTF8 -Force
-  Grant-LandInstallTempFileAccess -Path $outFile -Rights 'M'
-  $active = [ordered]@{
-    run_id = "$ts"
-    config_path = $configPath
-    log_path = $outFile
-  }
-  ($active | ConvertTo-Json -Compress) | Out-File -LiteralPath $activePath -Encoding UTF8 -Force
-  Grant-LandInstallTempFileAccess -Path $activePath -Rights 'R'
 } catch {
   Write-Output "INSTALL_ERROR|reason=config_write_failed|msg=$($_.Exception.Message)"
   exit 1
 }
 
-Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile|active=$activePath"
+Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile"
 
-$helper = Join-Path $script:SemLandTempDir 'sem_land_gui_installer_worker.ps1'
-if (-not (Test-Path -LiteralPath $helper)) {
-  Write-Output "INSTALL_ERROR|reason=helper_missing|path=$helper"
-  exit 1
-}
+$started = $false
+$lastStartError = ''
+$launchModes = @(
+  @{ mode = 'user_session' },
+  @{ mode = 'scheduled_highest'; run_level = 'Highest' }
+)
 
-try {
-  $batPath = New-LandInstallTaskBat -Timestamp $ts -WorkerPath $helper -ConfigPath $configPath -LogPath $outFile
-  Grant-LandInstallTempFileAccess -Path $batPath -Rights 'R'
-} catch {
-  Write-Output "INSTALL_ERROR|reason=task_bat_write_failed|msg=$($_.Exception.Message)"
-  exit 1
-}
+foreach ($launch in $launchModes) {
+  if ($started) { break }
+  $mode = [string]$launch.mode
+  $runLevel = [string]$launch.run_level
 
-$taskCmd = Get-LandInstallTaskCmdLine -BatPath $batPath
-Write-Output "INSTALL_TASK_CMD|cmd.exe $taskCmd"
-Write-Output "INSTALL_TASK_BAT|path=$batPath"
-try {
-  $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $taskCmd
-  $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
-  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
-  $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
-  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-  Start-ScheduledTask -TaskName $taskName
-  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile|bat=$batPath"
-} catch {
-  Write-Output "INSTALL_ERROR|reason=scheduled_task_create_failed|msg=$($_.Exception.Message)"
-  exit 1
-}
-
-$bootDeadline = (Get-Date).AddSeconds(90)
-$earlyLineCount = 0
-$workerStarted = $false
-$taskInfo = $null
-do {
-  Start-Sleep -Seconds 1
-  Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
-  if (Test-InstallWorkerStarted -Path $outFile) {
-    $workerStarted = $true
-    Write-Output 'INSTALL_WORKER_BOOT_OK'
-    break
+  if ($mode -eq 'user_session') {
+    if ($session.session_id -le 0) {
+      Write-Output 'INSTALL_TASK_START_SKIPPED|mode=user_session|reason=no_session_id'
+      continue
+    }
+    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath -LogPath $outFile
+  } else {
+    $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
   }
-  $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
-  if ($taskInfo) {
-    $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
-    if ($lastHex -eq '800710E0') {
-      Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
+
+  if (-not $result.ok) {
+    $lastStartError = [string]$result.error
+    Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|run_level=$runLevel|error=$lastStartError"
+    if ($mode -like 'scheduled_*') {
+      Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+    }
+    continue
+  }
+
+  $earlyLineCount = 0
+  $bootDeadline = (Get-Date).AddSeconds(60)
+  do {
+    Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
+    if (Test-InstallWorkerStarted -Path $outFile) {
+      $started = $true
+      Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|user=$profileUser"
+      if ($mode -like 'scheduled_*') {
+        $script:usedScheduledTaskName = $taskName
+      }
       break
     }
-  }
-} while ((Get-Date) -lt $bootDeadline)
+    if ($mode -like 'scheduled_*') {
+      $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+      if ($taskInfo) {
+        $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
+        if ($lastHex -eq '800710E0') {
+          Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
+          break
+        }
+      }
+    }
+    Start-Sleep -Milliseconds 300
+  } while ((Get-Date) -lt $bootDeadline)
 
-if (-not $workerStarted) {
-  Start-Sleep -Seconds 2
-  Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
-  if (Test-InstallWorkerStarted -Path $outFile) {
-    $workerStarted = $true
-    Write-Output 'INSTALL_WORKER_BOOT_OK'
+  if (-not $started -and ($mode -like 'scheduled_*')) {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   }
 }
 
-if (-not $workerStarted) {
-  Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
+if (-not $started) {
   if (Test-Path -LiteralPath $outFile) {
-    $tail = @(Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue | Select-Object -Last 8)
-    if ($tail.Count -gt 0) {
-      Write-Output ("INSTALL_TASK_LOG_TAIL|" + ($tail -join ' || '))
-    }
+    Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_ }
   } else {
-    Write-Output "INSTALL_TASK_LOG_EMPTY|log=$outFile"
+    Write-Output "INSTALL_TASK_NO_OUTPUT|log=$outFile|hint=worker_never_booted"
   }
-  Write-InstallTraceTail
-  if ($taskInfo) {
-    $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
-    $taskState = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State
-    Write-Output "INSTALL_TASK_BOOT_TIMEOUT|state=$taskState|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex"
-  } else {
-    Write-Output 'INSTALL_TASK_BOOT_TIMEOUT|last_result=unknown'
-  }
-  if (Test-Path -LiteralPath $batPath) {
-    Write-Output "INSTALL_TASK_BAT_EXISTS|path=$batPath"
-  }
-  if (Test-Path -LiteralPath $activePath) {
-    Write-Output "INSTALL_ACTIVE_EXISTS|path=$activePath"
-  }
-  if (Test-Path -LiteralPath $configPath) {
-    Write-Output "INSTALL_CONFIG_EXISTS|path=$configPath"
-  }
-  Write-Output 'INSTALL_ERROR|reason=worker_never_booted'
-  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+  Write-Output "INSTALL_ERROR|reason=worker_never_booted|last_error=$lastStartError|user=$profileUser"
   exit 1
 }
 
 try {
   $deadline = (Get-Date).AddSeconds($timeoutSec)
   $logComplete = $false
-  $lastLineCount = $earlyLineCount
+  $lastLineCount = 0
   do {
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$lastLineCount)
     if (Test-InstallLogTerminalLine -Path $outFile) {
@@ -405,24 +468,26 @@ try {
     Start-Sleep -Seconds 1
   } while ((Get-Date) -lt $deadline)
 
-  if (-not $logComplete) {
+  if (Test-Path -LiteralPath $outFile) {
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$lastLineCount)
-    Write-Output "INSTALL_TASK_LOG_INCOMPLETE|log=$outFile"
+    if (-not $logComplete) {
+      Write-Output "INSTALL_TASK_LOG_INCOMPLETE|log=$outFile"
+    }
   }
 } catch {
   Write-Output "INSTALL_TASK_ERROR|msg=$($_.Exception.Message)"
   Write-Output 'INSTALL_ERROR|reason=task_failed'
   exit 1
 } finally {
-  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-  Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $activePath -Force -ErrorAction SilentlyContinue
-  if ($batPath) {
-    Remove-Item -LiteralPath $batPath -Force -ErrorAction SilentlyContinue
+  if (-not [string]::IsNullOrWhiteSpace($script:usedScheduledTaskName)) {
+    Unregister-ScheduledTask -TaskName $script:usedScheduledTaskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   }
+  Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
 }
 
-if ((Get-InstallLogTerminalStatus -Path $outFile) -eq 'complete') {
-  exit 0
+if (Test-InstallLogTerminalLine -Path $outFile) {
+  if ((Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue) -match '\bINSTALL_COMPLETE\b') {
+    exit 0
+  }
 }
 exit 1

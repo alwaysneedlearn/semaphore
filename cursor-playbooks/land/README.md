@@ -27,7 +27,7 @@ LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
 **Redeploy (GUI installer):** copy installer exe from controller to **current interactive user's Desktop** by default (`C:\Users\{user}\Desktop\{installer}.exe`). Override with **`LAND_INSTALLER_DEST`** or set **`LAND_INSTALLER_USE_DESKTOP=false`** to use `{{ EXE_DIR }}\{installer}.exe`. Wizard clicks: `LHBTS 安装` / **升级** → `提示` / **确定** → poll until `LHBTS 安装` / **确定** (no fixed 5s wait; each step uses **`LAND_INSTALL_STEP_TIMEOUT_SECONDS`** poll). No zip extract, no `HKCU\Software\LH` registry.
 
-**Semaphore vs manual test:** WinRM runs `sem_land_gui_installer_interactive.ps1`, which writes config/active/log under **`C:\Windows\Temp\`**. Scheduled task runs **`cmd.exe /c sem_land_install_run_{ts}.bat`** (same pattern as graceful stop: bat invokes `worker.ps1` with `-ConfigFileArg`/`-LogFileArg` in the bat file, not via Task Scheduler args). **Manual** `worker.ps1 -ConfigFileArg ... -LogFileArg ...` in RDP skips that layer. Trace: `sem_land_gui_install_trace.log` (`BAT_START` / `WORKER_INVOKED`). Error **`0x800710E0`** — keep **Lenovo RDP logged on**.
+**Semaphore vs manual test:** WinRM runs `sem_land_gui_installer_interactive.ps1` (`chdir=C:\Windows\Temp`). Worker launch: **(1) WTS user-session `CreateProcessWithTokenW`**, **(2) scheduled task** with the same `powershell -File` + quoted `-ConfigFileArg`/`-LogFileArg` as graceful stop. Temp config/log under `C:\Windows\Temp\`. Manual `worker.ps1` in RDP skips the parent. Keep **Lenovo RDP logged on**.
 
 ## Runner 部署（必做）
 
