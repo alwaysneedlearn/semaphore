@@ -160,6 +160,14 @@ function Get-LandGuiWorkerCommandLine {
   return "-NoProfile -ExecutionPolicy Bypass -File `"$helper`" -ConfigFileArg `"$ConfigPath`""
 }
 
+function Get-LandSchTasksTrArgument {
+  param([string]$ConfigPath)
+  $run = "powershell.exe $(Get-LandGuiWorkerCommandLine -ConfigPath $ConfigPath)"
+  # schtasks /TR requires one quoted command; escape embedded " as \"
+  $escaped = $run.Replace('"', '\"')
+  return "`"$escaped`""
+}
+
 function Start-LandGuiWorkerInUserSession {
   param(
     [int]$SessionId,
@@ -259,21 +267,28 @@ function Start-LandGuiInstallViaSchTasks {
   if (-not (Test-Path -LiteralPath $helper)) {
     return @{ ok = $false; error = 'helper_missing' }
   }
-  $psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $ConfigPath
-  $tr = "powershell.exe $psArgs"
+  $tr = Get-LandSchTasksTrArgument -ConfigPath $ConfigPath
   $st = (Get-Date).AddSeconds(5).ToString('HH:mm')
   $sd = (Get-Date).ToString('MM/dd/yyyy')
   $rl = if ($RunLevel -eq 'Highest') { 'HIGHEST' } else { 'LIMITED' }
   try {
+    Write-Output "INTERACTIVE_SCHTASKS_TR|task=$TaskName|tr=$tr"
     $createArgs = @(
       '/Create', '/F', '/TN', $TaskName,
       '/TR', $tr,
       '/SC', 'ONCE', '/ST', $st, '/SD', $sd,
       '/RU', $ProfileUser, '/IT', '/RL', $rl
     )
-    $create = Start-Process -FilePath 'schtasks.exe' -ArgumentList $createArgs -Wait -PassThru -NoNewWindow
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $create = Start-Process -FilePath 'schtasks.exe' -ArgumentList $createArgs -Wait -PassThru -NoNewWindow -RedirectStandardError $stderrFile
+    $stderrText = ''
+    if (Test-Path -LiteralPath $stderrFile) {
+      $stderrText = (Get-Content -LiteralPath $stderrFile -Raw -ErrorAction SilentlyContinue)
+      Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+    }
     if ($create.ExitCode -ne 0) {
-      return @{ ok = $false; error = "schtasks_create_exit=$($create.ExitCode)" }
+      $errDetail = if ($stderrText) { $stderrText.Trim() } else { '' }
+      return @{ ok = $false; error = "schtasks_create_exit=$($create.ExitCode)|stderr=$errDetail" }
     }
     $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow
     Write-Output "INTERACTIVE_SCHTASKS|name=$TaskName|user=$ProfileUser|run_level=$rl|run_exit=$($run.ExitCode)"
@@ -512,7 +527,9 @@ $lastStartError = ''
 $script:usedScheduledTaskName = ''
 $launchModes = @(
   @{ mode = 'scheduled_highest'; run_level = 'Highest' },
-  @{ mode = 'schtasks_highest'; run_level = 'Highest' }
+  @{ mode = 'user_session_wts'; run_level = '' },
+  @{ mode = 'schtasks_highest'; run_level = 'Highest' },
+  @{ mode = 'schtasks_limited'; run_level = 'Limited' }
 )
 foreach ($launch in $launchModes) {
   if ($started) { break }
@@ -528,7 +545,15 @@ foreach ($launch in $launchModes) {
   }
   $mode = [string]$launch.mode
   $runLevel = [string]$launch.run_level
-  if ($mode -like 'schtasks_*') {
+  if ($mode -eq 'user_session_wts') {
+    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
+    if (-not $result.ok) {
+      $lastStartError = [string]$result.error
+      Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|error=$lastStartError"
+      continue
+    }
+    $result = @{ ok = $true; error = '' }
+  } elseif ($mode -like 'schtasks_*') {
     $result = Start-LandGuiInstallViaSchTasks -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -RunLevel $runLevel
   } else {
     $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
@@ -571,6 +596,13 @@ foreach ($launch in $launchModes) {
     [System.Threading.Thread]::Sleep(200)
   } while ((Get-Date) -lt $bootDeadline)
   if (-not $started -and ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*')) {
+    $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($taskInfo) {
+      $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
+      Write-Output "INSTALL_TASK_BOOT_TIMEOUT|mode=$mode|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex|log=$outFile"
+    } else {
+      Write-Output "INSTALL_TASK_BOOT_TIMEOUT|mode=$mode|log=$outFile"
+    }
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   }
 }
