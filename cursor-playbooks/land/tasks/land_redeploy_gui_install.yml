@@ -9,6 +9,18 @@
       before GUI install (graceful stop phase).
   when: (land_installer_dest | default('') | trim | length) == 0
 
+- name: 重新部署：强制刷新 GUI 安装脚本（避免 C:\Windows\Temp 残留旧版）
+  ansible.windows.win_copy:
+    src: "{{ sem_files_dir | default(playbook_dir ~ '/files') }}/sem_land_gui_installer_interactive.ps1"
+    dest: C:\Windows\Temp\sem_land_gui_installer_interactive.ps1
+    force: true
+
+- name: 重新部署：强制刷新 GUI 安装 worker
+  ansible.windows.win_copy:
+    src: "{{ sem_files_dir | default(playbook_dir ~ '/files') }}/sem_land_gui_installer_worker.ps1"
+    dest: C:\Windows\Temp\sem_land_gui_installer_worker.ps1
+    force: true
+
 - name: 重新部署：执行 GUI 安装向导
   environment:
     LAND_INSTALLER_EXE_PATH: "{{ land_installer_dest }}"
@@ -36,9 +48,11 @@
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
     (
-      ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
+      ('INSTALL_SCRIPT_REV=20260707-scheduled-stop-style-v2' not in (_land_gui_install.stdout | default('')))
+      or ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
       or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))
+      or ('StopExisting' in (_land_gui_install.stdout | default('')))
     )
 
 - name: DEBUG LAND GUI 安装结果

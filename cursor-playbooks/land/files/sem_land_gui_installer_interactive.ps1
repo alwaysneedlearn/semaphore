@@ -1,6 +1,9 @@
 # Run LAND GUI installer worker in logged-in desktop user's interactive session.
-# Launch: (1) WTS user session CreateProcessWithTokenW, (2) scheduled task like stop script.
+# Launch: scheduled task (same pattern as sem_stop_close_main_window_confirm_interactive.ps1).
 # Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
+# INSTALL_SCRIPT_REV bumps when launch logic changes — must appear in task stdout.
+
+Write-Output 'INSTALL_SCRIPT_REV=20260707-scheduled-stop-style-v2'
 
 $SemLandTempDir = 'C:\Windows\Temp'
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
@@ -387,7 +390,6 @@ Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$inst
 $started = $false
 $lastStartError = ''
 $launchModes = @(
-  @{ mode = 'user_session' },
   @{ mode = 'scheduled_highest'; run_level = 'Highest' }
 )
 
@@ -409,6 +411,9 @@ foreach ($launch in $launchModes) {
   if (-not $result.ok) {
     $lastStartError = [string]$result.error
     Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|run_level=$runLevel|error=$lastStartError"
+    if ($mode -eq 'user_session' -and $lastStartError -match 'err=1314') {
+      Write-Output 'INSTALL_WTS_HINT|err=1314|meaning=WinRM账户无WTSQueryUserToken权限，已改走计划任务'
+    }
     if ($mode -like 'scheduled_*') {
       Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
     }
