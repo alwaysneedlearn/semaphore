@@ -473,37 +473,12 @@ public class SemaphoreLandGuiInstaller {
         return count;
     }
 
-    public static bool HasBodyTextContaining(IntPtr parent, string needle) {
-        if (parent == IntPtr.Zero || string.IsNullOrEmpty(needle)) { return false; }
-        var queue = new Queue<IntPtr>();
-        queue.Enqueue(parent);
-        while (queue.Count > 0) {
-            IntPtr node = queue.Dequeue();
-            foreach (IntPtr child in GetChildWindows(node)) {
-                string text = GetControlText(child);
-                if (!string.IsNullOrEmpty(text) && text.IndexOf(needle, StringComparison.Ordinal) >= 0) {
-                    return true;
-                }
-                queue.Enqueue(child);
-            }
-        }
-        return false;
-    }
-
     public static bool IsFinalInstallWizardReady(IntPtr hwnd) {
         if (hwnd == IntPtr.Zero) { return false; }
-        if (HasBodyTextContaining(hwnd, "已完成")) { return true; }
         if (HasVisibleButtonText(hwnd, "升级")) { return false; }
         if (HasVisibleButtonText(hwnd, "卸载")) { return false; }
         if (HasVisibleButtonText(hwnd, "确定")) { return true; }
         return CountVisibleButtons(hwnd) == 1;
-    }
-
-    public static string GetWizardPhase(IntPtr hwnd) {
-        if (hwnd == IntPtr.Zero) { return "none"; }
-        if (IsFinalInstallWizardReady(hwnd)) { return "final"; }
-        if (HasVisibleButtonText(hwnd, "升级") || HasVisibleButtonText(hwnd, "卸载")) { return "initial"; }
-        return "unknown";
     }
 
     public static IntPtr FindLastVisibleButton(IntPtr parent) {
@@ -587,12 +562,6 @@ public class SemaphoreLandGuiInstaller {
             }
             IntPtr btn = FindButtonByTextDeep(hwnd, buttonText);
             string clickMode = "text_match";
-            if (btn == IntPtr.Zero && IsFinalInstallWizardReady(hwnd) && NormalizeButtonText(buttonText) == "确定") {
-                btn = FindLastVisibleButton(hwnd);
-                if (btn != IntPtr.Zero) {
-                    clickMode = "final_visible_button";
-                }
-            }
             if (btn == IntPtr.Zero) {
                 string scan = ScanWindowTree(hwnd, 20);
                 if (FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
@@ -825,45 +794,14 @@ if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
   Set-LandInstallerProcessId -LiteralPath $installerPath
 }
 
-$wizardPhase = 'unknown'
-try {
-  $mainHwnd = [SemaphoreLandGuiInstaller]::FindTopLevelWindowByTitle($dlg1Title)
-  if ($mainHwnd -ne [IntPtr]::Zero) {
-    $wizardPhase = [SemaphoreLandGuiInstaller]::GetWizardPhase($mainHwnd)
-  }
-} catch {
-  $wizardPhase = 'error'
-}
-Write-InstallLine "INSTALL_WIZARD_PHASE|phase=$wizardPhase|title=$dlg1Title"
-
-$skipStep1 = $false
-$skipStep2 = $false
-if ($wizardPhase -eq 'final') {
-  $skipStep1 = $true
-  $skipStep2 = $true
-  Write-InstallLine 'INSTALL_SKIP_STEPS|steps=1,2|reason=final_or_completed_screen'
-} else {
-  try {
-    $promptHwnd = [SemaphoreLandGuiInstaller]::FindTopLevelWindowByTitle($dlg2Title)
-    if ($promptHwnd -ne [IntPtr]::Zero) {
-      $skipStep1 = $true
-      Write-InstallLine "INSTALL_SKIP_STEPS|steps=1|reason=prompt_dialog_visible|title=$dlg2Title"
-    }
-  } catch { }
-}
-
-if (-not $skipStep1) {
 if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY)) {
   Write-InstallLine 'INSTALL_FAILED|step=1'
   exit 1
 }
-}
 
-if (-not $skipStep2) {
 if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY)) {
   Write-InstallLine 'INSTALL_FAILED|step=2'
   exit 1
-}
 }
 
 Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button"
