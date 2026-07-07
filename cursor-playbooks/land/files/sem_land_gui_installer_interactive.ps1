@@ -3,7 +3,7 @@
 # Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
 # INSTALL_SCRIPT_REV bumps when launch logic changes — must appear in task stdout.
 
-Write-Output 'INSTALL_SCRIPT_REV=20260707-worker-boot-v5'
+Write-Output 'INSTALL_SCRIPT_REV=20260707-bat-pipe-fix-v6'
 
 $SemLandTempDir = 'C:\Windows\Temp'
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
@@ -148,6 +148,24 @@ function Get-LandGuiSchTasksTrArgument {
   return "`"$escaped`""
 }
 
+function Write-LandInstallBatFile {
+  param(
+    [string]$Path,
+    [string]$Content
+  )
+  $normalized = ($Content -replace "`r?`n", "`r`n").TrimEnd() + "`r`n"
+  [System.IO.File]::WriteAllText($Path, $normalized, [System.Text.Encoding]::ASCII)
+}
+
+function Grant-LandInstallExecuteRead {
+  param([string]$Path)
+  if ([string]::IsNullOrWhiteSpace($Path)) { return }
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+  try {
+    & icacls.exe $Path /grant 'Users:(RX)' /grant 'Everyone:(RX)' 2>$null | Out-Null
+  } catch { }
+}
+
 function New-LandInstallTaskBat {
   param(
     [string]$Timestamp,
@@ -158,21 +176,18 @@ function New-LandInstallTaskBat {
   $batPath = Join-Path $SemLandTempDir "sem_land_install_run_$Timestamp.bat"
   $tracePath = Join-Path $SemLandTempDir 'sem_land_gui_install_trace.log'
   $psOutPath = Join-Path $SemLandTempDir "sem_land_install_ps_$Timestamp.log"
-  $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  # NOTE: bat echo lines must use ";" not "|" — cmd treats "|" as pipe and exits 255.
   $content = @"
 @echo off
-setlocal
-cd /d $SemLandTempDir
-echo BAT_START|ts=$Timestamp>>"$tracePath"
-echo BAT_CMD|worker=$WorkerPath|config=$ConfigPath|log=$LogPath>>"$tracePath"
-"$psExe" -NoProfile -ExecutionPolicy Bypass -Command "exit 0" 1>nul 2>nul
-echo POWERSHELL_SMOKE|ts=$Timestamp|rc=%ERRORLEVEL%>>"$tracePath"
-"$psExe" -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath" 1>>"$psOutPath" 2>&1
+echo BAT_START;ts=$Timestamp>>"$tracePath"
+echo BAT_CMD;worker=$WorkerPath;config=$ConfigPath;log=$LogPath>>"$tracePath"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath" 1>>"$psOutPath" 2>&1
 set RC=%ERRORLEVEL%
-echo BAT_END|ts=$Timestamp|rc=%RC%>>"$tracePath"
+echo BAT_END;ts=$Timestamp;rc=%RC%>>"$tracePath"
 exit /b %RC%
 "@
-  $content | Out-File -LiteralPath $batPath -Encoding ASCII -Force
+  Write-LandInstallBatFile -Path $batPath -Content $content
+  Grant-LandInstallExecuteRead -Path $batPath
   return @{ bat = $batPath; ps_out = $psOutPath }
 }
 
@@ -323,8 +338,44 @@ function Start-LandGuiInstallViaSchTasks {
       $errDetail = if ($stderrText) { $stderrText.Trim() } else { '' }
       return @{ ok = $false; error = "schtasks_create_exit=$($create.ExitCode)|stderr=$errDetail" }
     }
-    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow
+    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stderrFile -RedirectStandardError $stderrFile
     Write-Output "INTERACTIVE_SCHTASKS|name=$TaskName|user=$ProfileUser|run_level=$rl|run_exit=$($run.ExitCode)|bat=$BatPath"
+    return @{ ok = $true; error = '' }
+  } catch {
+    return @{ ok = $false; error = $_.Exception.Message }
+  }
+}
+
+function Start-LandGuiInstallScheduledPowerShell {
+  param(
+    [string]$TaskName,
+    [string]$ProfileUser,
+    [string]$WorkerPath,
+    [string]$ConfigPath,
+    [string]$LogPath,
+    [string]$RunLevel
+  )
+  if (-not (Test-Path -LiteralPath $WorkerPath)) {
+    return @{ ok = $false; error = "helper_missing|$WorkerPath" }
+  }
+  $psArgList = @(
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', "`"$WorkerPath`"",
+    '-ConfigFileArg', "`"$ConfigPath`"",
+    '-LogFileArg', "`"$LogPath`""
+  )
+  $psArgs = $psArgList -join ' '
+  Write-Output "INSTALL_TASK_CMD|powershell.exe $psArgs"
+  try {
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
+    $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+    $principal = New-ScheduledTaskPrincipal -UserId $ProfileUser -LogonType Interactive -RunLevel $RunLevel
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+    Start-ScheduledTask -TaskName $TaskName
+    Start-Sleep -Seconds 2
+    Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$ProfileUser|run_level=$RunLevel|launcher=powershell|config=$ConfigPath|log=$LogPath"
     return @{ ok = $true; error = '' }
   } catch {
     return @{ ok = $false; error = $_.Exception.Message }
@@ -354,7 +405,7 @@ function Start-LandGuiInstallScheduledTask {
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
     Start-Sleep -Seconds 2
-    Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$ProfileUser|run_level=$RunLevel|config=$ConfigPath|log=$LogPath|bat=$BatPath"
+    Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$ProfileUser|run_level=$RunLevel|launcher=cmd|config=$ConfigPath|log=$LogPath|bat=$BatPath"
     return @{ ok = $true; error = '' }
   } catch {
     return @{ ok = $false; error = $_.Exception.Message }
@@ -521,7 +572,7 @@ function Test-InstallBatEnded {
   } catch {
     return $null
   }
-  if ($text -match "BAT_END\|ts=$RunId\|rc=(\d+)") {
+  if ($text -match "BAT_END[;|]ts=$RunId[;|]rc=(\d+)") {
     return [int]$Matches[1]
   }
   return $null
@@ -632,18 +683,21 @@ try {
 $started = $false
 $lastStartError = ''
 $launchModes = @(
-  @{ mode = 'scheduled_cmd_highest'; run_level = 'Highest'; schtasks = $false }
-  @{ mode = 'schtasks_cmd_highest'; run_level = 'Highest'; schtasks = $true }
+  @{ mode = 'scheduled_ps_highest'; run_level = 'Highest'; launch = 'powershell' }
+  @{ mode = 'scheduled_cmd_highest'; run_level = 'Highest'; launch = 'cmd' }
+  @{ mode = 'schtasks_cmd_highest'; run_level = 'Highest'; launch = 'schtasks' }
 )
 
 foreach ($launch in $launchModes) {
   if ($started) { break }
   $mode = [string]$launch.mode
   $runLevel = [string]$launch.run_level
-  $useSchTasks = [bool]$launch.schtasks
+  $launchKind = [string]$launch.launch
 
-  if ($useSchTasks) {
+  if ($launchKind -eq 'schtasks') {
     $result = Start-LandGuiInstallViaSchTasks -TaskName $taskName -ProfileUser $profileUser -BatPath $batPath -RunLevel $runLevel
+  } elseif ($launchKind -eq 'powershell') {
+    $result = Start-LandGuiInstallScheduledPowerShell -TaskName $taskName -ProfileUser $profileUser -WorkerPath $workerScript -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
   } elseif ($mode -eq 'user_session') {
     if ($session.session_id -le 0) {
       Write-Output 'INSTALL_TASK_START_SKIPPED|mode=user_session|reason=no_session_id'
@@ -660,7 +714,7 @@ foreach ($launch in $launchModes) {
     if ($mode -eq 'user_session' -and $lastStartError -match 'err=1314') {
       Write-Output 'INSTALL_WTS_HINT|err=1314|meaning=WinRM账户无WTSQueryUserToken权限，已改走计划任务'
     }
-    if (-not $useSchTasks -and $mode -like 'scheduled_*') {
+    if ($launchKind -ne 'schtasks' -and $mode -like 'scheduled_*') {
       Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
     }
     continue
@@ -673,7 +727,7 @@ foreach ($launch in $launchModes) {
     if (Test-InstallWorkerStarted -Path $outFile) {
       $started = $true
       Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|user=$profileUser"
-      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*' -or $useSchTasks) {
+      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
         $script:usedScheduledTaskName = $taskName
       }
       break
@@ -681,7 +735,7 @@ foreach ($launch in $launchModes) {
     if (Test-InstallWorkerStartedViaTrace -ConfigPath $configPath -RunId $ts) {
       $started = $true
       Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|via=trace|user=$profileUser"
-      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*' -or $useSchTasks) {
+      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
         $script:usedScheduledTaskName = $taskName
       }
       break
@@ -696,7 +750,7 @@ foreach ($launch in $launchModes) {
         break
       }
     }
-    if (-not $useSchTasks -and $mode -like 'scheduled_*') {
+    if ($launchKind -ne 'schtasks' -and $mode -like 'scheduled_*') {
       $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
       if ($taskInfo) {
         $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
@@ -712,10 +766,10 @@ foreach ($launch in $launchModes) {
   if (-not $started) {
     Write-InstallTaskDiag -TaskName $taskName
     Write-InstallTraceTail
-    if (-not $useSchTasks -and ($mode -like 'scheduled_*')) {
+    if ($launchKind -ne 'schtasks' -and ($mode -like 'scheduled_*')) {
       Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
     }
-    if ($useSchTasks) {
+    if ($launchKind -eq 'schtasks') {
       schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
     }
   }
