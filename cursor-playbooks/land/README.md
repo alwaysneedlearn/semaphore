@@ -27,7 +27,7 @@ LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 
 **Redeploy (GUI installer):** copy installer exe from controller to **current interactive user's Desktop** by default (`C:\Users\{user}\Desktop\{installer}.exe`). Override with **`LAND_INSTALLER_DEST`** or set **`LAND_INSTALLER_USE_DESKTOP=false`** to use `{{ EXE_DIR }}\{installer}.exe`. Wizard clicks: `LHBTS 安装` / **升级** → `提示` / **确定** → poll until `LHBTS 安装` / **确定** (no fixed 5s wait; each step uses **`LAND_INSTALL_STEP_TIMEOUT_SECONDS`** poll). No zip extract, no `HKCU\Software\LH` registry.
 
-**Semaphore vs manual test:** WinRM runs `sem_land_gui_installer_interactive.ps1`, which writes a JSON config under `C:\Users\Public\` and launches `sem_land_gui_installer_worker.ps1` via a single **Interactive** scheduled task (`Register-ScheduledTask`, Highest). **Manual** `worker.ps1` in RDP skips that layer. One worker per redeploy (lock file). Error **`0x800710E0`** — keep **Lenovo RDP logged on** (session Active).
+**Semaphore vs manual test:** WinRM runs `sem_land_gui_installer_interactive.ps1`, which writes a JSON config under `C:\Windows\Temp\` and launches `sem_land_gui_installer_worker.ps1` via a single **Interactive** scheduled task (`Register-ScheduledTask`, Highest), passing **`-ConfigFileArg` and `-LogFileArg` on the CLI** (same pattern as graceful stop). **Manual** `worker.ps1` in RDP skips that layer. One worker per redeploy (lock file). Error **`0x800710E0`** — keep **Lenovo RDP logged on** (session Active).
 
 ## Runner 部署（必做）
 

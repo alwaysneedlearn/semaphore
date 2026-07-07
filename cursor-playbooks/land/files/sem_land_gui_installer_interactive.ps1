@@ -109,9 +109,17 @@ function Remove-StaleLandGuiInstallTasks {
 }
 
 function Get-LandGuiWorkerCommandLine {
-  param([string]$ConfigPath)
+  param([string]$ConfigPath, [string]$LogPath)
   $helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
-  return "-NoProfile -ExecutionPolicy Bypass -File `"$helper`" -ConfigFileArg `"$ConfigPath`""
+  # Match stop-script arg join: pass LogFileArg on CLI (scheduled task does not inherit parent env).
+  $psArgList = @(
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', "`"$helper`"",
+    '-ConfigFileArg', "`"$ConfigPath`"",
+    '-LogFileArg', "`"$LogPath`""
+  )
+  return ($psArgList -join ' ')
 }
 
 function Grant-LandInstallConfigRead {
@@ -120,6 +128,17 @@ function Grant-LandInstallConfigRead {
   if (-not (Test-Path -LiteralPath $ConfigPath)) { return }
   try {
     & icacls.exe $ConfigPath /grant 'Users:(R)' /grant 'Everyone:(R)' 2>$null | Out-Null
+  } catch { }
+}
+
+function Write-InstallTraceTail {
+  $tracePath = 'C:\Windows\Temp\sem_land_gui_install_trace.log'
+  if (-not (Test-Path -LiteralPath $tracePath)) { return }
+  try {
+    $tail = @(Get-Content -LiteralPath $tracePath -ErrorAction Stop | Select-Object -Last 6)
+    if ($tail.Count -gt 0) {
+      Write-Output ("INSTALL_TRACE_TAIL|" + ($tail -join ' || '))
+    }
   } catch { }
 }
 
@@ -200,8 +219,8 @@ Write-InteractiveSessionDiagnostics -ProfileUser $profileUser -Session $session
 Remove-StaleLandGuiInstallTasks
 
 $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$configPath = "C:\Users\Public\sem_land_install_cfg_$ts.json"
-$outFile = "C:\Users\Public\sem_land_install_$ts.log"
+$configPath = "C:\Windows\Temp\sem_land_install_cfg_$ts.json"
+$outFile = "C:\Windows\Temp\sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
 
 $config = [ordered]@{
@@ -237,7 +256,8 @@ if (-not (Test-Path -LiteralPath $helper)) {
   exit 1
 }
 
-$psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $configPath
+$psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $configPath -LogPath $outFile
+Write-Output "INSTALL_TASK_CMD|$psArgs"
 try {
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
   $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
@@ -268,6 +288,11 @@ do {
       Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
       break
     }
+    $taskState = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State
+    if ($taskState -and $taskState -ne 'Running' -and $taskInfo.LastTaskResult -ne 267009) {
+      Write-Output "INSTALL_TASK_EARLY_EXIT|state=$taskState|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex"
+      break
+    }
   }
   Start-Sleep -Seconds 1
 } while ((Get-Date) -lt $bootDeadline)
@@ -282,6 +307,7 @@ if (-not $workerStarted) {
   } else {
     Write-Output "INSTALL_TASK_LOG_EMPTY|log=$outFile"
   }
+  Write-InstallTraceTail
   if ($taskInfo) {
     $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
     Write-Output "INSTALL_TASK_BOOT_TIMEOUT|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex"

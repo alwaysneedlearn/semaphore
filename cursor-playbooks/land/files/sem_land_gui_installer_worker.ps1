@@ -18,14 +18,20 @@ param(
   [string]$Dlg3CoordYPct = '93'
 )
 
+$ConfigFileArg = ($ConfigFileArg | ForEach-Object { $_ }).Trim().Trim('"')
+$LogFileArg = ($LogFileArg | ForEach-Object { $_ }).Trim().Trim('"')
+$InstallerPathArg = ($InstallerPathArg | ForEach-Object { $_ }).Trim().Trim('"')
+
+try {
+  $traceLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_INVOKED|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg|log=$LogFileArg"
+  Add-Content -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_trace.log' -Value $traceLine -Encoding UTF8 -ErrorAction SilentlyContinue
+} catch { }
+
 function Resolve-LandInstallLogFromConfigPath {
   param([string]$ConfigPath)
   if ([string]::IsNullOrWhiteSpace($ConfigPath)) { return '' }
   if ($ConfigPath -match 'sem_land_install_cfg_(\d+)\.json$') {
     $ts = $Matches[1]
-    if ($ConfigPath -match '\\Users\\Public\\') {
-      return "C:\Users\Public\sem_land_install_$ts.log"
-    }
     return "C:\Windows\Temp\sem_land_install_$ts.log"
   }
   return ''
@@ -133,6 +139,15 @@ if (-not [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
 if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and $derivedLogPath) {
   $script:LogFileArg = $derivedLogPath
   $LogFileArg = $derivedLogPath
+}
+
+if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
+  $err = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_ERROR|reason=missing_config_and_log_args|hint=scheduled_task_argv_lost"
+  try {
+    Add-Content -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_trace.log' -Value $err -Encoding UTF8
+  } catch { }
+  Write-Output $err
+  exit 1
 }
 
 if (-not [string]::IsNullOrWhiteSpace($script:LogFileArg)) {
