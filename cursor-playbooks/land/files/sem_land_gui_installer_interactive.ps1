@@ -143,12 +143,21 @@ try {
 } catch { }
 if (-not (Test-Path -LiteralPath `$helper)) {
   try {
-    Add-Content -LiteralPath `$tracePath -Value "JOB_ERROR|reason=helper_missing|path=`$helper" -Encoding UTF8
+    Add-Content -LiteralPath `$tracePath -Value "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] JOB_ERROR|reason=helper_missing|path=`$helper" -Encoding UTF8
   } catch { }
   exit 1
 }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File `$helper -ConfigFileArg `$configPath -LogFileArg `$logPath
-exit `$LASTEXITCODE
+`$exitCode = 0
+try {
+  & `$helper -ConfigFileArg `$configPath -LogFileArg `$logPath
+  if (`$null -ne `$LASTEXITCODE) { `$exitCode = [int]`$LASTEXITCODE }
+} catch {
+  try {
+    Add-Content -LiteralPath `$tracePath -Value "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] JOB_ERROR|reason=worker_invoke_failed|msg=`$(`$_.Exception.Message)" -Encoding UTF8
+  } catch { }
+  `$exitCode = 1
+}
+exit `$exitCode
 "@
   $jobContent | Out-File -LiteralPath $jobPath -Encoding ASCII -Force
   return $jobPath
@@ -185,7 +194,10 @@ function Grant-LandInstallConfigRead {
 
 function Write-InstallTraceTail {
   $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
-  if (-not (Test-Path -LiteralPath $tracePath)) { return }
+  if (-not (Test-Path -LiteralPath $tracePath)) {
+    Write-Output "INSTALL_TRACE_MISSING|path=$tracePath"
+    return
+  }
   try {
     $tail = @(Get-Content -LiteralPath $tracePath -ErrorAction Stop | Select-Object -Last 6)
     if ($tail.Count -gt 0) {
@@ -329,8 +341,7 @@ try {
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
   $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-  Start-ScheduledTask -TaskName $taskName
-  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile"
+  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile|job=$jobPath"
 } catch {
   Write-Output "INSTALL_ERROR|reason=scheduled_task_create_failed|msg=$($_.Exception.Message)"
   exit 1
