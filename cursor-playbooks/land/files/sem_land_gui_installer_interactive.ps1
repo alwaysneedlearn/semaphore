@@ -118,49 +118,8 @@ function Remove-StaleLandGuiInstallTasks {
   }
 }
 
-function Get-LandGuiInstallJobScriptPath {
-  param([string]$Timestamp)
-  return (Join-Path $script:SemLandTempDir "sem_land_install_job_$Timestamp.ps1")
-}
-
-function New-LandGuiInstallJobScript {
-  param(
-    [string]$Timestamp,
-    [string]$ConfigPath,
-    [string]$LogPath
-  )
-  $jobPath = Get-LandGuiInstallJobScriptPath -Timestamp $Timestamp
-  $helper = Join-Path $script:SemLandTempDir 'sem_land_gui_installer_worker.ps1'
-  $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
-  $jobContent = @"
-`$ErrorActionPreference = 'Continue'
-`$tracePath = '$tracePath'
-`$helper = '$helper'
-`$configPath = '$ConfigPath'
-`$logPath = '$LogPath'
-try {
-  Add-Content -LiteralPath `$tracePath -Value "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] JOB_START|pid=`$PID|user=`$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=`$configPath|log=`$logPath" -Encoding UTF8
-} catch { }
-if (-not (Test-Path -LiteralPath `$helper)) {
-  try {
-    Add-Content -LiteralPath `$tracePath -Value "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] JOB_ERROR|reason=helper_missing|path=`$helper" -Encoding UTF8
-  } catch { }
-  exit 1
-}
-`$exitCode = 0
-try {
-  & `$helper -ConfigFileArg `$configPath -LogFileArg `$logPath
-  if (`$null -ne `$LASTEXITCODE) { `$exitCode = [int]`$LASTEXITCODE }
-} catch {
-  try {
-    Add-Content -LiteralPath `$tracePath -Value "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] JOB_ERROR|reason=worker_invoke_failed|msg=`$(`$_.Exception.Message)" -Encoding UTF8
-  } catch { }
-  `$exitCode = 1
-}
-exit `$exitCode
-"@
-  $jobContent | Out-File -LiteralPath $jobPath -Encoding ASCII -Force
-  return $jobPath
+function Get-SemLandInstallActivePath {
+  return (Join-Path $script:SemLandTempDir 'sem_land_install_active.json')
 }
 
 function Grant-LandInstallTempFileAccess {
@@ -177,12 +136,12 @@ function Grant-LandInstallTempFileAccess {
 }
 
 function Get-LandGuiWorkerCommandLine {
-  param([string]$JobPath)
-  # Task Scheduler is unreliable with many quoted args; run a generated job script only.
+  param([string]$WorkerPath)
+  # Task Scheduler cannot pass -ConfigFileArg reliably; worker reads sem_land_install_active.json.
   $psArgList = @(
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
-    '-File', $JobPath
+    '-File', $WorkerPath
   )
   return ($psArgList -join ' ')
 }
@@ -286,7 +245,7 @@ $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $configPath = Join-Path $script:SemLandTempDir "sem_land_install_cfg_$ts.json"
 $outFile = Join-Path $script:SemLandTempDir "sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
-$jobPath = $null
+$activePath = Get-SemLandInstallActivePath
 
 $config = [ordered]@{
   installer_path = $installerPath
@@ -310,12 +269,19 @@ try {
   Grant-LandInstallConfigRead -ConfigPath $configPath
   '' | Out-File -LiteralPath $outFile -Encoding UTF8 -Force
   Grant-LandInstallTempFileAccess -Path $outFile -Rights 'M'
+  $active = [ordered]@{
+    run_id = "$ts"
+    config_path = $configPath
+    log_path = $outFile
+  }
+  ($active | ConvertTo-Json -Compress) | Out-File -LiteralPath $activePath -Encoding UTF8 -Force
+  Grant-LandInstallTempFileAccess -Path $activePath -Rights 'R'
 } catch {
   Write-Output "INSTALL_ERROR|reason=config_write_failed|msg=$($_.Exception.Message)"
   exit 1
 }
 
-Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile"
+Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile|active=$activePath"
 
 $helper = Join-Path $script:SemLandTempDir 'sem_land_gui_installer_worker.ps1'
 if (-not (Test-Path -LiteralPath $helper)) {
@@ -323,25 +289,15 @@ if (-not (Test-Path -LiteralPath $helper)) {
   exit 1
 }
 
-$jobPath = $null
-try {
-  $jobPath = New-LandGuiInstallJobScript -Timestamp $ts -ConfigPath $configPath -LogPath $outFile
-  Grant-LandInstallTempFileAccess -Path $jobPath -Rights 'R'
-} catch {
-  Write-Output "INSTALL_ERROR|reason=job_script_write_failed|msg=$($_.Exception.Message)"
-  exit 1
-}
-
-$psArgs = Get-LandGuiWorkerCommandLine -JobPath $jobPath
+$psArgs = Get-LandGuiWorkerCommandLine -WorkerPath $helper
 Write-Output "INSTALL_TASK_CMD|$psArgs"
-Write-Output "INSTALL_JOB_SCRIPT|path=$jobPath"
 try {
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
   $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
   $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile|job=$jobPath"
+  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile|active=$activePath"
 } catch {
   Write-Output "INSTALL_ERROR|reason=scheduled_task_create_failed|msg=$($_.Exception.Message)"
   exit 1
@@ -396,15 +352,14 @@ if (-not $workerStarted) {
   } else {
     Write-Output 'INSTALL_TASK_BOOT_TIMEOUT|last_result=unknown'
   }
-  if ($jobPath -and (Test-Path -LiteralPath $jobPath)) {
-    Write-Output "INSTALL_JOB_SCRIPT_EXISTS|path=$jobPath"
+  if (Test-Path -LiteralPath $activePath) {
+    Write-Output "INSTALL_ACTIVE_EXISTS|path=$activePath"
   }
   if (Test-Path -LiteralPath $configPath) {
     Write-Output "INSTALL_CONFIG_EXISTS|path=$configPath"
   }
   Write-Output 'INSTALL_ERROR|reason=worker_never_booted'
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-  Remove-Item -LiteralPath $jobPath -Force -ErrorAction SilentlyContinue
   exit 1
 }
 
@@ -432,9 +387,7 @@ try {
 } finally {
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
-  if ($jobPath) {
-    Remove-Item -LiteralPath $jobPath -Force -ErrorAction SilentlyContinue
-  }
+  Remove-Item -LiteralPath $activePath -Force -ErrorAction SilentlyContinue
 }
 
 if ((Get-InstallLogTerminalStatus -Path $outFile) -eq 'complete') {

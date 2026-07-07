@@ -33,11 +33,54 @@ function Resolve-SemLandScriptTempDir {
 $script:SemLandTempDir = Resolve-SemLandScriptTempDir
 $script:SemLandTraceLogPath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
 $script:SemLandWorkerLockPath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_worker.lock'
+$script:SemLandActivePath = Join-Path $script:SemLandTempDir 'sem_land_install_active.json'
+
+function Resolve-LandInstallFromActiveFile {
+  param(
+    [string]$ConfigPathIn,
+    [string]$LogPathIn
+  )
+  $cfg = $ConfigPathIn
+  $log = $LogPathIn
+  if (-not [string]::IsNullOrWhiteSpace($cfg) -and -not [string]::IsNullOrWhiteSpace($log)) {
+    return @{ ok = $true; ConfigFileArg = $cfg; LogFileArg = $log }
+  }
+  if (-not (Test-Path -LiteralPath $script:SemLandActivePath)) {
+    return @{ ok = $false; ConfigFileArg = $cfg; LogFileArg = $log }
+  }
+  try {
+    $raw = Get-Content -LiteralPath $script:SemLandActivePath -Raw -Encoding UTF8 -ErrorAction Stop
+    $active = $raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return @{ ok = $false; ConfigFileArg = $cfg; LogFileArg = $log }
+  }
+  if ([string]::IsNullOrWhiteSpace($cfg) -and $active.config_path) {
+    $cfg = [string]$active.config_path
+  }
+  if ([string]::IsNullOrWhiteSpace($log) -and $active.log_path) {
+    $log = [string]$active.log_path
+  }
+  return @{
+    ok = (-not [string]::IsNullOrWhiteSpace($cfg))
+    ConfigFileArg = $cfg
+    LogFileArg = $log
+  }
+}
+
+$activeResolved = Resolve-LandInstallFromActiveFile -ConfigPathIn $ConfigFileArg -LogPathIn $LogFileArg
+$ConfigFileArg = $activeResolved.ConfigFileArg
+$LogFileArg = $activeResolved.LogFileArg
+$activeResolvedOk = $activeResolved.ok
 
 try {
-  $traceLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_INVOKED|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg|log=$LogFileArg|temp_dir=$($script:SemLandTempDir)"
-  Add-Content -LiteralPath $script:SemLandTraceLogPath -Value $traceLine -Encoding UTF8 -ErrorAction SilentlyContinue
-} catch { }
+  $traceLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_INVOKED|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg|log=$LogFileArg|active=$activeResolved|temp_dir=$($script:SemLandTempDir)"
+  Add-Content -LiteralPath $script:SemLandTraceLogPath -Value $traceLine -Encoding UTF8 -ErrorAction Stop
+} catch {
+  try {
+    $fallbackTrace = Join-Path $env:TEMP 'sem_land_gui_install_trace.log'
+    Add-Content -LiteralPath $fallbackTrace -Value "WORKER_TRACE_FALLBACK|msg=$($_.Exception.Message)" -Encoding UTF8
+  } catch { }
+}
 
 function Resolve-LandInstallLogFromConfigPath {
   param([string]$ConfigPath)
@@ -154,7 +197,7 @@ if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and $derivedLogPath) {
 }
 
 if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
-  $err = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_ERROR|reason=missing_config_and_log_args|hint=scheduled_task_argv_lost"
+  $err = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_ERROR|reason=missing_config_and_log_args|hint=active_file_missing_or_empty|active_path=$($script:SemLandActivePath)"
   try {
     Add-Content -LiteralPath $script:SemLandTraceLogPath -Value $err -Encoding UTF8
   } catch { }
