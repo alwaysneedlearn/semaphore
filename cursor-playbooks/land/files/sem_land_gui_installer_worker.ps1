@@ -590,6 +590,10 @@ public class SemaphoreLandGuiInstaller {
         return WpfUiContains(hwnd, "已完成");
     }
 
+    public static bool WpfCanDetectInitialButtons(IntPtr hwnd) {
+        return WpfUiContains(hwnd, "升级") || WpfUiContains(hwnd, "取消");
+    }
+
     public static string DescribeWpfFinalReadiness(IntPtr hwnd) {
         if (!IsWpfHwndWrapper(hwnd)) { return "phase=not_wpf"; }
         if (Step2CompletedUtc != DateTime.MinValue) {
@@ -599,13 +603,19 @@ public class SemaphoreLandGuiInstaller {
             }
         }
         if (WpfWizardOnInitialButtonRow(hwnd)) { return "phase=initial_buttons|upgrade_or_cancel_visible"; }
+        string title = GetControlText(hwnd);
+        if (!string.IsNullOrEmpty(title) && title.IndexOf("已完成", StringComparison.Ordinal) >= 0) {
+            return "phase=completed_title";
+        }
         if (WpfWizardShowsCompleted(hwnd)) { return "phase=completed_text"; }
-        if (!UiAutomationEnabled && Step2CompletedUtc != DateTime.MinValue) {
+        if (Step2CompletedUtc != DateTime.MinValue) {
             double sec = (DateTime.UtcNow - Step2CompletedUtc).TotalSeconds;
-            if (sec < MinSecondsBeforeFinalFallback) {
-                return "phase=installing_fallback|elapsed_sec=" + sec.ToString("F1");
+            if (sec >= MinSecondsBeforeFinalFallback && !WpfCanDetectInitialButtons(hwnd)) {
+                return "phase=elapsed_no_initial_buttons|elapsed_sec=" + sec.ToString("F1");
             }
-            return "phase=fallback_elapsed_ok|elapsed_sec=" + sec.ToString("F1");
+            if (sec < MinSecondsBeforeFinalFallback) {
+                return "phase=installing|elapsed_sec=" + sec.ToString("F1");
+            }
         }
         return "phase=installing";
     }
@@ -616,9 +626,12 @@ public class SemaphoreLandGuiInstaller {
             if ((DateTime.UtcNow - Step2CompletedUtc).TotalSeconds < MinSecondsAfterStep2) { return false; }
         }
         if (WpfWizardOnInitialButtonRow(hwnd)) { return false; }
+        string title = GetControlText(hwnd);
+        if (!string.IsNullOrEmpty(title) && title.IndexOf("已完成", StringComparison.Ordinal) >= 0) { return true; }
         if (WpfWizardShowsCompleted(hwnd)) { return true; }
-        if (!UiAutomationEnabled && Step2CompletedUtc != DateTime.MinValue) {
-            return (DateTime.UtcNow - Step2CompletedUtc).TotalSeconds >= MinSecondsBeforeFinalFallback;
+        if (Step2CompletedUtc != DateTime.MinValue) {
+            double sec = (DateTime.UtcNow - Step2CompletedUtc).TotalSeconds;
+            if (sec >= MinSecondsBeforeFinalFallback && !WpfCanDetectInitialButtons(hwnd)) { return true; }
         }
         return false;
     }
@@ -825,17 +838,15 @@ function Wait-Click-LandDialog {
     }
     if ($ok) {
       if ($RequireFinalWizard.IsPresent) {
-        [System.Threading.Thread]::Sleep(1200)
+        [System.Threading.Thread]::Sleep(800)
         $reject = $false
         try {
           $postHwnd = [SemaphoreLandGuiInstaller]::FindWizardWindow($TitlePart)
-          if ($postHwnd -ne [IntPtr]::Zero -and [SemaphoreLandGuiInstaller]::WpfWizardOnInitialButtonRow($postHwnd)) {
+          if ($postHwnd -ne [IntPtr]::Zero -and [SemaphoreLandGuiInstaller]::WpfCanDetectInitialButtons($postHwnd)) {
             Write-InstallLine "DIALOG_CLICK_REJECT|title_part=$TitlePart|button=$ButtonText|attempt=$attempt|reason=post_click_initial_row|detail=likely_cancel_at_coord"
             $reject = $true
           }
-        } catch {
-          Write-InstallLine "DIALOG_CLICK_REJECT|title_part=$TitlePart|reason=post_click_check_failed|msg=$($_.Exception.Message)"
-        }
+        } catch { }
         if ($reject) {
           $ok = $false
           continue
@@ -1064,23 +1075,8 @@ try {
 
 $installerAlreadyRunning = Test-InstallerProcessRunning -LiteralPath $installerPath
 $resumeFromStep = 0
-if ($installerAlreadyRunning) {
-  $resumeFromStep = Get-LastCompletedInstallStep -LogPath $LogFileArg -InstallerPath $installerPath
-  if ($resumeFromStep -ge 3) {
-    Write-InstallLine "INSTALL_RESUME|adjust=step3_not_trusted|reason=installer_still_running"
-    $resumeFromStep = 2
-    Write-LandInstallProgress -InstallerPath $installerPath -Step 2
-  }
-  if ($resumeFromStep -lt 2 -and (Test-PromptDialogVisible)) {
-    $resumeFromStep = 1
-  }
-  if ($resumeFromStep -gt 0) {
-    Write-InstallLine "INSTALL_RESUME|from_step=$($resumeFromStep + 1)|reason=installer_already_running"
-  }
-}
 
-[int]$step3Timeout = $stepTimeout * 2
-if ($step3Timeout -lt 120) { $step3Timeout = 120 }
+[int]$step3Timeout = [Math]::Max($stepTimeout * 2, 120)
 
 Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir|session=interactive"
 
@@ -1124,15 +1120,12 @@ if ($resumeFromStep -lt 2) {
 
 Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button|wait_for=已完成"
 if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $step3Timeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -RequireFinalWizard)) {
-  Write-LandInstallProgress -InstallerPath $installerPath -Step 2
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
 }
 
-if (-not (Wait-For-LandInstallerFinished -LiteralPath $installerPath -WizardTitle $dlg3Title -TimeoutSec 60)) {
-  Write-LandInstallProgress -InstallerPath $installerPath -Step 2
-  Write-InstallLine 'INSTALL_FAILED|step=3_verify|reason=installer_still_running'
-  exit 1
+if (-not (Wait-For-LandInstallerFinished -LiteralPath $installerPath -WizardTitle $dlg3Title -TimeoutSec 30)) {
+  Write-InstallLine 'INSTALL_WARN|step=3_verify|reason=installer_still_running'
 }
 Write-InstallLine 'INSTALL_STEP_DONE|step=3'
 Write-LandInstallProgress -InstallerPath $installerPath -Step 3

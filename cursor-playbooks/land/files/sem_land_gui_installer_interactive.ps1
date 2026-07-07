@@ -34,12 +34,12 @@ $dlg2CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_Y_PCT' -Default '0
 $dlg3CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_X_PCT' -Default '88'
 $dlg3CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_Y_PCT' -Default '93'
 
-[int]$timeoutSec = 180
+[int]$timeoutSec = 300
 $timeoutRaw = [string]$env:LAND_INSTALL_TASK_TIMEOUT_SECONDS
 if (-not [string]::IsNullOrWhiteSpace($timeoutRaw)) {
   [int]::TryParse($timeoutRaw, [ref]$timeoutSec) | Out-Null
 }
-if ($timeoutSec -lt 30) { $timeoutSec = 30 }
+if ($timeoutSec -lt 60) { $timeoutSec = 60 }
 
 function Resolve-InteractiveProfileUserFromExplorer {
   param([string]$HintUser)
@@ -316,12 +316,33 @@ function Start-LandGuiInstallViaSchTasks {
       $errDetail = if ($stderrText) { $stderrText.Trim() } else { '' }
       return @{ ok = $false; error = "schtasks_create_exit=$($create.ExitCode)|stderr=$errDetail" }
     }
-    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow
-    Write-Output "INTERACTIVE_SCHTASKS|name=$TaskName|user=$ProfileUser|run_level=$rl|run_exit=$($run.ExitCode)"
+    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -PassThru -NoNewWindow
+    Write-Output "INTERACTIVE_SCHTASKS|name=$TaskName|user=$ProfileUser|run_level=$rl|run_pid=$($run.Id)"
     return @{ ok = $true; error = '' }
   } catch {
     return @{ ok = $false; error = $_.Exception.Message }
   }
+}
+
+function Clear-LandInstallProgressFiles {
+  try {
+    Get-ChildItem -LiteralPath 'C:\Windows\Temp' -Filter 'sem_land_install_progress_*.json' -ErrorAction SilentlyContinue |
+      Remove-Item -Force -ErrorAction SilentlyContinue
+  } catch { }
+}
+
+function Stop-StaleLandInstallerProcess {
+  param([string]$LiteralPath)
+  if ([string]::IsNullOrWhiteSpace($LiteralPath)) { return }
+  if (-not (Test-LandInstallerExeRunning -LiteralPath $LiteralPath)) { return }
+  $name = [System.IO.Path]::GetFileNameWithoutExtension($LiteralPath)
+  Write-Output "INSTALL_STALE_INSTALLER|path=$LiteralPath|action=stop_before_fresh_run"
+  Get-CimInstance Win32_Process -Filter "Name='$name.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and ($_.ExecutablePath -ieq $LiteralPath) } |
+    ForEach-Object {
+      try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch { }
+    }
+  Start-Sleep -Seconds 2
 }
 
 function Test-LandInstallerExeRunning {
@@ -408,7 +429,7 @@ function Test-InstallWorkerStarted {
   } catch {
     return $false
   }
-  return ($text -match 'INSTALL_WORKER_(BOOT|START)\b')
+  return ($text -match 'INSTALL_WORKER_BOOT\b')
 }
 
 function Write-InstallLogTail {
@@ -526,6 +547,9 @@ if (-not $session.ok) {
 }
 Write-InteractiveSessionDiagnostics -ProfileUser $profileUser -Session $session
 Remove-StaleLandGuiInstallTasks
+Clear-LandInstallProgressFiles
+Remove-LandGuiInstallWorkerLock
+Stop-StaleLandInstallerProcess -LiteralPath $installerPath
 
 $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $configPath = "C:\Windows\Temp\sem_land_install_cfg_$ts.json"
@@ -582,22 +606,14 @@ $lastStartError = ''
 $script:usedScheduledTaskName = ''
 $launchModes = @(
   @{ mode = 'scheduled_highest'; run_level = 'Highest' },
-  @{ mode = 'scheduled_limited'; run_level = 'Limited' },
-  @{ mode = 'schtasks_highest'; run_level = 'Highest' },
-  @{ mode = 'schtasks_limited'; run_level = 'Limited' }
+  @{ mode = 'schtasks_highest'; run_level = 'Highest' }
 )
-Remove-LandGuiInstallWorkerLock
 foreach ($launch in $launchModes) {
   if ($started) { break }
-  if ($launch.mode -ne 'scheduled_highest') {
-    if (Test-InstallWorkerStarted -Path $outFile) {
-      $started = $true
-      break
-    }
-    if (Test-LandInstallerExeRunning -LiteralPath $installerPath) {
-      Write-Output "INSTALL_SKIP_LAUNCH|mode=$($launch.mode)|reason=installer_already_running"
-      break
-    }
+  if (Test-InstallWorkerStarted -Path $outFile) {
+    $started = $true
+    Write-Output 'INSTALL_WORKER_ALREADY_BOOTED|action=attach_existing_log'
+    break
   }
   $mode = [string]$launch.mode
   $runLevel = [string]$launch.run_level
@@ -638,8 +654,11 @@ foreach ($launch in $launchModes) {
       }
     }
     if (Test-LandInstallerExeRunning -LiteralPath $installerPath) {
-      Write-Output "INSTALL_INSTALLER_STARTED_DURING_BOOT|path=$installerPath|action=stop_extra_launch_modes"
-      break
+      Write-Output "INSTALL_INSTALLER_STARTED_DURING_BOOT|path=$installerPath|action=worker_presumably_running"
+      if (Test-InstallWorkerStarted -Path $outFile) {
+        $started = $true
+        break
+      }
     }
     [System.Threading.Thread]::Sleep(200)
   } while ((Get-Date) -lt $bootDeadline)
