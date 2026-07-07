@@ -265,9 +265,9 @@ function Start-LandGuiInstallScheduledTask {
   $psArgs = Get-LandGuiWorkerPsArgs -ConfigPath $ConfigPath -LogPath $LogPath
   Write-Output "INSTALL_TASK_CMD|$psArgs"
   try {
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs -WorkingDirectory $SemLandTempDir
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
     $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances StopExisting
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
     $principal = New-ScheduledTaskPrincipal -UserId $ProfileUser -LogonType Interactive -RunLevel $RunLevel
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
