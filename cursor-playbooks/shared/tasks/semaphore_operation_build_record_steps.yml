@@ -56,6 +56,39 @@
         }]
         + (
           [{
+            'step': 'GUI 安装向导',
+            'result': (
+              'ok' if (
+                (_h._land_gui_install.stdout | default('') is search('INSTALL_COMPLETE'))
+                and not (_h._land_gui_install.stdout | default('') is search('INSTALL_ERROR|INSTALL_FAILED'))
+              ) else 'failed'
+            ),
+            'detail': (
+              (
+                (_h._land_gui_install.stdout | default('') | regex_search('INSTALL_VERSION[^\n]*') | default(''))
+                | trim
+              )
+              if (
+                (_h._land_gui_install.stdout | default('') is search('INSTALL_COMPLETE'))
+              ) else (
+                (
+                  (_h._land_gui_install.stdout | default('') | regex_search('INSTALL_(?:ERROR|FAILED)[^\n]*') | default(''))
+                  | trim
+                )
+                | default(
+                  (_h.host_failure_reason | default('') | truncate(200, True)),
+                  true
+                )
+              )
+            )
+          }] if (
+            _op_type == 'redeploy'
+            and (_h.land_include_gui_installer | default(false) | bool)
+            and (_h._land_gui_install is defined)
+          ) else []
+        )
+        + (
+          [{
             'step': '制品下发',
             'result': ('ok' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
             'detail': ('exe present after deploy' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')

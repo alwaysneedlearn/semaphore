@@ -1,0 +1,37 @@
+---
+# Set host_failure_reason after redeploy/restart block rescue (GUI install, start, etc.).
+
+- ansible.builtin.set_fact:
+    host_failure_reason: "{{ _failure_summary | truncate(500, True) }}"
+  vars:
+    _gui_out: "{{ (_land_gui_install.stdout | default('')) | string }}"
+    _gui_err_matches: "{{ _gui_out | regex_findall('INSTALL_(?:ERROR|FAILED)[^\\n]*') | default([]) }}"
+    _gui_err_line: "{{ (_gui_err_matches | last | default('')) | trim }}"
+    _gui_version_line: "{{ (_gui_out | regex_search('INSTALL_VERSION[^\\n]*') | default('')) | trim }}"
+    _failure_summary: >-
+      {{
+        (
+          'LAND GUI install: ' ~ _gui_err_line
+          if ((_gui_err_line | length) > 0)
+          else (
+            'LAND GUI install failed (no INSTALL_COMPLETE)'
+            if (
+              (_land_gui_install is defined)
+              and (
+                (_gui_out is search('INSTALL_ERROR'))
+                or (_gui_out is search('INSTALL_FAILED'))
+                or (_gui_out is search('worker_never_booted'))
+                or (_gui_out is search('INSTALL_TASK_LOG_INCOMPLETE'))
+              )
+            )
+            else (
+              'LAND redeploy: ' ~ (ansible_failed_result.msg | default('task failed') | string)
+            )
+          )
+        )
+        ~ (
+          ' | ' ~ _gui_version_line
+          if ((_gui_version_line | length) > 0 and (_gui_err_line | length) > 0)
+          else ''
+        )
+      }}
