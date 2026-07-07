@@ -413,7 +413,7 @@ function Start-LandGuiInstallScheduledTask {
   try {
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
     $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances StopExisting
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances Queue
     $principal = New-ScheduledTaskPrincipal -UserId $ProfileUser -LogonType Interactive -RunLevel $RunLevel
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
@@ -507,7 +507,7 @@ $lastStartError = ''
 $script:usedScheduledTaskName = ''
 $launchModes = @(
   @{ mode = 'scheduled_highest'; run_level = 'Highest' },
-  @{ mode = 'user_session'; run_level = '' }
+  @{ mode = 'schtasks_highest'; run_level = 'Highest' }
 )
 foreach ($launch in $launchModes) {
   if ($started) { break }
@@ -523,25 +523,15 @@ foreach ($launch in $launchModes) {
   }
   $mode = [string]$launch.mode
   $runLevel = [string]$launch.run_level
-  if ($mode -eq 'user_session') {
-    if ($session.session_id -le 0) {
-      Write-Output 'INSTALL_TASK_START_SKIPPED|mode=user_session|reason=no_session_id'
-      continue
-    }
-    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
-  } elseif ($mode -eq 'user_session') {
-    if ($session.session_id -le 0) {
-      Write-Output 'INSTALL_TASK_START_SKIPPED|mode=user_session|reason=no_session_id'
-      continue
-    }
-    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
+  if ($mode -like 'schtasks_*') {
+    $result = Start-LandGuiInstallViaSchTasks -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -RunLevel $runLevel
   } else {
     $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
   }
   if (-not $result.ok) {
     $lastStartError = [string]$result.error
     Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|run_level=$runLevel|error=$lastStartError"
-    if ($mode -like 'scheduled_*') {
+    if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
       Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
     }
     continue
@@ -553,12 +543,12 @@ foreach ($launch in $launchModes) {
     if (Test-InstallWorkerStarted -Path $outFile) {
       $started = $true
       Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|user=$profileUser"
-      if ($mode -eq 'scheduled_highest') {
+      if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
         $script:usedScheduledTaskName = $taskName
       }
       break
     }
-    if ($mode -eq 'scheduled_highest') {
+    if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*') {
       $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
       if ($taskInfo) {
         $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
@@ -575,7 +565,7 @@ foreach ($launch in $launchModes) {
     }
     [System.Threading.Thread]::Sleep(200)
   } while ((Get-Date) -lt $bootDeadline)
-  if (-not $started -and $mode -eq 'scheduled_highest') {
+  if (-not $started -and ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*')) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   }
 }
