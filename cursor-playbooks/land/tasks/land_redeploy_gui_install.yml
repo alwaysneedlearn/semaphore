@@ -25,7 +25,7 @@
   environment:
     LAND_INSTALLER_EXE_PATH: "{{ land_installer_dest }}"
     SEMAPHORE_PROFILE_USER: "{{ _land_install_profile_user | default(_reconfig_profile_user) }}"
-    LAND_INSTALL_TASK_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('180', true)) }}"
+    LAND_INSTALL_TASK_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('360', true)) }}"
     LAND_INSTALL_STEP_TIMEOUT_SECONDS: "{{ ((lookup('env', 'LAND_INSTALL_STEP_TIMEOUT_SECONDS') | default('', true) | trim) | default('90', true)) }}"
     LAND_INSTALL_DLG1_TITLE: "{{ (lookup('env', 'LAND_INSTALL_DLG1_TITLE') | default('', true) | trim) | default('LHBTS 安装', true) }}"
     LAND_INSTALL_DLG1_BUTTON: "{{ (lookup('env', 'LAND_INSTALL_DLG1_BUTTON') | default('', true) | trim) | default('升级', true) }}"
@@ -48,7 +48,7 @@
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
     (
-      ('INSTALL_SCRIPT_REV=20260707-cmd-bat-launch-v4' not in (_land_gui_install.stdout | default('')))
+      ('INSTALL_SCRIPT_REV=20260707-worker-boot-v5' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
       or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))

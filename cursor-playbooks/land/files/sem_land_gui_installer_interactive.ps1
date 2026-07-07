@@ -3,7 +3,7 @@
 # Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
 # INSTALL_SCRIPT_REV bumps when launch logic changes — must appear in task stdout.
 
-Write-Output 'INSTALL_SCRIPT_REV=20260707-cmd-bat-launch-v4'
+Write-Output 'INSTALL_SCRIPT_REV=20260707-worker-boot-v5'
 
 $SemLandTempDir = 'C:\Windows\Temp'
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
@@ -157,16 +157,23 @@ function New-LandInstallTaskBat {
   )
   $batPath = Join-Path $SemLandTempDir "sem_land_install_run_$Timestamp.bat"
   $tracePath = Join-Path $SemLandTempDir 'sem_land_gui_install_trace.log'
+  $psOutPath = Join-Path $SemLandTempDir "sem_land_install_ps_$Timestamp.log"
+  $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $content = @"
 @echo off
+setlocal
+cd /d $SemLandTempDir
 echo BAT_START|ts=$Timestamp>>"$tracePath"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath"
+echo BAT_CMD|worker=$WorkerPath|config=$ConfigPath|log=$LogPath>>"$tracePath"
+"$psExe" -NoProfile -ExecutionPolicy Bypass -Command "exit 0" 1>nul 2>nul
+echo POWERSHELL_SMOKE|ts=$Timestamp|rc=%ERRORLEVEL%>>"$tracePath"
+"$psExe" -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath" 1>>"$psOutPath" 2>&1
 set RC=%ERRORLEVEL%
 echo BAT_END|ts=$Timestamp|rc=%RC%>>"$tracePath"
 exit /b %RC%
 "@
   $content | Out-File -LiteralPath $batPath -Encoding ASCII -Force
-  return $batPath
+  return @{ bat = $batPath; ps_out = $psOutPath }
 }
 
 function Get-LandInstallTaskCmdLine {
@@ -405,12 +412,25 @@ function Grant-LandInstallLogWrite {
   param([string]$LogPath)
   if ([string]::IsNullOrWhiteSpace($LogPath)) { return }
   try {
-    if (-not (Test-Path -LiteralPath $LogPath)) {
-      "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_PARENT_TOUCH|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)" |
-        Out-File -LiteralPath $LogPath -Encoding UTF8 -Force
+    if (Test-Path -LiteralPath $LogPath) {
+      Remove-Item -LiteralPath $LogPath -Force -ErrorAction SilentlyContinue
     }
-    & icacls.exe $LogPath /grant 'Users:(M)' /grant 'Everyone:(M)' 2>$null | Out-Null
+    & icacls.exe (Split-Path -Parent $LogPath) /grant 'Users:(M)' /grant 'Everyone:(M)' 2>$null | Out-Null
   } catch { }
+}
+
+function Initialize-LandInstallTraceFile {
+  param([string]$TracePath, [string]$RunId)
+  try {
+    $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_RUN_START|ts=$RunId|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+    $line | Out-File -LiteralPath $TracePath -Encoding UTF8 -Force
+    & icacls.exe $TracePath /grant 'Users:(M)' /grant 'Everyone:(M)' 2>$null | Out-Null
+  } catch { }
+}
+
+function Remove-StaleLandGuiInstallWorkerLock {
+  $lockPath = Join-Path $SemLandTempDir 'sem_land_gui_install_worker.lock'
+  Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
 }
 
 function Write-LandInstallActiveFile {
@@ -472,7 +492,10 @@ function Write-InstallTraceTail {
 }
 
 function Test-InstallWorkerStartedViaTrace {
-  param([string]$ConfigPath)
+  param(
+    [string]$ConfigPath,
+    [string]$RunId
+  )
   $tracePath = Join-Path $SemLandTempDir 'sem_land_gui_install_trace.log'
   if (-not (Test-Path -LiteralPath $tracePath)) { return $false }
   try {
@@ -480,16 +503,44 @@ function Test-InstallWorkerStartedViaTrace {
   } catch {
     return $false
   }
-  $ts = ''
-  if ($ConfigPath -match 'sem_land_install_cfg_(\d+)\.json$') {
-    $ts = $Matches[1]
-  }
-  if ($ts -and $text -match "BAT_START\|ts=$ts") { return $true }
-  if ($text -notmatch 'WORKER_INVOKED|BAT_START') { return $false }
-  if (-not [string]::IsNullOrWhiteSpace($ConfigPath) -and $text -notmatch [regex]::Escape($ConfigPath)) {
-    return $false
+  if ($text -notmatch 'WORKER_INVOKED|WORKER_ENTRY') { return $false }
+  if (-not [string]::IsNullOrWhiteSpace($RunId) -and $text -notmatch "ts=$RunId|sem_land_install_cfg_$RunId|sem_land_install_$RunId") {
+    if (-not [string]::IsNullOrWhiteSpace($ConfigPath) -and $text -notmatch [regex]::Escape($ConfigPath)) {
+      return $false
+    }
   }
   return $true
+}
+
+function Test-InstallBatEnded {
+  param([string]$RunId)
+  $tracePath = Join-Path $SemLandTempDir 'sem_land_gui_install_trace.log'
+  if (-not (Test-Path -LiteralPath $tracePath)) { return $null }
+  try {
+    $text = Get-Content -LiteralPath $tracePath -Raw -ErrorAction Stop
+  } catch {
+    return $null
+  }
+  if ($text -match "BAT_END\|ts=$RunId\|rc=(\d+)") {
+    return [int]$Matches[1]
+  }
+  return $null
+}
+
+function Write-InstallPsOutTail {
+  param([string]$PsOutPath, [int]$MaxLines = 12)
+  if ([string]::IsNullOrWhiteSpace($PsOutPath)) { return }
+  if (-not (Test-Path -LiteralPath $PsOutPath)) {
+    Write-Output "INSTALL_PS_OUT|hint=missing|path=$PsOutPath"
+    return
+  }
+  try {
+    $lines = @(Get-Content -LiteralPath $PsOutPath -ErrorAction Stop)
+    $tail = @($lines | Select-Object -Last $MaxLines)
+    Write-Output ("INSTALL_PS_OUT|" + ($tail -join ' || '))
+  } catch {
+    Write-Output "INSTALL_PS_OUT|error=$($_.Exception.Message)"
+  }
 }
 
 if ([string]::IsNullOrWhiteSpace($profileUserHint)) {
@@ -553,6 +604,7 @@ Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$inst
 
 Write-LandInstallActiveFile -ConfigPath $configPath -LogPath $outFile
 Grant-LandInstallLogWrite -LogPath $outFile
+Remove-StaleLandGuiInstallWorkerLock
 
 $workerScript = Join-Path $SemLandTempDir 'sem_land_gui_installer_worker.ps1'
 $tracePath = Join-Path $SemLandTempDir 'sem_land_gui_install_trace.log'
@@ -563,12 +615,15 @@ if (-not (Test-Path -LiteralPath $workerScript)) {
 try {
   Unblock-File -LiteralPath $workerScript -ErrorAction SilentlyContinue
   & icacls.exe $workerScript /grant 'Users:(RX)' /grant 'Everyone:(RX)' 2>$null | Out-Null
-  Remove-Item -LiteralPath $tracePath -Force -ErrorAction SilentlyContinue
+  Initialize-LandInstallTraceFile -TracePath $tracePath -RunId $ts
 } catch { }
 
 try {
-  $batPath = New-LandInstallTaskBat -Timestamp $ts -WorkerPath $workerScript -ConfigPath $configPath -LogPath $outFile
+  $batInfo = New-LandInstallTaskBat -Timestamp $ts -WorkerPath $workerScript -ConfigPath $configPath -LogPath $outFile
+  $batPath = $batInfo.bat
+  $psOutPath = $batInfo.ps_out
   Grant-LandInstallConfigRead -ConfigPath $batPath
+  Grant-LandInstallLogWrite -LogPath $psOutPath
 } catch {
   Write-Output "INSTALL_ERROR|reason=task_bat_write_failed|msg=$($_.Exception.Message)"
   exit 1
@@ -612,7 +667,7 @@ foreach ($launch in $launchModes) {
   }
 
   $earlyLineCount = 0
-  $bootDeadline = (Get-Date).AddSeconds(60)
+  $bootDeadline = (Get-Date).AddSeconds(90)
   do {
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
     if (Test-InstallWorkerStarted -Path $outFile) {
@@ -623,13 +678,23 @@ foreach ($launch in $launchModes) {
       }
       break
     }
-    if (Test-InstallWorkerStartedViaTrace -ConfigPath $configPath) {
+    if (Test-InstallWorkerStartedViaTrace -ConfigPath $configPath -RunId $ts) {
       $started = $true
       Write-Output "INSTALL_WORKER_BOOT_OK|mode=$mode|via=trace|user=$profileUser"
       if ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*' -or $useSchTasks) {
         $script:usedScheduledTaskName = $taskName
       }
       break
+    }
+    $batRc = Test-InstallBatEnded -RunId $ts
+    if ($null -ne $batRc -and -not $started) {
+      Write-Output "INSTALL_BAT_ENDED|ts=$ts|rc=$batRc"
+      Write-InstallTraceTail
+      Write-InstallPsOutTail -PsOutPath $psOutPath
+      if ($batRc -ne 0) {
+        $lastStartError = "bat_exit=$batRc|worker_never_invoked"
+        break
+      }
     }
     if (-not $useSchTasks -and $mode -like 'scheduled_*') {
       $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
@@ -659,6 +724,7 @@ foreach ($launch in $launchModes) {
 if (-not $started) {
   Write-InstallTaskDiag -TaskName $taskName
   Write-InstallTraceTail
+  Write-InstallPsOutTail -PsOutPath $psOutPath
   if (Test-Path -LiteralPath $outFile) {
     $tail = @(Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue | Select-Object -Last 8)
     if ($tail.Count -gt 0) {
@@ -688,6 +754,9 @@ try {
     Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$lastLineCount)
     if (-not $logComplete) {
       Write-Output "INSTALL_TASK_LOG_INCOMPLETE|log=$outFile"
+      Write-InstallTraceTail
+      Write-InstallPsOutTail -PsOutPath $psOutPath
+      Write-Output 'INSTALL_ERROR|reason=install_timeout_or_worker_stuck'
     }
   }
 } catch {
@@ -701,7 +770,12 @@ try {
   }
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath (Join-Path $SemLandTempDir 'sem_land_install_active.json') -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $batPath -Force -ErrorAction SilentlyContinue
+  if ($batPath) {
+    Remove-Item -LiteralPath $batPath -Force -ErrorAction SilentlyContinue
+  }
+  if ($psOutPath) {
+    Remove-Item -LiteralPath $psOutPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 if (Test-InstallLogTerminalLine -Path $outFile) {

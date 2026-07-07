@@ -35,6 +35,11 @@ $script:SemLandTraceLogPath = Join-Path $script:SemLandTempDir 'sem_land_gui_ins
 $script:SemLandWorkerLockPath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_worker.lock'
 $script:SemLandActivePath = Join-Path $script:SemLandTempDir 'sem_land_install_active.json'
 
+try {
+  $entry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_ENTRY|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)`r`n"
+  [System.IO.File]::AppendAllText($script:SemLandTraceLogPath, $entry)
+} catch { }
+
 function Resolve-LandInstallFromActiveFile {
   param(
     [string]$ConfigPathIn,
