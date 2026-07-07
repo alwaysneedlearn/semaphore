@@ -21,6 +21,21 @@
     dest: C:\Windows\Temp\sem_land_gui_installer_worker.ps1
     force: true
 
+- name: 重新部署：GUI 脚本写入 UTF-8 BOM（避免 PS5 解析中文双引号字符串失败）
+  ansible.windows.win_shell: |
+    $files = @(
+      'C:\Windows\Temp\sem_land_gui_installer_worker.ps1',
+      'C:\Windows\Temp\sem_land_gui_installer_interactive.ps1'
+    )
+    $enc = New-Object System.Text.UTF8Encoding $true
+    foreach ($p in $files) {
+      if (-not (Test-Path -LiteralPath $p)) { continue }
+      $text = [System.IO.File]::ReadAllText($p)
+      [System.IO.File]::WriteAllText($p, $text, $enc)
+    }
+  args:
+    chdir: C:\Windows\Temp
+
 - name: 重新部署：执行 GUI 安装向导
   environment:
     LAND_INSTALLER_EXE_PATH: "{{ land_installer_dest }}"
@@ -48,7 +63,7 @@
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
     (
-      ('INSTALL_SCRIPT_REV=20260707-bat-pipe-fix-v6' not in (_land_gui_install.stdout | default('')))
+      ('INSTALL_SCRIPT_REV=20260707-worker-utf8-fix-v7' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
       or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))

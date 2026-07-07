@@ -3,7 +3,7 @@
 # Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
 # INSTALL_SCRIPT_REV bumps when launch logic changes — must appear in task stdout.
 
-Write-Output 'INSTALL_SCRIPT_REV=20260707-bat-pipe-fix-v6'
+Write-Output 'INSTALL_SCRIPT_REV=20260707-worker-utf8-fix-v7'
 
 $SemLandTempDir = 'C:\Windows\Temp'
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
@@ -183,7 +183,7 @@ echo BAT_START;ts=$Timestamp>>"$tracePath"
 echo BAT_CMD;worker=$WorkerPath;config=$ConfigPath;log=$LogPath>>"$tracePath"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath" 1>>"$psOutPath" 2>&1
 set RC=%ERRORLEVEL%
-echo BAT_END;ts=$Timestamp;rc=%RC%>>"$tracePath"
+(echo BAT_END;ts=$Timestamp;rc=%RC%)>>"$tracePath"
 exit /b %RC%
 "@
   Write-LandInstallBatFile -Path $batPath -Content $content
@@ -338,7 +338,11 @@ function Start-LandGuiInstallViaSchTasks {
       $errDetail = if ($stderrText) { $stderrText.Trim() } else { '' }
       return @{ ok = $false; error = "schtasks_create_exit=$($create.ExitCode)|stderr=$errDetail" }
     }
-    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stderrFile -RedirectStandardError $stderrFile
+    $runOutFile = [System.IO.Path]::GetTempFileName()
+    $runErrFile = [System.IO.Path]::GetTempFileName()
+    $run = Start-Process -FilePath 'schtasks.exe' -ArgumentList @('/Run', '/TN', $TaskName) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $runOutFile -RedirectStandardError $runErrFile
+    Remove-Item -LiteralPath $runOutFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $runErrFile -Force -ErrorAction SilentlyContinue
     Write-Output "INTERACTIVE_SCHTASKS|name=$TaskName|user=$ProfileUser|run_level=$rl|run_exit=$($run.ExitCode)|bat=$BatPath"
     return @{ ok = $true; error = '' }
   } catch {
@@ -673,7 +677,7 @@ try {
   $batInfo = New-LandInstallTaskBat -Timestamp $ts -WorkerPath $workerScript -ConfigPath $configPath -LogPath $outFile
   $batPath = $batInfo.bat
   $psOutPath = $batInfo.ps_out
-  Grant-LandInstallConfigRead -ConfigPath $batPath
+  Grant-LandInstallExecuteRead -Path $batPath
   Grant-LandInstallLogWrite -LogPath $psOutPath
 } catch {
   Write-Output "INSTALL_ERROR|reason=task_bat_write_failed|msg=$($_.Exception.Message)"

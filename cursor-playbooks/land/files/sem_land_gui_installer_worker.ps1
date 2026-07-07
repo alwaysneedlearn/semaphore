@@ -1229,7 +1229,7 @@ if ($resumeFromStep -lt 2) {
   Set-LandStep2CompletedClockForResume
 }
 
-Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button|wait_for=已完成"
+Write-InstallLine ('INSTALL_WAIT_DIALOG|title_part=' + $dlg3Title + '|mode=final_single_button|wait_for=done')
 if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -TimeoutSec $step3Timeout -CoordXPct $dlg3CoordX -CoordYPct $dlg3CoordY -RequireFinalWizard)) {
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
