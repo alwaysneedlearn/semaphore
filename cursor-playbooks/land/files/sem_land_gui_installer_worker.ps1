@@ -14,7 +14,7 @@ param(
   [string]$Dlg1CoordYPct = '93',
   [string]$Dlg2CoordXPct = '0',
   [string]$Dlg2CoordYPct = '0',
-  [string]$Dlg3CoordXPct = '83',
+  [string]$Dlg3CoordXPct = '88',
   [string]$Dlg3CoordYPct = '93'
 )
 
@@ -120,7 +120,7 @@ $dlg3Button = $Dlg3ButtonArg
 [int]$dlg1CoordY = 93
 [int]$dlg2CoordX = 0
 [int]$dlg2CoordY = 0
-[int]$dlg3CoordX = 83
+[int]$dlg3CoordX = 88
 [int]$dlg3CoordY = 93
 [int]::TryParse($Dlg1CoordXPct, [ref]$dlg1CoordX) | Out-Null
 [int]::TryParse($Dlg1CoordYPct, [ref]$dlg1CoordY) | Out-Null
@@ -475,10 +475,10 @@ public class SemaphoreLandGuiInstaller {
 
     public static bool IsFinalInstallWizardReady(IntPtr hwnd) {
         if (hwnd == IntPtr.Zero) { return false; }
-        if (!HasVisibleButtonText(hwnd, "确定")) { return false; }
         if (HasVisibleButtonText(hwnd, "升级")) { return false; }
         if (HasVisibleButtonText(hwnd, "卸载")) { return false; }
-        return true;
+        if (HasVisibleButtonText(hwnd, "确定")) { return true; }
+        return CountVisibleButtons(hwnd) == 1;
     }
 
     public static IntPtr FindLastVisibleButton(IntPtr parent) {

@@ -30,8 +30,8 @@ $dlg1CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG1_COORD_Y_PCT' -Default '9
 # Step 2 (提示 popup): use Win32 button text match only — coord 0 disables fallback click.
 $dlg2CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_X_PCT' -Default '0'
 $dlg2CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG2_COORD_Y_PCT' -Default '0'
-# Step 3 (single 确定): same client-area position as 取消 on step 1 (right).
-$dlg3CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_X_PCT' -Default '83'
+# Step 3 (single 确定): same LHBTS 安装 window; coord 88%, 93%.
+$dlg3CoordX = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_X_PCT' -Default '88'
 $dlg3CoordY = Get-EnvOrDefault -Name 'LAND_INSTALL_DLG3_COORD_Y_PCT' -Default '93'
 
 [int]$timeoutSec = 180
