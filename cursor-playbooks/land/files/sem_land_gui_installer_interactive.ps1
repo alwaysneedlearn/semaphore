@@ -1,5 +1,15 @@
 # Run LAND GUI installer worker in logged-in desktop user's interactive session.
 # Pattern matches sem_stop_close_main_window_confirm_interactive.ps1 (single scheduled task).
+# Temp config/log/trace files live alongside deployed scripts (C:\Windows\Temp\).
+
+function Resolve-SemLandScriptTempDir {
+  if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
+    return $PSScriptRoot
+  }
+  return 'C:\Windows\Temp'
+}
+
+$script:SemLandTempDir = Resolve-SemLandScriptTempDir
 
 $profileUserHint = [string]$env:SEMAPHORE_PROFILE_USER
 if ($null -eq $profileUserHint) { $profileUserHint = '' }
@@ -110,7 +120,7 @@ function Remove-StaleLandGuiInstallTasks {
 
 function Get-LandGuiWorkerCommandLine {
   param([string]$ConfigPath, [string]$LogPath)
-  $helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
+  $helper = Join-Path $script:SemLandTempDir 'sem_land_gui_installer_worker.ps1'
   # Match stop-script arg join: pass LogFileArg on CLI (scheduled task does not inherit parent env).
   $psArgList = @(
     '-NoProfile',
@@ -132,7 +142,7 @@ function Grant-LandInstallConfigRead {
 }
 
 function Write-InstallTraceTail {
-  $tracePath = 'C:\Windows\Temp\sem_land_gui_install_trace.log'
+  $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
   if (-not (Test-Path -LiteralPath $tracePath)) { return }
   try {
     $tail = @(Get-Content -LiteralPath $tracePath -ErrorAction Stop | Select-Object -Last 6)
@@ -219,8 +229,8 @@ Write-InteractiveSessionDiagnostics -ProfileUser $profileUser -Session $session
 Remove-StaleLandGuiInstallTasks
 
 $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$configPath = "C:\Windows\Temp\sem_land_install_cfg_$ts.json"
-$outFile = "C:\Windows\Temp\sem_land_install_$ts.log"
+$configPath = Join-Path $script:SemLandTempDir "sem_land_install_cfg_$ts.json"
+$outFile = Join-Path $script:SemLandTempDir "sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
 
 $config = [ordered]@{
@@ -250,7 +260,7 @@ try {
 
 Write-Output "INSTALL_SCHEDULED|task=$taskName|user=$profileUser|installer=$installerPath|config=$configPath|log=$outFile"
 
-$helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
+$helper = Join-Path $script:SemLandTempDir 'sem_land_gui_installer_worker.ps1'
 if (-not (Test-Path -LiteralPath $helper)) {
   Write-Output "INSTALL_ERROR|reason=helper_missing|path=$helper"
   exit 1

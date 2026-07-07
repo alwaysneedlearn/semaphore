@@ -1,4 +1,5 @@
 # LAND GUI installer: launch installer exe and click through wizard buttons (interactive session).
+# Temp config/log/trace/lock files live alongside deployed scripts (C:\Windows\Temp\).
 param(
   [string]$ConfigFileArg = '',
   [string]$InstallerPathArg = '',
@@ -22,9 +23,20 @@ $ConfigFileArg = ($ConfigFileArg | ForEach-Object { $_ }).Trim().Trim('"')
 $LogFileArg = ($LogFileArg | ForEach-Object { $_ }).Trim().Trim('"')
 $InstallerPathArg = ($InstallerPathArg | ForEach-Object { $_ }).Trim().Trim('"')
 
+function Resolve-SemLandScriptTempDir {
+  if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
+    return $PSScriptRoot
+  }
+  return 'C:\Windows\Temp'
+}
+
+$script:SemLandTempDir = Resolve-SemLandScriptTempDir
+$script:SemLandTraceLogPath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
+$script:SemLandWorkerLockPath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_worker.lock'
+
 try {
-  $traceLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_INVOKED|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg|log=$LogFileArg"
-  Add-Content -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_trace.log' -Value $traceLine -Encoding UTF8 -ErrorAction SilentlyContinue
+  $traceLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_INVOKED|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg|log=$LogFileArg|temp_dir=$($script:SemLandTempDir)"
+  Add-Content -LiteralPath $script:SemLandTraceLogPath -Value $traceLine -Encoding UTF8 -ErrorAction SilentlyContinue
 } catch { }
 
 function Resolve-LandInstallLogFromConfigPath {
@@ -32,7 +44,7 @@ function Resolve-LandInstallLogFromConfigPath {
   if ([string]::IsNullOrWhiteSpace($ConfigPath)) { return '' }
   if ($ConfigPath -match 'sem_land_install_cfg_(\d+)\.json$') {
     $ts = $Matches[1]
-    return "C:\Windows\Temp\sem_land_install_$ts.log"
+    return (Join-Path $script:SemLandTempDir "sem_land_install_$ts.log")
   }
   return ''
 }
@@ -49,7 +61,7 @@ function Write-LandInstallBootstrapLine {
     }
   } catch {
     try {
-      Add-Content -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_trace.log' -Value "$out|log_write_failed=$($_.Exception.Message)" -Encoding UTF8
+      Add-Content -LiteralPath $script:SemLandTraceLogPath -Value "$out|log_write_failed=$($_.Exception.Message)" -Encoding UTF8
     } catch { }
   }
 }
@@ -144,7 +156,7 @@ if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and $derivedLogPath) {
 if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
   $err = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] INSTALL_ERROR|reason=missing_config_and_log_args|hint=scheduled_task_argv_lost"
   try {
-    Add-Content -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_trace.log' -Value $err -Encoding UTF8
+    Add-Content -LiteralPath $script:SemLandTraceLogPath -Value $err -Encoding UTF8
   } catch { }
   Write-Output $err
   exit 1
@@ -991,7 +1003,7 @@ function Get-LandInstallProgressPath {
   $hash = [System.BitConverter]::ToString(
     [System.Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($InstallerPath.ToLowerInvariant()))
   ).Replace('-', '').Substring(0, 16)
-  return "C:\Windows\Temp\sem_land_install_progress_$hash.json"
+  return (Join-Path $script:SemLandTempDir "sem_land_install_progress_$hash.json")
 }
 
 function Read-LandInstallProgress {
@@ -1075,7 +1087,7 @@ if ([string]::IsNullOrWhiteSpace($workDir)) {
 }
 
 $script:landInstallerPid = 0
-$workerLockPath = 'C:\Windows\Temp\sem_land_gui_install_worker.lock'
+$workerLockPath = $script:SemLandWorkerLockPath
 
 function Read-LandWorkerLock {
   if (-not (Test-Path -LiteralPath $workerLockPath)) { return $null }
