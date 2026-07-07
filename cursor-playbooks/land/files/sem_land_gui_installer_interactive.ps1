@@ -135,15 +135,30 @@ function Grant-LandInstallTempFileAccess {
   } catch { }
 }
 
-function Get-LandGuiWorkerCommandLine {
-  param([string]$WorkerPath)
-  # Task Scheduler cannot pass -ConfigFileArg reliably; worker reads sem_land_install_active.json.
-  $psArgList = @(
-    '-NoProfile',
-    '-ExecutionPolicy', 'Bypass',
-    '-File', $WorkerPath
+function New-LandInstallTaskBat {
+  param(
+    [string]$Timestamp,
+    [string]$WorkerPath,
+    [string]$ConfigPath,
+    [string]$LogPath
   )
-  return ($psArgList -join ' ')
+  $batPath = Join-Path $script:SemLandTempDir "sem_land_install_run_$Timestamp.bat"
+  $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
+  $content = @"
+@echo off
+echo BAT_START|ts=$Timestamp>>"$tracePath"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$WorkerPath" -ConfigFileArg "$ConfigPath" -LogFileArg "$LogPath"
+set RC=%ERRORLEVEL%
+echo BAT_END|ts=$Timestamp|rc=%RC%>>"$tracePath"
+exit /b %RC%
+"@
+  $content | Out-File -LiteralPath $batPath -Encoding ASCII -Force
+  return $batPath
+}
+
+function Get-LandInstallTaskCmdLine {
+  param([string]$BatPath)
+  return "/c `"$BatPath`""
 }
 
 function Grant-LandInstallConfigRead {
@@ -195,7 +210,7 @@ function Test-InstallWorkerStarted {
   } catch {
     return $false
   }
-  return ($text -match 'INSTALL_WORKER_BOOT\b')
+  return ($text -match 'INSTALL_WORKER_BOOT\b|INSTALL_WORKER_START\b|WORKER_LINE0\b')
 }
 
 function Write-InstallLogTail {
@@ -246,6 +261,7 @@ $configPath = Join-Path $script:SemLandTempDir "sem_land_install_cfg_$ts.json"
 $outFile = Join-Path $script:SemLandTempDir "sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
 $activePath = Get-SemLandInstallActivePath
+$batPath = $null
 
 $config = [ordered]@{
   installer_path = $installerPath
@@ -289,15 +305,25 @@ if (-not (Test-Path -LiteralPath $helper)) {
   exit 1
 }
 
-$psArgs = Get-LandGuiWorkerCommandLine -WorkerPath $helper
-Write-Output "INSTALL_TASK_CMD|$psArgs"
 try {
-  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
+  $batPath = New-LandInstallTaskBat -Timestamp $ts -WorkerPath $helper -ConfigPath $configPath -LogPath $outFile
+  Grant-LandInstallTempFileAccess -Path $batPath -Rights 'R'
+} catch {
+  Write-Output "INSTALL_ERROR|reason=task_bat_write_failed|msg=$($_.Exception.Message)"
+  exit 1
+}
+
+$taskCmd = Get-LandInstallTaskCmdLine -BatPath $batPath
+Write-Output "INSTALL_TASK_CMD|cmd.exe $taskCmd"
+Write-Output "INSTALL_TASK_BAT|path=$batPath"
+try {
+  $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $taskCmd
   $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
   $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile|active=$activePath"
+  Start-ScheduledTask -TaskName $taskName
+  Write-Output "INTERACTIVE_INSTALL_TASK|name=$taskName|user=$profileUser|config=$configPath|log=$outFile|bat=$batPath"
 } catch {
   Write-Output "INSTALL_ERROR|reason=scheduled_task_create_failed|msg=$($_.Exception.Message)"
   exit 1
@@ -352,6 +378,9 @@ if (-not $workerStarted) {
   } else {
     Write-Output 'INSTALL_TASK_BOOT_TIMEOUT|last_result=unknown'
   }
+  if (Test-Path -LiteralPath $batPath) {
+    Write-Output "INSTALL_TASK_BAT_EXISTS|path=$batPath"
+  }
   if (Test-Path -LiteralPath $activePath) {
     Write-Output "INSTALL_ACTIVE_EXISTS|path=$activePath"
   }
@@ -388,6 +417,9 @@ try {
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $activePath -Force -ErrorAction SilentlyContinue
+  if ($batPath) {
+    Remove-Item -LiteralPath $batPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 if ((Get-InstallLogTerminalStatus -Path $outFile) -eq 'complete') {
