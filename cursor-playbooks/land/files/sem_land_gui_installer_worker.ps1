@@ -72,6 +72,18 @@ $ConfigFileArg = $activeResolved.ConfigFileArg
 $LogFileArg = $activeResolved.LogFileArg
 $activeResolvedOk = $activeResolved.ok
 
+if (-not [string]::IsNullOrWhiteSpace($LogFileArg)) {
+  $script:LogFileArg = $LogFileArg.Trim().Trim('"')
+  try {
+    $line0 = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_LINE0|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg"
+    Set-Content -LiteralPath $script:LogFileArg -Value $line0 -Encoding UTF8 -ErrorAction Stop
+  } catch {
+    try {
+      Add-Content -LiteralPath $script:SemLandTraceLogPath -Value "WORKER_LINE0_FAILED|msg=$($_.Exception.Message)" -Encoding UTF8
+    } catch { }
+  }
+}
+
 try {
   $traceLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] WORKER_INVOKED|pid=$PID|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=$ConfigFileArg|log=$LogFileArg|active=$activeResolvedOk|temp_dir=$($script:SemLandTempDir)"
   Add-Content -LiteralPath $script:SemLandTraceLogPath -Value $traceLine -Encoding UTF8 -ErrorAction Stop
