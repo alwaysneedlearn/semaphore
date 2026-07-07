@@ -318,19 +318,55 @@ public class SemaphoreLandGuiInstaller {
         return count;
     }
 
+    public static bool IsWpfHwndWrapper(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero) { return false; }
+        string cls = GetClassNameText(hwnd);
+        return cls.StartsWith("HwndWrapper", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsStandardDialogClass(IntPtr hwnd) {
+        if (hwnd == IntPtr.Zero) { return false; }
+        return string.Equals(GetClassNameText(hwnd), "#32770", StringComparison.Ordinal);
+    }
+
+    public static int ScoreWizardWindow(IntPtr hWnd, string titlePart) {
+        if (hWnd == IntPtr.Zero) { return -1; }
+        string title = GetControlText(hWnd);
+        string className = GetClassNameText(hWnd);
+        int score = 0;
+        if (string.Equals(title, titlePart, StringComparison.Ordinal)) {
+            score += 120;
+        } else if (TitleMatches(title, titlePart)) {
+            score += 60;
+        } else {
+            return -1;
+        }
+        if (IsStandardDialogClass(hWnd)) {
+            score += 200;
+        } else if (IsWpfHwndWrapper(hWnd)) {
+            score += 30;
+        }
+        if (!string.IsNullOrEmpty(titlePart) && titlePart.Length <= 6 && IsStandardDialogClass(hWnd)) {
+            score += 150;
+        }
+        int descendants = CountDescendants(hWnd);
+        if (descendants > 0) {
+            score += Math.Min(descendants, 15);
+        }
+        return score;
+    }
+
     public static IntPtr FindWizardWindow(string titlePart) {
         IntPtr best = IntPtr.Zero;
         int bestScore = -1;
         EnumWindows((hWnd, lParam) => {
             if (!IsWindowVisible(hWnd)) { return true; }
-            string title = GetControlText(hWnd);
-            if (!TitleMatches(title, titlePart)) { return true; }
             if (InstallerProcessId != 0) {
                 uint pid;
                 GetWindowThreadProcessId(hWnd, out pid);
                 if (pid != InstallerProcessId) { return true; }
             }
-            int score = CountDescendants(hWnd);
+            int score = ScoreWizardWindow(hWnd, titlePart);
             if (score > bestScore) {
                 bestScore = score;
                 best = hWnd;
@@ -345,7 +381,9 @@ public class SemaphoreLandGuiInstaller {
             uint pid;
             GetWindowThreadProcessId(hWnd, out pid);
             if (pid != InstallerProcessId) { return true; }
-            int score = CountDescendants(hWnd);
+            string title = GetControlText(hWnd);
+            if (!TitleMatches(title, titlePart)) { return true; }
+            int score = ScoreWizardWindow(hWnd, titlePart);
             if (score > bestScore) {
                 bestScore = score;
                 best = hWnd;
@@ -478,7 +516,11 @@ public class SemaphoreLandGuiInstaller {
         if (HasVisibleButtonText(hwnd, "升级")) { return false; }
         if (HasVisibleButtonText(hwnd, "卸载")) { return false; }
         if (HasVisibleButtonText(hwnd, "确定")) { return true; }
-        return CountVisibleButtons(hwnd) == 1;
+        int btnCount = CountVisibleButtons(hwnd);
+        if (btnCount == 1) { return true; }
+        // WPF HwndWrapper installers often expose no child HWNDs; coord fallback is authoritative.
+        if (btnCount == 0 && IsWpfHwndWrapper(hwnd)) { return true; }
+        return false;
     }
 
     public static IntPtr FindLastVisibleButton(IntPtr parent) {
@@ -555,6 +597,7 @@ public class SemaphoreLandGuiInstaller {
             }
             SetForegroundWindow(hwnd);
             string wizardClass = GetClassNameText(hwnd);
+            bool wpfEmptyTree = IsWpfHwndWrapper(hwnd) && CountDescendants(hwnd) == 0;
             if (RequireFinalWizardScreen && !IsFinalInstallWizardReady(hwnd)) {
                 string scan = ScanWindowTree(hwnd, 12);
                 detail = "wizard_not_final|title=" + GetControlText(hwnd) + "|buttons=" + CountVisibleButtons(hwnd) + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
@@ -564,6 +607,11 @@ public class SemaphoreLandGuiInstaller {
             string clickMode = "text_match";
             if (btn == IntPtr.Zero) {
                 string scan = ScanWindowTree(hwnd, 20);
+                if (RequireFinalWizardScreen && wpfEmptyTree && FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
+                    string coordDetail = ClickWindowAtPercent(hwnd, FallbackCoordXPct, FallbackCoordYPct);
+                    detail = "coord_click|wizard_class=" + wizardClass + "|mode=wpf_final|" + coordDetail + "|scan=(empty_tree)";
+                    return true;
+                }
                 if (FallbackCoordXPct > 0 && FallbackCoordYPct > 0) {
                     string coordDetail = ClickWindowAtPercent(hwnd, FallbackCoordXPct, FallbackCoordYPct);
                     detail = "coord_click|wizard_class=" + wizardClass + "|" + coordDetail + "|scan=" + (string.IsNullOrEmpty(scan) ? "(empty_tree)" : scan);
@@ -728,6 +776,81 @@ function Set-LandInstallerProcessId {
   Write-InstallLine "INSTALLER_PID_RESOLVED|pid=$($script:landInstallerPid)|path=$LiteralPath"
 }
 
+function Get-LandInstallProgressPath {
+  param([string]$InstallerPath)
+  $hash = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($InstallerPath.ToLowerInvariant()))
+  ).Replace('-', '').Substring(0, 16)
+  return "C:\Windows\Temp\sem_land_install_progress_$hash.json"
+}
+
+function Read-LandInstallProgress {
+  param([string]$InstallerPath)
+  $path = Get-LandInstallProgressPath -InstallerPath $InstallerPath
+  if (-not (Test-Path -LiteralPath $path)) { return 0 }
+  try {
+    $raw = Get-Content -LiteralPath $path -Raw -Encoding UTF8 -ErrorAction Stop
+    $obj = $raw | ConvertFrom-Json -ErrorAction Stop
+    if ([string]$obj.installer_path -ine $InstallerPath) { return 0 }
+    return [int]$obj.last_step_done
+  } catch {
+    return 0
+  }
+}
+
+function Write-LandInstallProgress {
+  param([string]$InstallerPath, [int]$Step)
+  $path = Get-LandInstallProgressPath -InstallerPath $InstallerPath
+  $payload = [ordered]@{
+    installer_path = $InstallerPath
+    last_step_done = $Step
+    updated = (Get-Date).ToString('o')
+  }
+  try {
+    ($payload | ConvertTo-Json -Compress) | Out-File -LiteralPath $path -Encoding UTF8 -Force -ErrorAction Stop
+  } catch { }
+}
+
+function Clear-LandInstallProgress {
+  param([string]$InstallerPath)
+  $path = Get-LandInstallProgressPath -InstallerPath $InstallerPath
+  try {
+    Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+  } catch { }
+}
+
+function Get-LastCompletedInstallStep {
+  param([string]$LogPath, [string]$InstallerPath)
+  $fromProgress = Read-LandInstallProgress -InstallerPath $InstallerPath
+  if ($fromProgress -gt 0) { return $fromProgress }
+  if ([string]::IsNullOrWhiteSpace($LogPath)) { return 0 }
+  if (-not (Test-Path -LiteralPath $LogPath)) { return 0 }
+  $last = 0
+  try {
+    $lines = @(Get-Content -LiteralPath $LogPath -ErrorAction Stop)
+  } catch {
+    return 0
+  }
+  foreach ($line in $lines) {
+    if ([string]$line -match 'INSTALL_STEP_DONE\|step=(\d+)') {
+      $n = [int]$Matches[1]
+      if ($n -gt $last) { $last = $n }
+    }
+  }
+  return $last
+}
+
+function Test-PromptDialogVisible {
+  try {
+    $hwnd = [SemaphoreLandGuiInstaller]::FindWizardWindow($dlg2Title)
+    if ($hwnd -eq [IntPtr]::Zero) { return $false }
+    $cls = [SemaphoreLandGuiInstaller]::GetClassNameText($hwnd)
+    return ($cls -eq '#32770')
+  } catch {
+    return $false
+  }
+}
+
 function Test-InstallerProcessRunning {
   param([string]$LiteralPath)
   $name = [System.IO.Path]::GetFileName($LiteralPath)
@@ -779,9 +902,22 @@ Write-LandWorkerLock -LogFile $LogFileArg
 
 try {
 
+$installerAlreadyRunning = Test-InstallerProcessRunning -LiteralPath $installerPath
+$resumeFromStep = 0
+if ($installerAlreadyRunning) {
+  $resumeFromStep = Get-LastCompletedInstallStep -LogPath $LogFileArg -InstallerPath $installerPath
+  if ($resumeFromStep -lt 2 -and (Test-PromptDialogVisible)) {
+    $resumeFromStep = 1
+  }
+  if ($resumeFromStep -gt 0) {
+    Write-InstallLine "INSTALL_RESUME|from_step=$($resumeFromStep + 1)|reason=installer_already_running"
+  }
+}
+
 Write-InstallLine "INSTALL_START|path=$installerPath|workdir=$workDir|session=interactive"
 
-if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
+if (-not $installerAlreadyRunning) {
+  Clear-LandInstallProgress -InstallerPath $installerPath
   if (-not (Start-LandInstallerGui -LiteralPath $installerPath -WorkDir $workDir)) {
     exit 1
   }
@@ -794,14 +930,26 @@ if (-not (Test-InstallerProcessRunning -LiteralPath $installerPath)) {
   Set-LandInstallerProcessId -LiteralPath $installerPath
 }
 
-if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY)) {
-  Write-InstallLine 'INSTALL_FAILED|step=1'
-  exit 1
+if ($resumeFromStep -lt 1) {
+  if (-not (Wait-Click-LandDialog -TitlePart $dlg1Title -ButtonText $dlg1Button -TimeoutSec $stepTimeout -CoordXPct $dlg1CoordX -CoordYPct $dlg1CoordY)) {
+    Write-InstallLine 'INSTALL_FAILED|step=1'
+    exit 1
+  }
+  Write-InstallLine 'INSTALL_STEP_DONE|step=1'
+  Write-LandInstallProgress -InstallerPath $installerPath -Step 1
+} else {
+  Write-InstallLine 'INSTALL_STEP_SKIP|step=1|reason=resume'
 }
 
-if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY)) {
-  Write-InstallLine 'INSTALL_FAILED|step=2'
-  exit 1
+if ($resumeFromStep -lt 2) {
+  if (-not (Wait-Click-LandDialog -TitlePart $dlg2Title -ButtonText $dlg2Button -TimeoutSec $stepTimeout -CoordXPct $dlg2CoordX -CoordYPct $dlg2CoordY)) {
+    Write-InstallLine 'INSTALL_FAILED|step=2'
+    exit 1
+  }
+  Write-InstallLine 'INSTALL_STEP_DONE|step=2'
+  Write-LandInstallProgress -InstallerPath $installerPath -Step 2
+} else {
+  Write-InstallLine 'INSTALL_STEP_SKIP|step=2|reason=resume'
 }
 
 Write-InstallLine "INSTALL_WAIT_DIALOG|title_part=$dlg3Title|mode=final_single_button"
@@ -809,8 +957,11 @@ if (-not (Wait-Click-LandDialog -TitlePart $dlg3Title -ButtonText $dlg3Button -T
   Write-InstallLine 'INSTALL_FAILED|step=3'
   exit 1
 }
+Write-InstallLine 'INSTALL_STEP_DONE|step=3'
+Write-LandInstallProgress -InstallerPath $installerPath -Step 3
 
 Write-InstallLine 'INSTALL_COMPLETE'
+Clear-LandInstallProgress -InstallerPath $installerPath
 exit 0
 } finally {
   Remove-LandWorkerLock

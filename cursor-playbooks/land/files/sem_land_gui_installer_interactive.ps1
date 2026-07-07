@@ -337,21 +337,26 @@ function Wait-LandGuiInstallFromExistingWorker {
   return $false
 }
 
-function Test-InstallLogTerminalLine {
+function Get-InstallLogTerminalStatus {
   param([string]$Path)
-  if (-not (Test-Path -LiteralPath $Path)) { return $false }
+  if (-not (Test-Path -LiteralPath $Path)) { return 'pending' }
   try {
     $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
   } catch {
-    return $false
+    return 'pending'
   }
-  foreach ($line in $lines) {
-    $t = ([string]$line).Trim()
-    if ($t -match '(INSTALL_COMPLETE|INSTALL_FAILED|INSTALL_ERROR)\b') {
-      return $true
-    }
+  for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+    $t = ([string]$lines[$i]).Trim()
+    if ($t -match '\bINSTALL_COMPLETE\b') { return 'complete' }
+    if ($t -match '\bINSTALL_FAILED\b') { return 'failed' }
+    if ($t -match '\bINSTALL_ERROR\b') { return 'failed' }
   }
-  return $false
+  return 'pending'
+}
+
+function Test-InstallLogTerminalLine {
+  param([string]$Path)
+  return (Get-InstallLogTerminalStatus -Path $Path) -ne 'pending'
 }
 
 function Test-InstallWorkerStarted {
@@ -490,7 +495,7 @@ if ($existingLock -and $existingLock.pid -gt 0) {
     Write-Output "INSTALL_ALREADY_RUNNING|pid=$($existingLock.pid)|log=$($existingLock.log)|action=wait_existing_worker"
     $outFile = if ($existingLock.log) { $existingLock.log } else { $outFile }
     if (Wait-LandGuiInstallFromExistingWorker -LogPath $outFile -TimeoutSec $timeoutSec) {
-      if ((Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue | Out-String) -match 'INSTALL_COMPLETE') { exit 0 }
+      if ((Get-InstallLogTerminalStatus -Path $outFile) -eq 'complete') { exit 0 }
     }
     Write-Output 'INSTALL_ERROR|reason=existing_worker_no_complete'
     exit 1
@@ -646,7 +651,8 @@ try {
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
 }
 
-if ((Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue | Out-String) -match 'INSTALL_COMPLETE') {
+$terminalStatus = Get-InstallLogTerminalStatus -Path $outFile
+if ($terminalStatus -eq 'complete') {
   exit 0
 }
 exit 1
