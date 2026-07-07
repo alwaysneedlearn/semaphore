@@ -118,27 +118,69 @@ function Remove-StaleLandGuiInstallTasks {
   }
 }
 
-function Get-LandGuiWorkerCommandLine {
-  param([string]$ConfigPath, [string]$LogPath)
+function Get-LandGuiInstallJobScriptPath {
+  param([string]$Timestamp)
+  return (Join-Path $script:SemLandTempDir "sem_land_install_job_$Timestamp.ps1")
+}
+
+function New-LandGuiInstallJobScript {
+  param(
+    [string]$Timestamp,
+    [string]$ConfigPath,
+    [string]$LogPath
+  )
+  $jobPath = Get-LandGuiInstallJobScriptPath -Timestamp $Timestamp
   $helper = Join-Path $script:SemLandTempDir 'sem_land_gui_installer_worker.ps1'
-  # Match stop-script arg join: pass LogFileArg on CLI (scheduled task does not inherit parent env).
+  $tracePath = Join-Path $script:SemLandTempDir 'sem_land_gui_install_trace.log'
+  $jobContent = @"
+`$ErrorActionPreference = 'Continue'
+`$tracePath = '$tracePath'
+`$helper = '$helper'
+`$configPath = '$ConfigPath'
+`$logPath = '$LogPath'
+try {
+  Add-Content -LiteralPath `$tracePath -Value "[`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] JOB_START|pid=`$PID|user=`$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)|config=`$configPath|log=`$logPath" -Encoding UTF8
+} catch { }
+if (-not (Test-Path -LiteralPath `$helper)) {
+  try {
+    Add-Content -LiteralPath `$tracePath -Value "JOB_ERROR|reason=helper_missing|path=`$helper" -Encoding UTF8
+  } catch { }
+  exit 1
+}
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File `$helper -ConfigFileArg `$configPath -LogFileArg `$logPath
+exit `$LASTEXITCODE
+"@
+  $jobContent | Out-File -LiteralPath $jobPath -Encoding ASCII -Force
+  return $jobPath
+}
+
+function Grant-LandInstallTempFileAccess {
+  param([string]$Path, [string]$Rights = 'R')
+  if ([string]::IsNullOrWhiteSpace($Path)) { return }
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+  try {
+    if ($Rights -eq 'M') {
+      & icacls.exe $Path /grant 'Users:(M)' /grant 'Everyone:(M)' 2>$null | Out-Null
+    } else {
+      & icacls.exe $Path /grant 'Users:(R)' /grant 'Everyone:(R)' 2>$null | Out-Null
+    }
+  } catch { }
+}
+
+function Get-LandGuiWorkerCommandLine {
+  param([string]$JobPath)
+  # Task Scheduler is unreliable with many quoted args; run a generated job script only.
   $psArgList = @(
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
-    '-File', "`"$helper`"",
-    '-ConfigFileArg', "`"$ConfigPath`"",
-    '-LogFileArg', "`"$LogPath`""
+    '-File', $JobPath
   )
   return ($psArgList -join ' ')
 }
 
 function Grant-LandInstallConfigRead {
   param([string]$ConfigPath)
-  if ([string]::IsNullOrWhiteSpace($ConfigPath)) { return }
-  if (-not (Test-Path -LiteralPath $ConfigPath)) { return }
-  try {
-    & icacls.exe $ConfigPath /grant 'Users:(R)' /grant 'Everyone:(R)' 2>$null | Out-Null
-  } catch { }
+  Grant-LandInstallTempFileAccess -Path $ConfigPath -Rights 'R'
 }
 
 function Write-InstallTraceTail {
@@ -232,6 +274,7 @@ $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $configPath = Join-Path $script:SemLandTempDir "sem_land_install_cfg_$ts.json"
 $outFile = Join-Path $script:SemLandTempDir "sem_land_install_$ts.log"
 $taskName = "LandGuiInstall-$ts"
+$jobPath = $null
 
 $config = [ordered]@{
   installer_path = $installerPath
@@ -253,6 +296,8 @@ $config = [ordered]@{
 try {
   ($config | ConvertTo-Json -Compress) | Out-File -LiteralPath $configPath -Encoding UTF8 -Force
   Grant-LandInstallConfigRead -ConfigPath $configPath
+  '' | Out-File -LiteralPath $outFile -Encoding UTF8 -Force
+  Grant-LandInstallTempFileAccess -Path $outFile -Rights 'M'
 } catch {
   Write-Output "INSTALL_ERROR|reason=config_write_failed|msg=$($_.Exception.Message)"
   exit 1
@@ -266,12 +311,22 @@ if (-not (Test-Path -LiteralPath $helper)) {
   exit 1
 }
 
-$psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $configPath -LogPath $outFile
+$jobPath = $null
+try {
+  $jobPath = New-LandGuiInstallJobScript -Timestamp $ts -ConfigPath $configPath -LogPath $outFile
+  Grant-LandInstallTempFileAccess -Path $jobPath -Rights 'R'
+} catch {
+  Write-Output "INSTALL_ERROR|reason=job_script_write_failed|msg=$($_.Exception.Message)"
+  exit 1
+}
+
+$psArgs = Get-LandGuiWorkerCommandLine -JobPath $jobPath
 Write-Output "INSTALL_TASK_CMD|$psArgs"
+Write-Output "INSTALL_JOB_SCRIPT|path=$jobPath"
 try {
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
   $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
-  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances Queue
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
   $principal = New-ScheduledTaskPrincipal -UserId $profileUser -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
   Start-ScheduledTask -TaskName $taskName
@@ -284,7 +339,9 @@ try {
 $bootDeadline = (Get-Date).AddSeconds(90)
 $earlyLineCount = 0
 $workerStarted = $false
+$taskInfo = $null
 do {
+  Start-Sleep -Seconds 1
   Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
   if (Test-InstallWorkerStarted -Path $outFile) {
     $workerStarted = $true
@@ -298,14 +355,17 @@ do {
       Write-Output 'INSTALL_TASK_HINT|code=0x800710E0|meaning=用户未在交互桌面登录或UAC/策略拒绝'
       break
     }
-    $taskState = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State
-    if ($taskState -and $taskState -ne 'Running' -and $taskInfo.LastTaskResult -ne 267009) {
-      Write-Output "INSTALL_TASK_EARLY_EXIT|state=$taskState|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex"
-      break
-    }
   }
-  Start-Sleep -Seconds 1
 } while ((Get-Date) -lt $bootDeadline)
+
+if (-not $workerStarted) {
+  Start-Sleep -Seconds 2
+  Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
+  if (Test-InstallWorkerStarted -Path $outFile) {
+    $workerStarted = $true
+    Write-Output 'INSTALL_WORKER_BOOT_OK'
+  }
+}
 
 if (-not $workerStarted) {
   Write-InstallLogTail -Path $outFile -LastLineCount ([ref]$earlyLineCount)
@@ -320,12 +380,20 @@ if (-not $workerStarted) {
   Write-InstallTraceTail
   if ($taskInfo) {
     $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
-    Write-Output "INSTALL_TASK_BOOT_TIMEOUT|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex"
+    $taskState = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State
+    Write-Output "INSTALL_TASK_BOOT_TIMEOUT|state=$taskState|last_result=$($taskInfo.LastTaskResult)|last_result_hex=0x$lastHex"
   } else {
     Write-Output 'INSTALL_TASK_BOOT_TIMEOUT|last_result=unknown'
   }
+  if ($jobPath -and (Test-Path -LiteralPath $jobPath)) {
+    Write-Output "INSTALL_JOB_SCRIPT_EXISTS|path=$jobPath"
+  }
+  if (Test-Path -LiteralPath $configPath) {
+    Write-Output "INSTALL_CONFIG_EXISTS|path=$configPath"
+  }
   Write-Output 'INSTALL_ERROR|reason=worker_never_booted'
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+  Remove-Item -LiteralPath $jobPath -Force -ErrorAction SilentlyContinue
   exit 1
 }
 
@@ -353,6 +421,9 @@ try {
 } finally {
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
   Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue
+  if ($jobPath) {
+    Remove-Item -LiteralPath $jobPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 if ((Get-InstallLogTerminalStatus -Path $outFile) -eq 'complete') {
