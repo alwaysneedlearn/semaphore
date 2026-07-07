@@ -37,14 +37,28 @@ function Write-LandInstallBootstrapLine {
     } else {
       $out | Out-File -LiteralPath $Path -Encoding UTF8 -Force -ErrorAction Stop
     }
-  } catch { }
+  } catch {
+    try {
+      Add-Content -LiteralPath 'C:\Windows\Temp\sem_land_gui_install_trace.log' -Value "$out|log_write_failed=$($_.Exception.Message)" -Encoding UTF8
+    } catch { }
+  }
 }
 
 $script:LogFileArg = ''
+$script:InstallerPathArg = ''
+if (-not [string]::IsNullOrWhiteSpace($LogFileArg)) {
+  $script:LogFileArg = $LogFileArg.Trim().Trim('"')
+}
+if (-not [string]::IsNullOrWhiteSpace($InstallerPathArg)) {
+  $script:InstallerPathArg = $InstallerPathArg.Trim().Trim('"')
+}
+
 $derivedLogPath = Resolve-LandInstallLogFromConfigPath -ConfigPath $ConfigFileArg
-if ($derivedLogPath) {
+if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and $derivedLogPath) {
   $script:LogFileArg = $derivedLogPath
-  Write-LandInstallBootstrapLine -Path $derivedLogPath -Line "INSTALL_WORKER_START|config=$ConfigFileArg"
+}
+if ($script:LogFileArg) {
+  Write-LandInstallBootstrapLine -Path $script:LogFileArg -Line "INSTALL_WORKER_START|config=$ConfigFileArg|user=$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
 }
 
 function Write-InstallLine {
@@ -90,7 +104,10 @@ function Initialize-LandInstallFromConfig {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
-  if (Initialize-LandInstallFromConfig -Path $ConfigFileArg) {
+  if (-not (Initialize-LandInstallFromConfig -Path $ConfigFileArg)) {
+    $cfgExists = Test-Path -LiteralPath $ConfigFileArg
+    Write-LandInstallBootstrapLine -Path $script:LogFileArg -Line "INSTALL_WARN|reason=config_load_failed|path=$ConfigFileArg|exists=$cfgExists"
+  } else {
     $InstallerPathArg = $script:InstallerPathArg
     $LogFileArg = $script:LogFileArg
     $Dlg1TitleArg = $script:Dlg1TitleArg
@@ -128,6 +145,9 @@ if (-not [string]::IsNullOrWhiteSpace($script:LogFileArg)) {
 }
 
 $installerPath = $InstallerPathArg
+if ([string]::IsNullOrWhiteSpace($installerPath)) {
+  $installerPath = $script:InstallerPathArg
+}
 if ([string]::IsNullOrWhiteSpace($installerPath)) {
   $installerPath = [string]$env:LAND_INSTALLER_EXE_PATH
 }
