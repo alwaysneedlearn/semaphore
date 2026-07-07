@@ -18,6 +18,35 @@ param(
   [string]$Dlg3CoordYPct = '93'
 )
 
+function Resolve-LandInstallLogFromConfigPath {
+  param([string]$ConfigPath)
+  if ([string]::IsNullOrWhiteSpace($ConfigPath)) { return '' }
+  if ($ConfigPath -match 'sem_land_install_cfg_(\d+)\.json$') {
+    return "C:\Windows\Temp\sem_land_install_$($Matches[1]).log"
+  }
+  return ''
+}
+
+function Write-LandInstallBootstrapLine {
+  param([string]$Path, [string]$Line)
+  if ([string]::IsNullOrWhiteSpace($Path)) { return }
+  $out = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Line"
+  try {
+    if (Test-Path -LiteralPath $Path) {
+      Add-Content -LiteralPath $Path -Value $out -Encoding UTF8 -ErrorAction Stop
+    } else {
+      $out | Out-File -LiteralPath $Path -Encoding UTF8 -Force -ErrorAction Stop
+    }
+  } catch { }
+}
+
+$script:LogFileArg = ''
+$derivedLogPath = Resolve-LandInstallLogFromConfigPath -ConfigPath $ConfigFileArg
+if ($derivedLogPath) {
+  $script:LogFileArg = $derivedLogPath
+  Write-LandInstallBootstrapLine -Path $derivedLogPath -Line "INSTALL_WORKER_START|config=$ConfigFileArg"
+}
+
 function Write-InstallLine {
   param([string]$Line)
   $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
@@ -78,6 +107,11 @@ if (-not [string]::IsNullOrWhiteSpace($ConfigFileArg)) {
     $Dlg3CoordXPct = $script:Dlg3CoordXPct
     $Dlg3CoordYPct = $script:Dlg3CoordYPct
   }
+}
+
+if ([string]::IsNullOrWhiteSpace($script:LogFileArg) -and $derivedLogPath) {
+  $script:LogFileArg = $derivedLogPath
+  $LogFileArg = $derivedLogPath
 }
 
 if (-not [string]::IsNullOrWhiteSpace($script:LogFileArg)) {

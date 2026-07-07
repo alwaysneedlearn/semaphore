@@ -168,6 +168,31 @@ function Get-LandSchTasksTrArgument {
   return "`"$escaped`""
 }
 
+function Get-LandSchTasksScheduleDateTime {
+  $culture = [System.Globalization.CultureInfo]::InvariantCulture
+  $runAt = (Get-Date).AddSeconds(8)
+  return @{
+    start_time = $runAt.ToString('HH:mm', $culture)
+    start_date = $runAt.ToString('yyyy/MM/dd', $culture)
+  }
+}
+
+function Get-LandPowerShellExePath {
+  $sys = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  if (Test-Path -LiteralPath $sys) { return $sys }
+  return 'powershell.exe'
+}
+
+function Get-LandScheduledTaskPrincipalCandidates {
+  param([string]$ProfileUser, [string]$ShortName)
+  $list = New-Object System.Collections.Generic.List[string]
+  foreach ($c in @($ProfileUser, ".\$ShortName", $ShortName)) {
+    if ([string]::IsNullOrWhiteSpace($c)) { continue }
+    if (-not $list.Contains($c)) { $list.Add($c) | Out-Null }
+  }
+  return @($list)
+}
+
 function Start-LandGuiWorkerInUserSession {
   param(
     [int]$SessionId,
@@ -268,11 +293,12 @@ function Start-LandGuiInstallViaSchTasks {
     return @{ ok = $false; error = 'helper_missing' }
   }
   $tr = Get-LandSchTasksTrArgument -ConfigPath $ConfigPath
-  $st = (Get-Date).AddSeconds(5).ToString('HH:mm')
-  $sd = (Get-Date).ToString('MM/dd/yyyy')
+  $schedule = Get-LandSchTasksScheduleDateTime
+  $st = $schedule.start_time
+  $sd = $schedule.start_date
   $rl = if ($RunLevel -eq 'Highest') { 'HIGHEST' } else { 'LIMITED' }
   try {
-    Write-Output "INTERACTIVE_SCHTASKS_TR|task=$TaskName|tr=$tr"
+    Write-Output "INTERACTIVE_SCHTASKS_TR|task=$TaskName|tr=$tr|sd=$sd|st=$st"
     $createArgs = @(
       '/Create', '/F', '/TN', $TaskName,
       '/TR', $tr,
@@ -382,7 +408,7 @@ function Test-InstallWorkerStarted {
   } catch {
     return $false
   }
-  return ($text -match 'INSTALL_WORKER_BOOT\b')
+  return ($text -match 'INSTALL_WORKER_(BOOT|START)\b')
 }
 
 function Write-InstallLogTail {
@@ -399,6 +425,26 @@ function Write-InstallLogTail {
     }
     $LastLineCount.Value = $lines.Count
   }
+}
+
+function Write-InstallLogTailForDiagnostics {
+  param([string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) {
+    Write-Output "INSTALL_TASK_LOG_EMPTY|path=$Path"
+    return
+  }
+  try {
+    $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
+  } catch {
+    Write-Output "INSTALL_TASK_LOG_READ_FAILED|path=$Path|msg=$($_.Exception.Message)"
+    return
+  }
+  if ($lines.Count -eq 0) {
+    Write-Output "INSTALL_TASK_LOG_EMPTY|path=$Path"
+    return
+  }
+  $tail = $lines | Select-Object -Last 12
+  Write-Output ("INSTALL_TASK_LOG_TAIL|" + ($tail -join ' || '))
 }
 
 function Write-InstallBootstrapLog {
@@ -422,27 +468,36 @@ function Start-LandGuiInstallScheduledTask {
     [string]$ProfileUser,
     [string]$ConfigPath,
     [string]$LogPath,
-    [string]$RunLevel
+    [string]$RunLevel,
+    [string]$ProfileShort
   )
   $helper = 'C:\Windows\Temp\sem_land_gui_installer_worker.ps1'
   if (-not (Test-Path -LiteralPath $helper)) {
     return @{ ok = $false; error = 'helper_missing'; helper = $helper }
   }
 
+  $psExe = Get-LandPowerShellExePath
   $psArgs = Get-LandGuiWorkerCommandLine -ConfigPath $ConfigPath
-  try {
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
-    $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(2))
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances Queue
-    $principal = New-ScheduledTaskPrincipal -UserId $ProfileUser -LogonType Interactive -RunLevel $RunLevel
-    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-    Start-ScheduledTask -TaskName $TaskName
-    Start-Sleep -Seconds 2
-    Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$ProfileUser|run_level=$RunLevel|config=$ConfigPath|log=$LogPath"
-    return @{ ok = $true; error = '' }
-  } catch {
-    return @{ ok = $false; error = $_.Exception.Message }
+  $principalCandidates = Get-LandScheduledTaskPrincipalCandidates -ProfileUser $ProfileUser -ShortName $ProfileShort
+  $lastError = ''
+  foreach ($principalUser in $principalCandidates) {
+    try {
+      Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+      $action = New-ScheduledTaskAction -Execute $psExe -Argument $psArgs -WorkingDirectory 'C:\Windows\Temp'
+      $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(3))
+      $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances Queue
+      $principal = New-ScheduledTaskPrincipal -UserId $principalUser -LogonType Interactive -RunLevel $RunLevel
+      Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+      Start-ScheduledTask -TaskName $TaskName
+      Start-Sleep -Seconds 2
+      Write-Output "INTERACTIVE_INSTALL_TASK|name=$TaskName|user=$principalUser|run_level=$RunLevel|ps=$psExe|config=$ConfigPath|log=$LogPath"
+      return @{ ok = $true; error = '' }
+    } catch {
+      $lastError = $_.Exception.Message
+      Write-Output "INTERACTIVE_INSTALL_TASK_TRY|user=$principalUser|run_level=$RunLevel|error=$lastError"
+    }
   }
+  return @{ ok = $false; error = $lastError }
 }
 
 if ([string]::IsNullOrWhiteSpace($profileUserHint)) {
@@ -527,10 +582,11 @@ $lastStartError = ''
 $script:usedScheduledTaskName = ''
 $launchModes = @(
   @{ mode = 'scheduled_highest'; run_level = 'Highest' },
-  @{ mode = 'user_session_wts'; run_level = '' },
+  @{ mode = 'scheduled_limited'; run_level = 'Limited' },
   @{ mode = 'schtasks_highest'; run_level = 'Highest' },
   @{ mode = 'schtasks_limited'; run_level = 'Limited' }
 )
+Remove-LandGuiInstallWorkerLock
 foreach ($launch in $launchModes) {
   if ($started) { break }
   if ($launch.mode -ne 'scheduled_highest') {
@@ -545,18 +601,10 @@ foreach ($launch in $launchModes) {
   }
   $mode = [string]$launch.mode
   $runLevel = [string]$launch.run_level
-  if ($mode -eq 'user_session_wts') {
-    $result = Start-LandGuiWorkerInUserSession -SessionId $session.session_id -ConfigPath $configPath
-    if (-not $result.ok) {
-      $lastStartError = [string]$result.error
-      Write-Output "INSTALL_TASK_START_FAILED|mode=$mode|error=$lastStartError"
-      continue
-    }
-    $result = @{ ok = $true; error = '' }
-  } elseif ($mode -like 'schtasks_*') {
+  if ($mode -like 'schtasks_*') {
     $result = Start-LandGuiInstallViaSchTasks -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -RunLevel $runLevel
   } else {
-    $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel
+    $result = Start-LandGuiInstallScheduledTask -TaskName $taskName -ProfileUser $profileUser -ConfigPath $configPath -LogPath $outFile -RunLevel $runLevel -ProfileShort $profileShort
   }
   if (-not $result.ok) {
     $lastStartError = [string]$result.error
@@ -596,6 +644,7 @@ foreach ($launch in $launchModes) {
     [System.Threading.Thread]::Sleep(200)
   } while ((Get-Date) -lt $bootDeadline)
   if (-not $started -and ($mode -like 'scheduled_*' -or $mode -like 'schtasks_*')) {
+    Write-InstallLogTailForDiagnostics -Path $outFile
     $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
     if ($taskInfo) {
       $lastHex = '{0:X8}' -f ([uint32]($taskInfo.LastTaskResult))
