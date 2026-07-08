@@ -1,86 +1,53 @@
 ---
 # Resolve program directory from running process (Win32_Process.ExecutablePath).
-# Falls back to play facts exe_path / exe_dir when process is not running.
+# Falls back to scanned exe_path / exe_dir + app_dir / exe_dir_preferred via PowerShell Split-Path.
 # Sets: _sinexcel_program_dir, _sinexcel_program_parent, exe_path, exe_dir,
 #       redeploy_zip_dest, redeploy_extract_dest, _sinexcel_program_dir_source
 
-- name: 重新部署：从运行进程解析程序目录
-  ansible.windows.win_shell: |
-    $procName = "{{ process_name }}"
-    $procName = $procName -replace '(?i)\.exe$', ''
-    $filters = @(
-      "Name='$procName.exe'",
-      "Name='$procName'"
-    )
-    $exePath = ''
-    foreach ($flt in $filters) {
-      $p = Get-CimInstance Win32_Process -Filter $flt -ErrorAction SilentlyContinue | Select-Object -First 1
-      if ($null -eq $p) { continue }
-      $candidate = [string]$p.ExecutablePath
-      $candidate = $candidate.Trim()
-      if ($candidate.Length -gt 0 -and (Test-Path -LiteralPath $candidate)) {
-        $exePath = $candidate
-        break
-      }
-    }
-    if ($exePath.Length -eq 0) {
-      Write-Output 'NOT_FOUND|'
-      exit 0
-    }
-    $progDir = Split-Path -LiteralPath $exePath -Parent
-    $parentDir = Split-Path -LiteralPath $progDir -Parent
-    if ([string]::IsNullOrWhiteSpace($parentDir)) { $parentDir = $progDir }
-    Write-Output ("FOUND|" + $exePath + "|" + $progDir + "|" + $parentDir)
-  register: _sinexcel_process_path_probe
+- name: 重新部署：解析程序目录（进程 / 扫描 / 安装路径）
+  environment:
+    SINEXCEL_PROCESS_NAME: "{{ process_name }}"
+    SINEXCEL_FALLBACK_EXE_PATH: "{{ exe_path | default('', true) }}"
+    SINEXCEL_FALLBACK_EXE_DIR: "{{ exe_dir | default('', true) }}"
+    SINEXCEL_FALLBACK_APP_DIR: "{{ app_dir | default('', true) }}"
+    SINEXCEL_FALLBACK_EXE_DIR_PREFERRED: "{{ exe_dir_preferred | default('', true) }}"
+    SINEXCEL_EXE_NAME: "{{ exe_name | default('', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_resolve_sinexcel_program_dir.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: _sinexcel_program_dir_resolve
   changed_when: false
 
-- name: 重新部署：登记进程解析结果
+- name: 重新部署：登记程序目录解析行
   ansible.builtin.set_fact:
-    _sinexcel_program_dir_source: >-
-      {{
-        'process'
-        if ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | first) == 'FOUND'
-        else 'scan'
-      }}
-    _sinexcel_program_dir: >-
-      {{
-        ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | list)[2]
-        if ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | first) == 'FOUND'
-        else (
-          (exe_path | regex_replace('\\\\[^\\\\]+$', ''))
-          if ((exe_path | default('') | trim | length) > 0)
-          else (
-            (exe_dir ~ '\\' ~ app_dir)
-            if (app_dir | default('') | trim | length > 0 and app_dir not in ['.', ''])
-            else exe_dir
-          )
-        )
-      }}
-    exe_path: >-
-      {{
-        ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | list)[1]
-        if ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | first) == 'FOUND'
-        else exe_path
-      }}
+    _sinexcel_program_dir_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_DIR_RESOLVED=') | list | first) | default('PROGRAM_DIR_RESOLVED=', true) }}"
+    _sinexcel_program_parent_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_PARENT_RESOLVED=') | list | first) | default('PROGRAM_PARENT_RESOLVED=', true) }}"
+    _sinexcel_exe_path_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^EXE_PATH_RESOLVED=') | list | first) | default('EXE_PATH_RESOLVED=', true) }}"
+    _sinexcel_program_dir_source_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_DIR_SOURCE=') | list | first) | default('PROGRAM_DIR_SOURCE=', true) }}"
+    _sinexcel_program_resolve_error_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_RESOLVE_ERROR') | list | first) | default('', true) }}"
 
-- name: 重新部署：解析程序上级目录
-  ansible.builtin.set_fact:
-    _sinexcel_program_parent: >-
-      {{
-        ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | list)[3]
-        if ((_sinexcel_process_path_probe.stdout | default('') | trim).split('|') | first) == 'FOUND'
-        else (
-          (_sinexcel_program_dir | regex_replace('\\\\[^\\\\]+$', ''))
-          if ((_sinexcel_program_dir | default('') | trim | length) > 0)
-          else exe_dir
-        )
-      }}
+- name: 重新部署：程序目录解析失败
+  ansible.builtin.fail:
+    msg: >-
+      SINEXCEL redeploy cannot resolve program directory
+      (process={{ process_name }}, exe_path={{ exe_path | default('') }},
+      exe_dir={{ exe_dir | default('') }}, app_dir={{ app_dir | default('') }}).
+      {{ _sinexcel_program_resolve_error_line | default('') }}
+  when:
+    - (_sinexcel_program_dir_line | regex_replace('^PROGRAM_DIR_RESOLVED=', '') | trim | length) == 0
+      or (_sinexcel_program_parent_line | regex_replace('^PROGRAM_PARENT_RESOLVED=', '') | trim | length) == 0
 
-- name: 重新部署：规范化程序目录与 zip 路径
+- name: 重新部署：应用程序目录与 zip 路径
   ansible.builtin.set_fact:
-    exe_dir: "{{ _sinexcel_program_dir }}"
-    redeploy_zip_dest: "{{ _sinexcel_program_parent }}\\{{ zip_name }}.zip"
-    redeploy_extract_dest: "{{ _sinexcel_program_parent }}"
+    _sinexcel_program_dir_source: "{{ (_sinexcel_program_dir_source_line | regex_replace('^PROGRAM_DIR_SOURCE=', '') | trim) }}"
+    _sinexcel_program_dir: "{{ (_sinexcel_program_dir_line | regex_replace('^PROGRAM_DIR_RESOLVED=', '') | trim) }}"
+    _sinexcel_program_parent: "{{ (_sinexcel_program_parent_line | regex_replace('^PROGRAM_PARENT_RESOLVED=', '') | trim) }}"
+    exe_path: "{{ (_sinexcel_exe_path_line | regex_replace('^EXE_PATH_RESOLVED=', '') | trim) }}"
+    exe_dir: "{{ (_sinexcel_program_dir_line | regex_replace('^PROGRAM_DIR_RESOLVED=', '') | trim) }}"
+    redeploy_zip_dest: "{{ (_sinexcel_program_parent_line | regex_replace('^PROGRAM_PARENT_RESOLVED=', '') | trim) }}\\{{ zip_name }}.zip"
+    redeploy_extract_dest: "{{ (_sinexcel_program_parent_line | regex_replace('^PROGRAM_PARENT_RESOLVED=', '') | trim) }}"
 
 - name: DEBUG SINEXCEL 程序目录解析
   ansible.builtin.debug:
@@ -91,3 +58,4 @@
       - "[DEBUG-SINEXCEL] exe_path={{ exe_path | default('n/a') }}"
       - "[DEBUG-SINEXCEL] redeploy_zip_dest={{ redeploy_zip_dest | default('n/a') }}"
       - "[DEBUG-SINEXCEL] redeploy_extract_dest={{ redeploy_extract_dest | default('n/a') }}"
+      - "[DEBUG-SINEXCEL] resolve_stdout={{ _sinexcel_program_dir_resolve.stdout_lines | default([]) }}"
