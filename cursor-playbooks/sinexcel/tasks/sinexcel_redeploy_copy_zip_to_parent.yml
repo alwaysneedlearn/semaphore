@@ -1,0 +1,31 @@
+---
+# Copy upgrade zip to parent(program_dir) when missing on target.
+
+- name: 重新部署：检查上级目录压缩包
+  ansible.windows.win_shell: |
+    $zip = "{{ redeploy_zip_dest }}"
+    if (Test-Path -LiteralPath $zip) { Write-Output 'ZIP_FOUND' } else { Write-Output 'ZIP_NOT_FOUND' }
+  register: _sinexcel_redeploy_zip_check
+  changed_when: false
+
+- name: 重新部署：从控制器复制压缩包到程序上级目录
+  ansible.builtin.win_copy:
+    src: "{{ redeploy_zip_src }}"
+    dest: "{{ redeploy_zip_dest }}"
+  register: _sinexcel_redeploy_zip_copy
+  when: "'ZIP_NOT_FOUND' in (_sinexcel_redeploy_zip_check.stdout | default(''))"
+
+- name: 重新部署：跳过复制（上级目录已有压缩包）
+  ansible.builtin.debug:
+    msg: "[DEBUG-SINEXCEL] redeploy zip exists, skip copy: {{ redeploy_zip_dest }}"
+  when: "'ZIP_FOUND' in (_sinexcel_redeploy_zip_check.stdout | default(''))"
+
+- name: 重新部署：复制后确认压缩包存在
+  ansible.windows.win_stat:
+    path: "{{ redeploy_zip_dest }}"
+  register: _sinexcel_redeploy_zip_stat
+
+- name: 重新部署：压缩包不存在则失败
+  ansible.builtin.fail:
+    msg: "Upgrade zip not found on target after copy step: {{ redeploy_zip_dest }}"
+  when: not (_sinexcel_redeploy_zip_stat.stat.exists | default(false))

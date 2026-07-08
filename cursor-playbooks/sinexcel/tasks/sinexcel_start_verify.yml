@@ -1,0 +1,54 @@
+---
+# Interactive start + post-start Kafka health checks (redeploy/restart tail).
+
+- name: 获取当前登录用户
+  ansible.windows.win_shell: |
+    $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+        if ($o -and $o.ReturnValue -eq 0 -and $o.User) { $o.User.Trim() }
+      } |
+      Where-Object { $_ } |
+      Select-Object -First 1
+    if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
+  register: get_username_result
+  changed_when: false
+
+- name: 规范化启动用户
+  ansible.builtin.set_fact:
+    _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
+
+- name: 启动程序
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
+
+- name: 启动后确认进程状态
+  ansible.windows.win_shell: |
+    Start-Sleep -Seconds 3
+    $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+  register: _ini_agent_process_after
+  changed_when: false
+  when: not (start_aborted_exe_missing | default(false) | bool)
+
+- name: 启动后查询 Kafka 配置（健康判定，轮询）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config_start_poll.yml"
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - sinexcel_start_check_api | default(true) | bool
+
+- name: 启动后：开启 Kafka 上传
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_enable.yml"
+  vars:
+    sinexcel_kafka_enable_phase: after_start
+  when: >-
+    not (start_aborted_exe_missing | default(false) | bool)
+    and (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING')
+    and not (_sinexcel_kafka_enabled | default(false) | bool)
+
+- name: 启动后再次查询 Kafka 配置（IsEnable 后，轮询）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config_start_poll.yml"
+  when: >-
+    not (start_aborted_exe_missing | default(false) | bool)
+    and sinexcel_start_check_api | default(true) | bool
+    and (_sinexcel_kafka_enable_raw is defined)
+    and not (_sinexcel_kafka_enable_raw.skipped | default(true))

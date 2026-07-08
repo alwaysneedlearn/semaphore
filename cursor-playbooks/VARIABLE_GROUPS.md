@@ -65,6 +65,8 @@ EXE_SCAN_MAX_DEPTH=2
 # Redeploy：控制器上的安装包目录（仅 device_redeploy 复制 zip）
 ZIP_PATH=/root/sinexcel/pkg
 ZIP_NAME=sinexcel
+# Redeploy：program_dir\config 下要改的文件名（逗号分隔，通常 2 个）
+SINEXCEL_CONFIG_FILES=agent.json,kafka.json
 # Agent HTTP API（巡检 / 启动 / 停止可选探测）
 SINEXCEL_API_PORT=9002
 API_PORT=9002

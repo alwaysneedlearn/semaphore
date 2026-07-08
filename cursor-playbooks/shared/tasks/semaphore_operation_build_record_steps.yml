@@ -89,6 +89,36 @@
         )
         + (
           [{
+            'step': '升级包复制',
+            'result': ('ok' if (_h._sinexcel_redeploy_zip_stat.stat.exists | default(false) | bool) else 'failed'),
+            'detail': (_h.redeploy_zip_dest | default('') | string)
+          }] if (
+            _op_type == 'redeploy'
+            and (_h._sinexcel_redeploy_zip_stat is defined)
+          ) else []
+        )
+        + (
+          [{
+            'step': '目录备份',
+            'result': ('ok' if ('BACKUP_OK' in ((_h._sinexcel_redeploy_backup.stdout | default('')) | string)) else 'failed'),
+            'detail': ((_h._sinexcel_redeploy_backup.stdout | default('')) | string | truncate(200, True))
+          }] if (
+            _op_type == 'redeploy'
+            and (_h._sinexcel_redeploy_backup is defined)
+          ) else []
+        )
+        + (
+          [{
+            'step': '解压覆盖',
+            'result': ('ok' if ('EXTRACT_OK' in ((_h._sinexcel_redeploy_extract.stdout | default('')) | string)) else 'failed'),
+            'detail': ((_h._sinexcel_redeploy_extract.stdout | default('')) | string | truncate(200, True))
+          }] if (
+            _op_type == 'redeploy'
+            and (_h._sinexcel_redeploy_extract is defined)
+          ) else []
+        )
+        + (
+          [{
             'step': '制品下发',
             'result': ('ok' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
             'detail': ('exe present after deploy' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')

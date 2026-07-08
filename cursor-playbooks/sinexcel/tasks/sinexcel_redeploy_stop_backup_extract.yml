@@ -1,0 +1,77 @@
+---
+# Graceful stop → backup program dir → extract zip over parent (overwrite).
+
+- name: 重新部署：停止前检查进程
+  ansible.windows.win_shell: |
+    $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+  register: _sinexcel_process_before_restart
+  changed_when: false
+
+- name: 重新部署：优雅停止
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
+
+- name: 重新部署：备份程序目录
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $progDir = "{{ _sinexcel_program_dir }}"
+    if (-not (Test-Path -LiteralPath $progDir)) {
+      Write-Output "BACKUP_SKIP|reason=program_dir_missing|dir=$progDir"
+      exit 0
+    }
+    $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $leaf = Split-Path -LiteralPath $progDir -Leaf
+    $parent = Split-Path -LiteralPath $progDir -Parent
+    if ([string]::IsNullOrWhiteSpace($parent)) { $parent = $progDir }
+    $backupDir = Join-Path $parent ($leaf + '.bak_' + $stamp)
+    if (Test-Path -LiteralPath $backupDir) {
+      Write-Output "BACKUP_ERROR|reason=backup_exists|path=$backupDir"
+      exit 1
+    }
+    Copy-Item -LiteralPath $progDir -Destination $backupDir -Recurse -Force
+    Write-Output ("BACKUP_OK|from=" + $progDir + "|to=" + $backupDir)
+  register: _sinexcel_redeploy_backup
+  failed_when: >-
+    _sinexcel_redeploy_backup is defined
+    and 'stdout' in _sinexcel_redeploy_backup
+    and ('BACKUP_ERROR' in (_sinexcel_redeploy_backup.stdout | default('')))
+
+- name: 重新部署：解压升级包并覆盖
+  ansible.windows.win_shell: |
+    $zipPath = "{{ redeploy_zip_dest }}"
+    $destDir = "{{ redeploy_extract_dest }}"
+    try {
+      if (-not (Test-Path -LiteralPath $zipPath)) {
+        Write-Output "EXTRACT_ERROR|reason=zip_missing|path=$zipPath"
+        exit 1
+      }
+      if (-not (Test-Path -LiteralPath $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+      }
+      Expand-Archive -LiteralPath $zipPath -DestinationPath $destDir -Force
+      Write-Output "EXTRACT_OK|zip=$zipPath|dest=$destDir"
+    } catch {
+      Write-Output ("EXTRACT_ERROR|reason=" + $_.Exception.Message)
+      exit 1
+    }
+  register: _sinexcel_redeploy_extract
+  failed_when: >-
+    _sinexcel_redeploy_extract is defined
+    and 'stdout' in _sinexcel_redeploy_extract
+    and ('EXTRACT_ERROR' in (_sinexcel_redeploy_extract.stdout | default('')))
+
+- name: 重新部署：解压后检查程序文件
+  ansible.windows.win_stat:
+    path: "{{ exe_path }}"
+  register: _redeploy_exe_stat_after
+
+- name: 重新部署：程序文件不存在则失败
+  ansible.builtin.fail:
+    msg: "Program executable missing after redeploy extract: {{ exe_path }}"
+  when: not (_redeploy_exe_stat_after.stat.exists | default(false))
+
+- name: DEBUG SINEXCEL 重新部署备份/解压
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] redeploy_backup={{ (_sinexcel_redeploy_backup.stdout | default('') | string) | truncate(500, True) }}"
+      - "[DEBUG-SINEXCEL] redeploy_extract={{ (_sinexcel_redeploy_extract.stdout | default('') | string) | truncate(500, True) }}"

@@ -1,0 +1,144 @@
+---
+# Patch program_dir/config files after redeploy extract.
+# Env SINEXCEL_CONFIG_FILES: comma-separated filenames (e.g. agent.json,kafka.json).
+# Semaphore categories ConfigFile1 / ConfigFile2 map to file #1 / #2.
+# When ConfigFile1 is empty, falls back to KafkaConfig for file #1.
+
+- name: 准备 SINEXCEL 配置分类
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_prepare_merged_cfg.yml"
+
+- name: 解析重新部署配置文件列表
+  ansible.builtin.set_fact:
+    _sinexcel_config_file_names: >-
+      {{
+        (
+          (lookup('env', 'SINEXCEL_CONFIG_FILES') | default('', true) | trim)
+          | split(',')
+          | map('trim')
+          | reject('equalto', '')
+          | list
+        )
+      }}
+    _sinexcel_config_patch_1: "{{ merged_cfg.ConfigFile1 | default(merged_cfg.KafkaConfig | default({})) }}"
+    _sinexcel_config_patch_2: "{{ merged_cfg.ConfigFile2 | default({}) }}"
+
+- name: 重新部署：无配置文件名则跳过磁盘改配
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] config_files=skipped (set SINEXCEL_CONFIG_FILES in Variable Group)"
+      - "[DEBUG-SINEXCEL] config_dir={{ _sinexcel_program_dir | default('') }}\\config"
+  when: (_sinexcel_config_file_names | default([]) | length) == 0
+
+- name: 重新部署：写入 config 目录配置文件
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $configDir = Join-Path "{{ _sinexcel_program_dir }}" 'config'
+    if (-not (Test-Path -LiteralPath $configDir)) {
+      New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+    $fileName = "{{ item.file }}"
+    $targetPath = Join-Path $configDir $fileName
+    $patchJson = [string]$env:SINEXCEL_CONFIG_PATCH_JSON
+    $patch = $patchJson | ConvertFrom-Json
+    $patchHt = @{}
+    if ($null -ne $patch) {
+      foreach ($p in $patch.PSObject.Properties) {
+        $patchHt[$p.Name] = $p.Value
+      }
+    }
+    if ($patchHt.Count -eq 0) {
+      Write-Output ("CFG_SKIP|file=" + $fileName + "|reason=empty_patch")
+      exit 0
+    }
+    $ext = [System.IO.Path]::GetExtension($fileName).ToLowerInvariant()
+    if ($ext -eq '.json') {
+      $root = @{}
+      if (Test-Path -LiteralPath $targetPath) {
+        $raw = Get-Content -LiteralPath $targetPath -Raw -Encoding UTF8
+        if ($raw -and $raw.Trim().Length -gt 0) {
+          $parsed = $raw | ConvertFrom-Json
+          foreach ($p in $parsed.PSObject.Properties) {
+            $root[$p.Name] = $p.Value
+          }
+        }
+      }
+      foreach ($k in $patchHt.Keys) {
+        $root[$k] = $patchHt[$k]
+      }
+      ($root | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $targetPath -Encoding UTF8
+      Write-Output ("CFG_OK|file=" + $fileName + "|format=json|keys=" + (($patchHt.Keys | Sort-Object) -join ','))
+      exit 0
+    }
+    # INI / key=value lines
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    if (Test-Path -LiteralPath $targetPath) {
+      $lines.AddRange([string[]](Get-Content -LiteralPath $targetPath -Encoding UTF8))
+    }
+    function Upsert-IniKey {
+      param([System.Collections.Generic.List[string]]$LinesRef, [string]$Section, [string]$Key, [string]$Value)
+      $secStart = -1
+      $secEnd = $LinesRef.Count
+      for ($i = 0; $i -lt $LinesRef.Count; $i++) {
+        if ($LinesRef[$i].Trim() -eq "[$Section]") {
+          $secStart = $i
+          for ($j = $i + 1; $j -lt $LinesRef.Count; $j++) {
+            if ($LinesRef[$j].Trim() -match '^\[.+\]$') { $secEnd = $j; break }
+          }
+          break
+        }
+      }
+      $newLine = "$Key=$Value"
+      if ($secStart -lt 0) {
+        if ($LinesRef.Count -gt 0 -and $LinesRef[$LinesRef.Count - 1].Trim() -ne '') { $LinesRef.Add('') }
+        $LinesRef.Add("[$Section]")
+        $LinesRef.Add($newLine)
+        return
+      }
+      for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
+        if ($LinesRef[$k].Trim() -match "^$([regex]::Escape($Key))=") {
+          $LinesRef[$k] = $newLine
+          return
+        }
+      }
+      $LinesRef.Insert($secEnd, $newLine)
+    }
+    foreach ($k in $patchHt.Keys) {
+      $val = [string]$patchHt[$k]
+      if ($k -match '^(.+)\.(.+)$') {
+        Upsert-IniKey -LinesRef $lines -Section $Matches[1] -Key $Matches[2] -Value $val
+      } else {
+        Upsert-IniKey -LinesRef $lines -Section 'DEFAULT' -Key $k -Value $val
+      }
+    }
+    $lines | Set-Content -LiteralPath $targetPath -Encoding UTF8
+    Write-Output ("CFG_OK|file=" + $fileName + "|format=ini|keys=" + (($patchHt.Keys | Sort-Object) -join ','))
+  environment:
+    SINEXCEL_CONFIG_PATCH_JSON: "{{ item.patch | to_json }}"
+  args:
+    executable: powershell.exe
+  register: _sinexcel_config_patch_results
+  loop: >-
+    {{
+      [
+        {
+          'file': (_sinexcel_config_file_names | first),
+          'patch': _sinexcel_config_patch_1
+        }
+      ]
+      + (
+        [{
+          'file': (_sinexcel_config_file_names | list)[1],
+          'patch': _sinexcel_config_patch_2
+        }] if ((_sinexcel_config_file_names | default([]) | length) > 1) else []
+      )
+    }}
+  loop_control:
+    label: "{{ item.file }}"
+  when: (_sinexcel_config_file_names | default([]) | length) > 0
+
+- name: DEBUG SINEXCEL config 文件改配
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] config_files={{ _sinexcel_config_file_names | default([]) }}"
+      - "[DEBUG-SINEXCEL] config_patch_stdout={{ (_sinexcel_config_patch_results.results | default([]) | map(attribute='stdout') | list) }}"
+  when: _sinexcel_config_patch_results is defined

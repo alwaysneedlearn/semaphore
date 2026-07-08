@@ -37,7 +37,7 @@ grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
 |------|---------|
 | `device_status.yml` | Exe + process + **Kafka QueryConfig** (`EnableFlowInfoExtendedSqlite`), bulk callback |
 | `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryHistory + Retransmit**（`Retransmit` 分类） |
-| `device_redeploy.yml` | 仅 **zip 下发** + API 启停（无 INI） |
+| `device_redeploy.yml` | **进程定位目录** → 上级目录 zip（已有则跳过）→ 优雅停止 → **备份目录** → **解压覆盖** → **改 `config/` 下 2 个文件** → 启动 + API 验证 |
 | `device_check_restart.yml` | Unhealthy gate via Kafka QueryConfig; restart only when needed |
 | `device_stop.yml` | Force stop process |
 
@@ -138,9 +138,32 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 ### Redeploy（`device_redeploy.yml`）
 
+**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=1`）：**
+
+1. 从**运行中进程**解析 `ExecutablePath` → 程序目录 `program_dir`、上级目录 `parent_dir`（进程未跑时回退盘符扫描的 `exe_path`）
+2. 复制 `{{ ZIP_NAME }}.zip` 到 **`parent_dir`**（已存在则跳过复制）
+3. **优雅停止**（`STOP_POPUP_*`）
+4. **备份** `program_dir` → `program_dir.bak_yyyyMMdd_HHmmss`
+5. `Expand-Archive -Force` 解压到 `parent_dir`（覆盖原目录）
+6. 修改 **`program_dir\config\`** 下配置文件（见下）
+7. 计划任务启动 + `QueryConfig` / `IsEnable` 健康检查
+
 | Variable | Default | 用于 |
 |----------|---------|------|
 | `ZIP_PATH` | `/root/sinexcel/pkg` | **仅 Redeploy**：控制器上 `{{ ZIP_NAME }}.zip` 所在目录 |
+| `SINEXCEL_CONFIG_FILES` | — | **必填（改配时）**：逗号分隔的 2 个文件名，如 `agent.json,kafka.json`，相对 `program_dir\config\` |
+
+**Semaphore 配置分类（重新部署写盘）：**
+
+| Category | 对应文件 |
+|----------|----------|
+| `ConfigFile1` | `SINEXCEL_CONFIG_FILES` 第 1 个；未配置时回落 `KafkaConfig` |
+| `ConfigFile2` | 第 2 个文件 |
+
+- **`.json`**：顶层键深合并（保留未改键）
+- **`.ini` / 其它**：按 `Section.Key=value` 或 `Key=value`（默认 `[DEFAULT]`） upsert
+
+Restart / Check-restart 仍走 **HTTP Kafka API**（`sinexcel_config_stop_start.yml`），不写 `program_dir\config`。
 
 控制器上须有：`/root/sinexcel/pkg/sinexcel.zip`（或自定义 `ZIP_PATH` / `ZIP_NAME`）。
 

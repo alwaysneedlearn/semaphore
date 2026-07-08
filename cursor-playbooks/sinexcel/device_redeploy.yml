@@ -27,9 +27,9 @@
     exe_scan_latest: "{{ ((lookup('env', 'EXE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
     exe_scan_max_depth: "{{ ((lookup('env', 'EXE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('2', true)) | int }}"
     exe_path: "{% if app_dir in ['.', ''] %}{{ exe_dir }}\\{{ exe_name }}{% else %}{{ exe_dir }}\\{{ app_dir }}\\{{ exe_name }}{% endif %}"
-    redeploy_zip_dest: "{{ exe_dir }}\\{{ zip_name }}.zip"
     redeploy_zip_src: "{{ zip_path }}/{{ zip_name }}.zip"
     redeploy_extract_dest: "{{ exe_dir }}"
+    sinexcel_redeploy_use_extract_overwrite: true
     process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
     stop_graceful_process_name: "{{ process_name }}"
     stop_popup_wait_seconds: "{{ ((lookup('env', 'STOP_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('2', true)) | int }}"
@@ -63,18 +63,23 @@
     - ansible.builtin.set_fact:
         _agent_target_host: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
 
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_config_stop_start.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_resolve_program_dir_from_process.yml"
+
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_redeploy_upgrade.yml"
+      rescue:
+        - ansible.builtin.set_fact:
+            host_failure_reason: "{{ (ansible_failed_result.msg | default('SINEXCEL redeploy failed')) | string | truncate(500, True) }}"
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _sem_display_hostname }}"
           ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy' }}"
+          device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy') }}"
           winrm_status: online
-          api_status: "{{ 'online' if ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'offline' }}"
-          abnormal_reason: ""
+          api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'offline') }}"
+          abnormal_reason: "{{ host_failure_reason | default('') }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
 
