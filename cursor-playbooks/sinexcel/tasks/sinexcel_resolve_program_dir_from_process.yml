@@ -63,7 +63,7 @@
         else exe_path
       }}
 
-- name: 重新部署：规范化程序目录与 zip 路径
+- name: 重新部署：解析程序上级目录
   ansible.builtin.set_fact:
     _sinexcel_program_parent: >-
       {{
@@ -75,6 +75,9 @@
           else exe_dir
         )
       }}
+
+- name: 重新部署：规范化程序目录与 zip 路径
+  ansible.builtin.set_fact:
     exe_dir: "{{ _sinexcel_program_dir }}"
     redeploy_zip_dest: "{{ _sinexcel_program_parent }}\\{{ zip_name }}.zip"
     redeploy_extract_dest: "{{ _sinexcel_program_parent }}"
