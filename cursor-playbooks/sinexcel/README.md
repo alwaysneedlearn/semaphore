@@ -58,6 +58,8 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | Category | Used by |
 |----------|---------|
 | `KafkaConfig` | **仅**此分类参与 `POST /kafka/SetConfig`（**不会**回落 `SystemConfig`，避免误发 `IsHisDataFromFirst` 等无关字段） |
+| `ConfigFile1` | **Redeploy 磁盘改配**：写入 `program_dir\config\` 下第 1 个 INI/JSON（文件名由 `SINEXCEL_CONFIG_FILES` 第 1 段指定） |
+| `ConfigFile2` | **Redeploy 磁盘改配**：第 2 个配置文件（`SINEXCEL_CONFIG_FILES` 第 2 段） |
 | `Retransmit` | `StartTime`, `EndTime` — **原样传给 API**（仅 trim），常见如 `2024-01-01 00:00:00` 或 `2026/01/01 00:00:00.000`。Restart 先 QueryHistory，再对查询到的**全部**历史行批量 Retransmit。 |
 | **`Install`** (or **`Paths`**) | **可选**：仅极个别机台扫描仍找不到 exe 时覆盖路径（日常用变量组即可） |
 

@@ -1,10 +1,10 @@
 ---
-# Patch program_dir/config files after redeploy extract.
-# Env SINEXCEL_CONFIG_FILES: comma-separated filenames (e.g. agent.json,kafka.json).
-# Semaphore categories ConfigFile1 / ConfigFile2 map to file #1 / #2.
-# When ConfigFile1 is empty, falls back to KafkaConfig for file #1.
+# Patch program_dir\config INI/JSON files after redeploy extract (before start).
+# Variable Group: SINEXCEL_CONFIG_FILES=file1.ini,file2.ini
+# Semaphore device config categories: ConfigFile1, ConfigFile2 (flat key=value maps).
+# INI section keys use dotted form: Section.Key=value
 
-- name: 准备 SINEXCEL 配置分类
+- name: 准备 SINEXCEL 配置分类（磁盘改配）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_prepare_merged_cfg.yml"
 
 - name: 解析重新部署配置文件列表
@@ -19,103 +19,27 @@
           | list
         )
       }}
-    _sinexcel_config_patch_1: "{{ merged_cfg.ConfigFile1 | default(merged_cfg.KafkaConfig | default({})) }}"
+    _sinexcel_config_patch_1: "{{ merged_cfg.ConfigFile1 | default({}) }}"
     _sinexcel_config_patch_2: "{{ merged_cfg.ConfigFile2 | default({}) }}"
 
 - name: 重新部署：无配置文件名则跳过磁盘改配
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] config_files=skipped (set SINEXCEL_CONFIG_FILES in Variable Group)"
-      - "[DEBUG-SINEXCEL] config_dir={{ _sinexcel_program_dir | default('') }}\\config"
+      - "[DEBUG-SINEXCEL] config_files=skipped (set SINEXCEL_CONFIG_FILES in Variable Group, e.g. foo.ini,bar.ini)"
+      - "[DEBUG-SINEXCEL] config_dir={{ _sinexcel_program_dir | default('') }}\\{{ sinexcel_config_rel_dir | default('config', true) }}"
   when: (_sinexcel_config_file_names | default([]) | length) == 0
 
 - name: 重新部署：写入 config 目录配置文件
-  ansible.windows.win_shell: |
-    $ErrorActionPreference = 'Stop'
-    $configDir = Join-Path "{{ _sinexcel_program_dir }}" 'config'
-    if (-not (Test-Path -LiteralPath $configDir)) {
-      New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-    }
-    $fileName = "{{ item.file }}"
-    $targetPath = Join-Path $configDir $fileName
-    $patchJson = [string]$env:SINEXCEL_CONFIG_PATCH_JSON
-    $patch = $patchJson | ConvertFrom-Json
-    $patchHt = @{}
-    if ($null -ne $patch) {
-      foreach ($p in $patch.PSObject.Properties) {
-        $patchHt[$p.Name] = $p.Value
-      }
-    }
-    if ($patchHt.Count -eq 0) {
-      Write-Output ("CFG_SKIP|file=" + $fileName + "|reason=empty_patch")
-      exit 0
-    }
-    $ext = [System.IO.Path]::GetExtension($fileName).ToLowerInvariant()
-    if ($ext -eq '.json') {
-      $root = @{}
-      if (Test-Path -LiteralPath $targetPath) {
-        $raw = Get-Content -LiteralPath $targetPath -Raw -Encoding UTF8
-        if ($raw -and $raw.Trim().Length -gt 0) {
-          $parsed = $raw | ConvertFrom-Json
-          foreach ($p in $parsed.PSObject.Properties) {
-            $root[$p.Name] = $p.Value
-          }
-        }
-      }
-      foreach ($k in $patchHt.Keys) {
-        $root[$k] = $patchHt[$k]
-      }
-      ($root | ConvertTo-Json -Depth 32) | Set-Content -LiteralPath $targetPath -Encoding UTF8
-      Write-Output ("CFG_OK|file=" + $fileName + "|format=json|keys=" + (($patchHt.Keys | Sort-Object) -join ','))
-      exit 0
-    }
-    # INI / key=value lines
-    $lines = New-Object 'System.Collections.Generic.List[string]'
-    if (Test-Path -LiteralPath $targetPath) {
-      $lines.AddRange([string[]](Get-Content -LiteralPath $targetPath -Encoding UTF8))
-    }
-    function Upsert-IniKey {
-      param([System.Collections.Generic.List[string]]$LinesRef, [string]$Section, [string]$Key, [string]$Value)
-      $secStart = -1
-      $secEnd = $LinesRef.Count
-      for ($i = 0; $i -lt $LinesRef.Count; $i++) {
-        if ($LinesRef[$i].Trim() -eq "[$Section]") {
-          $secStart = $i
-          for ($j = $i + 1; $j -lt $LinesRef.Count; $j++) {
-            if ($LinesRef[$j].Trim() -match '^\[.+\]$') { $secEnd = $j; break }
-          }
-          break
-        }
-      }
-      $newLine = "$Key=$Value"
-      if ($secStart -lt 0) {
-        if ($LinesRef.Count -gt 0 -and $LinesRef[$LinesRef.Count - 1].Trim() -ne '') { $LinesRef.Add('') }
-        $LinesRef.Add("[$Section]")
-        $LinesRef.Add($newLine)
-        return
-      }
-      for ($k = $secStart + 1; $k -lt $secEnd; $k++) {
-        if ($LinesRef[$k].Trim() -match "^$([regex]::Escape($Key))=") {
-          $LinesRef[$k] = $newLine
-          return
-        }
-      }
-      $LinesRef.Insert($secEnd, $newLine)
-    }
-    foreach ($k in $patchHt.Keys) {
-      $val = [string]$patchHt[$k]
-      if ($k -match '^(.+)\.(.+)$') {
-        Upsert-IniKey -LinesRef $lines -Section $Matches[1] -Key $Matches[2] -Value $val
-      } else {
-        Upsert-IniKey -LinesRef $lines -Section 'DEFAULT' -Key $k -Value $val
-      }
-    }
-    $lines | Set-Content -LiteralPath $targetPath -Encoding UTF8
-    Write-Output ("CFG_OK|file=" + $fileName + "|format=ini|keys=" + (($patchHt.Keys | Sort-Object) -join ','))
   environment:
+    SINEXCEL_PROGRAM_DIR: "{{ _sinexcel_program_dir }}"
+    SINEXCEL_CONFIG_REL_DIR: "{{ sinexcel_config_rel_dir | default('config', true) }}"
+    SINEXCEL_CONFIG_FILE_NAME: "{{ item.file }}"
     SINEXCEL_CONFIG_PATCH_JSON: "{{ item.patch | to_json }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_sinexcel_patch_config_file.ps1
   args:
-    executable: powershell.exe
+    chdir: C:\Windows\Temp
   register: _sinexcel_config_patch_results
   loop: >-
     {{
@@ -135,6 +59,19 @@
   loop_control:
     label: "{{ item.file }}"
   when: (_sinexcel_config_file_names | default([]) | length) > 0
+  failed_when: false
+
+- name: 重新部署：配置文件改配失败
+  ansible.builtin.fail:
+    msg: >-
+      SINEXCEL config file patch failed on {{ inventory_hostname }}.
+      results={{ (_sinexcel_config_patch_results.results | default([]) | map(attribute='stdout') | list) }}
+  when:
+    - _sinexcel_config_patch_results is defined
+    - not (_sinexcel_config_patch_results.skipped | default(false))
+    - >-
+      (_sinexcel_config_patch_results.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length) > 0
+      or ('CFG_ERROR' in ((_sinexcel_config_patch_results.results | default([]) | map(attribute='stdout') | join(' '))))
 
 - name: DEBUG SINEXCEL config 文件改配
   ansible.builtin.debug:

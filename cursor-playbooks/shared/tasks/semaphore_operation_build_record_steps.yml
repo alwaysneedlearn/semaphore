@@ -119,6 +119,20 @@
         )
         + (
           [{
+            'step': 'INI 配置改配',
+            'result': ('ok' if (
+              (_h._sinexcel_config_patch_results.results | default([]) | map(attribute='stdout') | join(' ') | regex_search('CFG_OK'))
+              and not (_h._sinexcel_config_patch_results.results | default([]) | map(attribute='stdout') | join(' ') | regex_search('CFG_ERROR'))
+            ) else ('skipped' if (_h._sinexcel_config_patch_results is not defined) else 'failed')),
+            'detail': ((_h._sinexcel_config_patch_results.results | default([]) | map(attribute='stdout') | join('; ') | string) | truncate(200, True))
+          }] if (
+            _op_type == 'redeploy'
+            and (_h._sinexcel_config_patch_results is defined)
+            and not (_h._sinexcel_config_patch_results.skipped | default(false))
+          ) else []
+        )
+        + (
+          [{
             'step': '制品下发',
             'result': ('ok' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'failed'),
             'detail': ('exe present after deploy' if (_h._redeploy_exe_stat_after.stat.exists | default(false) | bool) else 'package/exe missing after deploy')
