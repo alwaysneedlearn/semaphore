@@ -99,7 +99,7 @@
         )
         + (
           [{
-            'step': '目录备份',
+            'step': '旧版目录备份',
             'result': ('ok' if ('BACKUP_OK' in ((_h._sinexcel_redeploy_backup.stdout | default('')) | string)) else 'failed'),
             'detail': ((_h._sinexcel_redeploy_backup.stdout | default('')) | string | truncate(200, True))
           }] if (

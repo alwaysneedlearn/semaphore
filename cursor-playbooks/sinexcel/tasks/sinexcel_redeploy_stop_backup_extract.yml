@@ -22,13 +22,13 @@
 - name: 重新部署：优雅停止
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
 
-- name: 重新部署：备份程序目录
+- name: 重新部署：备份旧版程序目录（解压前）
   ansible.windows.win_shell: |
     $ErrorActionPreference = 'Stop'
     $progDir = "{{ _sinexcel_program_dir }}"
     if (-not (Test-Path -LiteralPath $progDir)) {
-      Write-Output "BACKUP_SKIP|reason=program_dir_missing|dir=$progDir"
-      exit 0
+      Write-Output "BACKUP_ERROR|reason=old_program_dir_missing|dir=$progDir"
+      exit 1
     }
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $leaf = Split-Path -LiteralPath $progDir -Leaf
@@ -46,6 +46,14 @@
     _sinexcel_redeploy_backup is defined
     and 'stdout' in _sinexcel_redeploy_backup
     and ('BACKUP_ERROR' in (_sinexcel_redeploy_backup.stdout | default('')))
+
+- name: 重新部署：旧版目录未备份则中止（解压前门禁）
+  ansible.builtin.fail:
+    msg: >-
+      SINEXCEL redeploy requires a successful backup of the old program directory
+      before extract. program_dir={{ _sinexcel_program_dir | default('') }}.
+      backup_stdout={{ (_sinexcel_redeploy_backup.stdout | default('')) | string | truncate(300, True) }}
+  when: "'BACKUP_OK' not in ((_sinexcel_redeploy_backup.stdout | default('')) | string)"
 
 - name: 重新部署：解压升级包到程序目录并覆盖
   environment:
@@ -76,5 +84,5 @@
 - name: DEBUG SINEXCEL 重新部署备份/解压
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] redeploy_backup={{ (_sinexcel_redeploy_backup.stdout | default('') | string) | truncate(500, True) }}"
+      - "[DEBUG-SINEXCEL] redeploy_backup_before_extract={{ (_sinexcel_redeploy_backup.stdout | default('') | string) | truncate(500, True) }}"
       - "[DEBUG-SINEXCEL] redeploy_extract={{ (_sinexcel_redeploy_extract.stdout | default('') | string) | truncate(500, True) }}"

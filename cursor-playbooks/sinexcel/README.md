@@ -138,13 +138,13 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 ### Redeploy（`device_redeploy.yml`）
 
-**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=5`）：**
+**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=6`）：**
 
 1. 从**运行中进程**或盘符扫描解析 **当前程序目录** `program_dir`（如 `D:\盛弘软件\电池检测与化成V3.9.2.7-20240307-全包`）、上级 `parent_dir`（放 zip）
 2. 复制 `{{ ZIP_NAME }}.zip` 到 **`parent_dir`**（已存在则跳过复制）
 3. 进程在跑时：**`POST /kafka/SetConfig`**（`KafkaConfig`）+ **`POST /kafka/IsEnable`**
 4. **优雅停止**（`STOP_POPUP_*`）
-5. **备份** 当前 `program_dir` → `program_dir.bak_yyyyMMdd_HHmmss`（目录不存在则 `BACKUP_SKIP`）
+5. **备份旧版目录**（解压前强制）：`program_dir` → 同级 `program_dir.bak_yyyyMMdd_HHmmss`；旧目录不存在或备份失败则**中止**，不执行解压
 6. 解压 zip **到 `program_dir` 内就地覆盖**：若 zip 内仅有一层与 `ZIP_NAME` 同名的目录，则合并该目录下文件到 `program_dir`（`Expand-Archive` + `Copy-Item -Force`）
 7. 计划任务启动 → **`SetConfig` 重试** + **`IsEnable`** → `QueryConfig` 健康检查
 
