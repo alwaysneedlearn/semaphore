@@ -11,7 +11,6 @@
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_debug_tag: SINEXCEL
     sem_operation_type: restart
-    ini_agent_force_stop: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     _exe_name_default: sinexcel_agent.exe
