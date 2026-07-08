@@ -13,6 +13,6 @@
     (sinexcel_kafka_cfg_flat | default({}) | length) > 0
     and not (_sinexcel_kafka_set_before_ok | default(false) | bool)
     and (
-      (((_ini_agent_process_after | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
-      or (((_sinexcel_process_after_restart | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      ((_ini_agent_process_after | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
+      or ((_sinexcel_process_after_restart | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
     )

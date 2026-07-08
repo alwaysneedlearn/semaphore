@@ -16,9 +16,9 @@
   when: >-
     (sinexcel_kafka_cfg_flat | default({}) | length) > 0
     and (
-      (((_sinexcel_process_before_restart | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
-      or (((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
-      or (((_ini_agent_process_before | default({})).stdout | default('') | trim).split('|') | first) == 'RUNNING')
+      ((_sinexcel_process_before_restart | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
+      or ((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
+      or ((_ini_agent_process_before | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
     )
 
 - name: DEBUG SINEXCEL 停止前未 SetConfig（进程未运行）
