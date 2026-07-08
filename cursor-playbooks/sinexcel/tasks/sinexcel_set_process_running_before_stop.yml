@@ -1,0 +1,18 @@
+---
+# Set _sinexcel_process_running_before_stop (avoid default({}) in when: — Jinja } parse errors).
+# Requires _sinexcel_process_before_restart when present; optional _sinexcel_process_check / _ini_agent_process_before.
+
+- name: 登记停止前进程是否运行
+  ansible.builtin.set_fact:
+    _sinexcel_process_running_before_stop: >-
+      {{
+        ((_sinexcel_process_before_restart.stdout | default('') | trim).split('|') | first == 'RUNNING')
+        or (
+          (_sinexcel_process_check is defined)
+          and ((_sinexcel_process_check.stdout | default('') | trim).split('|') | first == 'RUNNING')
+        )
+        or (
+          (_ini_agent_process_before is defined)
+          and ((_ini_agent_process_before.stdout | default('') | trim).split('|') | first == 'RUNNING')
+        )
+      }}

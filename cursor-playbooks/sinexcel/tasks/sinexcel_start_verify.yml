@@ -30,6 +30,9 @@
   changed_when: false
   when: not (start_aborted_exe_missing | default(false) | bool)
 
+- ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_set_process_running_after_start.yml"
+  when: not (start_aborted_exe_missing | default(false) | bool)
+
 - name: 启动后查询 Kafka 配置（健康判定，轮询）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_query_config_start_poll.yml"
   when:
@@ -46,7 +49,7 @@
     sinexcel_kafka_enable_phase: after_start
   when: >-
     not (start_aborted_exe_missing | default(false) | bool)
-    and ((_ini_agent_process_after.stdout | default('') | trim).split('|') | first == 'RUNNING')
+    and (_sinexcel_process_running_after_start | default(false) | bool)
     and not (_sinexcel_kafka_enabled | default(false) | bool)
 
 - name: 启动后再次查询 Kafka 配置（IsEnable 后，轮询）

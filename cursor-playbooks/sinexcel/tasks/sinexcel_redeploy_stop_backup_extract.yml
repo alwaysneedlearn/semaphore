@@ -8,6 +8,8 @@
   register: _sinexcel_process_before_restart
   changed_when: false
 
+- ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_set_process_running_before_stop.yml"
+
 - name: 重新部署：进程运行中 Kafka SetConfig（停止前）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_set_config_before_stop.yml"
 
@@ -15,11 +17,7 @@
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_enable.yml"
   vars:
     sinexcel_kafka_enable_phase: before_stop
-  when: >-
-    (
-      (_sinexcel_process_before_restart.stdout | default('') | trim).split('|') | first == 'RUNNING'
-      or (_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
-    )
+  when: _sinexcel_process_running_before_stop | default(false) | bool
 
 - name: 重新部署：优雅停止
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"

@@ -112,7 +112,11 @@
       ansible.builtin.set_fact:
         _sinexcel_need_reconfigure: >-
           {{
-            ((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first != 'RUNNING'
+            (
+              ((_sinexcel_process_check.stdout | default('') | trim).split('|') | first != 'RUNNING')
+              if (_sinexcel_process_check is defined)
+              else false
+            )
             or (
               (sinexcel_start_check_api | default(true) | bool)
               and not (_sinexcel_kafka_api_ok | default(false) | bool)

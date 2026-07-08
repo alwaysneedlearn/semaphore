@@ -13,20 +13,16 @@
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_set_config_attempt.yml"
   vars:
     sinexcel_kafka_set_phase: before_stop
-  when: >-
-    (sinexcel_kafka_cfg_flat | default({}) | length) > 0
-    and (
-      ((_sinexcel_process_before_restart | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
-      or ((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
-      or ((_ini_agent_process_before | default({})).stdout | default('') | trim).split('|') | first == 'RUNNING'
-    )
+  when:
+    - sinexcel_kafka_cfg_flat is defined
+    - (sinexcel_kafka_cfg_flat | length) > 0
+    - _sinexcel_process_running_before_stop | default(false) | bool
 
 - name: DEBUG SINEXCEL 停止前未 SetConfig（进程未运行）
   ansible.builtin.debug:
     msg:
       - "[DEBUG-SINEXCEL] kafka_set phase=before_stop skipped=process_not_running"
-  when: >-
-    (sinexcel_kafka_cfg_flat | default({}) | length) > 0
-    and ((_sinexcel_process_before_restart | default({})).stdout | default('') | trim).split('|') | first != 'RUNNING'
-    and ((_sinexcel_process_check | default({})).stdout | default('') | trim).split('|') | first != 'RUNNING'
-    and ((_ini_agent_process_before | default({})).stdout | default('') | trim).split('|') | first != 'RUNNING'
+  when:
+    - sinexcel_kafka_cfg_flat is defined
+    - (sinexcel_kafka_cfg_flat | length) > 0
+    - not (_sinexcel_process_running_before_stop | default(false) | bool)

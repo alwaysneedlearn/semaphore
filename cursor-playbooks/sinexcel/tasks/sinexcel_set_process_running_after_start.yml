@@ -1,0 +1,13 @@
+---
+# Set _sinexcel_process_running_after_start (avoid default({}) in when:).
+
+- name: 登记启动后进程是否运行
+  ansible.builtin.set_fact:
+    _sinexcel_process_running_after_start: >-
+      {{
+        ((_ini_agent_process_after.stdout | default('') | trim).split('|') | first == 'RUNNING')
+        or (
+          (_sinexcel_process_after_restart is defined)
+          and ((_sinexcel_process_after_restart.stdout | default('') | trim).split('|') | first == 'RUNNING')
+        )
+      }}
