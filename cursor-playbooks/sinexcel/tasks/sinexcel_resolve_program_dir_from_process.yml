@@ -19,6 +19,7 @@
     chdir: C:\Windows\Temp
   register: _sinexcel_program_dir_resolve
   changed_when: false
+  failed_when: false
 
 - name: 重新部署：登记程序目录解析行
   ansible.builtin.set_fact:
@@ -27,6 +28,15 @@
     _sinexcel_exe_path_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^EXE_PATH_RESOLVED=') | list | first) | default('EXE_PATH_RESOLVED=', true) }}"
     _sinexcel_program_dir_source_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_DIR_SOURCE=') | list | first) | default('PROGRAM_DIR_SOURCE=', true) }}"
     _sinexcel_program_resolve_error_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_RESOLVE_ERROR') | list | first) | default('', true) }}"
+
+- name: 重新部署：程序目录解析脚本执行失败
+  ansible.builtin.fail:
+    msg: >-
+      sem_resolve_sinexcel_program_dir.ps1 failed (rc={{ _sinexcel_program_dir_resolve.rc | default('?') }}).
+      stderr={{ (_sinexcel_program_dir_resolve.stderr | default('')) | string | truncate(400, True) }}
+  when:
+    - _sinexcel_program_dir_resolve.rc | default(0) | int != 0
+    - (_sinexcel_program_dir_line | default('PROGRAM_DIR_RESOLVED=', true) | regex_replace('^PROGRAM_DIR_RESOLVED=', '') | trim | length) == 0
 
 - name: 重新部署：程序目录解析失败
   ansible.builtin.fail:

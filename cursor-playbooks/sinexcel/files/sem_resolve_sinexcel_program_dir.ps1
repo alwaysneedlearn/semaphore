@@ -4,7 +4,7 @@
 #      SINEXCEL_FALLBACK_EXE_DIR_PREFERRED, SINEXCEL_EXE_NAME
 #
 # Redeploy layout (in-place upgrade into current install folder):
-#   program_dir   = current install dir (e.g. D:\盛弘软件\电池检测与化成V3.9.2.7-20240307-全包)
+#   program_dir   = current install dir (from process or scanned exe_path)
 #   parent_dir    = parent of program_dir (zip copy destination)
 #   extract dest  = program_dir (merge zip contents, overwrite files)
 
@@ -18,11 +18,7 @@ function Get-TrimmedEnv([string]$name) {
 
 function Normalize-WindowsPath([string]$path) {
   if ([string]::IsNullOrWhiteSpace($path)) { return '' }
-  $p = $path.Trim()
-  $p = $p -replace '：', ':'
-  $p = $p -replace '／', '/'
-  $p = $p -replace '＼', '\'
-  $p = $p.Replace('/', '\')
+  $p = $path.Trim().Replace('/', '\')
   if ($p -match '^([A-Za-z]):([^\\/]|$)') {
     $letter = $Matches[1]
     $rest = $Matches[2]
