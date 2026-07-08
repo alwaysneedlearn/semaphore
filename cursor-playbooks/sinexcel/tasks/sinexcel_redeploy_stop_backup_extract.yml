@@ -23,37 +23,32 @@
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/stop_program_graceful_before_reconfig.yml"
 
 - name: 重新部署：备份旧版程序目录（解压前）
-  ansible.windows.win_shell: |
-    $ErrorActionPreference = 'Stop'
-    $progDir = "{{ _sinexcel_program_dir }}"
-    if (-not (Test-Path -LiteralPath $progDir)) {
-      Write-Output "BACKUP_ERROR|reason=old_program_dir_missing|dir=$progDir"
-      exit 1
-    }
-    $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    $leaf = Split-Path -LiteralPath $progDir -Leaf
-    $parent = Split-Path -LiteralPath $progDir -Parent
-    if ([string]::IsNullOrWhiteSpace($parent)) { $parent = $progDir }
-    $backupDir = Join-Path $parent ($leaf + '.bak_' + $stamp)
-    if (Test-Path -LiteralPath $backupDir) {
-      Write-Output "BACKUP_ERROR|reason=backup_exists|path=$backupDir"
-      exit 1
-    }
-    Copy-Item -LiteralPath $progDir -Destination $backupDir -Recurse -Force
-    Write-Output ("BACKUP_OK|from=" + $progDir + "|to=" + $backupDir)
+  environment:
+    SINEXCEL_PROGRAM_DIR: "{{ _sinexcel_program_dir }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_sinexcel_redeploy_backup_program_dir.ps1
+  args:
+    chdir: C:\Windows\Temp
+  vars:
+    ansible_winrm_operation_timeout_sec: 3600
+    ansible_winrm_read_timeout_sec: 3700
   register: _sinexcel_redeploy_backup
-  failed_when: >-
-    _sinexcel_redeploy_backup is defined
-    and 'stdout' in _sinexcel_redeploy_backup
-    and ('BACKUP_ERROR' in (_sinexcel_redeploy_backup.stdout | default('')))
+  changed_when: >-
+    'BACKUP_OK' in ((_sinexcel_redeploy_backup.stdout | default('')) | string)
+  failed_when: false
 
 - name: 重新部署：旧版目录未备份则中止（解压前门禁）
   ansible.builtin.fail:
     msg: >-
       SINEXCEL redeploy requires a successful backup of the old program directory
       before extract. program_dir={{ _sinexcel_program_dir | default('') }}.
-      backup_stdout={{ (_sinexcel_redeploy_backup.stdout | default('')) | string | truncate(300, True) }}
-  when: "'BACKUP_OK' not in ((_sinexcel_redeploy_backup.stdout | default('')) | string)"
+      rc={{ _sinexcel_redeploy_backup.rc | default('?') }}.
+      backup_stdout={{ (_sinexcel_redeploy_backup.stdout | default('')) | string | truncate(300, True) }}.
+      backup_stderr={{ (_sinexcel_redeploy_backup.stderr | default('')) | string | truncate(300, True) }}
+  when: >-
+    (_sinexcel_redeploy_backup.rc | default(1) | int != 0)
+    or ('BACKUP_OK' not in ((_sinexcel_redeploy_backup.stdout | default('')) | string))
 
 - name: 重新部署：解压升级包到程序目录并覆盖
   environment:
