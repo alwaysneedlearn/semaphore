@@ -36,6 +36,10 @@
     - not (start_aborted_exe_missing | default(false) | bool)
     - sinexcel_start_check_api | default(true) | bool
 
+- name: 启动后：Kafka SetConfig 重试
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_set_config_after_start_retry.yml"
+  when: not (start_aborted_exe_missing | default(false) | bool)
+
 - name: 启动后：开启 Kafka 上传
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_enable.yml"
   vars:
