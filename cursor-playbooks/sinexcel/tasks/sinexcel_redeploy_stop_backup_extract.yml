@@ -1,5 +1,5 @@
 ---
-# Graceful stop → backup program dir → extract zip over parent (overwrite).
+# Graceful stop → backup program dir → in-place extract zip into program_dir (overwrite).
 
 - name: 重新部署：停止前检查进程
   ansible.windows.win_shell: |
@@ -47,24 +47,16 @@
     and 'stdout' in _sinexcel_redeploy_backup
     and ('BACKUP_ERROR' in (_sinexcel_redeploy_backup.stdout | default('')))
 
-- name: 重新部署：解压升级包并覆盖
-  ansible.windows.win_shell: |
-    $zipPath = "{{ redeploy_zip_dest }}"
-    $destDir = "{{ redeploy_extract_dest }}"
-    try {
-      if (-not (Test-Path -LiteralPath $zipPath)) {
-        Write-Output "EXTRACT_ERROR|reason=zip_missing|path=$zipPath"
-        exit 1
-      }
-      if (-not (Test-Path -LiteralPath $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-      }
-      Expand-Archive -LiteralPath $zipPath -DestinationPath $destDir -Force
-      Write-Output "EXTRACT_OK|zip=$zipPath|dest=$destDir"
-    } catch {
-      Write-Output ("EXTRACT_ERROR|reason=" + $_.Exception.Message)
-      exit 1
-    }
+- name: 重新部署：解压升级包到程序目录并覆盖
+  environment:
+    SINEXCEL_ZIP_PATH: "{{ redeploy_zip_dest }}"
+    SINEXCEL_PROGRAM_DIR: "{{ redeploy_extract_dest }}"
+    SINEXCEL_ZIP_INNER_NAME: "{{ zip_name }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_sinexcel_redeploy_extract_inplace.ps1
+  args:
+    chdir: C:\Windows\Temp
   register: _sinexcel_redeploy_extract
   failed_when: >-
     _sinexcel_redeploy_extract is defined

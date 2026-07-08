@@ -47,7 +47,7 @@
     exe_path: "{{ (_sinexcel_exe_path_line | regex_replace('^EXE_PATH_RESOLVED=', '') | trim) }}"
     exe_dir: "{{ (_sinexcel_program_dir_line | regex_replace('^PROGRAM_DIR_RESOLVED=', '') | trim) }}"
     redeploy_zip_dest: "{{ (_sinexcel_program_parent_line | regex_replace('^PROGRAM_PARENT_RESOLVED=', '') | trim) }}\\{{ zip_name }}.zip"
-    redeploy_extract_dest: "{{ (_sinexcel_program_parent_line | regex_replace('^PROGRAM_PARENT_RESOLVED=', '') | trim) }}"
+    redeploy_extract_dest: "{{ (_sinexcel_program_dir_line | regex_replace('^PROGRAM_DIR_RESOLVED=', '') | trim) }}"
 
 - name: DEBUG SINEXCEL 程序目录解析
   ansible.builtin.debug:

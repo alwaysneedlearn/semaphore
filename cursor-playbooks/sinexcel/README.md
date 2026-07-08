@@ -138,14 +138,14 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 ### Redeploy（`device_redeploy.yml`）
 
-**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=2`）：**
+**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=5`）：**
 
-1. 从**运行中进程**解析 `ExecutablePath` → 程序目录 `program_dir`、上级目录 `parent_dir`（进程未跑时回退盘符扫描的 `exe_path`）
+1. 从**运行中进程**或盘符扫描解析 **当前程序目录** `program_dir`（如 `D:\盛弘软件\电池检测与化成V3.9.2.7-20240307-全包`）、上级 `parent_dir`（放 zip）
 2. 复制 `{{ ZIP_NAME }}.zip` 到 **`parent_dir`**（已存在则跳过复制）
 3. 进程在跑时：**`POST /kafka/SetConfig`**（`KafkaConfig`）+ **`POST /kafka/IsEnable`**
 4. **优雅停止**（`STOP_POPUP_*`）
-5. **备份** 目标版本目录 `install_base\ZIP_NAME` → `…ZIP_NAME.bak_yyyyMMdd_HHmmss`（目录尚不存在则 `BACKUP_SKIP`）
-6. `Expand-Archive -Force` 解压到 `parent_dir`（覆盖原目录）
+5. **备份** 当前 `program_dir` → `program_dir.bak_yyyyMMdd_HHmmss`（目录不存在则 `BACKUP_SKIP`）
+6. 解压 zip **到 `program_dir` 内就地覆盖**：若 zip 内仅有一层与 `ZIP_NAME` 同名的目录，则合并该目录下文件到 `program_dir`（`Expand-Archive` + `Copy-Item -Force`）
 7. 计划任务启动 → **`SetConfig` 重试** + **`IsEnable`** → `QueryConfig` 健康检查
 
 **不写** `program_dir\config` 磁盘文件；配置与 Restart 相同，经 **HTTP Kafka API**（Semaphore 分类 **`KafkaConfig`**）。

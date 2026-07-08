@@ -1,12 +1,12 @@
 # Resolve SINEXCEL program directory for redeploy.
 # Env: SINEXCEL_PROCESS_NAME, SINEXCEL_FALLBACK_EXE_PATH, SINEXCEL_FALLBACK_EXE_DIR,
-#      SINEXCEL_FALLBACK_APP_DIR (zip folder / redeploy target name),
+#      SINEXCEL_FALLBACK_APP_DIR (zip inner folder name hint, optional),
 #      SINEXCEL_FALLBACK_EXE_DIR_PREFERRED, SINEXCEL_EXE_NAME
 #
-# Redeploy layout:
-#   install_base  = parent of current install (e.g. D:\盛弘软件)
-#   program_dir   = install_base\APP_DIR (e.g. D:\盛弘软件\3.9.2.10-0610)
-#   parent_dir    = install_base (zip + extract destination)
+# Redeploy layout (in-place upgrade into current install folder):
+#   program_dir   = current install dir (e.g. D:\盛弘软件\电池检测与化成V3.9.2.7-20240307-全包)
+#   parent_dir    = parent of program_dir (zip copy destination)
+#   extract dest  = program_dir (merge zip contents, overwrite files)
 
 $ErrorActionPreference = 'Continue'
 
@@ -157,13 +157,16 @@ $parentDir = ''
 $exePath = ''
 
 if ($null -ne $resolved) {
-  $parentDir = Normalize-WindowsPath $resolved.BaseDir
-  if ($targetAppDir.Length -gt 0 -and $targetAppDir -ne '.') {
-    $programDir = Normalize-WindowsPath (Join-Path $parentDir $targetAppDir)
-  } elseif ($resolved.InstallDir) {
+  if ($resolved.InstallDir) {
     $programDir = Normalize-WindowsPath $resolved.InstallDir
+    $parentDir = Normalize-WindowsPath $resolved.BaseDir
   } else {
-    $programDir = $parentDir
+    $parentDir = Normalize-WindowsPath $resolved.BaseDir
+    if ($targetAppDir.Length -gt 0 -and $targetAppDir -ne '.') {
+      $programDir = Normalize-WindowsPath (Join-Path $parentDir $targetAppDir)
+    } else {
+      $programDir = $parentDir
+    }
   }
 
   if ($exeName.Length -gt 0) {
