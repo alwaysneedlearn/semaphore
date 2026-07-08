@@ -1,11 +1,11 @@
 ---
 # SINEXCEL redeploy: process dir → copy zip → API Kafka (pre-stop) → stop → backup → extract → start → API Kafka.
-# Revision marker: SINEXCEL_REDEPLOY_UPGRADE_REV=3
+# Revision marker: SINEXCEL_REDEPLOY_UPGRADE_REV=4
 
 - name: DEBUG SINEXCEL 重新部署升级流程
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-SINEXCEL] SINEXCEL_REDEPLOY_UPGRADE_REV=3"
+      - "[DEBUG-SINEXCEL] SINEXCEL_REDEPLOY_UPGRADE_REV=4"
       - "[DEBUG-SINEXCEL] redeploy_mode=extract_overwrite_kafka_api (no config file patch)"
 
 - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_redeploy_copy_zip_to_parent.yml"

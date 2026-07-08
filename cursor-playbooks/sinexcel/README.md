@@ -144,7 +144,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 2. 复制 `{{ ZIP_NAME }}.zip` 到 **`parent_dir`**（已存在则跳过复制）
 3. 进程在跑时：**`POST /kafka/SetConfig`**（`KafkaConfig`）+ **`POST /kafka/IsEnable`**
 4. **优雅停止**（`STOP_POPUP_*`）
-5. **备份** `program_dir` → `program_dir.bak_yyyyMMdd_HHmmss`
+5. **备份** 目标版本目录 `install_base\ZIP_NAME` → `…ZIP_NAME.bak_yyyyMMdd_HHmmss`（目录尚不存在则 `BACKUP_SKIP`）
 6. `Expand-Archive -Force` 解压到 `parent_dir`（覆盖原目录）
 7. 计划任务启动 → **`SetConfig` 重试** + **`IsEnable`** → `QueryConfig` 健康检查
 
