@@ -59,14 +59,18 @@
     - ansible.builtin.set_fact:
         _agent_target_host: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
 
-    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_config_stop_start.yml"
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_config_stop_start.yml"
+      rescue:
+        - ansible.builtin.set_fact:
+            host_failure_reason: "{{ (ansible_failed_result.msg | default('SINEXCEL restart failed')) | string | truncate(500, True) }}"
 
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
           hostname: "{{ _sem_display_hostname }}"
           ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (((_ini_agent_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy') }}"
+          device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if ((_ini_agent_process_after.stdout | default('') | trim).split('|') | first == 'RUNNING') and ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'unhealthy') }}"
           winrm_status: online
           api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if ((not (sinexcel_start_check_api | bool)) or (_sinexcel_kafka_api_ok | default(false) | bool)) else 'offline') }}"
           abnormal_reason: >-
