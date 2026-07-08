@@ -7,7 +7,8 @@
   ansible.builtin.set_fact:
     _stop_needs_force_fallback: >-
       {{
-        (stop_graceful_result is defined)
+        (stop_enable_force_fallback | default(true) | bool)
+        and (stop_graceful_result is defined)
         and not (stop_graceful_result.unreachable | default(false))
         and ('NOT_RUNNING' not in (stop_graceful_result.stdout | default('')))
         and ('ALREADY_STOPPED' not in (stop_graceful_result.stdout | default('')))

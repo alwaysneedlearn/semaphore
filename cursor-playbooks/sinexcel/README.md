@@ -134,7 +134,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `STOP_POPUP_KEYWORD` | `警告` | 优雅停止确认 |
 | `STOP_POPUP_MATCH_MODE` | `title_or_content` | 无标题弹窗用正文匹配 |
 | `STOP_POPUP_WAIT_SECONDS` | `2` | 停前等弹窗 |
-| `STOP_FORCE_AFTER_GRACEFUL` | `true` | 优雅停失败后强杀 |
+| `STOP_FORCE_AFTER_GRACEFUL` | `false` | SINEXCEL 默认**不**强杀；优雅停失败则操作失败（可 env 设为 `true` 恢复旧行为） |
 
 ### Redeploy（`device_redeploy.yml`）
 

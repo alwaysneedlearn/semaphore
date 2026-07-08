@@ -63,7 +63,7 @@ if ([string]::IsNullOrWhiteSpace($matchMode)) {
   $matchMode = 'title_or_content'
 }
 
-$forceAfter = $true
+$forceAfter = $false
 $forceRaw = $ForceAfterArg
 if ([string]::IsNullOrWhiteSpace($forceRaw)) {
   $forceRaw = [string]$env:STOP_FORCE_AFTER_GRACEFUL

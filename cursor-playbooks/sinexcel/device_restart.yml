@@ -12,7 +12,6 @@
     sem_operation_type: restart
     sem_operation_force_log: true
     sem_debug_tag: SINEXCEL
-    ini_agent_force_stop: false
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\SINEXCEL', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     _exe_name_default: sinexcel_agent.exe
@@ -33,7 +32,7 @@
     stop_popup_match_mode: "{{ (lookup('env', 'STOP_POPUP_MATCH_MODE') | default('', true) | trim) | default('title_or_content', true) }}"
     start_popup_wait_seconds: "{{ ((lookup('env', 'START_POPUP_WAIT_SECONDS') | default('', true) | trim) | default('3', true)) | int }}"
     start_popup_keyword: "{{ (lookup('env', 'START_POPUP_KEYWORD') | default('', true) | trim) | default('提示', true) }}"
-    stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('true', true)) | bool }}"
+    stop_force_after_graceful: "{{ ((lookup('env', 'STOP_FORCE_AFTER_GRACEFUL') | default('', true) | trim) | default('false', true)) | bool }}"
     stop_verify_process_name: "{{ process_name }}"
     sinexcel_start_check_api: "{{ ((lookup('env', 'SINEXCEL_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
     sinexcel_include_retransmit: false

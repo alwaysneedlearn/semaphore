@@ -24,7 +24,7 @@ if ($waitSec -lt 0) { $waitSec = 0 }
 $forceRaw = [string]$env:STOP_FORCE_AFTER_GRACEFUL
 if ($null -eq $forceRaw) { $forceRaw = '' }
 $forceRaw = $forceRaw.Trim()
-if ($forceRaw.Length -eq 0) { $forceRaw = 'true' }
+if ($forceRaw.Length -eq 0) { $forceRaw = 'false' }
 
 $verifyName = [string]$env:STOP_VERIFY_PROCESS_NAME
 if ($null -eq $verifyName) { $verifyName = '' }
