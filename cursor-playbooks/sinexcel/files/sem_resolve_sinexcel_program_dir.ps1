@@ -5,9 +5,9 @@
 $ErrorActionPreference = 'Continue'
 
 function Get-TrimmedEnv([string]$name) {
-  $v = [string]$env:$name
+  $v = [Environment]::GetEnvironmentVariable($name)
   if ($null -eq $v) { return '' }
-  return $v.Trim()
+  return ([string]$v).Trim()
 }
 
 function Test-AbsoluteWindowsPath([string]$path) {
