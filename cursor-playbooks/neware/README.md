@@ -142,6 +142,6 @@ When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other sec
 2. **`tasks/start_verify_poll_process_after_start.yml`** — process poll; may set **`skip_log_poll`** on process/exe failure.
 3. **`tasks/neware_query_upload_status_api_start_poll.yml`** — upload-status POST **polled** until **`ExecResultData==3`** (defaults align with **`LOG_POLL_RETRIES`** / **`LOG_POLL_DELAY`**; override **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`**). Patrol/health still uses **`neware_query_upload_status_api.yml`** (short retries).
 4. **`tasks/log_poll_confirm.yml`** when API did not return **3**.
-5. **`final_start_ok`** — **`_exe_start_script_ok`** + **`process_running_after_start`** + (**`api_upload_started`** or log poll **`rc == 0`**).
+5. **`final_start_ok`** — **`_exe_start_script_ok`** + (**`api_upload_started`** via localhost API poll, **independent of WinRM**) or (**`process_running_after_start`** + log poll **`rc == 0`**). **`winrm_status`** reflects post-start WinRM probe (`_start_verify_winrm_ok`), not API health.
 
 Log baseline is recorded in **`tasks/log_poll_record_baseline_before_start_api.yml`** **before** start (not after exe launch).

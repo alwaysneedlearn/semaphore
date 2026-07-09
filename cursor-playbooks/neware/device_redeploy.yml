@@ -76,8 +76,25 @@
           ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
           device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (final_start_ok | default(false) | bool) else 'unhealthy') }}"
           api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if (final_start_ok | default(false) | bool) else 'offline') }}"
-          winrm_status: online
-          abnormal_reason: "{{ host_failure_reason | default('') }}"
+          winrm_status: >-
+            {{
+              'offline'
+              if not (_start_verify_winrm_ok | default(_winrm_session_ok | default(false)) | bool)
+              else 'online'
+            }}
+          abnormal_reason: >-
+            {{
+              host_failure_reason | default('')
+              if (host_failure_reason is defined)
+              else (
+                'WinRM unreachable after start (API healthy; winrm_status=offline)'
+                if (
+                  (final_start_ok | default(false) | bool)
+                  and not (_start_verify_winrm_ok | default(_winrm_session_ok | default(false)) | bool)
+                )
+                else ''
+              )
+            }}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
 

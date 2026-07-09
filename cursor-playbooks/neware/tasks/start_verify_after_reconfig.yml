@@ -1,5 +1,6 @@
 ---
-# 重配启动后的验证：exe VERIFY_OK + 启动后进程轮询 + API 数据上报状态（优先）+ 日志轮询回退
+# 重配启动后的验证：exe VERIFY_OK → API 轮询（localhost，不依赖 WinRM）→ 进程/日志回退（需 WinRM）
+# START_VERIFY_AFTER_RECONFIG_REV=2 — API decoupled from WinRM process poll
 
 - ansible.builtin.include_tasks: tasks/start_verify_register_exe_start_ok.yml
 
@@ -9,21 +10,16 @@
   ansible.builtin.include_tasks: tasks/neware_query_upload_status_api_start_poll.yml
   vars:
     neware_api_query_context: start_verify
-  when: >
-    (_exe_start_script_ok | default(false) | bool) and
-    (process_running_after_start | default(false) | bool) and
-    not (skip_log_poll | default(false) | bool)
+  when: _exe_start_script_ok | default(false) | bool
 
 - name: 启动验证：API 数据上报已启动，跳过日志轮询
   ansible.builtin.set_fact:
     skip_log_poll: true
     skip_log_poll_reason: >-
       API ExecResultData={{ api_upload_exec_result_data | default('n/a') }} (upload started={{ export_started | default('3') }})
-  when: >
-    (_exe_start_script_ok | default(false) | bool) and
-    (process_running_after_start | default(false) | bool) and
-    not (skip_log_poll | default(false) | bool) and
-    (api_upload_started | default(false) | bool)
+  when:
+    - _exe_start_script_ok | default(false) | bool
+    - api_upload_started | default(false) | bool
 
 - name: 启动验证：日志轮询前置检查
   ansible.builtin.include_tasks: tasks/log_poll_assert_baseline_before_poll.yml
@@ -36,38 +32,40 @@
 - name: 启动验证：综合判断启动结果（成功）
   ansible.builtin.set_fact:
     final_start_ok: true
-  when: >
+  when: >-
     (_exe_start_script_ok | default(false) | bool) and
-    (process_running_after_start | default(false) | bool) and
     (
       (api_upload_started | default(false) | bool) or
       (
+        (process_running_after_start | default(false) | bool) and
         not (skip_log_poll | default(false) | bool) and
-        log_poll is defined and (log_poll.rc | default(1)) == 0
+        (log_poll is defined) and
+        ((log_poll.rc | default(1) | int) == 0)
       )
     )
 
 - name: 启动验证：综合判断启动结果（失败）
   ansible.builtin.set_fact:
     final_start_ok: false
-  when: >
-    (_exe_start_script_ok is not defined) or
+  when: >-
     not (_exe_start_script_ok | default(false) | bool) or
-    not (process_running_after_start | default(false) | bool) or
     (
       not (api_upload_started | default(false) | bool) and
       (
+        not (process_running_after_start | default(false) | bool) or
         (skip_log_poll | default(false) | bool) or
-        log_poll is not defined or
-        (log_poll.rc | default(1)) != 0
+        (log_poll is not defined) or
+        ((log_poll.rc | default(1) | int) != 0)
       )
     )
 
 - name: 启动验证：输出验证结果
   ansible.builtin.debug:
     msg:
+      - "[启动验证] START_VERIFY_AFTER_RECONFIG_REV=2"
       - "[启动验证] final_start_ok={{ final_start_ok | default(false) }}"
       - "[启动验证] exe_verify_ok={{ _exe_start_script_ok | default(false) }} process_after_start={{ process_running_after_start | default(false) }}"
+      - "[启动验证] start_verify_winrm_ok={{ _start_verify_winrm_ok | default('n/a') }}"
       - "[启动验证] api_upload_started={{ api_upload_started | default(false) }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}"
       - "[启动验证] skip_log_poll={{ skip_log_poll | default(false) }} reason={{ skip_log_poll_reason | default('') | trim }}"
       - "[启动验证] log_poll_ok={{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}"
@@ -75,13 +73,14 @@
 - name: 启动验证：启动失败则终止
   ansible.builtin.fail:
     msg: |
-      [失败] 启动验证失败（exe 启动 / 启动后进程轮询 / API 数据上报 / 日志轮询）
+      [失败] 启动验证失败（exe 启动 / API 数据上报 / 日志轮询）
       exe_start_ok={{ _exe_start_script_ok | default(false) }}
       process_running_after_start={{ process_running_after_start | default(false) }}
+      start_verify_winrm_ok={{ _start_verify_winrm_ok | default('n/a') }}
       api_upload_started={{ api_upload_started | default(false) }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}
       api_last_http={{ api_upload_status_result.status | default('n/a') }} api_last_body={{ api_upload_status_result.content | default('') | truncate(400, True, '...') }}
       skip_log_poll={{ skip_log_poll | default(false) }} ({{ skip_log_poll_reason | default('') }})
       log_poll_ok={{ (log_poll is defined and (log_poll.rc | default(1)) == 0) | default(false) }}
       log_path={{ log_path | default('n/a') }}
-      hint=进程已启动时检查 API_PORT/INI ServerPort 与 BTSClient HTTP 是否可达；日志无关键字可增大 LOG_POLL_RETRIES/DELAY 或 API_STATUS_START_POLL_*
+      hint=API 与 WinRM 独立；VERIFY_OK 后应轮询 API_PORT；WinRM 断开时仍可用 API 判定 final_start_ok
   when: not (final_start_ok | default(false) | bool)
