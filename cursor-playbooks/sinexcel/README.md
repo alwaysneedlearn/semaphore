@@ -1,6 +1,6 @@
 # SINEXCEL playbooks (`cursor-playbooks/sinexcel/`)
 
-Device type **SINEXCEL**: LAND-style lifecycle — 配置经 **HTTP API**（`SetConfig` / `IsEnable` / `QueryConfig`），**不写 INI**；start/restart 通过计划任务启动 exe 并可选 **启动弹窗确认**。
+Device type **SINEXCEL**: LAND-style lifecycle — 配置经 **HTTP API**（`SetConfig` / `IsEnable` / `QueryConfig`）**与** Redeploy 可选 **磁盘 INI 改配**（`ConfigFile1`/`ConfigFile2`）；start/restart 通过计划任务启动 exe 并可选 **启动弹窗确认**。
 
 ## Runner 同步（报错 `_app_from_cfg is undefined` 时必做）
 
@@ -36,8 +36,8 @@ grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
 | File | Purpose |
 |------|---------|
 | `device_status.yml` | Exe + process + **Kafka QueryConfig** (`EnableFlowInfoExtendedSqlite`), bulk callback |
-| `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryHistory + Retransmit**（`Retransmit` 分类） |
-| `device_redeploy.yml` | **进程定位目录** → 上级目录 zip（已有则跳过）→ **Kafka SetConfig/IsEnable** → 优雅停止 → **备份** → **解压覆盖** → 启动 → **Kafka SetConfig 重试 + IsEnable** + API 验证 |
+| `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryConfig**（不含 Retransmit；重发见 `device_resend_data.yml`） |
+| `device_redeploy.yml` | **进程定位目录** → zip → **Kafka** → 优雅停止 → **备份** → **解压覆盖** → **INI 改配** → 启动 → **Kafka** 验证 |
 | `device_check_restart.yml` | Unhealthy gate via Kafka QueryConfig; restart only when needed |
 | `device_stop.yml` | Force stop process |
 
@@ -51,7 +51,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `POST /kafka/SetConfig` | Apply **KafkaConfig** category (addrs, topics) |
 | `POST /kafka/IsEnable` | `{"EnableFlowInfoExtendedSqlite": true}` |
 | `POST /kafka/QueryHistory` | `StartTime` / `EndTime` → history rows with `FlowId` |
-| `POST /kafka/Retransmit` | Batch `[{"FlowId":"..."}, ...]` (restart only) |
+| `POST /kafka/Retransmit` | Batch `[{"FlowId":"..."}, ...]`（**`device_resend_data.yml` 专用**） |
 
 ## Semaphore config categories (like LAND)
 
@@ -140,20 +140,50 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
 ### Redeploy（`device_redeploy.yml`）
 
-**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=6`）：**
+**流程（`SINEXCEL_REDEPLOY_UPGRADE_REV=8`）：**
 
-1. 从**运行中进程**或盘符扫描解析 **当前程序目录** `program_dir`（如 `D:\盛弘软件\电池检测与化成V3.9.2.7-20240307-全包`）、上级 `parent_dir`（放 zip）
+1. 从**运行中进程**或盘符扫描解析 **当前程序目录** `program_dir`、上级 `parent_dir`（放 zip）
 2. 复制 `{{ ZIP_NAME }}.zip` 到 **`parent_dir`**（已存在则跳过复制）
 3. 进程在跑时：**`POST /kafka/SetConfig`**（`KafkaConfig`）+ **`POST /kafka/IsEnable`**
 4. **优雅停止**（`STOP_POPUP_*`）
-5. **备份旧版目录**（解压前强制）：`program_dir` → 同级 `program_dir.bak_yyyyMMdd_HHmmss`；旧目录不存在或备份失败则**中止**，不执行解压
-6. 解压 zip **到 `program_dir` 内就地覆盖**：若 zip 内仅有一层与 `ZIP_NAME` 同名的目录，则合并该目录下文件到 `program_dir`（`Expand-Archive` + `Copy-Item -Force`）
-7. 计划任务启动 → **`SetConfig` 重试** + **`IsEnable`** → `QueryConfig` 健康检查
+5. **备份旧版目录**（解压前强制）：`program_dir` → 同级 `program_dir.bak_yyyyMMdd_HHmmss`
+6. 解压 zip **到 `program_dir` 内就地覆盖**（zip 内单层 `ZIP_NAME` 目录会展开合并）
+7. **磁盘改配**：按 `ConfigFile1` / `ConfigFile2` 合并写入 `program_dir\config\` 下 2 个 INI（缺 section/key 则追加）
+8. 计划任务启动 → **`SetConfig` 重试** + **`IsEnable`** → `QueryConfig` 健康检查
 
-**不写** `program_dir\config` 磁盘文件；配置与 Restart 相同，经 **HTTP Kafka API**（Semaphore 分类 **`KafkaConfig`**）。
+**磁盘 INI 与 Kafka API 分工**：`KafkaConfig` 仍经 HTTP API 下发；`ConfigFile1`/`ConfigFile2` 仅写本地 INI/JSON，互不替代。
+
+#### Redeploy 两个 INI 文件如何配置
+
+**变量组**（模板级，两台文件各一个文件名）：
+
+```text
+SINEXCEL_CONFIG_FILES=BTSClient.ini,kafka.ini
+```
+
+**设备类型默认配置 / 单台设备配置**（Semaphore JSON 分类）：
+
+```json
+{
+  "ConfigFile1": {
+    "Kafka.Addr": "192.168.1.10:9092",
+    "Kafka.Topic": "bts_flow"
+  },
+  "ConfigFile2": {
+    "Agent.Port": "9002",
+    "Log.Level": "info"
+  }
+}
+```
+
+- 键名 `Section.Key` → 写入 INI 的 `[Section]` 下 `Key=value`；无 section 时用 `[DEFAULT]`
+- 文件不存在则新建；section 或 key 不存在则**追加**
+- 未设 `SINEXCEL_CONFIG_FILES` 时跳过磁盘改配（仅 Kafka API）
+- 配置目录默认 `program_dir\config`（与解压后的布局一致）
 
 | Variable | Default | 用于 |
 |----------|---------|------|
+| `SINEXCEL_CONFIG_FILES` | — | 逗号分隔，如 `a.ini,b.ini`（Redeploy 磁盘改配） |
 | `ZIP_PATH` | `/root/sinexcel/pkg` | **仅 Redeploy**：控制器上 `{{ ZIP_NAME }}.zip` 所在目录 |
 
 Restart / Check-restart / Redeploy 均走 **HTTP Kafka API**（`sinexcel_config_stop_start.yml` 或 redeploy 内嵌同等 API 步骤）。

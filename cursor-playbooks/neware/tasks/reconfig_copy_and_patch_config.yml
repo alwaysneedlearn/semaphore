@@ -167,7 +167,7 @@
     }
 
     function Update-ConfigFile {
-      param([string]$configPath, [string]$cfgJson, [string]$calbIp, [int]$serverPort, [string]$fromDate, [string]$toDate)
+      param([string]$configPath, [string]$cfgJson, [string]$calbIp, [int]$serverPort, [string]$fromDate, [string]$toDate, [bool]$patchHisData)
       if (-not (Test-Path $configPath)) {
         Write-Output "CONFIG_NOT_FOUND:$configPath"
         return $false
@@ -209,8 +209,13 @@
         $sysCfg.Remove("ServerPort") | Out-Null
         $sysCfg.Remove("EnableReportApiCall") | Out-Null
         $sysCfg["ReportApiSettings"] = $reportApi
-        if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
-        if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
+        if ($patchHisData) {
+          if (-not $sysCfg.ContainsKey("HisDataFromTime")) { $sysCfg["HisDataFromTime"] = $fromDate }
+          if (-not $sysCfg.ContainsKey("HisDataToTime")) { $sysCfg["HisDataToTime"] = $toDate }
+        } else {
+          $sysCfg.Remove("HisDataFromTime") | Out-Null
+          $sysCfg.Remove("HisDataToTime") | Out-Null
+        }
         $lines = [System.Collections.Generic.List[string]](Get-Content $configPath)
         foreach ($section in @($cfg.Keys)) {
           $vals = $cfg[$section]
@@ -240,6 +245,7 @@
     if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
     $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
     if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
+    $patchHisData = {{ neware_include_his_data_resend | default(false) | bool | lower }}
     $userConfigPath = '{{ _reconfig_user_cfg_file | replace("\u0027", "\u0027\u0027") }}'
     $publicConfigPath = "C:\Users\Public\{{ _reconfig_client_rel_path }}\{{ config_file_name }}"
     # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
@@ -248,11 +254,12 @@
     Write-Output "RECONFIG_MODIFY_USER_CFG=$userConfigPath"
     Write-Output "RECONFIG_MODIFY_PUBLIC_CFG=$publicConfigPath"
     Write-Output "RECONFIG_REPORT_API_DEFAULTS|ServerIpAddrStr=$calbIp|ServerPort=$serverPort|EnableReportApiCall=true"
+    Write-Output "RECONFIG_HIS_DATA_PATCH=$patchHisData"
     Write-Output "=== 处理当前用户配置文件 ==="
-    $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+    $userResult = Update-ConfigFile -configPath $userConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate -patchHisData $patchHisData
 
     Write-Output "`n=== 处理Public用户配置文件 ==="
-    $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate
+    $publicResult = Update-ConfigFile -configPath $publicConfigPath -cfgJson $cfgJson -calbIp $calbIp -serverPort $serverPort -fromDate $fromDate -toDate $toDate -patchHisData $patchHisData
 
     if (-not $userResult -and -not $publicResult) {
       exit 1

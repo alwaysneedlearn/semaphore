@@ -132,4 +132,4 @@
         and (merged_cfg.Redeliver | default({}) | length) > 0
         and (((_land_process_after_restart.stdout | default('') | trim).split('|') | first) == 'RUNNING')
         and (land_api_status_ok | default(false) | bool)
-        and (land_include_redeliver | default(true) | bool)
+        and (land_include_redeliver | default(false) | bool)
