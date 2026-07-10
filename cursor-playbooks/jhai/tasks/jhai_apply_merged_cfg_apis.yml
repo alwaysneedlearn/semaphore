@@ -1,5 +1,6 @@
 ---
-# Apply Kafka / resend HTTP APIs from merged_cfg (never restarts the Windows service).
+# Apply Kafka / optional resend HTTP APIs from merged_cfg (never restarts the Windows service).
+# Resend tasks run only when jhai_include_resend_data is true (device_resend_data uses jhai_apply_resend_only instead).
 
 - name: 准备 JHAI 合并配置（Kafka / 重传分类）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_prepare_merged_cfg.yml"
@@ -9,10 +10,15 @@
 
 - name: JHAI 分段重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_part.yml"
-  when: jhai_resend_part_requested | default(false) | bool
+  when:
+    - jhai_include_resend_data | default(false) | bool
+    - jhai_resend_part_requested | default(false) | bool
 
 - name: JHAI 全量重传（HTTP API）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_resend_data_all.yml"
+  when:
+    - jhai_include_resend_data | default(false) | bool
+    - jhai_resend_all_requested | default(false) | bool
 
 - name: JHAI 汇总配置 API 结果
   ansible.builtin.set_fact:
@@ -21,6 +27,11 @@
     _jhai_cfg_apis_ok: >-
       {{
         (jhai_modify_kafka_ok is not defined or (jhai_modify_kafka_ok | default(false) | bool))
-        and (jhai_resend_part_ok is not defined or (jhai_resend_part_ok | default(false) | bool))
-        and (jhai_resend_all_ok is not defined or (jhai_resend_all_ok | default(false) | bool))
+        and (
+          not (jhai_include_resend_data | default(false) | bool)
+          or (
+            (jhai_resend_part_ok is not defined or (jhai_resend_part_ok | default(false) | bool))
+            and (jhai_resend_all_ok is not defined or (jhai_resend_all_ok | default(false) | bool))
+          )
+        )
       }}

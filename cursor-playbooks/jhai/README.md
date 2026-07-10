@@ -13,9 +13,10 @@
 |----------|------|
 | `device_status.yml` | 巡检：`POST /api/get_upload_status` 优先 + 服务 Running 参考 |
 | `device_stop.yml` | 停止 `UploaderServiceDaemon` |
-| `device_restart.yml` | 停 → 启 → 心跳轮询 → 可选 HTTP 配置 API |
-| `device_redeploy.yml` | 下发 zip + 服务重启（不自动调 Kafka/重传 API） |
-| `device_check_restart.yml` | 不健康时服务 restart + HTTP 配置 API |
+| `device_restart.yml` | 停 → 启 → 心跳轮询（**不含** Kafka/重传 HTTP API） |
+| `device_redeploy.yml` | 下发 zip + 服务重启（不含 Kafka/重传 API） |
+| `device_check_restart.yml` | 不健康时仅服务 restart（不含 Kafka/重传 API） |
+| `device_resend_data.yml` | UI **重传数据**：`resend_params` → `POST /api/resend_data_part` 或 `/api/resend_data_all`（**不重启服务**） |
 
 ## HTTP API（默认端口 9002）
 
@@ -52,15 +53,14 @@ TDENGINE_TAG_SUPPLIER=jhai
 | `JHAI_UPLOAD_STATUS_START_POLL_RETRIES` | `6` | 启动后心跳轮询次数 |
 | `JHAI_UPLOAD_STATUS_START_POLL_DELAY` | `10` | 轮询间隔（秒） |
 
-## 设备配置（Semaphore 分类 → HTTP API，不触发 restart）
+## 设备配置（Semaphore 分类）
 
-| Category | 字段 | API |
-|----------|------|-----|
-| `ModifyKafka` 或 `KafkaConfig` | `kafkaConnectionInfo` | `POST /api/modify_kafka_configuration` |
-| `ResendData` | `ResendDataAll: true` | `POST /api/resend_data_all`（**忽略**同分类下的 `testStartTime`/`testEndTime`） |
-| `ResendDataPart` 或 `ResendData` | `testStartTime` **且** `testEndTime`（均有值） | `POST /api/resend_data_part`（`ResendDataAll` 为 true 时不执行） |
+| Category | 字段 | 何时生效 |
+|----------|------|----------|
+| `ModifyKafka` 或 `KafkaConfig` | `kafkaConnectionInfo` | 仅当 playbook 设 **`jhai_include_config_apis: true`** 时调 `POST /api/modify_kafka_configuration`（当前 restart/redeploy/check_restart 均为 **false**） |
+| `ResendData` / `ResendDataPart` | `ResendDataAll` 或 `testStartTime`+`testEndTime` | **仅** `device_resend_data.yml`（UI 弹窗 `resend_params`）；restart **不**读取设备配置里的重传分类（`jhai_include_resend_data: false`） |
 
-`device_restart` / `device_check_restart` 在服务 **Running** 后调用上述 API（`jhai_include_config_apis=true`）。修改 Kafka / 重传**不会**再次 restart 服务。
+`device_resend_data` 调用重传 API **不会** restart 服务。若将来在 restart 上启用 `jhai_include_config_apis: true`，也只会下发 Kafka，**不会**顺带重传，除非单独设 `jhai_include_resend_data: true`。
 
 ## 路径解析
 

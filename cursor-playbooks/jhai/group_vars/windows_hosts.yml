@@ -33,4 +33,5 @@ jhai_service_scan_latest: "{{ ((lookup('env', 'JHAI_SERVICE_SCAN_LATEST') | defa
 jhai_upload_status_start_poll_retries: "{{ ((lookup('env', 'JHAI_UPLOAD_STATUS_START_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
 jhai_upload_status_start_poll_delay: "{{ ((lookup('env', 'JHAI_UPLOAD_STATUS_START_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
 jhai_include_config_apis: false
+jhai_include_resend_data: false
 jhai_service_stop_first: true

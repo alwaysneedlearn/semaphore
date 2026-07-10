@@ -1,5 +1,5 @@
 ---
-# JHAI: Windows service stop/start + upload status poll + optional HTTP config APIs (no restart for config).
+# JHAI: Windows service stop/start + upload status poll + optional HTTP Kafka APIs (no resend).
 
 - name: 停止 JHAI Windows 服务（重启前）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_windows_service_stop.yml"
@@ -12,7 +12,7 @@
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_api_upload_status_start_poll.yml"
   when: jhai_start_check_api | default(true) | bool
 
-- name: JHAI 应用 Kafka/重传配置（HTTP API，不重启服务）
+- name: JHAI 应用 Kafka 配置（HTTP API，不重启服务；不含重传）
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_apply_merged_cfg_apis.yml"
   when:
     - jhai_include_config_apis | default(false) | bool
