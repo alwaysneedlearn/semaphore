@@ -194,10 +194,6 @@ func runService() {
 	secretStorageSyncScheduler.Start()
 	defer secretStorageSyncScheduler.Stop()
 
-	deviceStatusScheduler := server.NewDeviceStatusScheduler(store, &taskPool)
-	deviceStatusScheduler.Start()
-	defer deviceStatusScheduler.Stop()
-
 	route := api.Route(
 		store,
 		terraformStore,

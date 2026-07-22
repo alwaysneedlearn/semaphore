@@ -449,8 +449,7 @@ func PutDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GetDeviceSettings returns the per-project device action template bindings
-// and the periodic refresh interval.
+// GetDeviceSettings returns the per-project device action template bindings.
 func GetDeviceSettings(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
 	s, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)

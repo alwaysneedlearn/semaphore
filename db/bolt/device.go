@@ -495,19 +495,3 @@ func (d *BoltDb) UpdateProjectDeviceSettings(s db.ProjectDeviceSettings) error {
 	}
 	return d.updateObject(s.ProjectID, projectDeviceSettingsProps, s)
 }
-
-func (d *BoltDb) MarkProjectStatusRefreshed(projectID int, refreshed time.Time) error {
-	s, err := d.GetProjectDeviceSettings(projectID)
-	if err != nil {
-		return err
-	}
-	t := refreshed
-	s.LastStatusRefreshAt = &t
-	return d.UpdateProjectDeviceSettings(s)
-}
-
-// GetProjectsDueForStatusRefresh is an unsupported op for the deprecated Bolt
-// backend; periodic device refresh is only available with SQL stores.
-func (d *BoltDb) GetProjectsDueForStatusRefresh(_ time.Time) ([]db.ProjectDeviceSettings, error) {
-	return nil, nil
-}

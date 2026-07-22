@@ -578,37 +578,3 @@ func (d *SqlDb) UpdateProjectDeviceSettings(s db.ProjectDeviceSettings) error {
 	)
 	return err
 }
-
-func (d *SqlDb) MarkProjectStatusRefreshed(projectID int, refreshed time.Time) error {
-	_, err := d.exec(
-		"update project__device_settings set last_status_refresh_at=? where project_id=?",
-		refreshed, projectID,
-	)
-	return err
-}
-
-func (d *SqlDb) GetProjectsDueForStatusRefresh(now time.Time) ([]db.ProjectDeviceSettings, error) {
-	var settings []db.ProjectDeviceSettings
-	q, args, err := squirrel.Select(strings.Split(projectDeviceSettingsColumns, ", ")...).
-		From("project__device_settings").
-		Where(squirrel.Gt{"status_refresh_interval_min": 0}).
-		ToSql()
-	if err != nil {
-		return nil, err
-	}
-	if _, err = d.selectAll(&settings, d.PrepareQuery(q), args...); err != nil {
-		return nil, err
-	}
-
-	var due []db.ProjectDeviceSettings
-	for _, s := range settings {
-		if s.StatusRefreshIntervalMin <= 0 {
-			continue
-		}
-		if s.LastStatusRefreshAt == nil ||
-			now.Sub(*s.LastStatusRefreshAt) >= time.Duration(s.StatusRefreshIntervalMin)*time.Hour {
-			due = append(due, s)
-		}
-	}
-	return due, nil
-}

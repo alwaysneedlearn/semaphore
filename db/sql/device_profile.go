@@ -2,8 +2,6 @@ package sql
 
 import (
 	"errors"
-	"strings"
-	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/semaphoreui/semaphore/db"
@@ -127,39 +125,6 @@ func (d *SqlDb) AssignDevicesWithoutProfile(projectID, profileID int) error {
 	_, err := d.exec(
 		"update project__device set device_profile_id=? where project_id=? and (device_profile_id is null or device_profile_id=0)",
 		profileID, projectID,
-	)
-	return err
-}
-
-func (d *SqlDb) GetDeviceProfileSettingsDueForRefresh(now time.Time) ([]db.ProjectDeviceProfileSettings, error) {
-	var settings []db.ProjectDeviceProfileSettings
-	q, args, err := squirrel.Select(strings.Split(projectDeviceProfileSettingsColumns, ", ")...).
-		From("project__device_profile_settings").
-		Where(squirrel.Gt{"status_refresh_interval_min": 0}).
-		ToSql()
-	if err != nil {
-		return nil, err
-	}
-	if _, err = d.selectAll(&settings, d.PrepareQuery(q), args...); err != nil {
-		return nil, err
-	}
-	var due []db.ProjectDeviceProfileSettings
-	for _, s := range settings {
-		if s.StatusRefreshIntervalMin <= 0 {
-			continue
-		}
-		if s.LastStatusRefreshAt == nil ||
-			now.Sub(*s.LastStatusRefreshAt) >= time.Duration(s.StatusRefreshIntervalMin)*time.Hour {
-			due = append(due, s)
-		}
-	}
-	return due, nil
-}
-
-func (d *SqlDb) MarkDeviceProfileStatusRefreshed(projectID, profileID int, refreshed time.Time) error {
-	_, err := d.exec(
-		"update project__device_profile_settings set last_status_refresh_at=? where project_id=? and profile_id=?",
-		refreshed, projectID, profileID,
 	)
 	return err
 }

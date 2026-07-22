@@ -1,8 +1,6 @@
 package bolt
 
 import (
-	"time"
-
 	"github.com/semaphoreui/semaphore/db"
 )
 
@@ -71,13 +69,5 @@ func (d *BoltDb) AssignDevicesWithoutProfile(projectID, profileID int) error {
 			}
 		}
 	}
-	return nil
-}
-
-func (d *BoltDb) GetDeviceProfileSettingsDueForRefresh(_ time.Time) ([]db.ProjectDeviceProfileSettings, error) {
-	return nil, nil
-}
-
-func (d *BoltDb) MarkDeviceProfileStatusRefreshed(projectID, profileID int, refreshed time.Time) error {
 	return nil
 }

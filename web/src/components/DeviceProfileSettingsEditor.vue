@@ -37,47 +37,6 @@
 
     <v-card outlined class="mb-3">
       <v-card-subtitle class="pb-0 font-weight-medium">
-        Scheduled status refresh
-      </v-card-subtitle>
-      <v-card-text>
-        <p class="text--secondary caption mb-3">
-          When interval &gt; 0, Semaphore runs the check-restart template on a timer
-          (falls back to Status / Patrol template if not set).
-        </p>
-        <v-row dense>
-          <v-col cols="12" sm="6">
-            <v-text-field
-              v-model.number="settings.status_refresh_interval_min"
-              :label="$t('deviceRefreshIntervalMinutes')"
-              :hint="$t('deviceRefreshIntervalHelp')"
-              persistent-hint
-              type="number"
-              min="0"
-              outlined
-              dense
-              :disabled="saving"
-            />
-          </v-col>
-          <v-col cols="12" sm="6">
-            <v-autocomplete
-              v-model="settings.check_restart_template_id"
-              :items="templates"
-              item-value="id"
-              item-text="name"
-              :label="$t('deviceCheckRestartTemplate')"
-              clearable
-              outlined
-              dense
-              hide-details="auto"
-              :disabled="saving"
-            />
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
-
-    <v-card outlined class="mb-3">
-      <v-card-subtitle class="pb-0 font-weight-medium">
         Inventory
       </v-card-subtitle>
       <v-card-text>
@@ -160,6 +119,7 @@ export default {
       defaultConfigItems: [],
       templateActions: [
         { field: 'status_template_id', label: 'Status / Patrol template' },
+        { field: 'check_restart_template_id', label: 'Check-restart template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'redeploy_template_id', label: 'Redeploy template' },
         { field: 'resend_data_template_id', label: 'Resend data template' },
@@ -203,7 +163,6 @@ export default {
         next[field] = this.normalizeTemplateId(next[field]);
       });
       next.default_inventory_id = this.normalizeTemplateId(next.default_inventory_id);
-      next.status_refresh_interval_min = Number(next.status_refresh_interval_min) || 0;
       this.settings = next;
       this.defaultConfigItems = this.parseDefaultConfigJson(next.default_config_json);
     },
@@ -276,7 +235,8 @@ export default {
     buildSavePayload() {
       const payload = { ...this.settings };
       payload.default_config_json = this.buildDefaultConfigJson();
-      payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
+      // Built-in scheduled status refresh removed; use Semaphore Schedules for check_restart.
+      payload.status_refresh_interval_min = 0;
       TEMPLATE_ID_FIELDS.forEach((field) => {
         payload[field] = this.normalizeTemplateId(payload[field]);
       });

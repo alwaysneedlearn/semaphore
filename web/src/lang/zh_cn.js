@@ -571,7 +571,5 @@ export default {
   deviceTemplateResendData: '重发数据模板',
   deviceTemplateStatus: '状态模板',
   deviceTemplateConfig: '配置模板',
-  deviceRefreshIntervalMinutes: '状态刷新间隔（小时）',
-  deviceRefreshIntervalHelp: '设为 0 表示禁用定时刷新。',
   deviceSettingsSaved: '设备设置已保存。',
 };

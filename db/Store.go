@@ -338,8 +338,6 @@ type DeviceManager interface {
 
 	GetProjectDeviceSettings(projectID int) (ProjectDeviceSettings, error)
 	UpdateProjectDeviceSettings(settings ProjectDeviceSettings) error
-	MarkProjectStatusRefreshed(projectID int, refreshed time.Time) error
-	GetProjectsDueForStatusRefresh(now time.Time) ([]ProjectDeviceSettings, error)
 
 	GetDeviceProfiles(projectID int) ([]DeviceProfile, error)
 	GetDeviceProfile(projectID, profileID int) (DeviceProfile, error)
@@ -349,8 +347,6 @@ type DeviceManager interface {
 	GetProjectDeviceProfileSettings(projectID, profileID int) (ProjectDeviceProfileSettings, error)
 	UpdateProjectDeviceProfileSettings(s ProjectDeviceProfileSettings) error
 	AssignDevicesWithoutProfile(projectID, profileID int) error
-	GetDeviceProfileSettingsDueForRefresh(now time.Time) ([]ProjectDeviceProfileSettings, error)
-	MarkDeviceProfileStatusRefreshed(projectID, profileID int, refreshed time.Time) error
 
 	UpsertDeviceDiscoveryRun(run DeviceDiscoveryRun) error
 	GetDeviceDiscoveryRun(projectID, taskID int) (DeviceDiscoveryRun, error)

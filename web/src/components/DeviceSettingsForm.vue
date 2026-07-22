@@ -3,8 +3,9 @@
     <v-alert v-if="formError" color="error" dense class="mb-2">{{ formError }}</v-alert>
 
     <v-alert type="info" dense class="mb-3" outlined>
-      Templates and refresh intervals belong under
+      Templates belong under
       <strong>Devices → Device types</strong>.
+      Periodic check-restart should be configured as a Semaphore Schedule.
       This form is kept only for migration compatibility.
     </v-alert>
 
@@ -25,18 +26,6 @@
         />
       </v-col>
     </v-row>
-
-    <v-text-field
-      v-model.number="settings.status_refresh_interval_min"
-      :label="$t('deviceRefreshIntervalMinutes')"
-      :hint="$t('deviceRefreshIntervalHelp')"
-      persistent-hint
-      type="number"
-      min="0"
-      outlined
-      dense
-      :disabled="saving"
-    />
 
     <v-divider class="my-4" />
     <p class="text--secondary mb-2">默认配置（全部设备）</p>
@@ -193,7 +182,6 @@ export default {
         restart_template_id: null,
         status_template_id: null,
         default_config_json: '',
-        status_refresh_interval_min: 0,
         default_ansible_user: '',
         default_ansible_password: '',
         default_ansible_connection: 'winrm',
@@ -235,9 +223,6 @@ export default {
         this.settings = { ...this.settings, ...(res.data || {}) };
         this.defaultConfigItems = this.parseDefaultConfigJson(this.settings.default_config_json);
         this.showDefaultAnsiblePassword = false;
-        if (this.settings.status_refresh_interval_min == null) {
-          this.settings.status_refresh_interval_min = 0;
-        }
       } catch (e) {
         this.formError = getErrorMessage(e);
       }
@@ -291,7 +276,7 @@ export default {
       try {
         const payload = { ...this.settings };
         payload.default_config_json = this.buildDefaultConfigJson();
-        payload.status_refresh_interval_min = Number(payload.status_refresh_interval_min) || 0;
+        payload.status_refresh_interval_min = 0;
         payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
         await axios.put(`/api/project/${this.projectId}/devices/settings`, payload);
         EventBus.$emit('i-snackbar', { color: 'success', text: this.$i18n.t('deviceSettingsSaved') });

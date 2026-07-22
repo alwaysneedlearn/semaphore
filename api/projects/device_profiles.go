@@ -140,7 +140,7 @@ func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSett
 		ResendDataTemplateID:     ps.ResendDataTemplateID,
 		DefaultInventoryID:       ps.DefaultInventoryID,
 		DefaultConfigJSON:        ps.DefaultConfigJSON,
-		StatusRefreshIntervalMin: ps.StatusRefreshIntervalMin,
+		StatusRefreshIntervalMin: 0,
 	}
 }
 
@@ -153,7 +153,8 @@ func applyProfileSettingsView(existing *db.ProjectDeviceProfileSettings, body de
 	existing.ResendDataTemplateID = body.ResendDataTemplateID
 	existing.DefaultInventoryID = body.DefaultInventoryID
 	existing.DefaultConfigJSON = body.DefaultConfigJSON
-	existing.StatusRefreshIntervalMin = body.StatusRefreshIntervalMin
+	// Built-in DeviceStatusScheduler removed; schedule check_restart via Semaphore Schedules.
+	existing.StatusRefreshIntervalMin = 0
 }
 
 func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {
