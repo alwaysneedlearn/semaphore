@@ -186,10 +186,7 @@
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
       when: check_result is defined and 'stdout' in check_result
 
-    - name: API 未通过时假定进程未运行（跳过优雅 stop）
-      ansible.builtin.set_fact:
-        process_running: false
-      when: not (api_upload_status_ok | default(false) | bool)
+    # API 不通只表示上报不健康，不能据此跳过 stop：进程仍在跑时必须先停再写配置/启动。
 
     - block:
         - ansible.builtin.set_fact:
