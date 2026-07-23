@@ -12,7 +12,7 @@
         (semaphore_vars.task_details.id | default('')) | string | trim
       ) or (
         lookup('env', 'SEMAPHORE_TASK_DETAILS_ID') | default('', true) | trim
-      }}
+      ) }}
     _sem_discovery_cred_ok: >-
       {{
         (_sem_bulk_pid | default('') | trim | length) > 0 and
