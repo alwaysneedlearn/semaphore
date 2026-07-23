@@ -101,13 +101,13 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 ### 4.1 一次性（操作员 PC，无管理员）
 
 1. 运维下发绿色/`AppData` 目录下的 `semaphore-rdp-helper.exe`（**非** Program Files）  
-2. 首次运行：Helper **写 HKCU** 注册 `semaphore-rdp://`（无需提权）  
-3. 配置多环境跳板；确认用户级 OpenSSH 与密钥可用  
+2. 双击 exe → 打开本地面板 `http://127.0.0.1:17300`（自动尝试注册协议）  
+3. 在面板中编辑环境跳板并保存；确认本机 OpenSSH / 密钥可用  
 
 ### 4.2 日常
 
 ```text
-Helper：选环境 → 连接 → 打开网页 → 登录 Semaphore
+双击 Helper → 面板选环境 → 连接 → 打开网页 → 登录 Semaphore
 Semaphore：设备列表 →「远程桌面」→ semaphore-rdp://?token=...
 Helper：换参 →（复用 master / 直连）→ mstsc → 结束仅 cancel 本次 -L
 ```
