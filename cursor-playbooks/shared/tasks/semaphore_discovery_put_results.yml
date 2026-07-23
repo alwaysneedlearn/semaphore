@@ -3,7 +3,7 @@
 
 - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_bulk_credentials.yml"
 
-- name: 解析 discovery 回调参数
+- name: 解析 discovery 回调 task_id
   ansible.builtin.set_fact:
     _sem_discovery_task_id: >-
       {{ (
@@ -13,6 +13,10 @@
       ) or (
         lookup('env', 'SEMAPHORE_TASK_DETAILS_ID') | default('', true) | trim
       ) }}
+
+# set_fact 同任务内不能引用刚写入的键；凭据判定必须拆开
+- name: 判定 discovery 回调凭据是否齐全
+  ansible.builtin.set_fact:
     _sem_discovery_cred_ok: >-
       {{
         (_sem_bulk_pid | default('') | trim | length) > 0 and
