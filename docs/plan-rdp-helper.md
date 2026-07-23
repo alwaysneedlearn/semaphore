@@ -226,14 +226,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-wi
 
 ---
 
-## 10. 实施切片（边界齐，可开工）
+## 10. 实施切片
 
-| 切片 | 内容 |
-|------|------|
-| S1 | Semaphore：launch token API（含密码有则下发）+ 设备按钮 + **失败提示文案（无下载链）** |
-| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc（有密码内存用、无密码本机输入）/ 日志（免管理员） |
-| S3 | ControlMaster 复用 + 直连探测 + 操作说明（运维分发） |
-| S4 | Actions 出 exe（资产给运维，不挂进产品下载） |
+| 切片 | 内容 | 状态 |
+|------|------|------|
+| S1 | Semaphore：launch token API + 设备按钮 + 失败提示（无下载链） | **已做** |
+| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **已做**（`cmd/rdp-helper`） |
+| S3 | ControlMaster 复用 + 直连探测 + README | **已做** |
+| S4 | Actions 出 exe（`.github/workflows/rdp_helper.yml`） | **已做** |
 
 ---
 
