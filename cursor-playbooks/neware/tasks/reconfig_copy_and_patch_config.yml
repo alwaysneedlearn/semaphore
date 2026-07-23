@@ -245,7 +245,8 @@
     if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
     $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
     if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-    $patchHisData = {{ neware_include_his_data_resend | default(false) | bool | lower }}
+    # Ansible bool must become PowerShell $true/$false — bare "false" is a cmdlet name error
+    $patchHisData = {% if neware_include_his_data_resend | default(false) | bool %}$true{% else %}$false{% endif %}
     $userConfigPath = '{{ _reconfig_user_cfg_file | replace("\u0027", "\u0027\u0027") }}'
     $publicConfigPath = "C:\Users\Public\{{ _reconfig_client_rel_path }}\{{ config_file_name }}"
     # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
