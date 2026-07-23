@@ -52,4 +52,5 @@ Registers `semaphore-rdp://` under **HKCU** and creates `config.json`.
 GOOS=windows GOARCH=amd64 go build -o semaphore-rdp-helper.exe ./cmd/rdp-helper
 ```
 
-GitHub Actions: `.github/workflows/rdp_helper.yml`.
+GitHub Actions：**Dev** workflow（`.github/workflows/dev.yml`）构建后打包
+`semaphore-dev.zip`（含 Linux `semaphore` + Windows `semaphore-rdp-helper.exe` + README）。

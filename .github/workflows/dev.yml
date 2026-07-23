@@ -56,6 +56,21 @@ jobs:
       - name: Run build
         run: task build
 
+      - name: Build RDP Helper (Windows amd64)
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -ldflags="-s -w" \
+            -o bin/semaphore-rdp-helper.exe ./cmd/rdp-helper
+
+      - name: Pack dist zip (semaphore + rdp-helper)
+        run: |
+          mkdir -p dist
+          cp -a bin/semaphore dist/semaphore
+          cp -a bin/semaphore-rdp-helper.exe dist/semaphore-rdp-helper.exe
+          cp -a cmd/rdp-helper/README.md dist/RDP-HELPER-README.md
+          (cd dist && zip -r ../semaphore-dev.zip .)
+          ls -la semaphore-dev.zip dist/
+
       - name: Check modification
         run: |
           git diff --exit-code --stat -- . ':(exclude)web/package.json' ':(exclude)web/package-lock.json' ':(exclude)go.mod' ':(exclude)go.sum'
@@ -64,6 +79,13 @@ jobs:
         run: task test
 
       - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: semaphore-dev
+          path: semaphore-dev.zip
+          retention-days: 7
+
+      - name: Upload semaphore binary (migrate jobs)
         uses: actions/upload-artifact@v4
         with:
           name: semaphore

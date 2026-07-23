@@ -1288,7 +1288,9 @@ export default {
         } catch (_) {
           helperOpened = false;
         }
-        await new Promise((r) => setTimeout(r, 1600));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1600);
+        });
         window.removeEventListener('blur', onBlur);
         if (!helperOpened && document.hasFocus()) {
           EventBus.$emit('i-snackbar', {

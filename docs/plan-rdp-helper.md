@@ -233,7 +233,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-wi
 | S1 | Semaphore：launch token API + 设备按钮 + 失败提示（无下载链） | **已做** |
 | S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **已做**（`cmd/rdp-helper`） |
 | S3 | ControlMaster 复用 + 直连探测 + README | **已做** |
-| S4 | Actions 出 exe（`.github/workflows/rdp_helper.yml`） | **已做** |
+| S4 | Actions 出 exe（并入 Dev，与 `semaphore` 打成 `semaphore-dev.zip`） | **已做** |
 
 ---
 
