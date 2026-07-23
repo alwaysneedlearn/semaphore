@@ -2,7 +2,8 @@
 # NEWARE-style device INI config: resolve user paths, copy template from controller, merge Semaphore config.
 # Set Variable Group RECONFIG_CLIENT_REL_PATH per device type (e.g. Documents\SINEXCEL\BTSClient).
 # Play must define: config_file_name, merged_cfg_json, merged_system_config, api_host, api_port,
-# his_data_from_time (optional). Set neware_include_his_data_resend=true only for device_resend_data.yml.
+# his_data_from_time (optional). neware_include_his_data_resend=true for device_restart.yml and device_resend_data.yml
+# (redeploy / check_restart keep false unless overridden).
 # Set reconfig_copy_ini_template=true and zip_path when copying controller-side INI template (NEWARE / NBT only).
 # controller-side INI template (NEWARE / NBT only; SINEXCEL does not use this task).
 
