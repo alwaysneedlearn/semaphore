@@ -27,7 +27,7 @@
     api_host: "{{ inventory_hostname }}"
     api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'API_PORT') | default('', true) | trim) | default('9002', true) | int }}{% endif %}"
     his_data_from_time: "{{ (lookup('env', 'HIS_DATA_FROM_TIME') | default('', true) | trim) | default('', true) }}"
-    neware_include_his_data_resend: false
+    neware_include_his_data_resend: true
     restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('30', true)) | int }}"
     process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     _devices_from_extra: "{{ devices | default([]) }}"
