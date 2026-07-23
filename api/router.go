@@ -153,6 +153,9 @@ func Route(
 	publicAPIRouter.HandleFunc("/auth/oidc/{provider}/redirect", oidcRedirect).Methods("GET")
 	publicAPIRouter.HandleFunc("/auth/oidc/{provider}/redirect/{redirect_path:.*}", oidcRedirect).Methods("GET")
 
+	// Native RDP Helper: one-time token exchange (no session cookie; token-only).
+	publicAPIRouter.HandleFunc("/rdp/launch-params", projects.GetRDPLaunchParams).Methods("GET", "HEAD")
+
 	internalAPI := publicAPIRouter.PathPrefix("/internal").Subrouter()
 	internalAPI.HandleFunc("/runners", runners.RegisterRunner).Methods("POST")
 
@@ -450,6 +453,7 @@ func Route(
 	projectDeviceManagement.HandleFunc("/{device_id}/config", projects.PutDeviceConfig).Methods("PUT")
 	projectDeviceManagement.HandleFunc("/{device_id}/probe", projects.ProbeDevice).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/action", projects.RunDeviceAction).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/rdp/launch", projects.LaunchDeviceRDP).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/connection-preview", projects.GetDeviceWinRMConnectionPreview).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec", projects.ExecDeviceWinRMCommand).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.GetDeviceWinRMExecLogs).Methods("GET", "HEAD")
