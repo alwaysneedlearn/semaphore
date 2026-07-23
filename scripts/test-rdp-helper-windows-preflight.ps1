@@ -109,7 +109,7 @@ try {
     Set-ItemProperty -Path $hkcuCmd -Name '(default)' -Value $cmdValue -Force
     $readBack = (Get-ItemProperty -Path $hkcuCmd -Name '(default)').'(default)'
     if ($readBack -eq $cmdValue) {
-        Add-Result 'HKCU_Protocol' 'PASS' "Registered $ProtocolScheme:// under HKCU (no admin)." $false
+        Add-Result 'HKCU_Protocol' 'PASS' ("Registered {0}:// under HKCU (no admin)." -f $ProtocolScheme) $false
     } else {
         Add-Result 'HKCU_Protocol' 'FAIL' 'HKCU write/read mismatch.' $false
     }
