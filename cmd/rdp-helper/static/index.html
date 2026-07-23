@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Semaphore RDP Helper</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3d8bfd;
+      --ok: #3dd68c;
+      --warn: #f5a524;
+      --err: #f31260;
+      --input: #0c121b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.45 system-ui, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.on { background: var(--ok); }
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 16px;
+      padding: 16px 20px 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    @media (max-width: 840px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .env {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 6px;
+    }
+    .env:hover { background: rgba(255,255,255,.04); }
+    .env.active { border-color: var(--accent); background: rgba(61,139,253,.12); }
+    .env .name { font-weight: 600; }
+    .env .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    button, .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: #243044;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.danger { background: transparent; border-color: var(--err); color: var(--err); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+    input, textarea {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+    textarea { min-height: 220px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .msg {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+    .msg.show { display: block; }
+    .msg.ok { background: rgba(61,214,140,.12); color: var(--ok); }
+    .msg.err { background: rgba(243,18,96,.12); color: #ff7a9c; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    pre.log {
+      margin: 0;
+      max-height: 280px;
+      overflow: auto;
+      background: var(--input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font: 12px/1.4 ui-monospace, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Semaphore RDP Helper</h1>
+    <div class="badge"><span id="connDot" class="dot"></span><span id="connLabel">未连接</span></div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>环境</h2>
+      <div id="envList"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="btnConnect">连接</button>
+        <button id="btnDisconnect">断开</button>
+        <button id="btnOpen">打开网页</button>
+      </div>
+      <div class="row">
+        <button id="btnInstall">注册协议</button>
+        <button id="btnRefresh">刷新</button>
+      </div>
+      <p class="hint">设备远程桌面仍在 Semaphore 网页里点按钮；本面板负责连跳板与开 UI。</p>
+      <div id="toast" class="msg"></div>
+    </section>
+    <section class="card">
+      <h2>配置 (config.json)</h2>
+      <label for="cfg">JSON</label>
+      <textarea id="cfg" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="btnSave">保存配置</button>
+      </div>
+      <h2 style="margin-top:20px">日志</h2>
+      <div class="row">
+        <button id="btnLogs">刷新日志</button>
+      </div>
+      <pre class="log" id="logs">（空）</pre>
+    </section>
+  </main>
+  <script>
+    let selectedEnv = '';
+    let status = null;
+
+    function toast(text, ok) {
+      const el = document.getElementById('toast');
+      el.textContent = text;
+      el.className = 'msg show ' + (ok ? 'ok' : 'err');
+    }
+
+    async function api(path, opts) {
+      const res = await fetch(path, Object(opts || {}, {
+        headers: Object.assign({ 'Content-Type': 'application/json' }, (opts && opts.headers) || {}),
+      }));
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (_) { data = { raw: text }; }
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message)) || text || res.statusText;
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function renderEnvs() {
+      const box = document.getElementById('envList');
+      box.innerHTML = '';
+      const envs = (status && status.config && status.config.environments) || [];
+      if (!envs.length) {
+        box.innerHTML = '<p class="hint">暂无环境，请在右侧 JSON 中添加 environments。</p>';
+        return;
+      }
+      if (!selectedEnv) selectedEnv = status.config.active_env || envs[0].id;
+      envs.forEach((e) => {
+        const b = document.createElement('button');
+        b.className = 'env' + (e.id === selectedEnv ? ' active' : '');
+        const connected = status.state && status.state.connected_env === e.id;
+        b.innerHTML = '<div class="name"></div><div class="meta"></div>';
+        b.querySelector('.name').textContent = e.name || e.id;
+        b.querySelector('.meta').textContent = e.id + (connected ? ' · 已连接' : '') + ' · hops ' + ((e.hops && e.hops.length) || 0);
+        b.onclick = () => { selectedEnv = e.id; renderEnvs(); };
+        box.appendChild(b);
+      });
+    }
+
+    function renderStatus() {
+      const connected = !!(status && status.state && status.state.connected_env);
+      document.getElementById('connDot').className = 'dot' + (connected ? ' on' : '');
+      document.getElementById('connLabel').textContent = connected
+        ? ('已连接: ' + status.state.connected_env)
+        : '未连接';
+      renderEnvs();
+      if (status && status.config_json) {
+        document.getElementById('cfg').value = status.config_json;
+      }
+    }
+
+    async function refresh() {
+      status = await api('/api/status');
+      renderStatus();
+    }
+
+    document.getElementById('btnRefresh').onclick = async () => {
+      try { await refresh(); toast('已刷新', true); } catch (e) { toast(e.message, false); }
+    };
+    document.getElementById('btnConnect').onclick = async () => {
+      try {
+        await api('/api/connect', { method: 'POST', body: JSON.stringify({ env_id: selectedEnv }) });
+        await refresh();
+        toast('已连接 ' + selectedEnv, true);
+      } catch (e) { toast(e.message, false); }
+    };
+    document.getElementById('btnDisconnect').onclick = async () => {
+      try {
+        await api('/api/disconnect', { method: 'POST', body: '{}' });
+        await refresh();
+        toast('已断开', true);
+      } catch (e) { toast(e.message, false); }
+    };
+    document.getElementById('btnOpen').onclick = async () => {
+      try {
+        await api('/api/open', { method: 'POST', body: JSON.stringify({ env_id: selectedEnv }) });
+        toast('已请求打开浏览器', true);
+      } catch (e) { toast(e.message, false); }
+    };
+    document.getElementById('btnInstall').onclick = async () => {
+      try {
+        await api('/api/install', { method: 'POST', body: '{}' });
+        toast('协议已注册 (HKCU)', true);
+      } catch (e) { toast(e.message, false); }
+    };
+    document.getElementById('btnSave').onclick = async () => {
+      try {
+        const raw = document.getElementById('cfg').value;
+        JSON.parse(raw);
+        await api('/api/config', { method: 'PUT', body: raw });
+        await refresh();
+        toast('配置已保存', true);
+      } catch (e) { toast(e.message, false); }
+    };
+    document.getElementById('btnLogs').onclick = async () => {
+      try {
+        const data = await api('/api/logs?tail=200');
+        document.getElementById('logs').textContent = data.text || '（空）';
+      } catch (e) { toast(e.message, false); }
+    };
+
+    refresh().then(() => document.getElementById('btnLogs').click()).catch((e) => toast(e.message, false));
+  </script>
+</body>
+</html>

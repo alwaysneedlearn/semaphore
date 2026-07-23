@@ -1,22 +1,31 @@
 # Semaphore RDP Helper
 
 Windows helper for native Remote Desktop via `mstsc`, with optional SSH ControlMaster
-tunnels. See [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md).
+tunnels and a **local web panel**. See [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md).
 
 ## Install (no admin)
 
 1. Copy `semaphore-rdp-helper.exe` to a user folder (e.g. `%LOCALAPPDATA%\SemaphoreRdpHelper\`).
-2. Run:
+2. Double-click the exe (or run with no args) → opens **http://127.0.0.1:17300** panel.
+3. In the panel: edit JSON environments → **保存配置** → select env → **连接** → **打开网页**.
+4. Optional: **注册协议** (also auto-attempted on UI start).
+5. In Semaphore device list, click **远程桌面**.
 
-```text
-semaphore-rdp-helper.exe install
-```
+CLI still works: `install` / `connect` / `open` / `disconnect` / `status` / `ui`.
 
-Registers `semaphore-rdp://` under **HKCU** and creates `config.json`.
+## Local web panel
 
-3. Edit `%LOCALAPPDATA%\SemaphoreRdpHelper\config.json` (environments / hops).
-4. `semaphore-rdp-helper.exe connect <env-id>`
-5. `semaphore-rdp-helper.exe open` → log into Semaphore → device **Remote desktop**.
+| 操作 | 说明 |
+|------|------|
+| 环境列表 | 选择 active 环境 |
+| 连接 / 断开 | SSH ControlMaster（+ 可选 UI 端口映射） |
+| 打开网页 | 打开该环境的 `semaphore_url` |
+| 注册协议 | HKCU `semaphore-rdp://` |
+| 配置 JSON | 编辑并保存 `config.json` |
+| 日志 | 查看 `helper.log` 尾部 |
+
+- Listen: `127.0.0.1:17300` only (loopback). Override: env `SEMAPHORE_RDP_HELPER_UI=127.0.0.1:17301`.
+- Second launch: if port busy, opens existing panel in browser and exits.
 
 ## config.json example
 
@@ -52,5 +61,4 @@ Registers `semaphore-rdp://` under **HKCU** and creates `config.json`.
 GOOS=windows GOARCH=amd64 go build -o semaphore-rdp-helper.exe ./cmd/rdp-helper
 ```
 
-GitHub Actions：**Dev** workflow（`.github/workflows/dev.yml`）构建后打包
-`semaphore-dev.zip`（含 Linux `semaphore` + Windows `semaphore-rdp-helper.exe` + README）。
+GitHub Actions：**Dev** workflow 打包 `semaphore-dev.zip`（Linux `semaphore` + Windows `semaphore-rdp-helper.exe` + README）。

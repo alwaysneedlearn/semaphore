@@ -1,6 +1,6 @@
 # 方案：Semaphore RDP Helper（原生远程桌面）
 
-> 状态：**MVP 部分落地**（API + 设备按钮 + CLI Helper；**托盘 UI 未做**，见 §10）  
+> 状态：**MVP 已落地**（API + 设备按钮 + CLI Helper + **本地 Web 面板**；见 §10）  
 
 > 目标：操作员经 SSH 跳板访问 Semaphore 所在网络时，用 **Windows 本地 Helper + mstsc** 打开设备远程桌面；**不做**浏览器内嵌 RDP。
 
@@ -43,7 +43,7 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 | 拉起 RDP | ✅ | 复用 master 增加 LocalForward → `mstsc`；退出后 `-O cancel` 该转发 |
 | 直连探测 | ✅ | 本机可达设备 3389 则跳过 SSH，直接 mstsc |
 | 本地日志 | ✅ | SSH / 协议 / API 错误可查 |
-| 托盘 / 精简 UI | ⚠️ | **未做**：现为 CLI（`install/connect/open/...`）+ 手改 `config.json`；出错 MessageBox |
+| 托盘 / 精简 UI | ✅ | **本地 Web 面板** `http://127.0.0.1:17300`（无参启动）；非系统托盘 |
 
 #### B. Semaphore 服务端 / Web
 
@@ -231,10 +231,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-wi
 | 切片 | 内容 | 状态 |
 |------|------|------|
 | S1 | Semaphore：launch token API + 设备按钮 + 失败提示（无下载链） | **已做** |
-| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **部分**：能力在 CLI；**无托盘配置 UI** |
+| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **已做**（CLI + 本地 Web 面板） |
 | S3 | ControlMaster 复用 + 直连探测 + README | **已做** |
 | S4 | Actions：Dev 打 `semaphore-dev.zip`（`semaphore` + helper.exe） | **已做** |
-| S5（补） | Helper 托盘 / 精简 UI：选环境、连接/断开、开网页、看日志、编辑环境 | **未做** |
+| S5 | Helper 本地 Web 面板（选环境 / 连断 / 开网页 / 编辑配置 / 日志） | **已做** |
 
 ---
 
