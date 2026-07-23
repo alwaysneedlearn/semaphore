@@ -134,7 +134,8 @@ try {
 # --- 6. OpenSSH client ---
 $ssh = Get-Command ssh -ErrorAction SilentlyContinue
 if ($ssh) {
-    $ver = & ssh -V 2>&1 | Out-String
+    # ssh -V writes to stderr; avoid NativeCommandError noise in console
+    $ver = cmd.exe /c "ssh -V 2>&1" | Out-String
     Add-Result 'OpenSSH' 'PASS' ("ssh found: {0} ({1})" -f $ssh.Source, ($ver.Trim())) $false
 } else {
     Add-Result 'OpenSSH' 'FAIL' 'ssh.exe not on PATH. Enable Optional Feature "OpenSSH Client" (may need admin once).' $true
@@ -206,18 +207,23 @@ try {
     New-Item -Path $hkcuKey -Force | Out-Null
     New-ItemProperty -Path $hkcuKey -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
     New-Item -Path $hkcuCmd -Force | Out-Null
-    # Use cmd /c echo so we do not need a real helper binary
-    $echoCmd = 'cmd.exe /c echo preflight-ok> "%TEMP%\semaphore-rdp-preflight-url.txt" & exit 0'
-    Set-ItemProperty -Path $hkcuCmd -Name '(default)' -Value $echoCmd -Force
+    # Absolute marker path (no %TEMP%); handler must accept "%1" for URL protocols
     $marker = Join-Path $env:TEMP 'semaphore-rdp-preflight-url.txt'
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $handler = '"{0}" -NoProfile -WindowStyle Hidden -Command "Set-Content -LiteralPath ''{1}'' -Value preflight-ok" "%1"' -f $psExe, $marker
+    Set-ItemProperty -Path $hkcuCmd -Name '(default)' -Value $handler -Force
     Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
-    Start-Process "${ProtocolScheme}://connect?token=preflight" -ErrorAction Stop
-    Start-Sleep -Milliseconds 1200
+    # cmd start is closer to browser/ShellExecute than Start-Process alone on some builds
+    cmd.exe /c "start `"`" `"${ProtocolScheme}://connect?token=preflight`"" | Out-Null
+    $deadline = (Get-Date).AddSeconds(5)
+    while (-not (Test-Path -LiteralPath $marker) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 200
+    }
     if (Test-Path -LiteralPath $marker) {
         Add-Result 'ProtocolURLLaunch' 'PASS' 'OS launched HKCU URL protocol handler.' $false
         Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
     } else {
-        Add-Result 'ProtocolURLLaunch' 'WARN' 'URL start issued but marker file missing (browser/policy may block).' $false
+        Add-Result 'ProtocolURLLaunch' 'WARN' 'URL start issued but marker missing. HKCU register already PASS — browser click may still work; verify manually if needed.' $false
     }
 } catch {
     Add-Result 'ProtocolURLLaunch' 'WARN' $_.Exception.Message $false
