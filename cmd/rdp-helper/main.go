@@ -355,8 +355,76 @@ func cmdStatus() error {
 		} else {
 			fmt.Println("control_path: missing (stale state?)")
 		}
+		if s.LandTarget != "" {
+			if err := sshControlCheck(s.ControlPath, s.LandTarget); err != nil {
+				fmt.Printf("control_master: dead (%v)\n", err)
+			} else {
+				fmt.Println("control_master: alive")
+			}
+		}
 	}
 	return nil
+}
+
+func envNeedsSSH(env Environment) bool {
+	return len(env.Hops) > 0 || strings.TrimSpace(env.LandHost) != ""
+}
+
+func sshControlCheck(controlPath, landTarget string) error {
+	if strings.TrimSpace(controlPath) == "" || strings.TrimSpace(landTarget) == "" {
+		return fmt.Errorf("missing control path or land target")
+	}
+	cmd := exec.Command("ssh", "-O", "check", "-o", "ControlPath="+controlPath, landTarget)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return err
+		}
+		return fmt.Errorf("%w (%s)", err, msg)
+	}
+	return nil
+}
+
+func waitSSHControl(controlPath, landTarget string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	var last error
+	for time.Now().Before(deadline) {
+		last = sshControlCheck(controlPath, landTarget)
+		if last == nil {
+			return nil
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if last == nil {
+		last = fmt.Errorf("timeout waiting for control master")
+	}
+	return last
+}
+
+// ensureConnected makes sure env is ready for protocol launch (auto-connect if needed).
+func ensureConnected(env Environment) (State, error) {
+	s, _ := loadState()
+	if !envNeedsSSH(env) {
+		if s.ConnectedEnv != env.ID {
+			s = State{ConnectedEnv: env.ID}
+			if err := saveState(s); err != nil {
+				return s, err
+			}
+		}
+		return s, nil
+	}
+	if s.ConnectedEnv == env.ID && s.ControlPath != "" && s.LandTarget != "" {
+		if err := sshControlCheck(s.ControlPath, s.LandTarget); err == nil {
+			return s, nil
+		}
+		logf("stale SSH session for env=%s; reconnecting", env.ID)
+	}
+	logf("auto-connect env=%s (password console may open)", env.ID)
+	if err := cmdConnect(env.ID); err != nil {
+		return s, err
+	}
+	return loadState()
 }
 
 func controlPathFor(env Environment) (string, error) {
@@ -464,7 +532,10 @@ func cmdConnect(envID string) error {
 	if err != nil {
 		return err
 	}
+	// OpenSSH on Windows prefers forward slashes in ControlPath.
+	cpSSH := filepath.ToSlash(cp)
 	_ = os.Remove(cp)
+	_ = os.Remove(cpSSH)
 
 	target := host
 	if user != "" {
@@ -473,9 +544,10 @@ func cmdConnect(envID string) error {
 	args := []string{
 		"-MNf",
 		"-o", "ControlMaster=yes",
-		"-o", "ControlPath=" + cp,
+		"-o", "ControlPath=" + cpSSH,
 		"-o", "ControlPersist=8h",
 		"-o", "ExitOnForwardFailure=yes",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-p", strconv.Itoa(port),
 	}
 	if id := strings.TrimSpace(env.SSHIdentity); id != "" {
@@ -501,12 +573,15 @@ func cmdConnect(envID string) error {
 	}
 	args = append(args, target)
 
-	cmd := exec.Command("ssh", args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("ssh connect failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	fmt.Println("Connecting via SSH (password prompt may open in a new console)...")
+	logf("ssh connect start env=%s land=%s", env.ID, target)
+	if err := runSSHConnect(args); err != nil {
+		return fmt.Errorf("ssh connect failed: %w (close the console after auth; use key auth to avoid prompts)", err)
 	}
-	s := State{ConnectedEnv: env.ID, ControlPath: cp, LandTarget: target}
+	if err := waitSSHControl(cpSSH, target, 20*time.Second); err != nil {
+		return fmt.Errorf("ssh connected but ControlMaster not ready: %w (need OpenSSH with ControlMaster; try updating OpenSSH)", err)
+	}
+	s := State{ConnectedEnv: env.ID, ControlPath: cpSSH, LandTarget: target}
 	if err := saveState(s); err != nil {
 		return err
 	}
@@ -575,10 +650,12 @@ func handleProtocolURL(raw string) error {
 		env, ok = findEnv(c, c.ActiveEnv)
 	}
 	if !ok {
-		return fmt.Errorf("no environment configured; run install and edit config.json, then connect")
+		return fmt.Errorf("no environment configured; open the helper panel, save a project, then retry")
 	}
-	if s.ConnectedEnv == "" && (len(env.Hops) > 0 || strings.TrimSpace(env.LandHost) != "") {
-		return fmt.Errorf("not connected; run: %s connect %s", filepath.Base(os.Args[0]), env.ID)
+
+	s, err = ensureConnected(env)
+	if err != nil {
+		return fmt.Errorf("auto-connect %s failed: %w", env.ID, err)
 	}
 
 	apiBase := strings.TrimRight(base, "/")
@@ -606,12 +683,13 @@ func handleProtocolURL(raw string) error {
 
 	useTunnel := false
 	localPort := 0
-	if s.ControlPath != "" && s.LandTarget != "" {
+	sessionOK := s.ControlPath != "" && s.LandTarget != "" && sshControlCheck(s.ControlPath, s.LandTarget) == nil
+	if sessionOK {
 		if !tcpReachable(targetHost, targetPort, 800*time.Millisecond) {
 			useTunnel = true
 		}
 	} else if !tcpReachable(targetHost, targetPort, 800*time.Millisecond) {
-		return fmt.Errorf("host %s:%d unreachable and no SSH session; connect an environment first", targetHost, targetPort)
+		return fmt.Errorf("host %s:%d unreachable and no SSH session; connect project %s in the helper panel", targetHost, targetPort, env.ID)
 	}
 
 	mstscHost := targetHost
