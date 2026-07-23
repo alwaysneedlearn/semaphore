@@ -36,11 +36,11 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 | 能力 | MVP | 说明 |
 |------|-----|------|
 | 多环境配置 | ✅ | 按「厂区/项目」保存：名称、跳板 0/1/2、Semaphore 地址、本地 UI 端口等（不必与 Semaphore 项目自动同步） |
-| 连接 / 断开环境 | ✅ | `ssh` ControlMaster；需要时 `-L` 映射 Semaphore UI |
+| 连接 / 断开环境 | ✅ | `ssh -N` + SOCKS `-D`（**不用** ControlMaster；Win32-OpenSSH 不支持）与可选 UI `-L` |
 | 打开网页 | ✅ | 连接成功后打开本机映射后的 Semaphore URL |
 | 自定义协议 | ✅ | **当前用户**注册并处理 `semaphore-rdp://connect?token=...`（无需管理员，见 §8） |
 | Token 换参 | ✅ | HTTPS 调 Semaphore API，用一次性 token 取连接参数 |
-| 拉起 RDP | ✅ | 复用 master 增加 LocalForward → `mstsc`；退出后 `-O cancel` 该转发 |
+| 拉起 RDP | ✅ | 经已建立 SOCKS 做本机转发 → `mstsc`；退出后停本次转发 |
 | 直连探测 | ✅ | 本机可达设备 3389 则跳过 SSH，直接 mstsc |
 | 本地日志 | ✅ | SSH / 协议 / API 错误可查 |
 | 托盘 / 精简 UI | ✅ | **本地 Web 面板** `http://127.0.0.1:17300`（无参启动）；非系统托盘 |
@@ -63,8 +63,8 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 | 原则 | 说明 |
 |------|------|
 | 跳板只在 **Helper 本机** | Semaphore **不存**操作员私钥与跳板机密 |
-| 一条 SSH 多用 | ControlMaster：UI 映射与多台 RDP LocalForward 共用 |
-| 断开策略 | 关 RDP **不断**环境连接；断开环境才拆 master |
+| 一条 SSH 多用 | 长连接 `ssh -N` + DynamicForward（SOCKS）；RDP 经 SOCKS 再开本机端口（不用 ControlMaster） |
+| 断开策略 | 关 RDP **不断**环境连接；断开环境才杀 SSH 进程 |
 | 设备信息在 Semaphore | `ip` / `rdp_user` / `rdp_password` / `rdp_port` |
 
 #### D. RDP 凭据策略（已确认）

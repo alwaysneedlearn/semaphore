@@ -55,8 +55,11 @@ type Config struct {
 
 type State struct {
 	ConnectedEnv string `json:"connected_env"`
-	ControlPath  string `json:"control_path"`
-	LandTarget   string `json:"land_target"` // user@host for ssh -O
+	SSHPid       int    `json:"ssh_pid,omitempty"`
+	SocksPort    int    `json:"socks_port,omitempty"`
+	LandTarget   string `json:"land_target,omitempty"` // user@host (informational)
+	// Legacy ControlMaster fields (ignored; Win32-OpenSSH does not support mux).
+	ControlPath string `json:"control_path,omitempty"`
 }
 
 type launchParams struct {
@@ -130,8 +133,8 @@ Usage:
   %s ui                    Same as no-args
   %s install               Register %s:// (HKCU) and create config dir
   %s envs                  List environments from config
-  %s connect [env-id]      SSH ControlMaster (+ optional UI -L)
-  %s disconnect            Tear down ControlMaster
+  %s connect [env-id]      SSH tunnel (-N + SOCKS; optional UI -L)
+  %s disconnect            Tear down SSH tunnel
   %s open                  Open Semaphore URL in browser
   %s status                Show connection state
   %s %s://connect?token=...  Handle protocol (used by OS)
@@ -348,58 +351,59 @@ func cmdStatus() error {
 		return err
 	}
 	s, _ := loadState()
-	fmt.Printf("active_env=%s connected=%s control=%s\n", c.ActiveEnv, s.ConnectedEnv, s.ControlPath)
-	if s.ControlPath != "" {
-		if _, err := os.Stat(s.ControlPath); err == nil {
-			fmt.Println("control_path: present")
+	fmt.Printf("active_env=%s connected=%s ssh_pid=%d socks_port=%d\n", c.ActiveEnv, s.ConnectedEnv, s.SSHPid, s.SocksPort)
+	if envNeedsSSH(mustFindEnv(c, s.ConnectedEnv, c.ActiveEnv)) || s.SocksPort > 0 || s.SSHPid > 0 {
+		if sessionAlive(s) {
+			fmt.Println("ssh_session: alive")
 		} else {
-			fmt.Println("control_path: missing (stale state?)")
-		}
-		if s.LandTarget != "" {
-			if err := sshControlCheck(s.ControlPath, s.LandTarget); err != nil {
-				fmt.Printf("control_master: dead (%v)\n", err)
-			} else {
-				fmt.Println("control_master: alive")
-			}
+			fmt.Println("ssh_session: dead (click Connect in the helper panel)")
 		}
 	}
 	return nil
+}
+
+func mustFindEnv(c Config, ids ...string) Environment {
+	for _, id := range ids {
+		if e, ok := findEnv(c, id); ok {
+			return e
+		}
+	}
+	return Environment{}
 }
 
 func envNeedsSSH(env Environment) bool {
 	return len(env.Hops) > 0 || strings.TrimSpace(env.LandHost) != ""
 }
 
-func sshControlCheck(controlPath, landTarget string) error {
-	if strings.TrimSpace(controlPath) == "" || strings.TrimSpace(landTarget) == "" {
-		return fmt.Errorf("missing control path or land target")
+func sessionAlive(s State) bool {
+	if s.SocksPort <= 0 {
+		return false
 	}
-	cmd := exec.Command("ssh", "-O", "check", "-o", "ControlPath="+controlPath, landTarget)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			return err
-		}
-		return fmt.Errorf("%w (%s)", err, msg)
+	if s.SSHPid > 0 && !processExists(s.SSHPid) {
+		return false
 	}
-	return nil
+	return tcpReachable("127.0.0.1", s.SocksPort, 500*time.Millisecond)
 }
 
-func waitSSHControl(controlPath, landTarget string, timeout time.Duration) error {
+func waitSOCKSReady(cmd *exec.Cmd, socksPort int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	var last error
 	for time.Now().Before(deadline) {
-		last = sshControlCheck(controlPath, landTarget)
-		if last == nil {
+		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+			return fmt.Errorf("ssh exited before tunnel was ready (exit=%s)", cmd.ProcessState.String())
+		}
+		if cmd.Process != nil && !processExists(cmd.Process.Pid) {
+			_ = cmd.Wait()
+			if cmd.ProcessState != nil {
+				return fmt.Errorf("ssh exited before tunnel was ready (exit=%s)", cmd.ProcessState.String())
+			}
+			return fmt.Errorf("ssh exited before tunnel was ready")
+		}
+		if tcpReachable("127.0.0.1", socksPort, 200*time.Millisecond) {
 			return nil
 		}
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
-	if last == nil {
-		last = fmt.Errorf("timeout waiting for control master")
-	}
-	return last
+	return fmt.Errorf("timeout waiting for SOCKS on 127.0.0.1:%d (check password / network)", socksPort)
 }
 
 // ensureConnected makes sure env is ready for protocol launch (auto-connect if needed).
@@ -414,29 +418,14 @@ func ensureConnected(env Environment) (State, error) {
 		}
 		return s, nil
 	}
-	if s.ConnectedEnv == env.ID && s.ControlPath != "" && s.LandTarget != "" {
-		if err := sshControlCheck(s.ControlPath, s.LandTarget); err == nil {
-			return s, nil
-		}
-		logf("stale SSH session for env=%s; reconnecting", env.ID)
+	if s.ConnectedEnv == env.ID && sessionAlive(s) {
+		return s, nil
 	}
 	logf("auto-connect env=%s (use this console for SSH password if prompted)", env.ID)
 	if err := cmdConnect(env.ID); err != nil {
-		return s, err
+		return s, fmt.Errorf("%w — or open the helper panel and click 连接 first", err)
 	}
 	return loadState()
-}
-
-func controlPathFor(env Environment) (string, error) {
-	dir, err := appDir()
-	if err != nil {
-		return "", err
-	}
-	sshDir := filepath.Join(dir, "ssh")
-	if err := os.MkdirAll(sshDir, 0o755); err != nil {
-		return "", err
-	}
-	return filepath.Join(sshDir, "cm-"+sanitizeID(env.ID)), nil
 }
 
 func sanitizeID(s string) string {
@@ -519,6 +508,7 @@ func cmdConnect(envID string) error {
 
 	// No SSH needed
 	if host == "" {
+		_ = cmdDisconnectQuiet()
 		s := State{ConnectedEnv: env.ID}
 		if err := saveState(s); err != nil {
 			return err
@@ -528,26 +518,27 @@ func cmdConnect(envID string) error {
 		return nil
 	}
 
-	cp, err := controlPathFor(env)
-	if err != nil {
-		return err
-	}
-	// OpenSSH on Windows prefers forward slashes in ControlPath.
-	cpSSH := filepath.ToSlash(cp)
-	_ = os.Remove(cp)
-	_ = os.Remove(cpSSH)
+	_ = cmdDisconnectQuiet()
 
 	target := host
 	if user != "" {
 		target = user + "@" + host
 	}
+
+	socksPort, err := pickLocalPort()
+	if err != nil {
+		return err
+	}
+
+	// Win32-OpenSSH does NOT support ControlMaster (getsockname / Bad file descriptor).
+	// Keep one long-lived `ssh -N` with DynamicForward (SOCKS); RDP uses that SOCKS.
 	args := []string{
-		"-MNf",
-		"-o", "ControlMaster=yes",
-		"-o", "ControlPath=" + cpSSH,
-		"-o", "ControlPersist=8h",
+		"-N",
 		"-o", "ExitOnForwardFailure=yes",
 		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "ServerAliveInterval=30",
+		"-o", "ServerAliveCountMax=3",
+		"-D", fmt.Sprintf("127.0.0.1:%d", socksPort),
 		"-p", strconv.Itoa(port),
 	}
 	if id := strings.TrimSpace(env.SSHIdentity); id != "" {
@@ -574,19 +565,42 @@ func cmdConnect(envID string) error {
 	args = append(args, target)
 
 	fmt.Println("Connecting via SSH (enter password in this console if prompted)...")
-	logf("ssh connect start env=%s land=%s", env.ID, target)
-	if err := runSSHConnect(args); err != nil {
-		return fmt.Errorf("ssh connect failed: %w (run helper from a console window, or use SSH key auth)", err)
+	logf("ssh connect start env=%s land=%s socks=%d", env.ID, target, socksPort)
+	cmd, err := startSSHTunnel(args)
+	if err != nil {
+		return fmt.Errorf("ssh start failed: %w", err)
 	}
-	if err := waitSSHControl(cpSSH, target, 20*time.Second); err != nil {
-		return fmt.Errorf("ssh connected but ControlMaster not ready: %w (need OpenSSH with ControlMaster; try updating OpenSSH)", err)
+	// Allow time for multi-hop password prompts.
+	if err := waitSOCKSReady(cmd, socksPort, 3*time.Minute); err != nil {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+		return fmt.Errorf("ssh connect failed: %w", err)
 	}
-	s := State{ConnectedEnv: env.ID, ControlPath: cpSSH, LandTarget: target}
+	go func() { _ = cmd.Wait() }()
+
+	s := State{
+		ConnectedEnv: env.ID,
+		SSHPid:       cmd.Process.Pid,
+		SocksPort:    socksPort,
+		LandTarget:   target,
+	}
 	if err := saveState(s); err != nil {
+		killProcess(cmd.Process.Pid)
 		return err
 	}
-	fmt.Printf("connected env=%s land=%s\n", env.ID, target)
-	logf("connect ok env=%s land=%s", env.ID, target)
+	fmt.Printf("connected env=%s land=%s socks=127.0.0.1:%d pid=%d\n", env.ID, target, socksPort, cmd.Process.Pid)
+	logf("connect ok env=%s land=%s socks=%d pid=%d", env.ID, target, socksPort, cmd.Process.Pid)
+	return nil
+}
+
+func cmdDisconnectQuiet() error {
+	s, _ := loadState()
+	if s.SSHPid > 0 {
+		killProcess(s.SSHPid)
+	}
+	_ = saveState(State{})
 	return nil
 }
 
@@ -595,17 +609,14 @@ func cmdDisconnect() error {
 	if err != nil {
 		return err
 	}
-	if s.ControlPath == "" {
-		s.ConnectedEnv = ""
-		_ = saveState(s)
+	if s.SSHPid == 0 && s.SocksPort == 0 && s.ConnectedEnv == "" {
 		fmt.Println("not connected")
 		return nil
 	}
-	cmd := exec.Command("ssh", "-O", "exit", "-o", "ControlPath="+s.ControlPath, s.LandTarget)
-	_ = cmd.Run()
-	_ = os.Remove(s.ControlPath)
-	s = State{}
-	_ = saveState(s)
+	if s.SSHPid > 0 {
+		killProcess(s.SSHPid)
+	}
+	_ = saveState(State{})
 	fmt.Println("disconnected")
 	logf("disconnect ok")
 	return nil
@@ -683,7 +694,7 @@ func handleProtocolURL(raw string) error {
 
 	useTunnel := false
 	localPort := 0
-	sessionOK := s.ControlPath != "" && s.LandTarget != "" && sshControlCheck(s.ControlPath, s.LandTarget) == nil
+	sessionOK := sessionAlive(s)
 	if sessionOK {
 		if !tcpReachable(targetHost, targetPort, 800*time.Millisecond) {
 			useTunnel = true
@@ -700,19 +711,14 @@ func handleProtocolURL(raw string) error {
 			return err
 		}
 		localPort = lp
-		fwd := fmt.Sprintf("%d:%s:%d", localPort, targetHost, targetPort)
-		cmd := exec.Command("ssh", "-O", "forward", "-L", fwd, "-o", "ControlPath="+s.ControlPath, s.LandTarget)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("ssh forward failed: %w (%s)", err, strings.TrimSpace(string(out)))
+		stop, err := startLocalForwardViaSOCKS("127.0.0.1", s.SocksPort, localPort, targetHost, targetPort)
+		if err != nil {
+			return fmt.Errorf("socks forward failed: %w", err)
 		}
+		defer stop()
 		mstscHost = "127.0.0.1"
 		mstscPort = localPort
-		defer func() {
-			cancel := exec.Command("ssh", "-O", "cancel", "-L", fwd, "-o", "ControlPath="+s.ControlPath, s.LandTarget)
-			_ = cancel.Run()
-			logf("canceled forward %s", fwd)
-		}()
-		logf("forwarded %s", fwd)
+		logf("socks forward 127.0.0.1:%d -> %s:%d via socks :%d", localPort, targetHost, targetPort, s.SocksPort)
 	}
 
 	pass := ""
