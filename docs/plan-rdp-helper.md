@@ -43,7 +43,7 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 | 拉起 RDP | ✅ | 复用 master 增加 LocalForward → `mstsc`；退出后 `-O cancel` 该转发 |
 | 直连探测 | ✅ | 本机可达设备 3389 则跳过 SSH，直接 mstsc |
 | 本地日志 | ✅ | SSH / 协议 / API 错误可查 |
-| 托盘 / 精简 UI | ✅ | 选环境、连接状态、打开网页、查看日志 |
+| 托盘 / 精简 UI | ⚠️ | **未做**：现为 CLI（`install/connect/open/...`）+ 手改 `config.json`；出错 MessageBox |
 
 #### B. Semaphore 服务端 / Web
 
