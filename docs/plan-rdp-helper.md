@@ -189,6 +189,14 @@ GET  /api/rdp/launch-params?token=...
 
 **结论：** Helper **按「当前用户、免提权」设计即可**；不要依赖安装服务、写 HKLM、装 Program Files。若 OpenSSH 都未装且用户无法添加可选功能，需运维预装 OpenSSH，这是环境前提，不是 Helper 必须提权。
 
+**本机验证脚本（普通用户 PowerShell）：**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-windows-preflight.ps1
+```
+
+脚本会测：AppData 可写、HKCU 协议注册、HKLM/Program Files（预期失败）、OpenSSH、本机高端口监听、`~/.ssh`、mstsc、自定义协议拉起。见仓库 `scripts/test-rdp-helper-windows-preflight.ps1`。
+
 ---
 
 ## 9. 边界确认记录
