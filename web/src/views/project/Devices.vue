@@ -471,6 +471,13 @@
             <v-icon>mdi-radar</v-icon>
           </v-btn>
           <v-btn
+            :title="$t('deviceRemoteDesktop')"
+            :loading="rdpBusyId === item.id"
+            @click="openRemoteDesktop(item)"
+          >
+            <v-icon>mdi-remote-desktop</v-icon>
+          </v-btn>
+          <v-btn
             v-if="showWinrmConsole(item)"
             :title="$t('deviceWinrmConsole')"
             @click="openWinrmConsole(item)"
@@ -558,6 +565,7 @@ export default {
       deviceProfilesDialog: false,
       importExportDialog: false,
       busyId: null,
+      rdpBusyId: null,
       configDialog: false,
       configDeviceId: null,
       configDeviceName: '',
@@ -1252,6 +1260,46 @@ export default {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
       } finally {
         this.busyId = null;
+      }
+    },
+
+    async openRemoteDesktop(device) {
+      this.rdpBusyId = device.id;
+      try {
+        const { data } = await axios.post(`${this.getItemsUrl()}/${device.id}/rdp/launch`);
+        let helperUrl = (data && data.helper_url) || '';
+        if (!helperUrl && data && data.token) {
+          helperUrl = `semaphore-rdp://connect?token=${encodeURIComponent(data.token)}`;
+        }
+        if (!helperUrl) {
+          throw new Error('empty helper_url');
+        }
+        const base = encodeURIComponent(window.location.origin);
+        const sep = helperUrl.includes('?') ? '&' : '?';
+        helperUrl = `${helperUrl}${sep}base=${base}`;
+
+        let helperOpened = false;
+        const onBlur = () => {
+          helperOpened = true;
+        };
+        window.addEventListener('blur', onBlur);
+        try {
+          window.location.href = helperUrl;
+        } catch (_) {
+          helperOpened = false;
+        }
+        await new Promise((r) => setTimeout(r, 1600));
+        window.removeEventListener('blur', onBlur);
+        if (!helperOpened && document.hasFocus()) {
+          EventBus.$emit('i-snackbar', {
+            color: 'warning',
+            text: this.$t('deviceRemoteDesktopHelperFailed'),
+          });
+        }
+      } catch (e) {
+        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
+      } finally {
+        this.rdpBusyId = null;
       }
     },
 

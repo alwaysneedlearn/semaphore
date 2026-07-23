@@ -1,6 +1,6 @@
 # 方案：Semaphore RDP Helper（原生远程桌面）
 
-> 状态：**边界已确认**（见 §9）  
+> 状态：**已实现 MVP**（API + 设备按钮 + `cmd/rdp-helper`；见 §10）  
 
 > 目标：操作员经 SSH 跳板访问 Semaphore 所在网络时，用 **Windows 本地 Helper + mstsc** 打开设备远程桌面；**不做**浏览器内嵌 RDP。
 
@@ -196,6 +196,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-wi
 ```
 
 脚本会测：AppData 可写、HKCU 协议注册、HKLM/Program Files（预期失败）、OpenSSH、本机高端口监听、`~/.ssh`、mstsc、自定义协议拉起。见仓库 `scripts/test-rdp-helper-windows-preflight.ps1`。
+
+### 8.1 预检实机结果（参考）
+
+在非管理员账号上跑通核心项后可认定环境满足 Helper 前提，例如：
+
+- Elevation / AppData / HKCU 协议 / LocalPortBind / `.ssh` / OpenSSH / mstsc：**PASS**
+- Program Files / HKLM 写入失败（脚本记为 PASS）：符合「只用用户目录 + HKCU」
+- `ProtocolURLLaunch` 偶发 WARN：不阻断；以 HKCU 注册 PASS 为准，网页点击再验
 
 ---
 

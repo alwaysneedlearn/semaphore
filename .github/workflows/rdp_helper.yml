@@ -1,0 +1,37 @@
+name: RDP Helper
+
+'on':
+  push:
+    branches:
+      - develop
+    paths:
+      - 'cmd/rdp-helper/**'
+      - '.github/workflows/rdp_helper.yml'
+      - 'docs/plan-rdp-helper.md'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.6'
+
+      - name: Build Windows amd64
+        run: |
+          mkdir -p dist
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -ldflags="-s -w" \
+            -o dist/semaphore-rdp-helper.exe ./cmd/rdp-helper
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: semaphore-rdp-helper-windows-amd64
+          path: dist/semaphore-rdp-helper.exe
+          if-no-files-found: error

@@ -442,6 +442,9 @@ export default {
   deviceImportResult:
     '已保存 {saved} 台：新建 {created}，更新 {updated}。{errors} 行有误。',
   deviceProbe: '探测',
+  deviceRemoteDesktop: '远程桌面',
+  deviceRemoteDesktopHelperFailed:
+    '无法打开 RDP Helper。请先在本机安装并配置 Semaphore RDP Helper、连接环境后再试。',
   deviceProbeTooltip:
     '探测：仅检测该设备配置的 RDP、WinRM（Ansible）与 API 端口的 TCP 是否可达；不含登录验证与完整业务健康检查。',
   deviceActions: '操作',

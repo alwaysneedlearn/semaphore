@@ -516,6 +516,9 @@ export default {
   deviceImportResult:
     'Saved {saved} device(s): {created} created, {updated} updated. {errors} row error(s).',
   deviceProbe: 'Probe',
+  deviceRemoteDesktop: 'Remote desktop',
+  deviceRemoteDesktopHelperFailed:
+    'Could not open the RDP Helper. Install and configure Semaphore RDP Helper on this PC, connect an environment, then try again.',
   deviceProbeTooltip:
     'Probe: TCP reachability on this device\'s RDP port, WinRM (Ansible) port, and configured API port only—not login or full application health.',
   deviceActions: 'Actions',
