@@ -163,7 +163,7 @@ GET  /api/rdp/launch-params?token=...
 | 语言 | Go，单文件 exe |
 | SSH / RDP | 系统 `ssh` + `mstsc` |
 | UI | 托盘 + 简单窗口 |
-| CI | GitHub Actions 打 `windows/amd64` exe |
+| CI | Dev workflow 打 `semaphore-dev.zip`（`semaphore` + `semaphore-rdp-helper.exe`） |
 | 分发 | **运维自行分发**；产品内不挂下载链 |
 
 ---
