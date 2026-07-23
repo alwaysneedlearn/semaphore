@@ -420,7 +420,7 @@ func ensureConnected(env Environment) (State, error) {
 		}
 		logf("stale SSH session for env=%s; reconnecting", env.ID)
 	}
-	logf("auto-connect env=%s (password console may open)", env.ID)
+	logf("auto-connect env=%s (use this console for SSH password if prompted)", env.ID)
 	if err := cmdConnect(env.ID); err != nil {
 		return s, err
 	}
@@ -573,10 +573,10 @@ func cmdConnect(envID string) error {
 	}
 	args = append(args, target)
 
-	fmt.Println("Connecting via SSH (password prompt may open in a new console)...")
+	fmt.Println("Connecting via SSH (enter password in this console if prompted)...")
 	logf("ssh connect start env=%s land=%s", env.ID, target)
 	if err := runSSHConnect(args); err != nil {
-		return fmt.Errorf("ssh connect failed: %w (close the console after auth; use key auth to avoid prompts)", err)
+		return fmt.Errorf("ssh connect failed: %w (run helper from a console window, or use SSH key auth)", err)
 	}
 	if err := waitSSHControl(cpSSH, target, 20*time.Second); err != nil {
 		return fmt.Errorf("ssh connected but ControlMaster not ready: %w (need OpenSSH with ControlMaster; try updating OpenSSH)", err)

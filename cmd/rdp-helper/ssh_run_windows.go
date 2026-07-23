@@ -3,16 +3,16 @@
 package main
 
 import (
+	"os"
 	"os/exec"
-	"syscall"
 )
 
-const createNewConsole = 0x00000010 // CREATE_NEW_CONSOLE
-
-// runSSHConnect starts ssh in a new console so password / confirmation prompts work
-// when the helper was launched without a TTY (protocol handler, web UI, double-click).
+// runSSHConnect runs ssh in the helper's existing console (stdin/stdout/stderr).
+// Do not use CREATE_NEW_CONSOLE — that window flashes and often exits with 0xffffffff.
 func runSSHConnect(args []string) error {
 	cmd := exec.Command("ssh", args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNewConsole}
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }

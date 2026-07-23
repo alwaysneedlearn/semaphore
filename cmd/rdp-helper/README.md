@@ -21,7 +21,7 @@ Dev Actions 两个 Artifact（不要再下成「zip 里套 zip」的合并包）
 4. **保存当前项目** → **连接** → **打开网页**
 5. 在 Semaphore 设备列表点 **远程桌面**
 
-经 SSH 时：**连接**（或点远程桌面自动连接）会弹出控制台窗口，按提示输入跳板/落地机密码。连接成功后 `state.json` 会标记已连接；若未连接就点远程桌面，Helper 会自动建连而不再只报 `not connected`。
+经 SSH 时：建议从 **cmd/PowerShell** 启动 Helper（保留原控制台）。点 **连接**（或点远程桌面自动连接）时在**同一控制台**输入跳板/落地机密码。连接成功后 `state.json` 会标记已连接；若未连接就点远程桌面，Helper 会自动建连而不再只报 `not connected`。
 
 首次可点 **注册协议**（无管理员，写 HKCU）。需要 OpenSSH Client（Windows 可选功能），且支持 `ControlMaster`。
 

@@ -484,7 +484,7 @@
     document.getElementById('btnConnect').onclick = async () => {
       try {
         await saveCurrent(true);
-        toast('正在连接…若弹出黑窗请输入 SSH 密码', true);
+        toast('正在连接…请在 Helper 原控制台输入 SSH 密码（勿关该窗口）', true);
         await api('/api/connect', { method: 'POST', body: JSON.stringify({ env_id: selectedId }) });
         await refresh();
         toast('已连接 ' + selectedId + '，可点「打开网页」', true);
