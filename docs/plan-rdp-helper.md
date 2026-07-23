@@ -163,7 +163,7 @@ GET  /api/rdp/launch-params?token=...
 | 语言 | Go，单文件 exe |
 | SSH / RDP | 系统 `ssh` + `mstsc` |
 | UI | 托盘 + 简单窗口 |
-| CI | Dev workflow 打 `semaphore-dev.zip`（`semaphore` + `semaphore-rdp-helper.exe`） |
+| CI | Dev：两个 Artifact — `semaphore`、`semaphore-rdp-helper` |
 | 分发 | **运维自行分发**；产品内不挂下载链 |
 
 ---
@@ -233,8 +233,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-wi
 | S1 | Semaphore：launch token API + 设备按钮 + 失败提示（无下载链） | **已做** |
 | S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **已做**（CLI + 本地 Web 面板） |
 | S3 | ControlMaster 复用 + 直连探测 + README | **已做** |
-| S4 | Actions：Dev 打 `semaphore-dev.zip`（`semaphore` + helper.exe） | **已做** |
-| S5 | Helper 本地 Web 面板（选环境 / 连断 / 开网页 / 编辑配置 / 日志） | **已做** |
+| S4 | Actions：Dev 两个 Artifact（`semaphore` / `semaphore-rdp-helper`） | **已做** |
+| S5 | Helper 本地 Web 面板（按项目表单配置 / 连断 / 开网页 / 日志） | **已做** |
 
 ---
 

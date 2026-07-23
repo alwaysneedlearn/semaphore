@@ -13,7 +13,6 @@
       --muted: #8b9bb4;
       --accent: #3d8bfd;
       --ok: #3dd68c;
-      --warn: #f5a524;
       --err: #f31260;
       --input: #0c121b;
     }
@@ -35,30 +34,32 @@
       flex-wrap: wrap;
     }
     header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: var(--panel);
-      border: 1px solid var(--border);
+    .steps {
+      margin: 0;
+      padding: 10px 20px;
+      background: #152033;
+      border-bottom: 1px solid var(--border);
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
+    }
+    .steps strong { color: var(--text); }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--border);
+      color: var(--muted); font-size: 12px;
     }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
     .dot.on { background: var(--ok); }
     main {
       display: grid;
-      grid-template-columns: 280px 1fr;
+      grid-template-columns: 260px 1fr;
       gap: 16px;
       padding: 16px 20px 32px;
-      max-width: 1100px;
+      max-width: 1080px;
       margin: 0 auto;
     }
-    @media (max-width: 840px) {
-      main { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -68,74 +69,55 @@
     .card h2 {
       margin: 0 0 12px;
       font-size: 13px;
-      text-transform: uppercase;
       letter-spacing: .04em;
       color: var(--muted);
       font-weight: 600;
+      text-transform: uppercase;
     }
     .env {
-      width: 100%;
-      text-align: left;
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text);
-      padding: 10px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-bottom: 6px;
+      width: 100%; text-align: left; background: transparent;
+      border: 1px solid transparent; color: var(--text);
+      padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 6px;
     }
     .env:hover { background: rgba(255,255,255,.04); }
     .env.active { border-color: var(--accent); background: rgba(61,139,253,.12); }
     .env .name { font-weight: 600; }
     .env .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-    button, .btn {
-      appearance: none;
-      border: 1px solid var(--border);
-      background: #243044;
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font: inherit;
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    button {
+      appearance: none; border: 1px solid var(--border); background: #243044;
+      color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit;
     }
     button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    button.danger { background: transparent; border-color: var(--err); color: var(--err); }
+    button.danger { background: transparent; border-color: var(--err); color: #ff7a9c; }
     button:disabled { opacity: .5; cursor: not-allowed; }
     label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
-    input, textarea {
-      width: 100%;
-      background: var(--input);
-      border: 1px solid var(--border);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 8px 10px;
-      font: inherit;
+    input, select, textarea {
+      width: 100%; background: var(--input); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 8px 10px; font: inherit;
     }
-    textarea { min-height: 220px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+    .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
     .msg {
-      margin-top: 10px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      font-size: 13px;
-      display: none;
+      margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; display: none;
     }
     .msg.show { display: block; }
     .msg.ok { background: rgba(61,214,140,.12); color: var(--ok); }
     .msg.err { background: rgba(243,18,96,.12); color: #ff7a9c; }
-    .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
-    pre.log {
-      margin: 0;
-      max-height: 280px;
-      overflow: auto;
-      background: var(--input);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      font: 12px/1.4 ui-monospace, Consolas, monospace;
-      white-space: pre-wrap;
-      word-break: break-word;
+    .hop {
+      border: 1px dashed var(--border); border-radius: 8px; padding: 10px; margin-top: 8px;
     }
+    .hop-title { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+    pre.log {
+      margin: 0; max-height: 220px; overflow: auto; background: var(--input);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+      font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word;
+    }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text); }
+    .check input { width: auto; }
+    details.advanced { margin-top: 12px; color: var(--muted); }
+    details.advanced summary { cursor: pointer; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -143,12 +125,23 @@
     <h1>Semaphore RDP Helper</h1>
     <div class="badge"><span id="connDot" class="dot"></span><span id="connLabel">未连接</span></div>
   </header>
+  <p class="steps">
+    <strong>用法：</strong>
+    ① 左侧选/建<strong>项目环境</strong> →
+    ② 填 Semaphore 地址与跳板 → 保存 →
+    ③ <strong>连接</strong> → <strong>打开网页</strong> →
+    ④ 在 Semaphore 设备列表点「远程桌面」
+  </p>
   <main>
     <section class="card">
-      <h2>环境</h2>
+      <h2>项目环境</h2>
       <div id="envList"></div>
-      <div class="row" style="margin-top:12px">
-        <button class="primary" id="btnConnect">连接</button>
+      <div class="row">
+        <button id="btnAdd" class="primary">新建项目</button>
+        <button id="btnDel" class="danger">删除当前</button>
+      </div>
+      <div class="row">
+        <button id="btnConnect" class="primary">连接</button>
         <button id="btnDisconnect">断开</button>
         <button id="btnOpen">打开网页</button>
       </div>
@@ -156,26 +149,95 @@
         <button id="btnInstall">注册协议</button>
         <button id="btnRefresh">刷新</button>
       </div>
-      <p class="hint">设备远程桌面仍在 Semaphore 网页里点按钮；本面板负责连跳板与开 UI。</p>
+      <p class="hint">每个「项目环境」对应一套跳板 + Semaphore 入口。先连接再开网页。</p>
       <div id="toast" class="msg"></div>
     </section>
+
     <section class="card">
-      <h2>配置 (config.json)</h2>
-      <label for="cfg">JSON</label>
-      <textarea id="cfg" spellcheck="false"></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="primary" id="btnSave">保存配置</button>
+      <h2>当前项目配置</h2>
+      <div class="grid2">
+        <div>
+          <label for="f_id">项目 ID（英文/数字，唯一）</label>
+          <input id="f_id" placeholder="例如 plant-a / lab1" />
+        </div>
+        <div>
+          <label for="f_name">显示名称</label>
+          <input id="f_name" placeholder="例如 厂区A" />
+        </div>
       </div>
-      <h2 style="margin-top:20px">日志</h2>
-      <div class="row">
-        <button id="btnLogs">刷新日志</button>
+
+      <label for="f_mode">访问方式</label>
+      <select id="f_mode">
+        <option value="direct">本机直连 Semaphore（无 SSH）</option>
+        <option value="ssh">经 SSH 跳板进网</option>
+      </select>
+
+      <div id="blockDirect">
+        <label for="f_url_direct">Semaphore 网页地址</label>
+        <input id="f_url_direct" placeholder="http://10.0.0.5:3000 或 http://127.0.0.1:3000" />
+        <p class="hint">能直接打开 Semaphore 时用这个；打开网页会跳到该地址。</p>
       </div>
+
+      <div id="blockSsh" style="display:none">
+        <label class="check"><input type="checkbox" id="f_forward_ui" checked /> 连接时映射 Semaphore 到本机端口</label>
+        <div class="grid2">
+          <div>
+            <label for="f_ui_local">本机端口</label>
+            <input id="f_ui_local" type="number" value="3000" />
+          </div>
+          <div>
+            <label for="f_url_mapped">打开网页用的地址</label>
+            <input id="f_url_mapped" placeholder="http://127.0.0.1:3000" />
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <label for="f_ui_remote_host">内网 Semaphore 主机</label>
+            <input id="f_ui_remote_host" placeholder="10.0.0.5 或 127.0.0.1（相对落地机）" />
+          </div>
+          <div>
+            <label for="f_ui_remote_port">内网端口</label>
+            <input id="f_ui_remote_port" type="number" value="3000" />
+          </div>
+        </div>
+        <p class="hint">映射含义：ssh -L 本机端口:内网主机:内网端口。然后浏览器打开「打开网页用的地址」。</p>
+
+        <label>跳板（按顺序，可 1～2 跳）</label>
+        <div id="hops"></div>
+        <div class="row">
+          <button type="button" id="btnAddHop">添加跳板</button>
+        </div>
+
+        <details class="advanced">
+          <summary>高级：落地机 / 密钥（一般不用填）</summary>
+          <div class="grid2">
+            <div>
+              <label for="f_land_host">落地机 host（空=最后一跳）</label>
+              <input id="f_land_host" />
+            </div>
+            <div>
+              <label for="f_land_user">落地机用户</label>
+              <input id="f_land_user" placeholder="与跳板用户相同可留空" />
+            </div>
+          </div>
+          <label for="f_identity">SSH 私钥路径（可选）</label>
+          <input id="f_identity" placeholder="C:\Users\you\.ssh\id_rsa" />
+        </details>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="btnSave">保存当前项目</button>
+      </div>
+
+      <h2 style="margin-top:22px">日志</h2>
+      <div class="row"><button id="btnLogs">刷新日志</button></div>
       <pre class="log" id="logs">（空）</pre>
     </section>
   </main>
   <script>
-    let selectedEnv = '';
-    let status = null;
+    let config = { environments: [], active_env: '' };
+    let state = {};
+    let selectedId = '';
 
     function toast(text, ok) {
       const el = document.getElementById('toast');
@@ -184,67 +246,250 @@
     }
 
     async function api(path, opts) {
-      const res = await fetch(path, Object(opts || {}, {
-        headers: Object.assign({ 'Content-Type': 'application/json' }, (opts && opts.headers) || {}),
-      }));
+      const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch (_) { data = { raw: text }; }
-      if (!res.ok) {
-        const msg = (data && (data.error || data.message)) || text || res.statusText;
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error((data && (data.error || data.message)) || text || res.statusText);
       return data;
     }
 
-    function renderEnvs() {
+    function emptyEnv() {
+      return {
+        id: 'project-' + Date.now().toString(36),
+        name: '新项目',
+        semaphore_url: 'http://127.0.0.1:3000',
+        api_base_url: '',
+        ui_local_port: 3000,
+        ui_remote_host: '',
+        ui_remote_port: 3000,
+        forward_ui: true,
+        hops: [{ host: '', port: 22, user: '' }],
+        land_host: '',
+        land_user: '',
+        land_port: 22,
+        ssh_identity: '',
+      };
+    }
+
+    function currentEnv() {
+      return (config.environments || []).find((e) => e.id === selectedId) || null;
+    }
+
+    function isSshMode(env) {
+      return !!(env && env.hops && env.hops.length && env.hops.some((h) => (h.host || '').trim()));
+    }
+
+    function setModeUI(ssh) {
+      document.getElementById('f_mode').value = ssh ? 'ssh' : 'direct';
+      document.getElementById('blockDirect').style.display = ssh ? 'none' : 'block';
+      document.getElementById('blockSsh').style.display = ssh ? 'block' : 'none';
+    }
+
+    function renderHops(hops) {
+      const box = document.getElementById('hops');
+      box.innerHTML = '';
+      (hops || []).forEach((h, i) => {
+        const div = document.createElement('div');
+        div.className = 'hop';
+        div.innerHTML =
+          '<div class="hop-title"><span>跳板 ' + (i + 1) + '</span><button type="button" data-i="' + i + '" class="rm">删除</button></div>' +
+          '<div class="grid2">' +
+          '<div><label>主机</label><input data-f="host" data-i="' + i + '" value="' + esc(h.host || '') + '" placeholder="jump.example.com" /></div>' +
+          '<div><label>端口</label><input data-f="port" data-i="' + i + '" type="number" value="' + (h.port || 22) + '" /></div>' +
+          '</div>' +
+          '<label>用户</label><input data-f="user" data-i="' + i + '" value="' + esc(h.user || '') + '" placeholder="ops" />';
+        box.appendChild(div);
+      });
+      box.querySelectorAll('.rm').forEach((btn) => {
+        btn.onclick = () => {
+          const env = currentEnv();
+          if (!env) return;
+          env.hops.splice(+btn.dataset.i, 1);
+          if (!env.hops.length) env.hops = [{ host: '', port: 22, user: '' }];
+          renderHops(env.hops);
+        };
+      });
+      box.querySelectorAll('input').forEach((inp) => {
+        inp.oninput = () => {
+          const env = currentEnv();
+          if (!env) return;
+          const i = +inp.dataset.i;
+          const f = inp.dataset.f;
+          if (f === 'port') env.hops[i].port = parseInt(inp.value || '22', 10);
+          else env.hops[i][f] = inp.value;
+        };
+      });
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    function fillForm(env) {
+      if (!env) return;
+      document.getElementById('f_id').value = env.id || '';
+      document.getElementById('f_name').value = env.name || '';
+      const ssh = isSshMode(env);
+      setModeUI(ssh);
+      document.getElementById('f_url_direct').value = env.semaphore_url || '';
+      document.getElementById('f_url_mapped').value = env.semaphore_url || 'http://127.0.0.1:3000';
+      document.getElementById('f_forward_ui').checked = !!env.forward_ui;
+      document.getElementById('f_ui_local').value = env.ui_local_port || 3000;
+      document.getElementById('f_ui_remote_host').value = env.ui_remote_host || '';
+      document.getElementById('f_ui_remote_port').value = env.ui_remote_port || 3000;
+      document.getElementById('f_land_host').value = env.land_host || '';
+      document.getElementById('f_land_user').value = env.land_user || '';
+      document.getElementById('f_identity').value = env.ssh_identity || '';
+      if (!env.hops || !env.hops.length) env.hops = [{ host: '', port: 22, user: '' }];
+      renderHops(env.hops);
+    }
+
+    function readFormIntoEnv(env) {
+      const id = (document.getElementById('f_id').value || '').trim();
+      const name = (document.getElementById('f_name').value || '').trim();
+      if (!id) throw new Error('请填写项目 ID');
+      env.id = id;
+      env.name = name || id;
+      const ssh = document.getElementById('f_mode').value === 'ssh';
+      if (!ssh) {
+        env.semaphore_url = (document.getElementById('f_url_direct').value || '').trim();
+        if (!env.semaphore_url) throw new Error('请填写 Semaphore 网页地址');
+        env.forward_ui = false;
+        env.hops = [];
+        env.ui_remote_host = '';
+        env.land_host = '';
+        env.land_user = '';
+        env.ssh_identity = '';
+      } else {
+        env.semaphore_url = (document.getElementById('f_url_mapped').value || '').trim() || ('http://127.0.0.1:' + (document.getElementById('f_ui_local').value || 3000));
+        env.forward_ui = document.getElementById('f_forward_ui').checked;
+        env.ui_local_port = parseInt(document.getElementById('f_ui_local').value || '3000', 10);
+        env.ui_remote_host = (document.getElementById('f_ui_remote_host').value || '').trim();
+        env.ui_remote_port = parseInt(document.getElementById('f_ui_remote_port').value || '3000', 10);
+        env.land_host = (document.getElementById('f_land_host').value || '').trim();
+        env.land_user = (document.getElementById('f_land_user').value || '').trim();
+        env.ssh_identity = (document.getElementById('f_identity').value || '').trim();
+        env.hops = (env.hops || []).filter((h) => (h.host || '').trim());
+        if (!env.hops.length) throw new Error('SSH 模式请至少填写一台跳板主机');
+        if (env.forward_ui && !env.ui_remote_host) throw new Error('请填写内网 Semaphore 主机');
+      }
+    }
+
+    function renderList() {
       const box = document.getElementById('envList');
       box.innerHTML = '';
-      const envs = (status && status.config && status.config.environments) || [];
+      const envs = config.environments || [];
       if (!envs.length) {
-        box.innerHTML = '<p class="hint">暂无环境，请在右侧 JSON 中添加 environments。</p>';
+        box.innerHTML = '<p class="hint">还没有项目。点「新建项目」开始。</p>';
         return;
       }
-      if (!selectedEnv) selectedEnv = status.config.active_env || envs[0].id;
+      if (!selectedId || !envs.find((e) => e.id === selectedId)) {
+        selectedId = config.active_env || envs[0].id;
+      }
       envs.forEach((e) => {
         const b = document.createElement('button');
-        b.className = 'env' + (e.id === selectedEnv ? ' active' : '');
-        const connected = status.state && status.state.connected_env === e.id;
+        b.className = 'env' + (e.id === selectedId ? ' active' : '');
+        const connected = state.connected_env === e.id;
         b.innerHTML = '<div class="name"></div><div class="meta"></div>';
         b.querySelector('.name').textContent = e.name || e.id;
-        b.querySelector('.meta').textContent = e.id + (connected ? ' · 已连接' : '') + ' · hops ' + ((e.hops && e.hops.length) || 0);
-        b.onclick = () => { selectedEnv = e.id; renderEnvs(); };
+        const mode = isSshMode(e) ? ('SSH ' + ((e.hops && e.hops.length) || 0) + ' 跳') : '直连';
+        b.querySelector('.meta').textContent = e.id + ' · ' + mode + (connected ? ' · 已连接' : '');
+        b.onclick = () => {
+          selectedId = e.id;
+          fillForm(e);
+          renderList();
+        };
         box.appendChild(b);
       });
     }
 
     function renderStatus() {
-      const connected = !!(status && status.state && status.state.connected_env);
+      const connected = !!(state && state.connected_env);
       document.getElementById('connDot').className = 'dot' + (connected ? ' on' : '');
-      document.getElementById('connLabel').textContent = connected
-        ? ('已连接: ' + status.state.connected_env)
-        : '未连接';
-      renderEnvs();
-      if (status && status.config_json) {
-        document.getElementById('cfg').value = status.config_json;
-      }
+      document.getElementById('connLabel').textContent = connected ? ('已连接: ' + state.connected_env) : '未连接';
+      renderList();
+      const env = currentEnv();
+      if (env) fillForm(env);
     }
 
     async function refresh() {
-      status = await api('/api/status');
+      const data = await api('/api/status');
+      config = data.config || { environments: [], active_env: '' };
+      state = data.state || {};
+      if (!config.environments) config.environments = [];
       renderStatus();
     }
 
-    document.getElementById('btnRefresh').onclick = async () => {
-      try { await refresh(); toast('已刷新', true); } catch (e) { toast(e.message, false); }
+    document.getElementById('f_mode').onchange = () => {
+      const ssh = document.getElementById('f_mode').value === 'ssh';
+      setModeUI(ssh);
+      const env = currentEnv();
+      if (env && ssh && (!env.hops || !env.hops.length)) {
+        env.hops = [{ host: '', port: 22, user: '' }];
+        renderHops(env.hops);
+      }
     };
-    document.getElementById('btnConnect').onclick = async () => {
+
+    document.getElementById('btnAddHop').onclick = () => {
+      const env = currentEnv();
+      if (!env) return;
+      if (!env.hops) env.hops = [];
+      env.hops.push({ host: '', port: 22, user: '' });
+      renderHops(env.hops);
+    };
+
+    document.getElementById('btnAdd').onclick = () => {
+      const env = emptyEnv();
+      config.environments.push(env);
+      selectedId = env.id;
+      config.active_env = env.id;
+      renderStatus();
+      toast('已新建，请填写后点「保存当前项目」', true);
+    };
+
+    document.getElementById('btnDel').onclick = async () => {
+      if (!currentEnv()) return;
+      if (!confirm('删除项目「' + (currentEnv().name || selectedId) + '」？')) return;
+      config.environments = config.environments.filter((e) => e.id !== selectedId);
+      selectedId = config.environments[0] ? config.environments[0].id : '';
+      config.active_env = selectedId;
       try {
-        await api('/api/connect', { method: 'POST', body: JSON.stringify({ env_id: selectedEnv }) });
+        await api('/api/config', { method: 'PUT', body: JSON.stringify(config) });
         await refresh();
-        toast('已连接 ' + selectedEnv, true);
+        toast('已删除', true);
       } catch (e) { toast(e.message, false); }
     };
+
+    async function saveCurrent(silent) {
+      let env = currentEnv();
+      if (!env) {
+        env = emptyEnv();
+        config.environments.push(env);
+        selectedId = env.id;
+      }
+      const oldId = env.id;
+      readFormIntoEnv(env);
+      if (oldId !== env.id) selectedId = env.id;
+      config.active_env = env.id;
+      await api('/api/config', { method: 'PUT', body: JSON.stringify(config) });
+      await refresh();
+      if (!silent) toast('已保存项目「' + env.name + '」', true);
+    }
+
+    document.getElementById('btnSave').onclick = async () => {
+      try { await saveCurrent(false); } catch (e) { toast(e.message, false); }
+    };
+
+    document.getElementById('btnConnect').onclick = async () => {
+      try {
+        await saveCurrent(true);
+        await api('/api/connect', { method: 'POST', body: JSON.stringify({ env_id: selectedId }) });
+        await refresh();
+        toast('已连接 ' + selectedId + '，可点「打开网页」', true);
+      } catch (e) { toast(e.message, false); }
+    };
+
     document.getElementById('btnDisconnect').onclick = async () => {
       try {
         await api('/api/disconnect', { method: 'POST', body: '{}' });
@@ -252,27 +497,25 @@
         toast('已断开', true);
       } catch (e) { toast(e.message, false); }
     };
+
     document.getElementById('btnOpen').onclick = async () => {
       try {
-        await api('/api/open', { method: 'POST', body: JSON.stringify({ env_id: selectedEnv }) });
+        await api('/api/open', { method: 'POST', body: JSON.stringify({ env_id: selectedId }) });
         toast('已请求打开浏览器', true);
       } catch (e) { toast(e.message, false); }
     };
+
     document.getElementById('btnInstall').onclick = async () => {
       try {
         await api('/api/install', { method: 'POST', body: '{}' });
-        toast('协议已注册 (HKCU)', true);
+        toast('协议已注册', true);
       } catch (e) { toast(e.message, false); }
     };
-    document.getElementById('btnSave').onclick = async () => {
-      try {
-        const raw = document.getElementById('cfg').value;
-        JSON.parse(raw);
-        await api('/api/config', { method: 'PUT', body: raw });
-        await refresh();
-        toast('配置已保存', true);
-      } catch (e) { toast(e.message, false); }
+
+    document.getElementById('btnRefresh').onclick = async () => {
+      try { await refresh(); toast('已刷新', true); } catch (e) { toast(e.message, false); }
     };
+
     document.getElementById('btnLogs').onclick = async () => {
       try {
         const data = await api('/api/logs?tail=200');
@@ -280,7 +523,17 @@
       } catch (e) { toast(e.message, false); }
     };
 
-    refresh().then(() => document.getElementById('btnLogs').click()).catch((e) => toast(e.message, false));
+    refresh().then(() => {
+      if (!(config.environments || []).length) {
+        const env = emptyEnv();
+        env.name = '我的项目';
+        env.id = 'my-project';
+        config.environments = [env];
+        selectedId = env.id;
+        renderStatus();
+      }
+      document.getElementById('btnLogs').click();
+    }).catch((e) => toast(e.message, false));
   </script>
 </body>
 </html>

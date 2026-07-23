@@ -1,64 +1,53 @@
 # Semaphore RDP Helper
 
-Windows helper for native Remote Desktop via `mstsc`, with optional SSH ControlMaster
-tunnels and a **local web panel**. See [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md).
+Windows helper：本机 Web 面板 + `mstsc` 远程桌面。见 [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md)。
 
-## Install (no admin)
+## 下载
 
-1. Copy `semaphore-rdp-helper.exe` to a user folder (e.g. `%LOCALAPPDATA%\SemaphoreRdpHelper\`).
-2. Double-click the exe (or run with no args) → opens **http://127.0.0.1:17300** panel.
-3. In the panel: edit JSON environments → **保存配置** → select env → **连接** → **打开网页**.
-4. Optional: **注册协议** (also auto-attempted on UI start).
-5. In Semaphore device list, click **远程桌面**.
+Dev Actions 两个 Artifact（不要再下成「zip 里套 zip」的合并包）：
 
-CLI still works: `install` / `connect` / `open` / `disconnect` / `status` / `ui`.
+| Artifact | 内容 |
+|----------|------|
+| `semaphore` | Linux `semaphore` 服务端二进制 |
+| `semaphore-rdp-helper` | `semaphore-rdp-helper.exe` + 本 README |
 
-## Local web panel
+## 用法（面板）
 
-| 操作 | 说明 |
+1. 双击 `semaphore-rdp-helper.exe` → 打开 **http://127.0.0.1:17300**
+2. **新建项目**（或改默认「我的项目」）
+3. 选访问方式：
+   - **本机直连**：填 Semaphore 网址，如 `http://10.x.x.x:3000`
+   - **经 SSH 跳板**：填跳板主机/用户、内网 Semaphore 主机，勾选端口映射
+4. **保存当前项目** → **连接** → **打开网页**
+5. 在 Semaphore 设备列表点 **远程桌面**
+
+首次可点 **注册协议**（无管理员，写 HKCU）。
+
+## 配置说明（按项目）
+
+每个「项目环境」一套入口，互不影响：
+
+| 字段 | 含义 |
 |------|------|
-| 环境列表 | 选择 active 环境 |
-| 连接 / 断开 | SSH ControlMaster（+ 可选 UI 端口映射） |
-| 打开网页 | 打开该环境的 `semaphore_url` |
-| 注册协议 | HKCU `semaphore-rdp://` |
-| 配置 JSON | 编辑并保存 `config.json` |
-| 日志 | 查看 `helper.log` 尾部 |
+| 项目 ID / 名称 | 本机区分用，不必等于 Semaphore 项目数字 ID |
+| 直连 URL | 浏览器能直接打开的 Semaphore 地址 |
+| 跳板 1/2 | `ssh -J` 顺序；最后一跳默认为落地机 |
+| 本机端口 + 内网主机 | `ssh -L 本机端口:内网主机:3000` |
+| 打开网页地址 | 通常 `http://127.0.0.1:本机端口` |
 
-- Listen: `127.0.0.1:17300` only (loopback). Override: env `SEMAPHORE_RDP_HELPER_UI=127.0.0.1:17301`.
-- Second launch: if port busy, opens existing panel in browser and exits.
+配置文件：`%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`（面板会写）。
 
-## config.json example
+## CLI（可选）
 
-```json
-{
-  "active_env": "plant-a",
-  "environments": [
-    {
-      "id": "plant-a",
-      "name": "Plant A",
-      "semaphore_url": "http://127.0.0.1:3000",
-      "forward_ui": true,
-      "ui_local_port": 3000,
-      "ui_remote_host": "10.0.0.5",
-      "ui_remote_port": 3000,
-      "land_user": "ops",
-      "hops": [
-        { "host": "jump1.example", "port": 22, "user": "ops" },
-        { "host": "jump2.internal", "port": 22, "user": "ops" }
-      ]
-    }
-  ]
-}
+```text
+semaphore-rdp-helper.exe          # 打开面板
+semaphore-rdp-helper.exe connect <项目ID>
+semaphore-rdp-helper.exe open
+semaphore-rdp-helper.exe disconnect
 ```
-
-- **0 hops / empty land**: direct (no SSH).
-- **hops**: last hop is land unless `land_host` is set; earlier hops become `ProxyJump`.
-- Passwords: if the device has `rdp_password` in Semaphore, Helper receives it briefly and uses `cmdkey`+`mstsc`; otherwise mstsc prompts.
 
 ## Build
 
 ```bash
 GOOS=windows GOARCH=amd64 go build -o semaphore-rdp-helper.exe ./cmd/rdp-helper
 ```
-
-GitHub Actions：**Dev** workflow 打包 `semaphore-dev.zip`（Linux `semaphore` + Windows `semaphore-rdp-helper.exe` + README）。

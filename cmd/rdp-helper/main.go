@@ -228,17 +228,17 @@ func saveConfig(c Config) error {
 func defaultConfig() Config {
 	return Config{
 		Environments: []Environment{{
-			ID:           "default",
-			Name:         "Default",
+			ID:           "my-project",
+			Name:         "我的项目",
 			SemaphoreURL: "http://127.0.0.1:3000",
 			UILocalPort:  3000,
-			UIRemoteHost: "127.0.0.1",
+			UIRemoteHost: "",
 			UIRemotePort: 3000,
-			ForwardUI:    false,
-			Hops:         nil,
+			ForwardUI:    true,
+			Hops:         []Hop{{Host: "", Port: 22, User: ""}},
 			LandUser:     "",
 		}},
-		ActiveEnv: "default",
+		ActiveEnv: "my-project",
 	}
 }
 
