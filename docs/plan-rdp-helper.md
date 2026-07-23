@@ -1,6 +1,7 @@
 # 方案：Semaphore RDP Helper（原生远程桌面）
 
-> 状态：**边界已确认**（见 §9）；密码策略（§9.4）仍待定  
+> 状态：**边界已确认**（见 §9）  
+
 > 目标：操作员经 SSH 跳板访问 Semaphore 所在网络时，用 **Windows 本地 Helper + mstsc** 打开设备远程桌面；**不做**浏览器内嵌 RDP。
 
 ---
@@ -50,7 +51,7 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 |------|-----|------|
 | 设备「远程桌面」按钮 | ✅ | 设备列表行操作（与 Probe / WinRM 并列） |
 | 签发一次性 token | ✅ | 绑定当前登录用户 + 设备 + 短 TTL；URL **只带 token** |
-| Launch API | ✅ | Helper 凭 token 获取目标 IP/端口、RDP 用户名等（密码策略见 §9.4） |
+| Launch API | ✅ | Helper 凭 token 获取目标 IP/端口、RDP 用户名；密码见下「凭据策略」 |
 | 协议失败提示 | ✅ | **仅提示** Helper 未响应/拉起失败（文案引导自行安装配置 Helper） |
 | 复用现有权限 | ✅ | 沿用现有项目资源权限即可打开设备页并点按钮；**不**为 RDP 单独加权限点 |
 | 审计 | ❌ | **不**为该功能新增审计日志 |
@@ -65,6 +66,13 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 | 一条 SSH 多用 | ControlMaster：UI 映射与多台 RDP LocalForward 共用 |
 | 断开策略 | 关 RDP **不断**环境连接；断开环境才拆 master |
 | 设备信息在 Semaphore | `ip` / `rdp_user` / `rdp_password` / `rdp_port` |
+
+#### D. RDP 凭据策略（已确认）
+
+| 情况 | 行为 |
+|------|------|
+| 设备在 Semaphore 中 **已配置** `rdp_password`（非空） | Launch API **短时下发**密码；Helper **仅内存使用**，不写进可分享 URL，尽量不落盘（或用完即删临时 `.rdp`） |
+| 设备 **未配置** `rdp_password`（空） | API 只下发主机 / 端口 / 用户名；Helper 或 `mstsc` **本机输入**密码 |
 
 ### 3.2 不做（Out of Scope）
 
@@ -134,11 +142,17 @@ POST /api/project/{id}/devices/{device_id}/rdp/launch
   → { "token", "expires_in", "helper_url" }
 
 GET  /api/rdp/launch-params?token=...
-  → { host, rdp_port, rdp_user, rdp_password?, suggested_env? }
+  → {
+      host, rdp_port, rdp_user,
+      rdp_password: string | null,   # 库中有则短时下发；空则 null → Helper/本机输入
+      password_provided: bool,
+      suggested_env?: string
+    }
 ```
 
 - URL 不带密码与主机机密  
 - 权限：能访问该项目设备即可（现有中间件），无新 RBAC  
+- `rdp_password` 仅经 **HTTPS + 一次性 token** 下发；Helper 不写日志明文  
 
 ---
 
@@ -184,7 +198,7 @@ GET  /api/rdp/launch-params?token=...
 | 1 | 仅 Windows Helper + mstsc，无浏览器内嵌 RDP | **是** |
 | 2 | 跳板只配 Helper，服务端不持私钥 | **是** |
 | 3 | Helper 为入口 | **是** |
-| 4 | RDP 密码：A 短时下发 / B 仅用户名 | **待定** |
+| 4 | RDP 密码 | **有则短时下发；无则本机输入** |
 | 5 | Helper 多环境即可，不必与项目自动同步 | **是** |
 | 6 | 直连探测进 MVP | **是** |
 | 7 | 独立 exe + Actions 构建 | **是**（分发不靠产品内下载链） |
@@ -196,12 +210,12 @@ GET  /api/rdp/launch-params?token=...
 
 ---
 
-## 10. 实施切片（确认 §9.4 后开工）
+## 10. 实施切片（边界齐，可开工）
 
 | 切片 | 内容 |
 |------|------|
-| S1 | Semaphore：launch token API + 设备按钮 + **失败提示文案（无下载链）** |
-| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志（免管理员） |
+| S1 | Semaphore：launch token API（含密码有则下发）+ 设备按钮 + **失败提示文案（无下载链）** |
+| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc（有密码内存用、无密码本机输入）/ 日志（免管理员） |
 | S3 | ControlMaster 复用 + 直连探测 + 操作说明（运维分发） |
 | S4 | Actions 出 exe（资产给运维，不挂进产品下载） |
 
