@@ -1,0 +1,36 @@
+---
+# 状态检测 Kafka TCP 回退（API ExecResultData!=3 且进程在跑）：
+# 进程对 RemotePort ∈ KAFKA_REMOTE_PORTS 有 Established → 工作正常。
+# 前置：deploy_sem_windows_helper_scripts.yml
+# 产出 register：kafka_check_result（KAFKA_OK|… / KAFKA_FAIL|…）
+
+- name: 状态判断：检查 Kafka TCP 连接（Established）
+  environment:
+    KAFKA_PROCESS_NAME: >-
+      {{
+        (kafka_process_name | default('', true) | trim)
+        if ((kafka_process_name | default('', true) | trim) | length) > 0
+        else (
+          (_exe_name_base | default('', true) | trim)
+          if ((_exe_name_env | default('', true) | trim) | length) > 0
+          else 'NWReport_DBWB'
+        )
+      }}
+    KAFKA_REMOTE_PORTS: "{{ kafka_remote_ports | default(((lookup('env', 'KAFKA_REMOTE_PORTS') | default('', true) | trim) | default('9092,9093,9094', true)), true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_check_kafka_tcp_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: kafka_check_result
+  failed_when: false
+  ignore_unreachable: true
+  changed_when: false
+
+- name: 状态判断：输出 Kafka 检查结果
+  ansible.builtin.debug:
+    msg: >-
+      [Kafka检查] 结果={{ kafka_check_result.stdout | default('未执行') | trim }}
+      unreachable={{ kafka_check_result.unreachable | default(false) }}
+      ports={{ kafka_remote_ports | default('9092,9093,9094') }}
+  when: kafka_check_result is defined

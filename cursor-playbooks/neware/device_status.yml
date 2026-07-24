@@ -30,8 +30,8 @@
       vars:
         neware_api_query_context: patrol
 
-  # 快路径：ExecResultData==3 → healthy；WinRM/进程/日志仅作 winrm_status 参考或跳过
-    - name: 数据上报 API 已健康（跳过 WinRM/进程/日志参考检查）
+  # 快路径：ExecResultData==3 → healthy；WinRM/进程/Kafka 仅作参考或跳过
+    - name: 数据上报 API 已健康（跳过 WinRM/进程/Kafka 参考检查）
       when: api_upload_started | default(false) | bool
       block:
         - name: WinRM 参考探测（仅填写 winrm_status，不改变 API 健康结论）
@@ -94,8 +94,8 @@
         - name: API 快速失败 — 结束本主机
           ansible.builtin.meta: end_host
 
-    # 参考路径：HTTP 200 且信封有效，但 ExecResultData!=3 → WinRM + 进程 + 日志
-    - name: API 200 但未达上报已启动 — WinRM/进程/日志参考检查
+    # 参考路径：HTTP 200 且信封有效，但 ExecResultData!=3 → WinRM + 进程 + Kafka TCP
+    - name: API 200 但未达上报已启动 — WinRM/进程/Kafka 参考检查
       when:
         - not (api_upload_started | default(false) | bool)
         - api_upload_status_ok | default(false) | bool
@@ -109,7 +109,7 @@
         - name: 一次性部署 Windows 辅助脚本
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
 
-        - name: 解析 EXE_DIR（参考：日志路径）
+        - name: 解析 EXE_DIR（参考）
           block:
             - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
           ignore_unreachable: true
@@ -151,20 +151,21 @@
           ansible.builtin.set_fact:
             need_reconfigure: true
             log_status_ok: false
+            kafka_status_ok: false
             upload_health_via_api: false
           when: >
             status is defined and
             'stdout' in status and
             'NOT_RUNNING' in status.stdout
 
-        - name: 日志关键字回退（API 未达 3 且进程在跑）
+        - name: Kafka TCP 回退（API 未达 3 且进程在跑）
           when: >
             status is defined and
             'stdout' in status and
             'NOT_RUNNING' not in status.stdout
           block:
-            - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
-            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+            - ansible.builtin.include_tasks: tasks/kafka_health_check_windows.yml
+            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_kafka.yml
             - ansible.builtin.set_fact:
                 upload_health_via_api: false
 
@@ -174,9 +175,9 @@
                   [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
                   api_upload_started={{ api_upload_started | default(false) }} |
                   ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
-                  日志_OK={{ log_status_ok | default('n/a') }} |
+                  Kafka_OK={{ kafka_status_ok | default('n/a') }} |
                   异常/需关注={{ need_reconfigure | default('n/a') }} |
-                  tail={{ log_health_tail_lines | default(10) }} recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}
+                  kafka={{ kafka_check_result.stdout | default('') | trim }}
 
         - name: 登记 Semaphore 状态回调行（参考路径）
           ansible.builtin.set_fact:
@@ -190,7 +191,7 @@
                    else 'healthy')) }}
               winrm_status: >-
                 {{ 'offline' if (not (_winrm_session_ok | default(false) | bool))
-                or (log_check_result is defined and (log_check_result.unreachable | default(false)))
+                or (kafka_check_result is defined and (kafka_check_result.unreachable | default(false)))
                 else 'online' }}
               api_status: >-
                 {{ 'offline' if status is not defined or ('stdout' not in status)
@@ -199,8 +200,8 @@
                    else 'offline')) }}
               abnormal_reason: >-
                 {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
-                {% elif log_check_result is defined and (log_check_result.unreachable | default(false)) %}WinRM unreachable during log status check
-                {% elif need_reconfigure is defined and need_reconfigure | bool %}API ExecResultData!=3 and log keyword fallback failed
+                {% elif kafka_check_result is defined and (kafka_check_result.unreachable | default(false)) %}WinRM unreachable during Kafka TCP check
+                {% elif need_reconfigure is defined and need_reconfigure | bool %}API ExecResultData!=3 and Kafka TCP not Established
                 {% else %}{% endif %}
 
         - name: DEBUG NEWARE 巡检（结果）

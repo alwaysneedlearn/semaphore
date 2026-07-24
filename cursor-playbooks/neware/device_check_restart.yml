@@ -134,8 +134,8 @@
       ansible.builtin.meta: end_host
       when: check_result is not defined
 
-    # 参考路径：API 200 且信封有效，但 ExecResultData!=3 → 进程 + 日志
-    - name: API 200 但未达上报已启动 — 进程/日志参考检查
+    # 参考路径：API 200 且信封有效，但 ExecResultData!=3 → 进程 + Kafka TCP
+    - name: API 200 但未达上报已启动 — 进程/Kafka 参考检查
       when:
         - api_upload_status_ok | default(false) | bool
         - not (api_upload_started | default(false) | bool)
@@ -144,30 +144,31 @@
           ansible.builtin.set_fact:
             need_reconfigure: true
             log_status_ok: false
+            kafka_status_ok: false
             upload_health_via_api: false
           when: >
             check_result is defined and 'stdout' in check_result and
             'NOT_RUNNING' in check_result.stdout
 
-        - name: WinRM 中途建连（日志判断前）
+        - name: WinRM 中途建连（Kafka 判断前）
           ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_refresh_midplay.yml"
           when: >
             _winrm_session_ok | default(false) | bool and
             check_result is defined and 'stdout' in check_result and
             'NOT_RUNNING' not in check_result.stdout
           vars:
-            winrm_refresh_label: "WinRM 中途建连（状态/日志判断前）"
+            winrm_refresh_label: "WinRM 中途建连（状态/Kafka 判断前）"
 
-        - name: 日志关键字回退（API 已查，不再重复 POST）
+        - name: Kafka TCP 回退（API 已查，不再重复 POST）
           when: >
             check_result is defined and 'stdout' in check_result and
             'NOT_RUNNING' not in check_result.stdout
           block:
-            - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
+            - ansible.builtin.include_tasks: tasks/kafka_health_check_windows.yml
 
-            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_kafka.yml
 
-            - name: 登记日志回退路径
+            - name: 登记 Kafka 回退路径
               ansible.builtin.set_fact:
                 upload_health_via_api: false
 
@@ -177,8 +178,8 @@
                   [综合判断] 程序状态={{ check_result.stdout | trim | regex_search('^[^|]+') }} |
                   api_upload_started={{ api_upload_started | default(false) }} |
                   ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
-                  日志_OK={{ log_status_ok | default('n/a') }} |
-                  tail={{ log_health_tail_lines | default(10) }} recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }} |
+                  Kafka_OK={{ kafka_status_ok | default('n/a') }} |
+                  kafka={{ kafka_check_result.stdout | default('') | trim }} |
                   需要重配={{ need_reconfigure | default('n/a') }}
 
     - name: 登记进程运行状态（供 stop 判断）

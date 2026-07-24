@@ -1,0 +1,34 @@
+---
+# 进程已在跑：据 Kafka TCP Established 登记 need_reconfigure / log_status_ok
+# （API 未达 3 时由 health_gate / Patrol / check_restart 调用）
+# 依赖：kafka_check_result（由 kafka_health_check_windows.yml 产生）
+# 使用 YAML 字面量 true/false，避免 set_fact: "{{ false }}" 变成字符串 "False"
+
+- name: 状态判断：登记需要重配（是，Kafka 未 Established）
+  ansible.builtin.set_fact:
+    need_reconfigure: true
+    log_status_ok: false
+    kafka_status_ok: false
+  when: >
+    kafka_check_result is defined and
+    (
+      (kafka_check_result.unreachable | default(false)) or
+      ('KAFKA_OK' not in (kafka_check_result.stdout | default('')))
+    )
+
+- name: 状态判断：登记需要重配（否，Kafka Established）
+  ansible.builtin.set_fact:
+    need_reconfigure: false
+    log_status_ok: true
+    kafka_status_ok: true
+  when: >
+    kafka_check_result is defined and
+    not (kafka_check_result.unreachable | default(false)) and
+    ('KAFKA_OK' in (kafka_check_result.stdout | default('')))
+
+- name: 状态判断：输出综合判断结果（Kafka）
+  ansible.builtin.debug:
+    msg: >
+      [综合判断] Kafka_OK={{ kafka_status_ok | default('n/a') }} |
+      需要重配={{ need_reconfigure | default('n/a') }}
+      | detail={{ kafka_check_result.stdout | default('') | trim }}

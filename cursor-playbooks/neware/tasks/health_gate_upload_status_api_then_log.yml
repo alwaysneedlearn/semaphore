@@ -1,37 +1,37 @@
 ---
-# 进程已在跑：先 POST 查询数据上报状态；ExecResultData==3 则跳过日志关键字，否则回退日志检查。
-# 依赖 play vars：api_host、api_port、log_health_*（group_vars/windows_hosts.yml）
-# 产出：need_reconfigure、log_status_ok、api_upload_*、upload_health_via_api（API 命中 3 时）
+# 进程已在跑：先 POST 查询数据上报状态；ExecResultData==3 则跳过 Kafka TCP，否则回退 Kafka Established。
+# 依赖 play vars：api_host、api_port、kafka_*（group_vars/windows_hosts.yml）
+# 产出：need_reconfigure、log_status_ok、kafka_status_ok、api_upload_*、upload_health_via_api
 
 - ansible.builtin.include_tasks: tasks/neware_query_upload_status_api.yml
   vars:
     neware_api_query_context: "{{ neware_health_gate_context | default('health_gate') }}"
 
-- name: 数据上报状态：API 已上报启动，跳过日志关键字
+- name: 数据上报状态：API 已上报启动，跳过 Kafka TCP
   ansible.builtin.set_fact:
     need_reconfigure: false
     log_status_ok: true
+    kafka_status_ok: true
     upload_health_via_api: true
   when: api_upload_started | default(false) | bool
 
-- name: 数据上报状态：API 未达上报已启动，回退日志关键字检查
+- name: 数据上报状态：API 未达上报已启动，回退 Kafka TCP 检查
   when: not (api_upload_started | default(false) | bool)
   block:
-    - ansible.builtin.include_tasks: tasks/log_health_check_windows.yml
+    - ansible.builtin.include_tasks: tasks/kafka_health_check_windows.yml
 
-    - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_log.yml
+    - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_kafka.yml
 
-    - name: 数据上报状态：登记日志回退路径
+    - name: 数据上报状态：登记 Kafka 回退路径
       ansible.builtin.set_fact:
         upload_health_via_api: false
 
-- name: 数据上报状态：输出综合判断（API 优先 / 日志回退）
+- name: 数据上报状态：输出综合判断（API 优先 / Kafka 回退）
   ansible.builtin.debug:
     msg: >
       [综合判断] upload_via_api={{ upload_health_via_api | default(false) }} |
       api_upload_started={{ api_upload_started | default(false) }} |
       ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
-      日志_OK={{ log_status_ok | default('n/a') }} |
+      Kafka_OK={{ kafka_status_ok | default('n/a') }} |
       需要重配={{ need_reconfigure | default('n/a') }}
-      | tail={{ log_health_tail_lines | default(10) }}
-      | recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}
+      | kafka={{ kafka_check_result.stdout | default('') | trim }}
