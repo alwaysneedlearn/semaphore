@@ -10,19 +10,19 @@
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] process_unreachable={{ status.unreachable | default(false) if (status is defined) else 'n/a' }}"
   when: status is defined
 
-- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（数据上报 / 日志健康）"
+- name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（数据上报 / Kafka 健康）"
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] api_upload_started={{ api_upload_started | default('n/a') }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] upload_health_via_api={{ upload_health_via_api | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_status_ok={{ log_status_ok | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] kafka_status_ok={{ kafka_status_ok | default(log_status_ok | default('n/a')) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] need_reconfigure={{ need_reconfigure | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_tail_lines={{ log_health_tail_lines | default(10) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_recent_h={{ ((log_health_recent_minutes | default(360) | int) / 60) | int }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] log_health_keyword={{ log_health_keyword | default('提示') | truncate(40, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] kafka_check={{ kafka_check_result.stdout | default('') | trim | truncate(120, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NEWARE') }}] kafka_ports={{ kafka_remote_ports | default('9092,9093,9094') }}"
   when: >
-    log_status_ok is defined or need_reconfigure is defined or
-    api_upload_started is defined or api_upload_exec_result_data is defined
+    log_status_ok is defined or kafka_status_ok is defined or need_reconfigure is defined or
+    api_upload_started is defined or api_upload_exec_result_data is defined or
+    kafka_check_result is defined
 
 - name: "DEBUG {{ sem_debug_tag | default('NEWARE') }} 巡检（回调行预览）"
   ansible.builtin.debug:
