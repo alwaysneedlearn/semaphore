@@ -778,8 +778,16 @@ func launchMSTSC(host string, port int, user, password string) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("mstsc only supported on Windows (got %s)", runtime.GOOS)
 	}
-	target := fmt.Sprintf("%s:%d", host, port)
-	termsrv := fmt.Sprintf("TERMSRV/%s", target)
+	host = strings.TrimSpace(host)
+	user = strings.TrimSpace(user)
+	if host == "" {
+		return fmt.Errorf("empty RDP host")
+	}
+	if port <= 0 {
+		port = 3389
+	}
+	fullAddress := fmt.Sprintf("%s:%d", host, port)
+	termsrv := "TERMSRV/" + fullAddress
 
 	if password != "" && user != "" {
 		_ = exec.Command("cmdkey", "/delete:"+termsrv).Run()
@@ -794,18 +802,44 @@ func launchMSTSC(host string, port int, user, password string) error {
 		}
 	}
 
-	args := []string{"/v:" + target}
-	if user != "" && password == "" {
-		// username only — mstsc prompts for password
-		args = append(args, "/u:"+user)
+	// Never pass /u: — mstsc treats unknown switches as fatal and shows the usage dialog.
+	// Prefer a short-lived .rdp so username can be prefilled without invalid CLI flags.
+	rdpBody := buildRDPFile(fullAddress, port, user)
+	dir, err := appDir()
+	if err != nil {
+		return err
 	}
-	cmd := exec.Command("mstsc", args...)
+	rdpPath := filepath.Join(dir, fmt.Sprintf("launch-%d.rdp", time.Now().UnixNano()))
+	if err := os.WriteFile(rdpPath, []byte(rdpBody), 0o600); err != nil {
+		return fmt.Errorf("write rdp file: %w", err)
+	}
+	defer func() { _ = os.Remove(rdpPath) }()
+
+	cmd := exec.Command("mstsc", rdpPath)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mstsc: %w", err)
 	}
-	logf("mstsc started target=%s user=%s", target, user)
+	logf("mstsc started target=%s user=%s rdp=%s", fullAddress, user, rdpPath)
 	_ = cmd.Wait()
 	return nil
+}
+
+func buildRDPFile(fullAddress string, port int, user string) string {
+	var b strings.Builder
+	b.WriteString("full address:s:")
+	b.WriteString(fullAddress)
+	b.WriteString("\r\n")
+	b.WriteString("server port:i:")
+	b.WriteString(strconv.Itoa(port))
+	b.WriteString("\r\n")
+	if user != "" {
+		b.WriteString("username:s:")
+		b.WriteString(user)
+		b.WriteString("\r\n")
+	}
+	b.WriteString("prompt for credentials:i:1\r\n")
+	b.WriteString("authentication level:i:2\r\n")
+	return b.String()
 }
 
 func truncate(s string, n int) string {
