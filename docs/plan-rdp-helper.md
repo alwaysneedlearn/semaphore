@@ -1,6 +1,6 @@
 # 方案：Semaphore RDP Helper（原生远程桌面）
 
-> 状态：**MVP 已落地**（API + 设备按钮 + CLI Helper + **本地 Web 面板**；见 §10）  
+> 状态：**MVP 已落地**（API + 设备按钮 + **CLI Helper**；见 §10）  
 
 > 目标：操作员经 SSH 跳板访问 Semaphore 所在网络时，用 **Windows 本地 Helper + mstsc** 打开设备远程桌面；**不做**浏览器内嵌 RDP。
 
@@ -43,7 +43,7 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 | 拉起 RDP | ✅ | 经已建立 SOCKS 做本机转发 → `mstsc`；退出后停本次转发 |
 | 直连探测 | ✅ | 本机可达设备 3389 则跳过 SSH，直接 mstsc |
 | 本地日志 | ✅ | SSH / 协议 / API 错误可查 |
-| 托盘 / 精简 UI | ✅ | **本地 Web 面板** `http://127.0.0.1:17300`（无参启动）；非系统托盘 |
+| 托盘 / 精简 UI | ❌ | **命令行**配置与连断；无本地 Web 面板 |
 
 #### B. Semaphore 服务端 / Web
 
@@ -101,7 +101,7 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 ### 4.1 一次性（操作员 PC，无管理员）
 
 1. 运维下发绿色/`AppData` 目录下的 `semaphore-rdp-helper.exe`（**非** Program Files）  
-2. 双击 exe → 打开本地面板 `http://127.0.0.1:17300`（自动尝试注册协议）  
+2. 编辑 `%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`，命令行 `connect` / `open`（`install` 注册协议）  
 3. 在面板中编辑环境跳板并保存；确认本机 OpenSSH / 密钥可用  
 
 ### 4.2 日常
@@ -231,10 +231,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-rdp-helper-wi
 | 切片 | 内容 | 状态 |
 |------|------|------|
 | S1 | Semaphore：launch token API + 设备按钮 + 失败提示（无下载链） | **已做** |
-| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **已做**（CLI + 本地 Web 面板） |
-| S3 | ControlMaster 复用 + 直连探测 + README | **已做** |
+| S2 | Helper：环境 / 连接 / 开网页 / HKCU 协议 / mstsc / 日志 | **已做**（CLI） |
+| S3 | ControlMaster 复用 + 直连探测 + README | **已做**（现为 SOCKS；Win 无 ControlMaster） |
 | S4 | Actions：Dev 两个 Artifact（`semaphore` / `semaphore-rdp-helper`） | **已做** |
-| S5 | Helper 本地 Web 面板（按项目表单配置 / 连断 / 开网页 / 日志） | **已做** |
+| S5 | Helper 本地 Web 面板 | **已移除**（纯 CLI + 编辑 config.json） |
 
 ---
 

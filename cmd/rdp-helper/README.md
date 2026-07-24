@@ -1,59 +1,78 @@
 # Semaphore RDP Helper
 
-Windows helper：本机 Web 面板 + `mstsc` 远程桌面。见 [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md)。
+Windows CLI helper：`ssh` 跳板 + `mstsc` 远程桌面。见 [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md)。
 
 ## 下载
 
-Dev Actions 两个 Artifact（不要再下成「zip 里套 zip」的合并包）：
+Dev Actions 两个 Artifact：
 
 | Artifact | 内容 |
 |----------|------|
 | `semaphore` | Linux `semaphore` 服务端二进制 |
 | `semaphore-rdp-helper` | `semaphore-rdp-helper.exe` + 本 README |
 
-## 用法（面板）
+## 用法（命令行）
 
-1. 双击 `semaphore-rdp-helper.exe` → 打开 **http://127.0.0.1:17300**
-2. **新建项目**（或改默认「我的项目」）
-3. 选访问方式：
-   - **本机直连**：Semaphore 和设备 RDP 本机都能直接访问
-   - **经 SSH 跳板**：
-     - Semaphore 也要映射：勾选「映射 Semaphore」，填内网主机
-     - **仅 RDP 要跳板、Semaphore 已直连**：**取消勾选**「映射 Semaphore」，「打开网页地址」填直连 URL（如 `http://10.x.x.x:3000`），仍填跳板
-4. **保存当前项目** → **连接** → **打开网页**
-5. 在 Semaphore 设备列表点 **远程桌面**
+在 **cmd / PowerShell** 中运行（保留窗口以便输入 SSH 密码）：
 
-经 SSH 时：建议从 **cmd/PowerShell** 启动 Helper（保留原控制台）。点 **连接** 时在**同一控制台**输入跳板/落地机密码。
+```text
+semaphore-rdp-helper.exe install
+semaphore-rdp-helper.exe envs
+semaphore-rdp-helper.exe connect <项目ID>
+semaphore-rdp-helper.exe open
+semaphore-rdp-helper.exe status
+semaphore-rdp-helper.exe disconnect <项目ID>
+```
 
-说明：Windows 自带 OpenSSH **不支持** `ControlMaster`（会报 `getsockname failed: Bad file descriptor`）。Helper 改为 `ssh -N` + 本机 SOCKS（`-D`），远程桌面经 SOCKS 转发，不依赖 ControlMaster。
+典型流程：
 
-首次可点 **注册协议**（无管理员，写 HKCU）。
+1. `install`（注册 `semaphore-rdp://`，创建配置目录）
+2. 编辑 `%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`
+3. `connect <项目ID>`（多项目可分别 connect，互不影响）
+4. `open` 打开 Semaphore 网页
+5. 在设备列表点 **远程桌面**
 
-## 配置说明（按项目）
+说明：Windows 自带 OpenSSH **不支持** `ControlMaster`；Helper 使用 `ssh -N` + SOCKS（`-D`）转发 RDP。
 
-每个「项目环境」一套入口，互不影响：
+## 配置文件
+
+路径：`%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`
+
+示例（Semaphore 直连 + 仅 RDP 走跳板）：
+
+```json
+{
+  "active_env": "plant-a",
+  "environments": [
+    {
+      "id": "plant-a",
+      "name": "厂区A",
+      "semaphore_url": "http://10.20.1.10:3000",
+      "forward_ui": false,
+      "ui_local_port": 3000,
+      "ui_remote_host": "",
+      "ui_remote_port": 3000,
+      "hops": [
+        { "host": "10.20.1.134", "port": 22, "user": "root" }
+      ],
+      "land_host": "",
+      "land_user": "",
+      "land_port": 0,
+      "ssh_identity": ""
+    }
+  ]
+}
+```
 
 | 字段 | 含义 |
 |------|------|
-| 项目 ID / 名称 | 本机区分用，不必等于 Semaphore 项目数字 ID |
-| 直连 URL | 浏览器能直接打开的 Semaphore 地址 |
-| 跳板 1/2 | `ssh -J` 顺序；最后一跳默认为落地机（**端口填在该跳板的「端口」**，不要依赖默认 22） |
-| 落地机（高级） | 仅当落地机与最后一跳不同时填写；此时用「落地机 SSH 端口」 |
-| 本机端口 + 内网主机 | `ssh -L 本机端口:内网主机:3000` |
-| 打开网页地址 | 通常 `http://127.0.0.1:本机端口` |
+| `id` / `name` | 本机项目标识；`connect` / `disconnect` 用 `id` |
+| `semaphore_url` | 浏览器打开的 Semaphore 地址 |
+| `forward_ui` | `true` 时用 SSH `-L` 映射网页；Semaphore 已直连则设 `false` |
+| `hops` | 跳板列表（含非 22 端口）；空 `land_host` 时最后一跳即落地机 |
+| `land_*` | 仅当落地机与最后一跳不同时填写 |
 
-配置文件：`%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`（面板会写）。
-
-**多项目**：每个项目独立 SSH/SOCKS 会话。连接项目 B 不会断开项目 A；「断开」只断当前选中项目。
-
-## CLI（可选）
-
-```text
-semaphore-rdp-helper.exe          # 打开面板
-semaphore-rdp-helper.exe connect <项目ID>
-semaphore-rdp-helper.exe open
-semaphore-rdp-helper.exe disconnect
-```
+`state.json` 记录各项目连接（pid / SOCKS 端口）；多项目会话互相独立。
 
 ## Build
 

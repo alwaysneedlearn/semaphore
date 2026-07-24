@@ -86,11 +86,7 @@ type launchParams struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		if err := cmdUI(); err != nil {
-			logf("ui error: %v", err)
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
+		printHelp()
 		return
 	}
 	arg := os.Args[1]
@@ -107,8 +103,6 @@ func main() {
 	switch cmd {
 	case "help", "-h", "--help":
 		printHelp()
-	case "ui":
-		err = cmdUI()
 	case "install":
 		err = cmdInstall()
 	case "status":
@@ -141,22 +135,27 @@ func main() {
 	}
 }
 
+func exeName() string {
+	return filepath.Base(os.Args[0])
+}
+
 func printHelp() {
+	n := exeName()
 	fmt.Printf(`Semaphore RDP Helper
 
 Usage:
-  %s                       Open local web panel (http://127.0.0.1:17300)
-  %s ui                    Same as no-args
   %s install               Register %s:// (HKCU) and create config dir
   %s envs                  List environments from config
   %s connect [env-id]      SSH tunnel for one project (-N + SOCKS; optional UI -L)
   %s disconnect [env-id]   Tear down that project's tunnel (default: active)
   %s open                  Open Semaphore URL in browser
   %s status                Show connection state
-  %s %s://connect?token=...  Handle protocol (used by OS)
+  %s help                  Show this help
+
+Protocol (OS): %s://connect?token=...&base=...
 
 Config: %%LOCALAPPDATA%%\%s\%s
-`, os.Args[0], os.Args[0], os.Args[0], protocolScheme, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], protocolScheme, appName, configFileName)
+`, n, protocolScheme, n, n, n, n, n, n, protocolScheme, appName, configFileName)
 }
 
 func appDir() (string, error) {
