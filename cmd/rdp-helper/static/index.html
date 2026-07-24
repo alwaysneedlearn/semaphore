@@ -149,7 +149,7 @@
         <button id="btnInstall">注册协议</button>
         <button id="btnRefresh">刷新</button>
       </div>
-      <p class="hint">每个「项目环境」对应一套跳板 + Semaphore 入口。先连接再开网页。</p>
+      <p class="hint">每个「项目环境」一套跳板 + Semaphore 入口；多项目可同时连接，互不影响。先连接再开网页。</p>
       <div id="toast" class="msg"></div>
     </section>
 
@@ -423,6 +423,18 @@
       }
     }
 
+    function isEnvConnected(id) {
+      if (!id || !state) return false;
+      if (state.sessions && state.sessions[id]) {
+        const sess = state.sessions[id];
+        if (sess.direct) return true;
+        if (sess.socks_port > 0 || sess.ssh_pid > 0) return true;
+      }
+      // fallback from API helper map
+      if (window.__connectedMap && window.__connectedMap[id]) return true;
+      return false;
+    }
+
     function renderList() {
       const box = document.getElementById('envList');
       box.innerHTML = '';
@@ -437,7 +449,7 @@
       envs.forEach((e) => {
         const b = document.createElement('button');
         b.className = 'env' + (e.id === selectedId ? ' active' : '');
-        const connected = state.connected_env === e.id;
+        const connected = isEnvConnected(e.id);
         b.innerHTML = '<div class="name"></div><div class="meta"></div>';
         b.querySelector('.name').textContent = e.name || e.id;
         const mode = isSshMode(e) ? ('SSH ' + ((e.hops && e.hops.length) || 0) + ' 跳') : '直连';
@@ -452,9 +464,13 @@
     }
 
     function renderStatus() {
-      const connected = !!(state && state.connected_env);
+      const ids = (state && state.sessions) ? Object.keys(state.sessions) : [];
+      const alive = ids.filter((id) => isEnvConnected(id));
+      const connected = alive.length > 0;
       document.getElementById('connDot').className = 'dot' + (connected ? ' on' : '');
-      document.getElementById('connLabel').textContent = connected ? ('已连接: ' + state.connected_env) : '未连接';
+      document.getElementById('connLabel').textContent = connected
+        ? ('已连接 ' + alive.length + ' 个项目: ' + alive.join(', '))
+        : '未连接';
       renderList();
       const env = currentEnv();
       if (env) fillForm(env);
@@ -464,6 +480,7 @@
       const data = await api('/api/status');
       config = data.config || { environments: [], active_env: '' };
       state = data.state || {};
+      window.__connectedMap = data.connected || {};
       if (!config.environments) config.environments = [];
       renderStatus();
     }
@@ -553,9 +570,9 @@
 
     document.getElementById('btnDisconnect').onclick = async () => {
       try {
-        await api('/api/disconnect', { method: 'POST', body: '{}' });
+        await api('/api/disconnect', { method: 'POST', body: JSON.stringify({ env_id: selectedId }) });
         await refresh();
-        toast('已断开', true);
+        toast('已断开当前项目「' + selectedId + '」（其他项目连接不受影响）', true);
       } catch (e) { toast(e.message, false); }
     };
 

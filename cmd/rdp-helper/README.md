@@ -44,6 +44,8 @@ Dev Actions 两个 Artifact（不要再下成「zip 里套 zip」的合并包）
 
 配置文件：`%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`（面板会写）。
 
+**多项目**：每个项目独立 SSH/SOCKS 会话。连接项目 B 不会断开项目 A；「断开」只断当前选中项目。
+
 ## CLI（可选）
 
 ```text

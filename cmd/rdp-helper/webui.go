@@ -148,11 +148,17 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s, _ := loadState()
+	connected := map[string]bool{}
+	for _, id := range connectedEnvIDs(s) {
+		connected[id] = true
+	}
 	raw, _ := json.MarshalIndent(c, "", "  ")
 	writeJSON(w, 200, map[string]any{
-		"config":      c,
-		"config_json": string(raw),
-		"state":       s,
+		"config":           c,
+		"config_json":      string(raw),
+		"state":            s,
+		"connected_env_ids": connectedEnvIDs(s),
+		"connected":        connected,
 	})
 }
 
@@ -216,8 +222,12 @@ func handleAPIDisconnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	var body struct {
+		EnvID string `json:"env_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
 	uiMu.Lock()
-	err := cmdDisconnect()
+	err := cmdDisconnect(body.EnvID)
 	uiMu.Unlock()
 	if err != nil {
 		writeAPIError(w, 500, err)

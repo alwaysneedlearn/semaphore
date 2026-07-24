@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,13 +54,24 @@ type Config struct {
 	ActiveEnv    string        `json:"active_env"`
 }
 
+// EnvSession is one project's connection (direct marker and/or SSH SOCKS tunnel).
+type EnvSession struct {
+	SSHPid     int    `json:"ssh_pid,omitempty"`
+	SocksPort  int    `json:"socks_port,omitempty"`
+	LandTarget string `json:"land_target,omitempty"`
+	Direct     bool   `json:"direct,omitempty"` // connected without SSH
+}
+
 type State struct {
-	ConnectedEnv string `json:"connected_env"`
+	// Sessions maps environment id → independent connection (projects do not share one tunnel).
+	Sessions map[string]EnvSession `json:"sessions,omitempty"`
+
+	// Legacy single-session fields (migrated on load).
+	ConnectedEnv string `json:"connected_env,omitempty"`
 	SSHPid       int    `json:"ssh_pid,omitempty"`
 	SocksPort    int    `json:"socks_port,omitempty"`
-	LandTarget   string `json:"land_target,omitempty"` // user@host (informational)
-	// Legacy ControlMaster fields (ignored; Win32-OpenSSH does not support mux).
-	ControlPath string `json:"control_path,omitempty"`
+	LandTarget   string `json:"land_target,omitempty"`
+	ControlPath  string `json:"control_path,omitempty"`
 }
 
 type launchParams struct {
@@ -108,7 +120,11 @@ func main() {
 		}
 		err = cmdConnect(envID)
 	case "disconnect":
-		err = cmdDisconnect()
+		envID := ""
+		if len(os.Args) > 2 {
+			envID = os.Args[2]
+		}
+		err = cmdDisconnect(envID)
 	case "open":
 		err = cmdOpen()
 	case "envs":
@@ -133,8 +149,8 @@ Usage:
   %s ui                    Same as no-args
   %s install               Register %s:// (HKCU) and create config dir
   %s envs                  List environments from config
-  %s connect [env-id]      SSH tunnel (-N + SOCKS; optional UI -L)
-  %s disconnect            Tear down SSH tunnel
+  %s connect [env-id]      SSH tunnel for one project (-N + SOCKS; optional UI -L)
+  %s disconnect [env-id]   Tear down that project's tunnel (default: active)
   %s open                  Open Semaphore URL in browser
   %s status                Show connection state
   %s %s://connect?token=...  Handle protocol (used by OS)
@@ -268,7 +284,7 @@ func loadState() (State, error) {
 	b, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return State{}, nil
+			return State{Sessions: map[string]EnvSession{}}, nil
 		}
 		return State{}, err
 	}
@@ -276,10 +292,32 @@ func loadState() (State, error) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return State{}, err
 	}
+	migrateLegacyState(&s)
 	return s, nil
 }
 
+func migrateLegacyState(s *State) {
+	if s.Sessions == nil {
+		s.Sessions = map[string]EnvSession{}
+	}
+	if len(s.Sessions) == 0 && strings.TrimSpace(s.ConnectedEnv) != "" {
+		s.Sessions[s.ConnectedEnv] = EnvSession{
+			SSHPid:     s.SSHPid,
+			SocksPort:  s.SocksPort,
+			LandTarget: s.LandTarget,
+			Direct:     s.SSHPid == 0 && s.SocksPort == 0,
+		}
+	}
+	// Drop legacy top-level fields from future writes.
+	s.ConnectedEnv = ""
+	s.SSHPid = 0
+	s.SocksPort = 0
+	s.LandTarget = ""
+	s.ControlPath = ""
+}
+
 func saveState(s State) error {
+	migrateLegacyState(&s)
 	p, err := statePath()
 	if err != nil {
 		return err
@@ -289,6 +327,48 @@ func saveState(s State) error {
 		return err
 	}
 	return os.WriteFile(p, b, 0o644)
+}
+
+func getSession(s State, envID string) (EnvSession, bool) {
+	if s.Sessions == nil || envID == "" {
+		return EnvSession{}, false
+	}
+	sess, ok := s.Sessions[envID]
+	return sess, ok
+}
+
+func putSession(envID string, sess EnvSession) error {
+	s, _ := loadState()
+	if s.Sessions == nil {
+		s.Sessions = map[string]EnvSession{}
+	}
+	s.Sessions[envID] = sess
+	return saveState(s)
+}
+
+func clearSession(envID string) error {
+	s, _ := loadState()
+	if s.Sessions == nil {
+		return saveState(State{Sessions: map[string]EnvSession{}})
+	}
+	if sess, ok := s.Sessions[envID]; ok {
+		if sess.SSHPid > 0 {
+			killProcess(sess.SSHPid)
+		}
+		delete(s.Sessions, envID)
+	}
+	return saveState(s)
+}
+
+func connectedEnvIDs(s State) []string {
+	var ids []string
+	for id, sess := range s.Sessions {
+		if sessionAlive(sess) || sess.Direct {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func findEnv(c Config, id string) (Environment, bool) {
@@ -337,7 +417,7 @@ func cmdEnvs() error {
 			mark = "*"
 		}
 		conn := ""
-		if s.ConnectedEnv == e.ID {
+		if sess, ok := getSession(s, e.ID); ok && (sessionAlive(sess) || sess.Direct) {
 			conn = " [connected]"
 		}
 		fmt.Printf("%s %s (%s) hops=%d%s\n", mark, e.ID, e.Name, len(e.Hops), conn)
@@ -351,38 +431,39 @@ func cmdStatus() error {
 		return err
 	}
 	s, _ := loadState()
-	fmt.Printf("active_env=%s connected=%s ssh_pid=%d socks_port=%d\n", c.ActiveEnv, s.ConnectedEnv, s.SSHPid, s.SocksPort)
-	if envNeedsSSH(mustFindEnv(c, s.ConnectedEnv, c.ActiveEnv)) || s.SocksPort > 0 || s.SSHPid > 0 {
-		if sessionAlive(s) {
-			fmt.Println("ssh_session: alive")
-		} else {
-			fmt.Println("ssh_session: dead (click Connect in the helper panel)")
+	fmt.Printf("active_env=%s\n", c.ActiveEnv)
+	ids := connectedEnvIDs(s)
+	if len(ids) == 0 {
+		fmt.Println("connected: (none)")
+		return nil
+	}
+	for _, id := range ids {
+		sess, _ := getSession(s, id)
+		if sess.Direct {
+			fmt.Printf("connected %s: direct\n", id)
+			continue
 		}
+		alive := sessionAlive(sess)
+		fmt.Printf("connected %s: ssh_pid=%d socks_port=%d alive=%v land=%s\n", id, sess.SSHPid, sess.SocksPort, alive, sess.LandTarget)
 	}
 	return nil
-}
-
-func mustFindEnv(c Config, ids ...string) Environment {
-	for _, id := range ids {
-		if e, ok := findEnv(c, id); ok {
-			return e
-		}
-	}
-	return Environment{}
 }
 
 func envNeedsSSH(env Environment) bool {
 	return len(env.Hops) > 0 || strings.TrimSpace(env.LandHost) != ""
 }
 
-func sessionAlive(s State) bool {
-	if s.SocksPort <= 0 {
+func sessionAlive(sess EnvSession) bool {
+	if sess.Direct {
+		return true
+	}
+	if sess.SocksPort <= 0 {
 		return false
 	}
-	if s.SSHPid > 0 && !processExists(s.SSHPid) {
+	if sess.SSHPid > 0 && !processExists(sess.SSHPid) {
 		return false
 	}
-	return tcpReachable("127.0.0.1", s.SocksPort, 500*time.Millisecond)
+	return tcpReachable("127.0.0.1", sess.SocksPort, 500*time.Millisecond)
 }
 
 func waitSOCKSReady(cmd *exec.Cmd, socksPort int, timeout time.Duration) error {
@@ -407,25 +488,27 @@ func waitSOCKSReady(cmd *exec.Cmd, socksPort int, timeout time.Duration) error {
 }
 
 // ensureConnected makes sure env is ready for protocol launch (auto-connect if needed).
-func ensureConnected(env Environment) (State, error) {
+// Other projects' sessions are left untouched.
+func ensureConnected(env Environment) (State, EnvSession, error) {
 	s, _ := loadState()
 	if !envNeedsSSH(env) {
-		if s.ConnectedEnv != env.ID {
-			s = State{ConnectedEnv: env.ID}
-			if err := saveState(s); err != nil {
-				return s, err
-			}
+		sess := EnvSession{Direct: true}
+		if err := putSession(env.ID, sess); err != nil {
+			return s, sess, err
 		}
-		return s, nil
+		s, _ = loadState()
+		return s, sess, nil
 	}
-	if s.ConnectedEnv == env.ID && sessionAlive(s) {
-		return s, nil
+	if sess, ok := getSession(s, env.ID); ok && sessionAlive(sess) {
+		return s, sess, nil
 	}
 	logf("auto-connect env=%s (use this console for SSH password if prompted)", env.ID)
 	if err := cmdConnect(env.ID); err != nil {
-		return s, fmt.Errorf("%w — or open the helper panel and click 连接 first", err)
+		return s, EnvSession{}, fmt.Errorf("%w — or open the helper panel and click 连接 first", err)
 	}
-	return loadState()
+	s, _ = loadState()
+	sess, _ := getSession(s, env.ID)
+	return s, sess, nil
 }
 
 func sanitizeID(s string) string {
@@ -506,19 +589,18 @@ func cmdConnect(envID string) error {
 		return err
 	}
 
+	// Only replace THIS project's session — leave other projects alone.
+	_ = clearSession(env.ID)
+
 	// No SSH needed
 	if host == "" {
-		_ = cmdDisconnectQuiet()
-		s := State{ConnectedEnv: env.ID}
-		if err := saveState(s); err != nil {
+		if err := putSession(env.ID, EnvSession{Direct: true}); err != nil {
 			return err
 		}
 		fmt.Printf("connected env=%s (direct, no SSH)\n", env.ID)
 		logf("connect direct env=%s", env.ID)
 		return nil
 	}
-
-	_ = cmdDisconnectQuiet()
 
 	target := host
 	if user != "" {
@@ -585,13 +667,12 @@ func cmdConnect(envID string) error {
 	}
 	go func() { _ = cmd.Wait() }()
 
-	s := State{
-		ConnectedEnv: env.ID,
-		SSHPid:       cmd.Process.Pid,
-		SocksPort:    socksPort,
-		LandTarget:   target,
+	sess := EnvSession{
+		SSHPid:     cmd.Process.Pid,
+		SocksPort:  socksPort,
+		LandTarget: target,
 	}
-	if err := saveState(s); err != nil {
+	if err := putSession(env.ID, sess); err != nil {
 		killProcess(cmd.Process.Pid)
 		return err
 	}
@@ -600,30 +681,27 @@ func cmdConnect(envID string) error {
 	return nil
 }
 
-func cmdDisconnectQuiet() error {
-	s, _ := loadState()
-	if s.SSHPid > 0 {
-		killProcess(s.SSHPid)
-	}
-	_ = saveState(State{})
-	return nil
-}
-
-func cmdDisconnect() error {
-	s, err := loadState()
+func cmdDisconnect(envID string) error {
+	c, err := ensureConfig()
 	if err != nil {
 		return err
 	}
-	if s.SSHPid == 0 && s.SocksPort == 0 && s.ConnectedEnv == "" {
-		fmt.Println("not connected")
+	if envID == "" {
+		envID = c.ActiveEnv
+	}
+	if envID == "" {
+		return fmt.Errorf("no environment id (pass disconnect <env-id>)")
+	}
+	s, _ := loadState()
+	if _, ok := getSession(s, envID); !ok {
+		fmt.Printf("not connected: %s\n", envID)
 		return nil
 	}
-	if s.SSHPid > 0 {
-		killProcess(s.SSHPid)
+	if err := clearSession(envID); err != nil {
+		return err
 	}
-	_ = saveState(State{})
-	fmt.Println("disconnected")
-	logf("disconnect ok")
+	fmt.Printf("disconnected %s\n", envID)
+	logf("disconnect ok env=%s", envID)
 	return nil
 }
 
@@ -661,18 +739,16 @@ func handleProtocolURL(raw string) error {
 		return err
 	}
 	s, _ := loadState()
-	env, ok := findEnv(c, s.ConnectedEnv)
-	if !ok {
-		env, ok = findEnv(c, c.ActiveEnv)
-	}
+	env, ok := pickEnvForLaunch(c, s, base)
 	if !ok {
 		return fmt.Errorf("no environment configured; open the helper panel, save a project, then retry")
 	}
 
-	s, err = ensureConnected(env)
+	s, sess, err := ensureConnected(env)
 	if err != nil {
 		return fmt.Errorf("auto-connect %s failed: %w", env.ID, err)
 	}
+	_ = s
 
 	apiBase := strings.TrimRight(base, "/")
 	if apiBase == "" {
@@ -689,7 +765,7 @@ func handleProtocolURL(raw string) error {
 	if err != nil {
 		return err
 	}
-	logf("launch-params host=%s port=%d user=%s password_provided=%v", params.Host, params.RDPPort, params.RDPUser, params.PasswordProvided)
+	logf("launch-params env=%s host=%s port=%d user=%s password_provided=%v", env.ID, params.Host, params.RDPPort, params.RDPUser, params.PasswordProvided)
 
 	targetHost := params.Host
 	targetPort := params.RDPPort
@@ -699,8 +775,8 @@ func handleProtocolURL(raw string) error {
 
 	useTunnel := false
 	localPort := 0
-	sessionOK := sessionAlive(s)
-	if sessionOK {
+	sshOK := !sess.Direct && sessionAlive(sess)
+	if sshOK {
 		if !tcpReachable(targetHost, targetPort, 800*time.Millisecond) {
 			useTunnel = true
 		}
@@ -716,14 +792,14 @@ func handleProtocolURL(raw string) error {
 			return err
 		}
 		localPort = lp
-		stop, err := startLocalForwardViaSOCKS("127.0.0.1", s.SocksPort, localPort, targetHost, targetPort)
+		stop, err := startLocalForwardViaSOCKS("127.0.0.1", sess.SocksPort, localPort, targetHost, targetPort)
 		if err != nil {
 			return fmt.Errorf("socks forward failed: %w", err)
 		}
 		defer stop()
 		mstscHost = "127.0.0.1"
 		mstscPort = localPort
-		logf("socks forward 127.0.0.1:%d -> %s:%d via socks :%d", localPort, targetHost, targetPort, s.SocksPort)
+		logf("socks forward env=%s 127.0.0.1:%d -> %s:%d via socks :%d", env.ID, localPort, targetHost, targetPort, sess.SocksPort)
 	}
 
 	pass := ""
@@ -734,6 +810,29 @@ func handleProtocolURL(raw string) error {
 		return err
 	}
 	return nil
+}
+
+// pickEnvForLaunch chooses which project handles an RDP protocol launch.
+// Prefer URL match against connected projects, then active, then any configured env.
+func pickEnvForLaunch(c Config, s State, base string) (Environment, bool) {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	norm := func(u string) string {
+		return strings.TrimRight(strings.TrimSpace(u), "/")
+	}
+	if base != "" {
+		for _, e := range c.Environments {
+			if norm(e.APIBaseURL) == base || norm(e.SemaphoreURL) == base {
+				return e, true
+			}
+		}
+	}
+	if e, ok := findEnv(c, c.ActiveEnv); ok {
+		return e, true
+	}
+	if len(c.Environments) > 0 {
+		return c.Environments[0], true
+	}
+	return Environment{}, false
 }
 
 func fetchLaunchParams(apiBase, token string) (launchParams, error) {
