@@ -71,21 +71,22 @@ if (Test-IsAdministrator) {
     Add-Result 'Elevation' 'PASS' 'Not elevated (matches target Helper PCs).' $false
 }
 
-# --- 2. User-writable install dir (AppData) ---
-$helperDir = Join-Path $env:LOCALAPPDATA 'SemaphoreRdpHelper'
+# --- 2. User-writable portable dir (exe folder / green install) ---
+$helperDir = Join-Path $PSScriptRoot 'SemaphoreRdpHelper_portable_probe'
 $probeFile = Join-Path $helperDir '_preflight_write_test.txt'
 try {
     New-Item -ItemType Directory -Path $helperDir -Force | Out-Null
     'ok' | Set-Content -LiteralPath $probeFile -Encoding UTF8
     if (Test-Path -LiteralPath $probeFile) {
-        Add-Result 'UserInstallDir' 'PASS' "Can write $helperDir" $false
+        Add-Result 'PortableInstallDir' 'PASS' "Can write portable folder $helperDir (Helper keeps config next to exe)" $false
     } else {
-        Add-Result 'UserInstallDir' 'FAIL' "Write appeared to succeed but file missing: $probeFile" $false
+        Add-Result 'PortableInstallDir' 'FAIL' "Write appeared to succeed but file missing: $probeFile" $false
     }
 } catch {
-    Add-Result 'UserInstallDir' 'FAIL' $_.Exception.Message $false
+    Add-Result 'PortableInstallDir' 'FAIL' $_.Exception.Message $false
 } finally {
     Remove-Item -LiteralPath $probeFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $helperDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # --- 3. Program Files write (expect FAIL without admin) ---
@@ -95,7 +96,7 @@ try {
     Remove-Item -LiteralPath $pfProbe -Force -ErrorAction SilentlyContinue
     Add-Result 'ProgramFilesWrite' 'WARN' 'Write to Program Files succeeded (unexpected on locked-down PCs).' $true
 } catch {
-    Add-Result 'ProgramFilesWrite' 'PASS' 'Cannot write Program Files without admin (expected). Use AppData/portable.' $true
+    Add-Result 'ProgramFilesWrite' 'PASS' 'Cannot write Program Files without admin (expected). Use a writable portable folder next to the exe.' $true
 }
 
 # --- 4. HKCU protocol registration (Helper path — no admin) ---
@@ -105,7 +106,7 @@ try {
     New-Item -Path $hkcuKey -Force | Out-Null
     New-ItemProperty -Path $hkcuKey -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
     New-Item -Path $hkcuCmd -Force | Out-Null
-    $cmdValue = '"' + (Join-Path $env:LOCALAPPDATA 'SemaphoreRdpHelper\semaphore-rdp-helper.exe') + '" "%1"'
+    $cmdValue = '"' + (Join-Path $helperDir 'semaphore-rdp-helper.exe') + '" "%1"'
     Set-ItemProperty -Path $hkcuCmd -Name '(default)' -Value $cmdValue -Force
     $readBack = (Get-ItemProperty -Path $hkcuCmd -Name '(default)').'(default)'
     if ($readBack -eq $cmdValue) {
@@ -265,7 +266,7 @@ if ($opensshFail) {
 
 Write-Host ''
 Write-Host 'Expected without admin: ProgramFilesWrite + HKLM_Protocol = PASS (meaning those admin paths are blocked).' -ForegroundColor DarkGray
-Write-Host 'Helper design: AppData + HKCU only; never Program Files / HKLM.' -ForegroundColor DarkGray
+Write-Host 'Helper design: portable folder next to exe + HKCU only; never Program Files / HKLM.' -ForegroundColor DarkGray
 Write-Host ''
 
 if ($blocking -or $opensshFail) { exit 1 }

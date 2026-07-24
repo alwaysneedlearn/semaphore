@@ -11,6 +11,19 @@ Dev Actions 两个 Artifact：
 | `semaphore` | Linux `semaphore` 服务端二进制 |
 | `semaphore-rdp-helper` | `semaphore-rdp-helper.exe` + 本 README |
 
+## 布局（绿色 / 便携）
+
+把 `semaphore-rdp-helper.exe` 放到任意可写目录（**不要**放 Program Files）。所有数据与 exe **同目录**：
+
+| 文件 | 说明 |
+|------|------|
+| `config.json` | 项目 / 跳板配置 |
+| `state.json` | 各项目连接状态 |
+| `helper.log` | 本地日志 |
+| `launch-*.rdp` | 临时 RDP 文件（用完删除） |
+
+可用桌面快捷方式启动：目标指向 exe（或 `cmd.exe /k "...\semaphore-rdp-helper.exe"` 方便看输出）。**起始位置**随意——程序按 exe 所在目录读写配置，不依赖当前工作目录。移动文件夹后请再执行一次 `install`（更新协议注册路径）。
+
 ## 用法（命令行）
 
 在 **cmd / PowerShell** 中运行（保留窗口以便输入 SSH 密码）：
@@ -26,8 +39,8 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 典型流程：
 
-1. `install`（注册 `semaphore-rdp://`，创建配置目录）
-2. 编辑 `%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`
+1. `install`（注册 `semaphore-rdp://`，若尚无则生成默认 `config.json`）
+2. 编辑 exe 同目录的 `config.json`
 3. `connect <项目ID>`（多项目可分别 connect，互不影响）
 4. `open` 打开 Semaphore 网页
 5. 在设备列表点 **远程桌面**
@@ -36,7 +49,7 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 ## 配置文件
 
-路径：`%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`
+路径：`<exe所在目录>\config.json`
 
 示例（Semaphore 直连 + 仅 RDP 走跳板）：
 
@@ -71,8 +84,6 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 | `forward_ui` | `true` 时用 SSH `-L` 映射网页；Semaphore 已直连则设 `false` |
 | `hops` | 跳板列表（含非 22 端口）；空 `land_host` 时最后一跳即落地机 |
 | `land_*` | 仅当落地机与最后一跳不同时填写 |
-
-`state.json` 记录各项目连接（pid / SOCKS 端口）；多项目会话互相独立。
 
 ## Build
 

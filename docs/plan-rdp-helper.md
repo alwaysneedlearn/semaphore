@@ -100,8 +100,8 @@ Helper 由运维自行分发；Semaphore **只提示**协议拉起失败，**不
 
 ### 4.1 一次性（操作员 PC，无管理员）
 
-1. 运维下发绿色/`AppData` 目录下的 `semaphore-rdp-helper.exe`（**非** Program Files）  
-2. 编辑 `%LOCALAPPDATA%\SemaphoreRdpHelper\config.json`，命令行 `connect` / `open`（`install` 注册协议）  
+1. 运维下发绿色目录下的 `semaphore-rdp-helper.exe`（**非** Program Files；配置与 exe 同目录）  
+2. 编辑同目录 `config.json`，命令行 `connect` / `open`（`install` 注册协议；可用桌面快捷方式）  
 3. 在面板中编辑环境跳板并保存；确认本机 OpenSSH / 密钥可用  
 
 ### 4.2 日常

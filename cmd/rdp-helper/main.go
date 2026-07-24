@@ -144,7 +144,7 @@ func printHelp() {
 	fmt.Printf(`Semaphore RDP Helper
 
 Usage:
-  %s install               Register %s:// (HKCU) and create config dir
+  %s install               Register %s:// (HKCU) and create config in exe folder
   %s envs                  List environments from config
   %s connect [env-id]      SSH tunnel for one project (-N + SOCKS; optional UI -L)
   %s disconnect [env-id]   Tear down that project's tunnel (default: active)
@@ -154,24 +154,25 @@ Usage:
 
 Protocol (OS): %s://connect?token=...&base=...
 
-Config: %%LOCALAPPDATA%%\%s\%s
-`, n, protocolScheme, n, n, n, n, n, n, protocolScheme, appName, configFileName)
+Config / state / log: same folder as this exe (%s, %s, %s)
+`, n, protocolScheme, n, n, n, n, n, n, protocolScheme, configFileName, stateFileName, logFileName)
 }
 
+// appDir is the directory containing the helper executable (portable layout).
+// Uses os.Executable so desktop shortcuts / protocol launches still work even when
+// the process working directory is not the exe folder.
 func appDir() (string, error) {
-	base := os.Getenv("LOCALAPPDATA")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		base = filepath.Join(home, "AppData", "Local")
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("resolve executable: %w", err)
 	}
-	dir := filepath.Join(base, appName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+	if abs, err := filepath.Abs(exe); err == nil {
+		exe = abs
 	}
-	return dir, nil
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return filepath.Dir(exe), nil
 }
 
 func configPath() (string, error) {
@@ -399,7 +400,7 @@ func cmdInstall() error {
 		return fmt.Errorf("register protocol: %w", err)
 	}
 	p, _ := configPath()
-	fmt.Printf("Registered %s://\nConfig: %s\nEdit environments in config.json, then: connect / open\n", protocolScheme, p)
+	fmt.Printf("Registered %s://\nConfig: %s\n(Edit config.json next to the exe, then: connect / open)\n", protocolScheme, p)
 	logf("install ok exe=%s", exe)
 	return nil
 }
