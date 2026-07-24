@@ -29,6 +29,10 @@
   when: >-
     (reconfig_copy_ini_template if (reconfig_copy_ini_template is defined) else (zip_path is defined)) | bool
 
+- name: NEWARE HisData patch flag as PowerShell literal
+  ansible.builtin.set_fact:
+    _neware_ps_patch_his_data: "{{ '$true' if (neware_include_his_data_resend | default(false) | bool) else '$false' }}"
+
 - name: 重配执行：修改配置文件
   win_shell: |
     # 只在值发生变化时打印 CFG_CHANGE；未变化不输出，避免日志噪音
@@ -245,9 +249,8 @@
     if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
     $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
     if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-    # PowerShell bool literal via Ansible expression (avoid {% if %} — trim_blocks
-    # removes the following newline). Do not put empty Jinja print markers in comments.
-    $patchHisData = {{ '$true' if (neware_include_his_data_resend | default(false) | bool) else '$false' }}
+    # Keep HisData patch as a real PowerShell bool ($true / $false), not bare true/false.
+    $patchHisData = {{ _neware_ps_patch_his_data }}
     $userConfigPath = '{{ _reconfig_user_cfg_file | replace("\u0027", "\u0027\u0027") }}'
     $publicConfigPath = "C:\Users\Public\{{ _reconfig_client_rel_path }}\{{ config_file_name }}"
     # 单行 JSON（merged_cfg_json 来自 to_json）；\u0027 避免 Jinja 内嵌单引号导致 Ansible 解析失败
