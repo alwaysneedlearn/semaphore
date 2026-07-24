@@ -52,7 +52,6 @@ type Environment struct {
 
 type Config struct {
 	Environments []Environment `json:"environments"`
-	ActiveEnv    string        `json:"active_env"`
 }
 
 // EnvSession is one project's connection (direct marker and/or SSH SOCKS tunnel).
@@ -128,7 +127,11 @@ func main() {
 		}
 		err = cmdDisconnect(envID)
 	case "open":
-		err = cmdOpen()
+		envID := ""
+		if len(os.Args) > 2 {
+			envID = os.Args[2]
+		}
+		err = cmdOpen(envID)
 	case "envs":
 		err = cmdEnvs()
 	default:
@@ -156,9 +159,9 @@ Usage:
   %s shell                 Same as no-args
   %s install               Register %s:// (HKCU) and create config in exe folder
   %s envs                  List environments from config
-  %s connect [env-id]      SSH tunnel for one project (-N + SOCKS; optional UI -L)
-  %s disconnect [env-id]   Tear down that project's tunnel (default: active)
-  %s open                  Open Semaphore URL in browser
+  %s connect <env-id>      SSH tunnel for one project (-N + SOCKS; optional UI -L)
+  %s disconnect <env-id>   Tear down that project's tunnel
+  %s open [env-id]         Open Semaphore URL in browser
   %s status                Show connection state
   %s help                  Show this help
 
@@ -172,9 +175,9 @@ func printShellHelp() {
 	fmt.Print(`Commands:
   install
   envs
-  connect [env-id]
-  disconnect [env-id]
-  open
+  connect <env-id>
+  disconnect <env-id>
+  open [env-id]
   status
   help
   exit
@@ -231,7 +234,7 @@ func cmdShell() error {
 		case "disconnect":
 			err = cmdDisconnect(arg1)
 		case "open":
-			err = cmdOpen()
+			err = cmdOpen(arg1)
 		default:
 			fmt.Fprintf(os.Stderr, "unknown command: %s (type help)\n", cmd)
 		}
@@ -337,11 +340,10 @@ func defaultConfig() Config {
 			UILocalPort:  3000,
 			UIRemoteHost: "",
 			UIRemotePort: 3000,
-			ForwardUI:    true,
-			Hops:         []Hop{{Host: "", Port: 22, User: ""}},
+			ForwardUI:    false,
+			Hops:         nil,
 			LandUser:     "",
 		}},
-		ActiveEnv: "my-project",
 	}
 }
 
@@ -456,18 +458,34 @@ func connectedEnvIDs(s State) []string {
 }
 
 func findEnv(c Config, id string) (Environment, bool) {
-	if id == "" {
-		id = c.ActiveEnv
-	}
-	for _, e := range c.Environments {
-		if e.ID == id {
-			return e, true
+	id = strings.TrimSpace(id)
+	if id != "" {
+		for _, e := range c.Environments {
+			if e.ID == id {
+				return e, true
+			}
 		}
+		return Environment{}, false
 	}
+	// No id: only OK when exactly one project is configured.
 	if len(c.Environments) == 1 {
 		return c.Environments[0], true
 	}
 	return Environment{}, false
+}
+
+func resolveEnv(c Config, id, cmd string) (Environment, error) {
+	env, ok := findEnv(c, id)
+	if ok {
+		return env, nil
+	}
+	if strings.TrimSpace(id) == "" && len(c.Environments) > 1 {
+		return Environment{}, fmt.Errorf("%s: pass <env-id> (multiple projects in config.json)", cmd)
+	}
+	if strings.TrimSpace(id) != "" {
+		return Environment{}, fmt.Errorf("environment %q not found (edit config.json)", id)
+	}
+	return Environment{}, fmt.Errorf("no environments in config.json")
 }
 
 func cmdInstall() error {
@@ -496,15 +514,11 @@ func cmdEnvs() error {
 	}
 	s, _ := loadState()
 	for _, e := range c.Environments {
-		mark := " "
-		if e.ID == c.ActiveEnv {
-			mark = "*"
-		}
 		conn := ""
 		if sess, ok := getSession(s, e.ID); ok && (sessionAlive(sess) || sess.Direct) {
 			conn = " [connected]"
 		}
-		fmt.Printf("%s %s (%s) hops=%d%s\n", mark, e.ID, e.Name, len(e.Hops), conn)
+		fmt.Printf("  %s (%s) hops=%d%s\n", e.ID, e.Name, len(e.Hops), conn)
 	}
 	return nil
 }
@@ -515,10 +529,10 @@ func cmdStatus() error {
 		return err
 	}
 	s, _ := loadState()
-	fmt.Printf("active_env=%s\n", c.ActiveEnv)
 	ids := connectedEnvIDs(s)
 	if len(ids) == 0 {
 		fmt.Println("connected: (none)")
+		_ = c
 		return nil
 	}
 	for _, id := range ids {
@@ -661,12 +675,10 @@ func cmdConnect(envID string) error {
 	if err != nil {
 		return err
 	}
-	env, ok := findEnv(c, envID)
-	if !ok {
-		return fmt.Errorf("environment not found (edit config.json)")
+	env, err := resolveEnv(c, envID, "connect")
+	if err != nil {
+		return err
 	}
-	c.ActiveEnv = env.ID
-	_ = saveConfig(c)
 
 	user, host, port, err := landSpec(env)
 	if err != nil {
@@ -770,12 +782,11 @@ func cmdDisconnect(envID string) error {
 	if err != nil {
 		return err
 	}
-	if envID == "" {
-		envID = c.ActiveEnv
+	env, err := resolveEnv(c, envID, "disconnect")
+	if err != nil {
+		return err
 	}
-	if envID == "" {
-		return fmt.Errorf("no environment id (pass disconnect <env-id>)")
-	}
+	envID = env.ID
 	s, _ := loadState()
 	if _, ok := getSession(s, envID); !ok {
 		fmt.Printf("not connected: %s\n", envID)
@@ -789,14 +800,14 @@ func cmdDisconnect(envID string) error {
 	return nil
 }
 
-func cmdOpen() error {
+func cmdOpen(envID string) error {
 	c, err := ensureConfig()
 	if err != nil {
 		return err
 	}
-	env, ok := findEnv(c, c.ActiveEnv)
-	if !ok {
-		return fmt.Errorf("no active environment")
+	env, err := resolveEnv(c, envID, "open")
+	if err != nil {
+		return err
 	}
 	u := strings.TrimSpace(env.SemaphoreURL)
 	if u == "" {
@@ -897,8 +908,9 @@ func handleProtocolURL(raw string) error {
 }
 
 // pickEnvForLaunch chooses which project handles an RDP protocol launch.
-// Prefer URL match against connected projects, then active, then any configured env.
+// Prefer URL match (protocol base=); else the sole configured project.
 func pickEnvForLaunch(c Config, s State, base string) (Environment, bool) {
+	_ = s
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	norm := func(u string) string {
 		return strings.TrimRight(strings.TrimSpace(u), "/")
@@ -910,8 +922,12 @@ func pickEnvForLaunch(c Config, s State, base string) (Environment, bool) {
 			}
 		}
 	}
-	if e, ok := findEnv(c, c.ActiveEnv); ok {
-		return e, true
+	if len(c.Environments) == 1 {
+		return c.Environments[0], true
+	}
+	if len(c.Environments) > 1 && base != "" {
+		// Multiple projects but base did not match any semaphore_url.
+		return Environment{}, false
 	}
 	if len(c.Environments) > 0 {
 		return c.Environments[0], true

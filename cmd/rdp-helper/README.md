@@ -67,7 +67,6 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 ```json
 {
-  "active_env": "plant-a",
   "environments": [
     {
       "id": "plant-a",
@@ -91,8 +90,8 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 | 字段 | 含义 |
 |------|------|
-| `id` / `name` | 本机项目标识；`connect` / `disconnect` 用 `id` |
-| `semaphore_url` | 浏览器打开的 Semaphore 地址 |
+| `id` / `name` | 本机项目标识；`connect` / `disconnect` / `open` 用 `id`（多项目时必填） |
+| `semaphore_url` | 浏览器打开的 Semaphore 地址（远程桌面协议用 `base=` 匹配项目） |
 | `forward_ui` | `true` 时用 SSH `-L` 映射网页；Semaphore 已直连则设 `false` |
 | `hops` | 跳板列表（含非 22 端口）；空 `land_host` 时最后一跳即落地机 |
 | `land_*` | 仅当落地机与最后一跳不同时填写 |

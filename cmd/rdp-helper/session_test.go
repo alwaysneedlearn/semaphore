@@ -24,7 +24,6 @@ func TestMigrateLegacyStateToSessions(t *testing.T) {
 
 func TestPickEnvForLaunchPrefersBaseURL(t *testing.T) {
 	c := Config{
-		ActiveEnv: "a",
 		Environments: []Environment{
 			{ID: "a", SemaphoreURL: "http://127.0.0.1:3000"},
 			{ID: "b", SemaphoreURL: "http://10.1.1.1:3000"},
@@ -33,5 +32,21 @@ func TestPickEnvForLaunchPrefersBaseURL(t *testing.T) {
 	env, ok := pickEnvForLaunch(c, State{}, "http://10.1.1.1:3000")
 	if !ok || env.ID != "b" {
 		t.Fatalf("got %+v ok=%v", env, ok)
+	}
+}
+
+func TestResolveEnvRequiresIDWhenMultiple(t *testing.T) {
+	c := Config{
+		Environments: []Environment{
+			{ID: "a", SemaphoreURL: "http://a"},
+			{ID: "b", SemaphoreURL: "http://b"},
+		},
+	}
+	if _, err := resolveEnv(c, "", "connect"); err == nil {
+		t.Fatal("expected error when env-id omitted with multiple projects")
+	}
+	env, err := resolveEnv(c, "b", "connect")
+	if err != nil || env.ID != "b" {
+		t.Fatalf("got %+v err=%v", env, err)
 	}
 }
