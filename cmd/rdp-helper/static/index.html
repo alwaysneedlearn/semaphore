@@ -180,6 +180,8 @@
 
       <div id="blockSsh" style="display:none">
         <label class="check"><input type="checkbox" id="f_forward_ui" checked /> 连接时映射 Semaphore 到本机端口</label>
+        <p class="hint" id="hintForwardUi">若本机已能直连 Semaphore、只是设备 RDP 要跳板：<strong>取消勾选</strong>此项，下方「打开网页地址」填直连 URL，仍配置跳板用于远程桌面。</p>
+        <div id="blockForwardUiFields">
         <div class="grid2">
           <div>
             <label for="f_ui_local">本机端口</label>
@@ -201,6 +203,12 @@
           </div>
         </div>
         <p class="hint">映射含义：ssh -L 本机端口:内网主机:内网端口。然后浏览器打开「打开网页用的地址」。</p>
+        </div>
+        <div id="blockUrlDirectUnderSsh" style="display:none">
+          <label for="f_url_mapped_direct">打开网页用的地址（直连 Semaphore）</label>
+          <input id="f_url_mapped_direct" placeholder="http://10.x.x.x:3000" />
+          <p class="hint">不映射 UI 时，点「打开网页」会打开这个直连地址；SSH 隧道只用于设备 RDP。</p>
+        </div>
 
         <label>跳板（按顺序，可 1～2 跳）</label>
         <div id="hops"></div>
@@ -289,6 +297,13 @@
       document.getElementById('f_mode').value = ssh ? 'ssh' : 'direct';
       document.getElementById('blockDirect').style.display = ssh ? 'none' : 'block';
       document.getElementById('blockSsh').style.display = ssh ? 'block' : 'none';
+      if (ssh) syncForwardUiFields();
+    }
+
+    function syncForwardUiFields() {
+      const on = document.getElementById('f_forward_ui').checked;
+      document.getElementById('blockForwardUiFields').style.display = on ? 'block' : 'none';
+      document.getElementById('blockUrlDirectUnderSsh').style.display = on ? 'none' : 'block';
     }
 
     function renderHops(hops) {
@@ -339,7 +354,9 @@
       setModeUI(ssh);
       document.getElementById('f_url_direct').value = env.semaphore_url || '';
       document.getElementById('f_url_mapped').value = env.semaphore_url || 'http://127.0.0.1:3000';
+      document.getElementById('f_url_mapped_direct').value = env.semaphore_url || '';
       document.getElementById('f_forward_ui').checked = !!env.forward_ui;
+      syncForwardUiFields();
       document.getElementById('f_ui_local').value = env.ui_local_port || 3000;
       document.getElementById('f_ui_remote_host').value = env.ui_remote_host || '';
       document.getElementById('f_ui_remote_port').value = env.ui_remote_port || 3000;
@@ -383,11 +400,18 @@
         env.land_port = 0;
         env.ssh_identity = '';
       } else {
-        env.semaphore_url = (document.getElementById('f_url_mapped').value || '').trim() || ('http://127.0.0.1:' + (document.getElementById('f_ui_local').value || 3000));
         env.forward_ui = document.getElementById('f_forward_ui').checked;
-        env.ui_local_port = parseInt(document.getElementById('f_ui_local').value || '3000', 10);
-        env.ui_remote_host = (document.getElementById('f_ui_remote_host').value || '').trim();
-        env.ui_remote_port = parseInt(document.getElementById('f_ui_remote_port').value || '3000', 10);
+        if (env.forward_ui) {
+          env.semaphore_url = (document.getElementById('f_url_mapped').value || '').trim() || ('http://127.0.0.1:' + (document.getElementById('f_ui_local').value || 3000));
+          env.ui_local_port = parseInt(document.getElementById('f_ui_local').value || '3000', 10);
+          env.ui_remote_host = (document.getElementById('f_ui_remote_host').value || '').trim();
+          env.ui_remote_port = parseInt(document.getElementById('f_ui_remote_port').value || '3000', 10);
+          if (!env.ui_remote_host) throw new Error('请填写内网 Semaphore 主机');
+        } else {
+          env.semaphore_url = (document.getElementById('f_url_mapped_direct').value || '').trim();
+          if (!env.semaphore_url) throw new Error('请填写直连 Semaphore 网页地址');
+          env.ui_remote_host = '';
+        }
         env.land_host = (document.getElementById('f_land_host').value || '').trim();
         env.land_user = (document.getElementById('f_land_user').value || '').trim();
         const lp = parseInt((document.getElementById('f_land_port').value || '').trim() || '0', 10);
@@ -396,7 +420,6 @@
         env.ssh_identity = (document.getElementById('f_identity').value || '').trim();
         env.hops = readHopsFromDom();
         if (!env.hops.length) throw new Error('SSH 模式请至少填写一台跳板主机');
-        if (env.forward_ui && !env.ui_remote_host) throw new Error('请填写内网 Semaphore 主机');
       }
     }
 
@@ -452,6 +475,19 @@
       if (env && ssh && (!env.hops || !env.hops.length)) {
         env.hops = [{ host: '', port: 22, user: '' }];
         renderHops(env.hops);
+      }
+    };
+
+    document.getElementById('f_forward_ui').onchange = () => {
+      syncForwardUiFields();
+      // Prefer copying current URL into the visible field when toggling.
+      const mapped = (document.getElementById('f_url_mapped').value || '').trim();
+      const direct = (document.getElementById('f_url_mapped_direct').value || '').trim();
+      if (!document.getElementById('f_forward_ui').checked && !direct && mapped) {
+        document.getElementById('f_url_mapped_direct').value = mapped;
+      }
+      if (document.getElementById('f_forward_ui').checked && !mapped && direct) {
+        document.getElementById('f_url_mapped').value = direct;
       }
     };
 

@@ -16,8 +16,10 @@ Dev Actions 两个 Artifact（不要再下成「zip 里套 zip」的合并包）
 1. 双击 `semaphore-rdp-helper.exe` → 打开 **http://127.0.0.1:17300**
 2. **新建项目**（或改默认「我的项目」）
 3. 选访问方式：
-   - **本机直连**：填 Semaphore 网址，如 `http://10.x.x.x:3000`
-   - **经 SSH 跳板**：填跳板主机/用户、内网 Semaphore 主机，勾选端口映射
+   - **本机直连**：Semaphore 和设备 RDP 本机都能直接访问
+   - **经 SSH 跳板**：
+     - Semaphore 也要映射：勾选「映射 Semaphore」，填内网主机
+     - **仅 RDP 要跳板、Semaphore 已直连**：**取消勾选**「映射 Semaphore」，「打开网页地址」填直连 URL（如 `http://10.x.x.x:3000`），仍填跳板
 4. **保存当前项目** → **连接** → **打开网页**
 5. 在 Semaphore 设备列表点 **远程桌面**
 
