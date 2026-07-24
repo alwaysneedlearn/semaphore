@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -86,7 +87,12 @@ type launchParams struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		printHelp()
+		// Double-click / desktop shortcut: keep console open with a prompt.
+		if err := cmdShell(); err != nil {
+			logf("shell error: %v", err)
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 	arg := os.Args[1]
@@ -103,6 +109,8 @@ func main() {
 	switch cmd {
 	case "help", "-h", "--help":
 		printHelp()
+	case "shell":
+		err = cmdShell()
 	case "install":
 		err = cmdInstall()
 	case "status":
@@ -144,6 +152,8 @@ func printHelp() {
 	fmt.Printf(`Semaphore RDP Helper
 
 Usage:
+  %s                       Interactive shell (for desktop shortcut / double-click)
+  %s shell                 Same as no-args
   %s install               Register %s:// (HKCU) and create config in exe folder
   %s envs                  List environments from config
   %s connect [env-id]      SSH tunnel for one project (-N + SOCKS; optional UI -L)
@@ -155,7 +165,81 @@ Usage:
 Protocol (OS): %s://connect?token=...&base=...
 
 Config / state / log: same folder as this exe (%s, %s, %s)
-`, n, protocolScheme, n, n, n, n, n, n, protocolScheme, configFileName, stateFileName, logFileName)
+`, n, n, n, protocolScheme, n, n, n, n, n, n, protocolScheme, configFileName, stateFileName, logFileName)
+}
+
+func printShellHelp() {
+	fmt.Print(`Commands:
+  install
+  envs
+  connect [env-id]
+  disconnect [env-id]
+  open
+  status
+  help
+  exit
+`)
+}
+
+// cmdShell keeps the console open (desktop shortcut / double-click friendly).
+func cmdShell() error {
+	if _, err := ensureConfig(); err != nil {
+		return err
+	}
+	if exe, err := os.Executable(); err == nil {
+		_ = registerProtocol(exe)
+	}
+	dir, _ := appDir()
+	fmt.Println("Semaphore RDP Helper — interactive shell")
+	if dir != "" {
+		fmt.Println("Dir:", dir)
+	}
+	fmt.Println("Type help for commands, exit to quit.")
+	fmt.Println()
+
+	sc := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("rdp> ")
+		if !sc.Scan() {
+			fmt.Println()
+			return sc.Err()
+		}
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		cmd := strings.ToLower(parts[0])
+		arg1 := ""
+		if len(parts) > 1 {
+			arg1 = parts[1]
+		}
+		var err error
+		switch cmd {
+		case "exit", "quit", "q":
+			return nil
+		case "help", "?", "h":
+			printShellHelp()
+		case "install":
+			err = cmdInstall()
+		case "envs":
+			err = cmdEnvs()
+		case "status":
+			err = cmdStatus()
+		case "connect":
+			err = cmdConnect(arg1)
+		case "disconnect":
+			err = cmdDisconnect(arg1)
+		case "open":
+			err = cmdOpen()
+		default:
+			fmt.Fprintf(os.Stderr, "unknown command: %s (type help)\n", cmd)
+		}
+		if err != nil {
+			logf("shell cmd %s: %v", cmd, err)
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
+	}
 }
 
 // appDir is the directory containing the helper executable (portable layout).

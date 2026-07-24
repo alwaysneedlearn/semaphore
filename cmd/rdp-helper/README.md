@@ -22,15 +22,26 @@ Dev Actions 两个 Artifact：
 | `helper.log` | 本地日志 |
 | `launch-*.rdp` | 临时 RDP 文件（用完删除） |
 
-可用桌面快捷方式启动：目标指向 exe（或 `cmd.exe /k "...\semaphore-rdp-helper.exe"` 方便看输出）。**起始位置**随意——程序按 exe 所在目录读写配置，不依赖当前工作目录。移动文件夹后请再执行一次 `install`（更新协议注册路径）。
+可用桌面快捷方式启动：目标直接指向 exe 即可（无参数会进入交互提示符 `rdp>`，窗口不会秒关）。也可 `cmd.exe /k "...\semaphore-rdp-helper.exe"`。**起始位置**随意——程序按 exe 所在目录读写配置。移动文件夹后请再执行一次 `install`（更新协议注册路径）。
 
-## 用法（命令行）
+## 用法
 
-在 **cmd / PowerShell** 中运行（保留窗口以便输入 SSH 密码）：
+### 交互模式（推荐快捷方式 / 双击）
+
+```text
+rdp> install
+rdp> envs
+rdp> connect plant-a
+rdp> open
+rdp> status
+rdp> disconnect plant-a
+rdp> exit
+```
+
+### 一次性命令
 
 ```text
 semaphore-rdp-helper.exe install
-semaphore-rdp-helper.exe envs
 semaphore-rdp-helper.exe connect <项目ID>
 semaphore-rdp-helper.exe open
 semaphore-rdp-helper.exe status
@@ -39,11 +50,12 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 典型流程：
 
-1. `install`（注册 `semaphore-rdp://`，若尚无则生成默认 `config.json`）
+1. 快捷方式打开 → `install`（注册协议；生成默认 `config.json`）
 2. 编辑 exe 同目录的 `config.json`
 3. `connect <项目ID>`（多项目可分别 connect，互不影响）
 4. `open` 打开 Semaphore 网页
 5. 在设备列表点 **远程桌面**
+6. 用完 `exit` 关闭窗口（SSH 子进程仍可按需保留；要断隧道用 `disconnect`）
 
 说明：Windows 自带 OpenSSH **不支持** `ControlMaster`；Helper 使用 `ssh -N` + SOCKS（`-D`）转发 RDP。
 
