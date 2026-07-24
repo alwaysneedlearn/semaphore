@@ -78,6 +78,13 @@ if ([string]::IsNullOrWhiteSpace($verifyName)) {
 }
 if ([string]::IsNullOrWhiteSpace($verifyName)) { $verifyName = $procName }
 
+# After popup confirm: poll until process exits (BTS may flush cache before exit).
+$exitWaitSec = 30
+if (-not [string]::IsNullOrWhiteSpace($env:STOP_EXIT_WAIT_SECONDS)) {
+  [int]::TryParse($env:STOP_EXIT_WAIT_SECONDS, [ref]$exitWaitSec) | Out-Null
+}
+if ($exitWaitSec -lt 0) { $exitWaitSec = 0 }
+
 $aliveHelper = Join-Path $PSScriptRoot 'sem_process_alive_windows.ps1'
 if (-not (Test-Path -LiteralPath $aliveHelper)) {
   $aliveHelper = 'C:\Windows\Temp\sem_process_alive_windows.ps1'
@@ -177,6 +184,19 @@ if (-not (Test-Path -LiteralPath $helperPath)) {
     }
   } else {
     Write-StopLine "POPUP_NOT_FOUND|keyword=$keyword|match_mode=$matchMode|hint=no_title_popup_use_content_keyword_警告"
+  }
+}
+
+if ($exitWaitSec -gt 0) {
+  Write-StopLine "EXIT_WAIT_START|seconds=$exitWaitSec|process=$verifyName"
+  $deadline = (Get-Date).AddSeconds($exitWaitSec)
+  while ((Get-Date) -lt $deadline) {
+    $still = @(Get-Process -Name $verifyName -ErrorAction SilentlyContinue)
+    if ($still.Count -eq 0) {
+      Write-StopLine "EXIT_WAIT_DONE|elapsed_lt=${exitWaitSec}s|gone=1"
+      break
+    }
+    Start-Sleep -Seconds 2
   }
 }
 

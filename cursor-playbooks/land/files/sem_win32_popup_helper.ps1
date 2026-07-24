@@ -29,6 +29,9 @@ public class SemaphorePopupHelper {
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
@@ -36,6 +39,7 @@ public class SemaphorePopupHelper {
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     public const uint WM_KEYDOWN = 0x0100;
+    public const uint BM_CLICK = 0x00F5;
     public const int VK_RETURN = 0x0D;
     public const int SW_RESTORE = 9;
 
@@ -79,6 +83,34 @@ public class SemaphorePopupHelper {
         return !string.IsNullOrEmpty(all) && all.Contains(keyword);
     }
 
+    public static bool TryClickConfirmButton(IntPtr hWnd, out string clickedText) {
+        clickedText = null;
+        IntPtr found = IntPtr.Zero;
+        string foundText = null;
+        EnumChildWindows(hWnd, (child, lParam) => {
+            StringBuilder csb = new StringBuilder(256);
+            GetWindowText(child, csb, csb.Capacity);
+            string ct = (csb.ToString() ?? "").Trim();
+            if (string.IsNullOrEmpty(ct)) { return true; }
+            // Prefer Yes / 是; avoid 否 / No / 取消 / Cancel.
+            bool isNo = ct.Contains("否") || ct.StartsWith("No", StringComparison.OrdinalIgnoreCase)
+                || ct.IndexOf("&N", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isCancel = ct.Contains("取消") || ct.StartsWith("Cancel", StringComparison.OrdinalIgnoreCase);
+            if (isNo || isCancel) { return true; }
+            bool isYes = ct == "是" || ct.StartsWith("是(") || ct.StartsWith("是(&")
+                || ct.StartsWith("Yes", StringComparison.OrdinalIgnoreCase)
+                || ct.IndexOf("&Y", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isYes) { return true; }
+            found = child;
+            foundText = ct;
+            return false;
+        }, IntPtr.Zero);
+        if (found == IntPtr.Zero) { return false; }
+        SendMessage(found, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+        clickedText = foundText;
+        return true;
+    }
+
     public static List<string> ConfirmByKeyword(string keyword, bool includeHidden, uint[] ownerPids, string matchMode) {
         var matched = new List<string>();
         HashSet<uint> pidSet = null;
@@ -96,13 +128,23 @@ public class SemaphorePopupHelper {
             bool iconic = IsIconic(hWnd);
             if (!visible && !includeHidden) { return true; }
             if (iconic || !visible) { ShowWindow(hWnd, SW_RESTORE); }
-            PostMessage(hWnd, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
+            string clickHow = "enter";
+            string buttonText = "";
+            string clicked;
+            if (TryClickConfirmButton(hWnd, out clicked)) {
+                clickHow = "button";
+                buttonText = clicked ?? "";
+            } else {
+                PostMessage(hWnd, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
+            }
             StringBuilder tsb = new StringBuilder(256);
             GetWindowText(hWnd, tsb, tsb.Capacity);
             string title = tsb.ToString();
             string content = GetAggregatedWindowText(hWnd);
             string label = string.IsNullOrEmpty(title) ? "(no_title)" : title;
-            matched.Add(label + "|content=" + content + (iconic ? "|minimized=1" : ""));
+            matched.Add(label + "|content=" + content + "|confirm=" + clickHow
+                + (string.IsNullOrEmpty(buttonText) ? "" : ("|button=" + buttonText))
+                + (iconic ? "|minimized=1" : ""));
             return true;
         }, IntPtr.Zero);
         return matched;

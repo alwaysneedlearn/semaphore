@@ -136,7 +136,9 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `START_POPUP_MATCH_MODE` | `title_or_content` | 弹窗标题/正文匹配 |
 | `STOP_POPUP_KEYWORD` | `警告` | 优雅停止确认 |
 | `STOP_POPUP_MATCH_MODE` | `title_or_content` | 无标题弹窗用正文匹配 |
-| `STOP_POPUP_WAIT_SECONDS` | `2` | 停前等弹窗 |
+| `STOP_POPUP_WAIT_SECONDS` | `2` | 关主窗后等弹窗出现 |
+| `STOP_EXIT_WAIT_SECONDS` | `30` | 弹窗确认后轮询等待进程退出（缓存刷盘可能较慢） |
+| `STOP_TASK_TIMEOUT_SECONDS` | `90` | 交互计划任务总超时（需覆盖弹窗+退出等待） |
 | `STOP_FORCE_AFTER_GRACEFUL` | `false` | SINEXCEL 默认**不**强杀；优雅停失败则操作失败（可 env 设为 `true` 恢复旧行为） |
 
 ### Redeploy（`device_redeploy.yml`）

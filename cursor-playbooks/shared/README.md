@@ -67,7 +67,7 @@ Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** a 
 
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 
-Used by `land/device_stop.yml` and `sinexcel/device_stop.yml` (and restart via `stop_program_graceful_before_reconfig.yml`). Task log should show **`[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=3`** — if missing, the runner playbook copy is stale (sync `develop` / refresh template repo).
+Used by `land/device_stop.yml` and `sinexcel/device_stop.yml` (and restart via `stop_program_graceful_before_reconfig.yml`). Task log should show **`[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=4`** — if missing, the runner playbook copy is stale (sync `develop` / refresh template repo).
 
 Variable Group / play vars:
 
@@ -75,11 +75,12 @@ Variable Group / play vars:
 |-----------|---------|---------|
 | `STOP_GRACEFUL_PROCESS_NAME` | `LHBTS` | `Get-Process` + `CloseMainWindow` |
 | `STOP_VERIFY_PROCESS_NAME` | same as `PROCESS_NAME` | Final running check |
-| `STOP_POPUP_WAIT_SECONDS` | `2` | Sleep before sending Enter |
+| `STOP_POPUP_WAIT_SECONDS` | `2` | Sleep before scanning/confirming popup |
+| `STOP_EXIT_WAIT_SECONDS` | `30` | After popup confirm, poll until process exits (BTS may flush cache) |
 | `STOP_POPUP_KEYWORD` | `警告` | Match in window **title** and/or **dialog content** (child control text) |
 | `STOP_POPUP_MATCH_MODE` | `title_or_content` | `title` \| `content` \| `title_or_content` — use `content` when popup has no title (SINEXCEL) |
 | `STOP_FORCE_AFTER_GRACEFUL` | `true` | Force kill if still running |
-| `STOP_TASK_TIMEOUT_SECONDS` | `45` | Interactive scheduled-stop wait timeout |
+| `STOP_TASK_TIMEOUT_SECONDS` | `90` | Interactive scheduled-stop wait timeout (must cover popup + exit wait) |
 
 The graceful stop task runs in the logged-in desktop user's interactive session (scheduled task), not the WinRM service session.
 
@@ -121,6 +122,6 @@ Get-ScheduledTask | Where TaskName -like 'StopGraceful*'
 Get-ChildItem C:\Windows\Temp\sem_stop_out_*.log | Sort LastWriteTime -Desc | Select -First 1 | Get-Content
 ```
 
-Increase wait: Variable Group `STOP_TASK_TIMEOUT_SECONDS=90`, `STOP_POPUP_WAIT_SECONDS=5`.
+Increase wait: Variable Group `STOP_EXIT_WAIT_SECONDS=60`, `STOP_TASK_TIMEOUT_SECONDS=120`, `STOP_POPUP_WAIT_SECONDS=5`.
 
 **No compatibility shims** under `neware/tasks/` for shared files — include `{{ sem_tasks_dir }}/…` directly from each play. Missing file → add under `shared/` or the device profile; wrong path → fix the play.

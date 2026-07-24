@@ -3,7 +3,8 @@
 #   STOP_GRACEFUL_PROCESS_NAME, STOP_POPUP_WAIT_SECONDS, STOP_POPUP_KEYWORD,
 #   STOP_FORCE_AFTER_GRACEFUL, STOP_VERIFY_PROCESS_NAME
 #   SEMAPHORE_PROFILE_USER (required interactive user)
-#   STOP_TASK_TIMEOUT_SECONDS (optional, default 45)
+#   STOP_TASK_TIMEOUT_SECONDS (optional, default 90)
+#   STOP_EXIT_WAIT_SECONDS (optional, default 30 — wait for process exit after popup)
 
 $procName = [string]$env:STOP_GRACEFUL_PROCESS_NAME
 if ($null -eq $procName) { $procName = '' }
@@ -24,7 +25,7 @@ if ($waitSec -lt 0) { $waitSec = 0 }
 $forceRaw = [string]$env:STOP_FORCE_AFTER_GRACEFUL
 if ($null -eq $forceRaw) { $forceRaw = '' }
 $forceRaw = $forceRaw.Trim()
-if ($forceRaw.Length -eq 0) { $forceRaw = 'false' }
+if ($forceRaw.Length -eq 0) { $forceRaw = 'true' }
 
 $verifyName = [string]$env:STOP_VERIFY_PROCESS_NAME
 if ($null -eq $verifyName) { $verifyName = '' }
@@ -41,7 +42,7 @@ if ($null -eq $profileUser) { $profileUser = '' }
 $profileUser = $profileUser.Trim()
 $profileShort = ($profileUser -split '\\')[-1]
 
-[int]$timeoutSec = 45
+[int]$timeoutSec = 90
 $timeoutRaw = [string]$env:STOP_TASK_TIMEOUT_SECONDS
 if (-not [string]::IsNullOrWhiteSpace($timeoutRaw)) {
   [int]::TryParse($timeoutRaw, [ref]$timeoutSec) | Out-Null

@@ -2,11 +2,11 @@
 # Graceful stop with confirmation popup (CloseMainWindow + Enter on title keyword).
 # Requires: deploy_sem_windows_helper_scripts.yml first.
 # Play vars: stop_graceful_process_name, stop_popup_*; stop_graceful_fail_on_still_running (default true for restart/redeploy).
-# Revision: STOP_GRACEFUL_CONFIRM_REV=3 — when: > form; no bare 'NOT_RUNNING' in YAML list items.
+# Revision: STOP_GRACEFUL_CONFIRM_REV=4 — EXIT_WAIT after popup; prefer 是/Yes click; task timeout 90s.
 
 - name: DEBUG 优雅停止任务版本
   ansible.builtin.debug:
-    msg: "[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=3 file=stop_program_close_main_window_confirm.yml"
+    msg: "[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=4 file=stop_program_close_main_window_confirm.yml"
   changed_when: false
 
 - name: 停止程序（解析交互用户）
@@ -39,7 +39,8 @@
     STOP_FORCE_AFTER_GRACEFUL: "{{ stop_force_after_graceful | string | lower }}"
     STOP_VERIFY_PROCESS_NAME: "{{ stop_verify_process_name | default(stop_graceful_process_name, true) }}"
     SEMAPHORE_PROFILE_USER: "{{ _stop_profile_user }}"
-    STOP_TASK_TIMEOUT_SECONDS: "{{ (lookup('env', 'STOP_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('45', true) }}"
+    STOP_TASK_TIMEOUT_SECONDS: "{{ (lookup('env', 'STOP_TASK_TIMEOUT_SECONDS') | default('', true) | trim) | default('90', true) }}"
+    STOP_EXIT_WAIT_SECONDS: "{{ (lookup('env', 'STOP_EXIT_WAIT_SECONDS') | default('', true) | trim) | default('30', true) }}"
   ansible.windows.win_shell: >-
     powershell.exe -NoProfile -ExecutionPolicy Bypass
     -File C:\Windows\Temp\sem_stop_close_main_window_confirm_interactive.ps1
