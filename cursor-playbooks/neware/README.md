@@ -64,9 +64,11 @@ Patrol all sets devices to `checking` first; the status template should run a pl
 | Retries | **`API_STATUS_RETRIES`** (default **3**), **`API_STATUS_RETRY_DELAY`** (default **3** s) — patrol/health |
 | Start-verify poll | **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`** (default = **`LOG_POLL_RETRIES`** / **`LOG_POLL_DELAY`**, else **8** / **10** s) — restart/redeploy until **`ExecResultData==3`** |
 | Envelope OK | HTTP **200**, **`ResponeResultCode==0`**, **`ExecResultCode==0`** |
-| **`ExecResultData`** | **1** = 程序已启动 · **2** = 启动数据上报中 · **3** = 数据上报已启动（健康，跳过日志关键字） |
+| **`ExecResultData`** | **1** = 程序已启动 · **2** = 启动数据上报中 · **3** = 数据上报已启动（健康，跳过 Kafka TCP） |
 
-Tasks: **`tasks/neware_query_upload_status_api.yml`**, **`tasks/health_gate_upload_status_api_then_log.yml`**. Logs: **`[DEBUG-NEWARE] upload_status_api`**.
+**Kafka TCP 回退**（API 未达 **3** 且进程在跑）：`Get-NetTCPConnection`，进程名默认 **`NWReport_DBWB`**（可用 **`KAFKA_PROCESS_NAME`** / 显式 **`EXE_NAME`**），远端端口 **`KAFKA_REMOTE_PORTS`**（默认 **9092,9093,9094**）；任一 **Established** → 健康。
+
+Tasks: **`tasks/neware_query_upload_status_api.yml`**, **`tasks/kafka_health_check_windows.yml`**, **`tasks/health_gate_upload_status_api_then_log.yml`**. Logs: **`[DEBUG-NEWARE] upload_status_api`**, **`[Kafka检查]`**.
 
 ### Bulk vs single-device extra-vars
 
