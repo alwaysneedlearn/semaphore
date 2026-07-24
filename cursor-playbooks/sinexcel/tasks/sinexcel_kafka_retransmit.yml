@@ -23,7 +23,7 @@
     body:
       StartTime: "{{ _sinexcel_retransmit_start }}"
       EndTime: "{{ _sinexcel_retransmit_end }}"
-    timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
+    timeout: "{{ sinexcel_api_timeout | default(30) | int }}"
     validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
     return_content: true
     status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
@@ -64,7 +64,7 @@
     method: POST
     body_format: json
     body: "{{ _sinexcel_retransmit_body }}"
-    timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
+    timeout: "{{ sinexcel_api_timeout | default(30) | int }}"
     validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
     return_content: true
     status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]

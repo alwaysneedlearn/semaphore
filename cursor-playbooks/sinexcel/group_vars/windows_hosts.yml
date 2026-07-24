@@ -11,7 +11,9 @@ sinexcel_kafka_set_config_path: "/kafka/SetConfig"
 sinexcel_kafka_is_enable_path: "/kafka/IsEnable"
 sinexcel_kafka_query_history_path: "/kafka/QueryHistory"
 sinexcel_kafka_retransmit_path: "/kafka/Retransmit"
-sinexcel_kafka_timeout: 15
+# Unified HTTP uri timeout for all SINEXCEL agent APIs (/kafka/* and legacy SyncLims checks).
+sinexcel_api_timeout: "{{ ((lookup('env', 'SINEXCEL_API_TIMEOUT') | default('', true) | trim) | default('30', true)) | int }}"
+sinexcel_kafka_timeout: "{{ sinexcel_api_timeout }}"
 sinexcel_kafka_verify_tls: false
 # After start/restart: poll POST /kafka/QueryConfig until api_ok or retries exhausted (patrol uses single POST).
 sinexcel_kafka_start_poll_retries: "{{ ((lookup('env', 'SINEXCEL_KAFKA_START_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"

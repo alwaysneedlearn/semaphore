@@ -16,7 +16,7 @@
     headers:
       Content-Type: application/json
       Accept: application/json
-    timeout: "{{ sinexcel_kafka_timeout | default(15) | int }}"
+    timeout: "{{ sinexcel_api_timeout | default(30) | int }}"
     validate_certs: "{{ sinexcel_kafka_verify_tls | default(false) | bool }}"
     return_content: true
     status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]

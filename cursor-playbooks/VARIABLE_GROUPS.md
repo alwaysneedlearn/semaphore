@@ -65,9 +65,10 @@ EXE_SCAN_MAX_DEPTH=2
 # Redeploy：控制器上的安装包目录（仅 device_redeploy 复制 zip）
 ZIP_PATH=/root/sinexcel/pkg
 ZIP_NAME=sinexcel
-# Agent HTTP API（巡检 / 启动 / 停止可选探测）
+# Agent HTTP API（巡检 / 启动 / 重传等）
 SINEXCEL_API_PORT=9002
 API_PORT=9002
+SINEXCEL_API_TIMEOUT=30
 SINEXCEL_START_CHECK_API=true
 # 弹窗（优雅停 / 交互启动）
 START_POPUP_KEYWORD=提示
@@ -82,11 +83,11 @@ SEMAPHORE_API_TOKEN=<token>
 
 **`ZIP_PATH` 仅 Redeploy**：Start / Restart **不写 INI**，配置经 HTTP API；Redeploy 需要控制器上 `{{ ZIP_PATH }}/{{ ZIP_NAME }}.zip`（默认 `/root/sinexcel/pkg/sinexcel.zip`）。
 
-**API 端口**：设备 `api_port` → **`SINEXCEL_API_PORT`** → `API_PORT` → **9002**（用于 `POST …/kafka/QueryConfig` 等 agent HTTP API）。旧名 `SINEXCEL_KAFKA_API_PORT` 仍兼容。
+**API 端口**：设备 `api_port` → **`SINEXCEL_API_PORT`** → 旧名 `SINEXCEL_KAFKA_API_PORT` → `API_PORT` → **9002**（用于 `POST …/kafka/QueryConfig` 等 agent HTTP API）。
+
+**API 超时**：统一环境变量 **`SINEXCEL_API_TIMEOUT`**（默认 **30** 秒），覆盖全部 `/kafka/*` HTTP `uri`（含 Retransmit），无单独 Retransmit 超时。
 
 **不必**为每台机单独配 `Install`：playbook 在 `D:\`、`E:\`… 上按 `EXE_DIR_FALLBACK_DRIVES` 浅层扫描 `EXE_NAME`（`EXE_SCAN_LATEST=true`），取 mtime 最新路径。仅极个别例外机台才用可选 **`Install.ExePath`** 覆盖。详见 [`sinexcel/README.md`](sinexcel/README.md)。
-
-**端口勿混用**：巡检/启动健康检查走 **Kafka**（`POST …/kafka/QueryConfig`），端口解析顺序为 **设备 `api_port` → `SINEXCEL_KAFKA_API_PORT` → `API_PORT` → 9002**。`SINEXCEL_API_PORT`（默认 8080）只用于 **Stop** 模板里可选的 SyncLims `QueryStatus` 探测，不参与 Kafka 巡检。
 
 ### NBT
 

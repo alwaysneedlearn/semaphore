@@ -52,8 +52,8 @@
     body_format: json
     body:
       token: "{{ sinexcel_api_token }}"
-    timeout: "{{ sinexcel_api_timeout }}"
-    validate_certs: "{{ sinexcel_api_verify_tls }}"
+    timeout: "{{ sinexcel_api_timeout | default(30) | int }}"
+    validate_certs: "{{ sinexcel_api_verify_tls | default(false) | bool }}"
     return_content: true
     status_code: [200, 201, 204, 400, 401, 403, 404, 500, 502, 503]
   register: _sinexcel_api_after

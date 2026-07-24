@@ -124,6 +124,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | Variable | Default | 用于 |
 |----------|---------|------|
 | `SINEXCEL_API_PORT` / `API_PORT` | `9002` | SetConfig / QueryConfig 等 HTTP API |
+| `SINEXCEL_API_TIMEOUT` | `30` | 所有 agent HTTP `uri` 超时（秒）；QueryConfig / SetConfig / Retransmit 等共用 |
 | `SINEXCEL_START_CHECK_API` | `true` | 启动后要求 `EnableFlowInfoExtendedSqlite=true` |
 | `SINEXCEL_KAFKA_START_POLL_RETRIES` | `6` | 启动后轮询 `QueryConfig` 直至 `api_ok`（`until` 挂在 `uri` 上；巡检仍为单次 POST） |
 | `SINEXCEL_KAFKA_START_POLL_DELAY` | `10` | `QueryConfig` 轮询间隔（秒） |
@@ -188,17 +189,13 @@ SINEXCEL_CONFIG_FILES=BTSClient.ini,kafka.ini
 
 Restart / Check-restart / Redeploy 均走 **HTTP Kafka API**（`sinexcel_config_stop_start.yml` 或 redeploy 内嵌同等 API 步骤）。
 
-### Stop（`device_stop.yml`）
+### Stop
+
+当前 SINEXCEL 启停走共享优雅停逻辑；HTTP 探测若启用，超时同样使用 **`SINEXCEL_API_TIMEOUT`**（默认 **30**），无单独超时变量。
 
 | Variable | Default | 用于 |
 |----------|---------|------|
-| `SINEXCEL_API_PORT` | `9002`（同 API 端口链） | 停后可选 API 探测（默认路径 `/SyncLims/QueryStatus`） |
-| `SINEXCEL_API_SCHEME` | `http` | 同上 |
-| `SINEXCEL_API_STATUS_PATH` | `/SyncLims/QueryStatus` | 同上 |
-| `SINEXCEL_API_TOKEN` | `sinexcelapi` | 同上 |
-| `SINEXCEL_API_TIMEOUT` | `8` | 同上 |
-| `SINEXCEL_API_VERIFY_TLS` | `true` | 同上 |
-| `SINEXCEL_STOP_CHECK_API` | `false` | 停后是否调 API |
+| `SINEXCEL_API_TIMEOUT` | `30` | 与 Kafka `/kafka/*` 共用 |
 | `STOP_GRACEFUL_PROCESS_NAME` | 同 `process_name` | 勿填错类型进程名 |
 
 ### API 路径（一般不用改）
