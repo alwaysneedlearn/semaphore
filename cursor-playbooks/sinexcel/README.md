@@ -124,6 +124,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | Variable | Default | 用于 |
 |----------|---------|------|
 | `SINEXCEL_API_PORT` / `API_PORT` | `9002` | SetConfig / QueryConfig 等 HTTP API |
+| `SINEXCEL_API_TIMEOUT` | `15` | 各 `/kafka/*` HTTP `uri` 超时（秒）；大流量 Retransmit 可调高 |
 | `SINEXCEL_START_CHECK_API` | `true` | 启动后要求 `EnableFlowInfoExtendedSqlite=true` |
 | `SINEXCEL_KAFKA_START_POLL_RETRIES` | `6` | 启动后轮询 `QueryConfig` 直至 `api_ok`（`until` 挂在 `uri` 上；巡检仍为单次 POST） |
 | `SINEXCEL_KAFKA_START_POLL_DELAY` | `10` | `QueryConfig` 轮询间隔（秒） |
@@ -196,7 +197,7 @@ Restart / Check-restart / Redeploy 均走 **HTTP Kafka API**（`sinexcel_config_
 | `SINEXCEL_API_SCHEME` | `http` | 同上 |
 | `SINEXCEL_API_STATUS_PATH` | `/SyncLims/QueryStatus` | 同上 |
 | `SINEXCEL_API_TOKEN` | `sinexcelapi` | 同上 |
-| `SINEXCEL_API_TIMEOUT` | `8` | 同上 |
+| `SINEXCEL_API_TIMEOUT` | `15` | 同上（与 Kafka `/kafka/*` 共用同一环境变量） |
 | `SINEXCEL_API_VERIFY_TLS` | `true` | 同上 |
 | `SINEXCEL_STOP_CHECK_API` | `false` | 停后是否调 API |
 | `STOP_GRACEFUL_PROCESS_NAME` | 同 `process_name` | 勿填错类型进程名 |
