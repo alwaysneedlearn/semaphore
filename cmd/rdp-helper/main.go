@@ -438,14 +438,14 @@ func landSpec(env Environment) (user, host string, port int, err error) {
 	host = strings.TrimSpace(env.LandHost)
 	port = env.LandPort
 	if host == "" && len(env.Hops) > 0 {
+		// Land = last hop. Always take that hop's port — do not keep a stale
+		// default land_port=22 from the UI when land_host is empty.
 		last := env.Hops[len(env.Hops)-1]
-		host = last.Host
+		host = strings.TrimSpace(last.Host)
 		if user == "" {
-			user = last.User
+			user = strings.TrimSpace(last.User)
 		}
-		if port == 0 {
-			port = last.Port
-		}
+		port = last.Port
 	}
 	if port == 0 {
 		port = 22
@@ -565,7 +565,12 @@ func cmdConnect(envID string) error {
 	args = append(args, target)
 
 	fmt.Println("Connecting via SSH (enter password in this console if prompted)...")
-	logf("ssh connect start env=%s land=%s socks=%d", env.ID, target, socksPort)
+	fmt.Printf("ssh target %s -p %d", target, port)
+	if pj := proxyJumpArg(env); pj != "" {
+		fmt.Printf(" -J %s", pj)
+	}
+	fmt.Println()
+	logf("ssh connect start env=%s land=%s port=%d jump=%s socks=%d", env.ID, target, port, proxyJumpArg(env), socksPort)
 	cmd, err := startSSHTunnel(args)
 	if err != nil {
 		return fmt.Errorf("ssh start failed: %w", err)

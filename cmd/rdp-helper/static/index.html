@@ -219,9 +219,14 @@
               <label for="f_land_user">落地机用户</label>
               <input id="f_land_user" placeholder="与跳板用户相同可留空" />
             </div>
+            <div>
+              <label for="f_land_port">落地机 SSH 端口</label>
+              <input id="f_land_port" type="number" placeholder="空=用最后一跳端口，默认 22" />
+            </div>
           </div>
           <label for="f_identity">SSH 私钥路径（可选）</label>
           <input id="f_identity" placeholder="C:\Users\you\.ssh\id_rsa" />
+          <p class="hint">未填落地机时，SSH 连最后一跳，端口用该跳板的「端口」。只有单独填写了落地机才用「落地机 SSH 端口」。</p>
         </details>
       </div>
 
@@ -267,7 +272,7 @@
         hops: [{ host: '', port: 22, user: '' }],
         land_host: '',
         land_user: '',
-        land_port: 22,
+        land_port: 0,
         ssh_identity: '',
       };
     }
@@ -340,9 +345,24 @@
       document.getElementById('f_ui_remote_port').value = env.ui_remote_port || 3000;
       document.getElementById('f_land_host').value = env.land_host || '';
       document.getElementById('f_land_user').value = env.land_user || '';
+      document.getElementById('f_land_port').value = env.land_port > 0 ? env.land_port : '';
       document.getElementById('f_identity').value = env.ssh_identity || '';
       if (!env.hops || !env.hops.length) env.hops = [{ host: '', port: 22, user: '' }];
       renderHops(env.hops);
+    }
+
+    function readHopsFromDom() {
+      const hops = [];
+      const box = document.getElementById('hops');
+      box.querySelectorAll('.hop').forEach((div) => {
+        const host = ((div.querySelector('input[data-f="host"]') || {}).value || '').trim();
+        const user = ((div.querySelector('input[data-f="user"]') || {}).value || '').trim();
+        const portRaw = ((div.querySelector('input[data-f="port"]') || {}).value || '').trim();
+        const port = parseInt(portRaw || '22', 10);
+        if (!host) return;
+        hops.push({ host: host, port: port > 0 ? port : 22, user: user });
+      });
+      return hops;
     }
 
     function readFormIntoEnv(env) {
@@ -360,6 +380,7 @@
         env.ui_remote_host = '';
         env.land_host = '';
         env.land_user = '';
+        env.land_port = 0;
         env.ssh_identity = '';
       } else {
         env.semaphore_url = (document.getElementById('f_url_mapped').value || '').trim() || ('http://127.0.0.1:' + (document.getElementById('f_ui_local').value || 3000));
@@ -369,8 +390,11 @@
         env.ui_remote_port = parseInt(document.getElementById('f_ui_remote_port').value || '3000', 10);
         env.land_host = (document.getElementById('f_land_host').value || '').trim();
         env.land_user = (document.getElementById('f_land_user').value || '').trim();
+        const lp = parseInt((document.getElementById('f_land_port').value || '').trim() || '0', 10);
+        // Empty land_host → land is last hop; clear land_port so backend uses hop.port
+        env.land_port = env.land_host ? (lp > 0 ? lp : 22) : 0;
         env.ssh_identity = (document.getElementById('f_identity').value || '').trim();
-        env.hops = (env.hops || []).filter((h) => (h.host || '').trim());
+        env.hops = readHopsFromDom();
         if (!env.hops.length) throw new Error('SSH 模式请至少填写一台跳板主机');
         if (env.forward_ui && !env.ui_remote_host) throw new Error('请填写内网 Semaphore 主机');
       }
