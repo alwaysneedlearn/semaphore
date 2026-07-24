@@ -245,8 +245,8 @@
     if ($fromDate -eq "") { $fromDate = (Get-Date).ToString("yyyy-MM-dd") }
     $toDate = "{{ merged_system_config.HisDataToTime | default('') }}"
     if ($toDate -eq "") { $toDate = (Get-Date).AddDays(1).ToString("yyyy-MM-dd") }
-    # Use {{ }} not {% if %} — Ansible trim_blocks eats the newline after {% endif %},
-    # which produced: $patchHisData = $true$userConfigPath = ...
+    # PowerShell bool literal via Ansible expression (avoid {% if %} — trim_blocks
+    # removes the following newline). Do not put empty Jinja print markers in comments.
     $patchHisData = {{ '$true' if (neware_include_his_data_resend | default(false) | bool) else '$false' }}
     $userConfigPath = '{{ _reconfig_user_cfg_file | replace("\u0027", "\u0027\u0027") }}'
     $publicConfigPath = "C:\Users\Public\{{ _reconfig_client_rel_path }}\{{ config_file_name }}"
