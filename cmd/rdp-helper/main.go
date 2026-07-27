@@ -1038,6 +1038,8 @@ func buildRDPFile(fullAddress string, port int, user string) string {
 	}
 	b.WriteString("prompt for credentials:i:1\r\n")
 	b.WriteString("authentication level:i:2\r\n")
+	// Local Resources → Clipboard: checked by default (mstsc .rdp).
+	b.WriteString("redirectclipboard:i:1\r\n")
 	return b.String()
 }
 

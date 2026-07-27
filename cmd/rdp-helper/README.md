@@ -96,6 +96,38 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 | `hops` | 跳板列表（含非 22 端口）；空 `land_host` 时最后一跳即落地机 |
 | `land_*` | 仅当落地机与最后一跳不同时填写 |
 
+## RDP 选项
+
+### 剪贴板（默认开启）
+
+Helper 生成的临时 `.rdp` 含 **`redirectclipboard:i:1`**（对应 mstsc「本地资源 → 剪贴板」勾选）。无需在连接对话框再勾。
+
+### 锁屏显示「正在被远程」（自定义文案）
+
+**mstsc / `.rdp` 无法**在被控机锁屏上动态写「正在被远程」。需在 **被控 Windows** 上部署策略或脚本：
+
+| 方式 | 效果 | 说明 |
+|------|------|------|
+| **LegalNotice**（登录/解锁提示） | 锁屏/登录前弹出标题+正文 | 可用 GPO 或本目录 `scripts/set-lock-notice.ps1` |
+| **会话感知**（推荐） | 有活跃 `rdp-tcp` 会话时写入提示，断开后清除 | `scripts/watch-rdp-session-notice.ps1`（计划任务每分钟或常驻） |
+
+被控机上（管理员 PowerShell）示例：
+
+```powershell
+# 一次性固定文案（每次锁屏/登录都会显示，与是否在远程无关）
+.\scripts\set-lock-notice.ps1 -Title "远程协助中" -Text "本机可能被运维远程桌面连接，请确认后再操作。"
+
+# 仅在有人 RDP 连入时显示（计划任务：每 1 分钟 -Once）
+.\scripts\watch-rdp-session-notice.ps1 -Title "正在被远程" -Text "操作员远程桌面连接中，请勿本地操作。" -Once
+```
+
+注册表（与脚本相同）：
+
+- `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\LegalNoticeCaption`
+- `...\LegalNoticeText`
+
+下次锁屏或登录生效。若域 GPO/Intune 也下发这两项，以策略为准。
+
 ## Build
 
 ```bash

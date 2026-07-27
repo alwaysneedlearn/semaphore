@@ -13,6 +13,9 @@ func TestBuildRDPFileIncludesUserAndAddress(t *testing.T) {
 	if !strings.Contains(body, "username:s:NEWARE\\admin") {
 		t.Fatalf("missing username: %q", body)
 	}
+	if !strings.Contains(body, "redirectclipboard:i:1") {
+		t.Fatalf("clipboard should be enabled by default: %q", body)
+	}
 	if strings.Contains(body, "/u:") {
 		t.Fatalf("must not embed mstsc /u switch: %q", body)
 	}
