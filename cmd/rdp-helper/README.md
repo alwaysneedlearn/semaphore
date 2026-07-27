@@ -102,31 +102,35 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 Helper 生成的临时 `.rdp` 含 **`redirectclipboard:i:1`**（对应 mstsc「本地资源 → 剪贴板」勾选）。无需在连接对话框再勾。
 
-### 锁屏显示「正在被远程」（自定义文案）
+### 屏幕置顶横幅（推荐：远程进去立刻显示）
 
-**mstsc / `.rdp` 无法**在被控机锁屏上动态写「正在被远程」。需在 **被控 Windows** 上部署策略或脚本：
-
-| 方式 | 效果 | 说明 |
-|------|------|------|
-| **LegalNotice**（登录/解锁提示） | 锁屏/登录前弹出标题+正文 | 可用 GPO 或本目录 `scripts/set-lock-notice.ps1` |
-| **会话感知**（推荐） | 有活跃 `rdp-tcp` 会话时写入提示，断开后清除 | `scripts/watch-rdp-session-notice.ps1`（计划任务每分钟或常驻） |
-
-被控机上（管理员 PowerShell）示例：
+不依赖 LegalNotice / 锁屏。RDP 进被控机 → 拷贝脚本 → 执行 → **当前会话桌面顶部**立即出现置顶横幅：
 
 ```powershell
-# 一次性固定文案（每次锁屏/登录都会显示，与是否在远程无关）
-.\scripts\set-lock-notice.ps1 -Title "远程协助中" -Text "本机可能被运维远程桌面连接，请确认后再操作。"
-
-# 仅在有人 RDP 连入时显示（计划任务：每 1 分钟 -Once）
-.\scripts\watch-rdp-session-notice.ps1 -Title "正在被远程" -Text "操作员远程桌面连接中，请勿本地操作。" -Once
+powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 `
+  -Title "正在被远程" `
+  -Text "操作员远程桌面连接中，请勿本地操作。"
 ```
 
-注册表（与脚本相同）：
+关闭：点横幅「关闭」、按 `Esc`，或：
 
-- `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\LegalNoticeCaption`
-- `...\LegalNoticeText`
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Close
+```
 
-下次锁屏或登录生效。若域 GPO/Intune 也下发这两项，以策略为准。
+说明：横幅画在**执行脚本的那个会话**里（通常是你的 RDP 会话）。若本机显示器是另一个已登录会话，本机屏幕不一定看得到。
+
+### 锁屏 LegalNotice（可选，需锁屏/登录才出现）
+
+| 方式 | 效果 | 脚本 |
+|------|------|------|
+| 固定提示 | 每次锁屏/登录弹窗 | `set-lock-notice.ps1` |
+| 会话感知 | 有 `rdp-tcp` 时写入，断开清除 | `watch-rdp-session-notice.ps1` |
+
+```powershell
+.\set-lock-notice.ps1 -Title "远程协助中" -Text "本机可能被运维远程…"
+.\watch-rdp-session-notice.ps1 -Title "正在被远程" -Text "…" -Once
+```
 
 ## Build
 
