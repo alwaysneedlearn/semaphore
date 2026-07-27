@@ -1,12 +1,8 @@
-# Set custom lock/logon notice on a Windows host (LegalNotice).
-# Shows at interactive logon AND when unlocking (console or RDP session lock screen).
-# This is NOT driven by mstsc — deploy on the *remote* host (GPO / Intune / WinRM once).
+# Set custom lock/logon notice (LegalNotice). ASCII-only source for Windows PowerShell 5.1.
+# Pass Chinese via -Title / -Text.
 #
-# Usage (elevated PowerShell on the remote):
-#   .\set-lock-notice.ps1 -Title "远程协助中" -Text "本机正在被远程桌面连接，请勿本地操作。"
+#   .\set-lock-notice.ps1 -Title "..." -Text "..."
 #   .\set-lock-notice.ps1 -Clear
-#
-# Env fallbacks: RDP_LOCK_NOTICE_TITLE, RDP_LOCK_NOTICE_TEXT
 
 param(
   [string]$Title = '',
@@ -32,9 +28,9 @@ if ([string]::IsNullOrWhiteSpace($Title)) {
 if ([string]::IsNullOrWhiteSpace($Text)) {
   $Text = [string]$env:RDP_LOCK_NOTICE_TEXT
 }
-if ([string]::IsNullOrWhiteSpace($Title)) { $Title = '远程协助中' }
+if ([string]::IsNullOrWhiteSpace($Title)) { $Title = 'Remote assistance' }
 if ([string]::IsNullOrWhiteSpace($Text)) {
-  $Text = '本机正在被远程桌面连接。请勿在本地操作，等待远程结束后再使用。'
+  $Text = 'This PC may be accessed via Remote Desktop. Confirm before local use.'
 }
 
 if (-not (Test-Path -LiteralPath $key)) {
