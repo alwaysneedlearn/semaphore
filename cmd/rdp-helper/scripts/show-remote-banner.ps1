@@ -1,16 +1,13 @@
 # Always-on-top banner on the *current* session desktop (no LegalNotice, no Win+L).
-# RDP in → copy script → run → banner shows immediately on that session's screen.
+# IMPORTANT: This file is ASCII-only so Windows PowerShell 5.1 parses it on GBK systems.
+# Pass Chinese (or any) text via -Title / -Text on the command line.
 #
-#   .\show-remote-banner.ps1
-#   .\show-remote-banner.ps1 -Title "正在被远程" -Text "操作员远程桌面连接中，请勿本地操作。"
-#   .\show-remote-banner.ps1 -Close
-#
-# Closes with the on-banner button or Esc. Physical console only sees it if it is
-# the same Windows session as the one running this script.
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Title "..." -Text "..."
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Close
 
 param(
-  [string]$Title = '正在被远程',
-  [string]$Text = '本机正在被远程桌面连接，请勿本地操作。',
+  [string]$Title = 'Remote session active',
+  [string]$Text = 'This PC is being accessed via Remote Desktop. Do not operate locally.',
   [int]$Height = 88,
   [string]$BackgroundColor = 'DarkOrange',
   [string]$ForegroundColor = 'White',
@@ -34,20 +31,39 @@ if ($Close) {
   exit 0
 }
 
-# Parent: spawn UI child (hidden console) so the RDP shell returns immediately.
+# Parent: spawn UI child; pass text via env to avoid -Command quoting / encoding issues.
 if ($env:SEMAPHORE_RDP_BANNER_UI -ne '1') {
   $self = $MyInvocation.MyCommand.Path
   $ps = (Get-Process -Id $PID).Path
-  # Embed marker in command line for -Close discovery.
-  $cmd = @"
-`$env:SEMAPHORE_RDP_BANNER_UI='1'
-# $marker
-& '$($self.Replace("'", "''"))' -Title '$($Title.Replace("'", "''"))' -Text '$($Text.Replace("'", "''"))' -Height $Height -BackgroundColor '$($BackgroundColor.Replace("'", "''"))' -ForegroundColor '$($ForegroundColor.Replace("'", "''"))' -Wait
-"@
-  $p = Start-Process -FilePath $ps -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $cmd) -PassThru -WindowStyle Hidden
-  Write-Output "BANNER_STARTED|pid=$($p.Id)|title=$Title"
+  $env:SEMAPHORE_RDP_BANNER_TITLE = $Title
+  $env:SEMAPHORE_RDP_BANNER_TEXT = $Text
+  $env:SEMAPHORE_RDP_BANNER_HEIGHT = "$Height"
+  $env:SEMAPHORE_RDP_BANNER_BG = $BackgroundColor
+  $env:SEMAPHORE_RDP_BANNER_FG = $ForegroundColor
+  # Marker must appear in child command line for -Close.
+  $cmd = "`$env:SEMAPHORE_RDP_BANNER_UI='1'; # $marker`n& '$($self.Replace("'", "''"))' -Wait"
+  $p = Start-Process -FilePath $ps `
+    -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $cmd) `
+    -PassThru -WindowStyle Hidden
+  Write-Output "BANNER_STARTED|pid=$($p.Id)"
   if ($Wait) { Wait-Process -Id $p.Id }
   exit 0
+}
+
+if (-not [string]::IsNullOrWhiteSpace($env:SEMAPHORE_RDP_BANNER_TITLE)) {
+  $Title = $env:SEMAPHORE_RDP_BANNER_TITLE
+}
+if (-not [string]::IsNullOrWhiteSpace($env:SEMAPHORE_RDP_BANNER_TEXT)) {
+  $Text = $env:SEMAPHORE_RDP_BANNER_TEXT
+}
+if (-not [string]::IsNullOrWhiteSpace($env:SEMAPHORE_RDP_BANNER_HEIGHT)) {
+  [void][int]::TryParse($env:SEMAPHORE_RDP_BANNER_HEIGHT, [ref]$Height)
+}
+if (-not [string]::IsNullOrWhiteSpace($env:SEMAPHORE_RDP_BANNER_BG)) {
+  $BackgroundColor = $env:SEMAPHORE_RDP_BANNER_BG
+}
+if (-not [string]::IsNullOrWhiteSpace($env:SEMAPHORE_RDP_BANNER_FG)) {
+  $ForegroundColor = $env:SEMAPHORE_RDP_BANNER_FG
 }
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -76,12 +92,23 @@ try {
   if ($fc.A -ne 0) { $fg = $fc }
 } catch { }
 
+# Prefer YaHei when present; fall back to Segoe UI (ASCII-safe font names only in source).
+$fontFamily = 'Segoe UI'
+foreach ($name in @('Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI')) {
+  try {
+    $probe = New-Object System.Drawing.Font($name, 12)
+    $probe.Dispose()
+    $fontFamily = $name
+    break
+  } catch { }
+}
+
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = $Title
 $titleLabel.Dock = 'Top'
 $titleLabel.Height = 36
 $titleLabel.TextAlign = 'MiddleCenter'
-$titleLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 16, [System.Drawing.FontStyle]::Bold)
+$titleLabel.Font = New-Object System.Drawing.Font($fontFamily, 16, [System.Drawing.FontStyle]::Bold)
 $titleLabel.ForeColor = $fg
 $titleLabel.BackColor = [System.Drawing.Color]::Transparent
 
@@ -89,13 +116,13 @@ $bodyLabel = New-Object System.Windows.Forms.Label
 $bodyLabel.Text = $Text
 $bodyLabel.Dock = 'Fill'
 $bodyLabel.TextAlign = 'MiddleCenter'
-$bodyLabel.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 12, [System.Drawing.FontStyle]::Regular)
+$bodyLabel.Font = New-Object System.Drawing.Font($fontFamily, 12, [System.Drawing.FontStyle]::Regular)
 $bodyLabel.ForeColor = $fg
 $bodyLabel.BackColor = [System.Drawing.Color]::Transparent
 $bodyLabel.Padding = New-Object System.Windows.Forms.Padding(16, 0, 16, 10)
 
 $closeBtn = New-Object System.Windows.Forms.Button
-$closeBtn.Text = '关闭 (Esc)'
+$closeBtn.Text = 'Close (Esc)'
 $closeBtn.Width = 110
 $closeBtn.Height = 28
 $closeBtn.FlatStyle = 'Flat'

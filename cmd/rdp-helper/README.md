@@ -106,19 +106,19 @@ Helper 生成的临时 `.rdp` 含 **`redirectclipboard:i:1`**（对应 mstsc「�
 
 不依赖 LegalNotice / 锁屏。RDP 进被控机 → 拷贝脚本 → 执行 → **当前会话桌面顶部**立即出现置顶横幅：
 
+脚本本体为 **ASCII**（避免 Windows PowerShell 5.1 在中文系统上把无 BOM 的 UTF-8 读成乱码而报错）。中文请写在命令行参数里：
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 `
-  -Title "正在被远程" `
-  -Text "操作员远程桌面连接中，请勿本地操作。"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Title "正在被远程" -Text "操作员远程桌面连接中，请勿本地操作。"
 ```
 
-关闭：点横幅「关闭」、按 `Esc`，或：
+关闭：点横幅 Close、按 `Esc`，或：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Close
 ```
 
-说明：横幅画在**执行脚本的那个会话**里（通常是你的 RDP 会话）。若本机显示器是另一个已登录会话，本机屏幕不一定看得到。
+说明：横幅画在**执行脚本的那个会话**里（通常是你的 RDP 会话）。若本机显示器是另一个已登录会话，本机屏幕不一定看得到。请重新从仓库拷贝更新后的 `show-remote-banner.ps1` 再试。
 
 ### 锁屏 LegalNotice（可选，需锁屏/登录才出现）
 
