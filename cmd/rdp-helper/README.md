@@ -102,35 +102,40 @@ semaphore-rdp-helper.exe disconnect <项目ID>
 
 Helper 生成的临时 `.rdp` 含 **`redirectclipboard:i:1`**（对应 mstsc「本地资源 → 剪贴板」勾选）。无需在连接对话框再勾。
 
-### 屏幕置顶横幅（推荐：远程进去立刻显示）
+## 在目标机「显示器锁屏」上显示提示
 
-不依赖 LegalNotice / 锁屏。RDP 进被控机 → 拷贝脚本 → 执行 → **当前会话桌面顶部**立即出现置顶横幅：
+桌面置顶横幅（`show-remote-banner.ps1`）只出现在 **RDP 会话桌面**，本机显示器若在锁屏上 **看不到**。
 
-脚本本体为 **ASCII**（避免 Windows PowerShell 5.1 在中文系统上把无 BOM 的 UTF-8 读成乱码而报错）。中文请写在命令行参数里：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Title "正在被远程" -Text "操作员远程桌面连接中，请勿本地操作。"
-```
-
-关闭：点横幅 Close、按 `Esc`，或：
+要用 **本机锁屏画面** 显示自定义文案，用锁屏壁纸方案（管理员）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\show-remote-banner.ps1 -Close
+# 拷到被控机后，管理员 PowerShell：
+powershell -NoProfile -ExecutionPolicy Bypass -File .\show-lockscreen-banner.ps1 `
+  -Title "正在被远程" `
+  -Text "操作员远程桌面连接中，请勿本地操作。" `
+  -LockConsole
 ```
 
-说明：横幅画在**执行脚本的那个会话**里（通常是你的 RDP 会话）。若本机显示器是另一个已登录会话，本机屏幕不一定看得到。请重新从仓库拷贝更新后的 `show-remote-banner.ps1` 再试。
+作用：
+1. 生成带文字的 JPG（`C:\ProgramData\SemaphoreRdp\lock-banner.jpg`）
+2. 写入系统锁屏策略（强制锁屏背景图）
+3. `-LockConsole` 尝试锁屏，便于本机显示器立刻切到锁屏
 
-### 锁屏 LegalNotice（可选，需锁屏/登录才出现）
-
-| 方式 | 效果 | 脚本 |
-|------|------|------|
-| 固定提示 | 每次锁屏/登录弹窗 | `set-lock-notice.ps1` |
-| 会话感知 | 有 `rdp-tcp` 时写入，断开清除 | `watch-rdp-session-notice.ps1` |
+清除：
 
 ```powershell
-.\set-lock-notice.ps1 -Title "远程协助中" -Text "本机可能被运维远程…"
-.\watch-rdp-session-notice.ps1 -Title "正在被远程" -Text "…" -Once
+powershell -NoProfile -ExecutionPolicy Bypass -File .\show-lockscreen-banner.ps1 -Clear
 ```
+
+若本机已锁屏仍是旧图：在本机按一下键 / 再锁一次，或重登后再看。部分版本策略刷新较慢。
+
+### 其它脚本（对比）
+
+| 脚本 | 显示位置 | 要锁屏吗 |
+|------|----------|----------|
+| `show-lockscreen-banner.ps1` | **本机锁屏背景** | 要（或已在锁屏） |
+| `show-remote-banner.ps1` | 当前会话桌面顶部 | 不要 |
+| `set-lock-notice.ps1` | 解锁前 LegalNotice 弹窗 | 要解锁才看到弹窗 |
 
 ## Build
 
