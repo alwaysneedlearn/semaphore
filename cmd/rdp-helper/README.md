@@ -117,11 +117,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\show-lockscreen-banner.ps1
 ```
 
 作用：
-1. 生成带文字的 JPG（`C:\ProgramData\SemaphoreRdp\lock-banner.jpg`）
-2. 写入系统锁屏策略（强制锁屏背景图）
-3. `-LockConsole` 尝试锁屏，便于本机显示器立刻切到锁屏
+1. **默认保留原锁屏图**：在原壁纸副本顶部叠半透明条 + 文字（不是整屏换成纯色图）
+2. 临时强制锁屏策略前会备份原策略；`-Clear` 时恢复
+3. `-LockConsole` 尝试锁屏，便于本机显示器立刻看到
 
-清除：
+若只要纯色底（旧行为）：加 `-SolidBackground`。
+
+**说明：** Windows 锁屏只能显示「一张图」。要在锁屏上出字，必须临时把策略指到这张合成图；`-Clear` 后恢复备份，原锁屏策略/图回来。完全不改锁屏图就只能用 LegalNotice 弹窗（不是壁纸上的字）。
+
+清除（恢复原锁屏策略）：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\show-lockscreen-banner.ps1 -Clear
