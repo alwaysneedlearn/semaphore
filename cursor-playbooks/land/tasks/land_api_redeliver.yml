@@ -28,6 +28,20 @@
         ((_land_redeliver_end | regex_search(_land_redeliver_time_pattern) | default('', true) | length) > 0)
       }}
 
+- name: DEBUG LAND Redeliver 请求参数
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] redeliver host={{ inventory_hostname }} target={{ _land_target_host | default(inventory_hostname) }}"
+      - "[DEBUG-LAND] redeliver method=POST"
+      - "[DEBUG-LAND] redeliver url={{ land_api_scheme }}://{{ _land_target_host | default(inventory_hostname) }}:{{ land_api_port }}{{ land_api_redeliver_path }}"
+      - "[DEBUG-LAND] redeliver timeout={{ land_api_timeout | default('n/a') }} verify_tls={{ land_api_verify_tls | default('n/a') }}"
+      - "[DEBUG-LAND] redeliver cfg={{ land_redeliver_cfg | default({}) | to_json }}"
+      - "[DEBUG-LAND] redeliver resend_params={{ resend_params | default({}) | to_json }}"
+      - "[DEBUG-LAND] redeliver request={{ {'token': land_api_token | default(''), 'startTime': _land_redeliver_start | default(''), 'endTime': _land_redeliver_end | default('')} | to_json }}"
+      - "[DEBUG-LAND] redeliver startTime={{ _land_redeliver_start | default('') }} valid={{ _land_redeliver_start_ok | default(false) }}"
+      - "[DEBUG-LAND] redeliver endTime={{ _land_redeliver_end | default('') }} valid={{ _land_redeliver_end_ok | default(false) }}"
+      - "[DEBUG-LAND] redeliver will_call={{ (_land_redeliver_start_ok | default(false) | bool) and (_land_redeliver_end_ok | default(false) | bool) }}"
+
 - name: 数据重传：API Redeliver（重启后）
   ansible.builtin.uri:
     url: "{{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_redeliver_path }}"
@@ -61,6 +75,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-LAND] redeliver url={{ land_api_scheme }}://{{ _land_target_host }}:{{ land_api_port }}{{ land_api_redeliver_path }}"
+      - "[DEBUG-LAND] redeliver request={{ {'token': land_api_token | default(''), 'startTime': _land_redeliver_start | default(''), 'endTime': _land_redeliver_end | default('')} | to_json }}"
       - "[DEBUG-LAND] redeliver http_status={{ _land_api_redeliver.status | default('skipped') }}"
       - "[DEBUG-LAND] redeliver response_body={{ _land_api_redeliver.content | default('') | truncate(1500, True) }}"
   when:
