@@ -432,6 +432,8 @@ type SessionManager interface {
 	GetSession(userID int, sessionID int) (Session, error)
 	CreateSession(session Session) (Session, error)
 	ExpireSession(userID int, sessionID int) error
+	// ExpireUserSessions marks all non-expired sessions for the user as expired (e.g. single-login).
+	ExpireUserSessions(userID int) error
 	TouchSession(userID int, sessionID int) error
 	SetSessionVerificationMethod(userID int, sessionID int, verificationMethod SessionVerificationMethod) error
 	VerifySession(userID int, sessionID int) error

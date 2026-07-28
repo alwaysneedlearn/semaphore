@@ -50,9 +50,12 @@ func (s *sessionServiceImpl) GetSession(cookie http.Cookie) (*db.Session, bool) 
 		return nil, false
 	}
 
-	if time.Since(session.LastActive).Hours() > 7*24 {
-		// more than week old unused session
-		// destroy.
+	if session.Expired {
+		return nil, false
+	}
+
+	// Idle timeout: unused UI session older than 30 minutes is destroyed.
+	if time.Since(session.LastActive) > 30*time.Minute {
 		if err = s.sessionRepo.ExpireSession(userID, sessionID); err != nil {
 			// it is internal error, it doesn't concern the user
 			log.Error(err)

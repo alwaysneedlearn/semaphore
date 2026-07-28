@@ -71,6 +71,11 @@ func (d *SqlDb) ExpireSession(userID int, sessionID int) error {
 	return validateMutationResult(res, err)
 }
 
+func (d *SqlDb) ExpireUserSessions(userID int) error {
+	_, err := d.exec("update session set expired=true where user_id=? and expired=false", userID)
+	return err
+}
+
 func (d *SqlDb) TouchSession(userID int, sessionID int) error {
 	_, err := d.exec("update session set last_active=? where id=? and user_id=?", tz.Now(), sessionID, userID)
 

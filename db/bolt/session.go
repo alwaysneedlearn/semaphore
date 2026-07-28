@@ -89,6 +89,13 @@ func (d *BoltDb) DeleteAPIToken(userID int, tokenID string) (err error) {
 
 func (d *BoltDb) GetSession(userID int, sessionID int) (session db.Session, err error) {
 	err = d.getObject(userID, db.SessionProps, intObjectID(sessionID), &session)
+	if err != nil {
+		return
+	}
+	if session.Expired {
+		err = db.ErrNotFound
+		return
+	}
 	return
 }
 
@@ -101,6 +108,24 @@ func (d *BoltDb) ExpireSession(userID int, sessionID int) (err error) {
 	session.Expired = true
 	err = d.updateObject(userID, db.SessionProps, session)
 	return
+}
+
+func (d *BoltDb) ExpireUserSessions(userID int) (err error) {
+	var sessions []db.Session
+	err = d.getObjects(userID, db.SessionProps, db.RetrieveQueryParams{}, nil, &sessions)
+	if err != nil {
+		return
+	}
+	for _, session := range sessions {
+		if session.Expired {
+			continue
+		}
+		session.Expired = true
+		if updErr := d.updateObject(userID, db.SessionProps, session); updErr != nil {
+			return updErr
+		}
+	}
+	return nil
 }
 
 func (d *BoltDb) SetSessionVerificationMethod(userID int, sessionID int, verificationMethod db.SessionVerificationMethod) error {

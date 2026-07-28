@@ -163,6 +163,16 @@ func createSession(w http.ResponseWriter, r *http.Request, user db.User, oidc bo
 		verified = true
 	}
 
+	// Single UI session per user: new login invalidates all previous cookie sessions.
+	if err = helpers.Store(r).ExpireUserSessions(user.ID); err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"user_id": user.ID,
+			"context": "session",
+		}).Error("Failed to expire previous sessions")
+		helpers.WriteErrorStatus(w, "Failed to create session", http.StatusInternalServerError)
+		return
+	}
+
 	newSession, err := helpers.Store(r).CreateSession(db.Session{
 		UserID:             user.ID,
 		Created:            tz.Now(),
