@@ -921,6 +921,27 @@ function Get-LandInstallRegistryVersion {
   }
 }
 
+# Registry may be exact ("5.1.4.8") or tagged ("5.1.4.8  CALB 0728"). Match on version prefix / first token.
+function Test-LandInstallVersionMatch {
+  param(
+    [string]$Registry,
+    [string]$Expected
+  )
+  if ([string]::IsNullOrWhiteSpace($Expected)) { return $true }
+  $reg = ([string]$Registry).Trim()
+  $exp = ([string]$Expected).Trim()
+  if ($reg.Length -eq 0) { return $false }
+  if ($reg -eq $exp) { return $true }
+  if ($reg.StartsWith($exp, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if ($reg.Length -eq $exp.Length) { return $true }
+    $next = $reg[$exp.Length]
+    if ([char]::IsWhiteSpace($next) -or $next -eq '-' -or $next -eq '_') { return $true }
+  }
+  $token = ($reg -split '\s+', 2)[0]
+  if ($token -eq $exp) { return $true }
+  return $false
+}
+
 function Wait-LandInstallRegistryVersion {
   param(
     [string]$Expected,
@@ -933,7 +954,7 @@ function Wait-LandInstallRegistryVersion {
     $ver = Get-LandInstallRegistryVersion
     if ($ver.Length -gt 0) {
       Write-InstallLine ('INSTALL_VERSION|registry=' + $ver + '|expected=' + $Expected + '|key=HKCU\Software\LH\InstallVersion|attempt=' + $attempt)
-      if ($Expected.Length -gt 0 -and $ver -ne $Expected) {
+      if ($Expected.Length -gt 0 -and -not (Test-LandInstallVersionMatch -Registry $ver -Expected $Expected)) {
         return @{ ok = $false; version = $ver; reason = 'version_mismatch' }
       }
       return @{ ok = $true; version = $ver; reason = '' }
