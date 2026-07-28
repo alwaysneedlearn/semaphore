@@ -64,7 +64,7 @@
   failed_when: >
     _land_gui_install is defined and 'stdout' in _land_gui_install and
     (
-      ('INSTALL_SCRIPT_REV=20260707-registry-version-v8' not in (_land_gui_install.stdout | default('')))
+      ('INSTALL_SCRIPT_REV=20260728-registry-version-prefix-v9' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_COMPLETE' not in (_land_gui_install.stdout | default('')))
       or ('INSTALL_ERROR' in (_land_gui_install.stdout | default('')))
       or ('INSTALL_FAILED' in (_land_gui_install.stdout | default('')))

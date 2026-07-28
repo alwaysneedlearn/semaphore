@@ -3,7 +3,7 @@
 # Temp files under C:\Windows\Temp\ (same dir as deployed sem_*.ps1).
 # INSTALL_SCRIPT_REV bumps when launch logic changes — must appear in task stdout.
 
-Write-Output 'INSTALL_SCRIPT_REV=20260707-registry-version-v8'
+Write-Output 'INSTALL_SCRIPT_REV=20260728-registry-version-prefix-v9'
 
 $SemLandTempDir = 'C:\Windows\Temp'
 if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot) -and (Test-Path -LiteralPath $PSScriptRoot)) {
