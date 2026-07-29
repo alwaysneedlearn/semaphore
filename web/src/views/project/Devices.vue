@@ -576,6 +576,7 @@ export default {
       resendDataDialog: false,
       pendingResendDevices: [],
       selectedDeviceIds: [],
+      selectedDevicesMap: {},
       totalDevices: 0,
       devicesLoading: false,
       tableOptions: {
@@ -696,8 +697,10 @@ export default {
         || this.selectAllFilteredLoading;
     },
     selectionHasResendData() {
-      const selected = new Set(this.selectedDeviceIds);
-      return (this.items || []).some((d) => selected.has(d.id) && this.deviceSupportsResendData(d));
+      return this.selectedDeviceIds.some((id) => {
+        const d = this.selectedDevicesMap[id];
+        return d && this.deviceSupportsResendData(d);
+      });
     },
   },
 
@@ -781,13 +784,12 @@ export default {
     },
 
     countProfileGroupsForSelection() {
-      const selected = new Set(this.selectedDeviceIds);
       const profileIds = new Set();
-      (this.items || []).forEach((d) => {
-        if (!selected.has(d.id)) {
-          return;
+      this.selectedDeviceIds.forEach((id) => {
+        const d = this.selectedDevicesMap[id];
+        if (d) {
+          profileIds.add(d.device_profile_id > 0 ? d.device_profile_id : 0);
         }
-        profileIds.add(d.device_profile_id > 0 ? d.device_profile_id : 0);
       });
       if (profileIds.has(0) && profileIds.size > 1) {
         return profileIds.size;
@@ -922,16 +924,20 @@ export default {
       this.resendDataDialog = true;
     },
 
+    selectedDevicesFull() {
+      return this.selectedDeviceIds
+        .map((id) => this.selectedDevicesMap[id])
+        .filter(Boolean);
+    },
+
     runBulkAction(action) {
       if (action === 'resend_data') {
-        const selected = new Set(this.selectedDeviceIds);
-        const devices = (this.items || []).filter((d) => selected.has(d.id));
+        const devices = this.selectedDevicesFull();
         this.openResendDialog(devices);
         return;
       }
       if (this.deviceActionNeedsConfirm(action)) {
-        const selected = new Set(this.selectedDeviceIds);
-        const devices = (this.items || []).filter((d) => selected.has(d.id));
+        const devices = this.selectedDevicesFull();
         if (!this.bulkActionProfilesHaveTemplate(action, devices)) {
           this.notifyDeviceActionTemplateMissing(action);
           return;
@@ -1048,6 +1054,17 @@ export default {
       this.loadItems();
     },
 
+    syncSelectedDevicesMap(addedItems, removedIds) {
+      const map = { ...this.selectedDevicesMap };
+      if (addedItems) {
+        addedItems.forEach((d) => { map[d.id] = d; });
+      }
+      if (removedIds) {
+        removedIds.forEach((id) => { delete map[id]; });
+      }
+      this.selectedDevicesMap = map;
+    },
+
     toggleSelectPage() {
       const checked = !this.pageAllSelected;
       const idsOnPage = new Set(this.pageDeviceIds);
@@ -1055,8 +1072,10 @@ export default {
         const merged = new Set(this.selectedDeviceIds);
         this.pageDeviceIds.forEach((id) => merged.add(id));
         this.selectedDeviceIds = [...merged];
+        this.syncSelectedDevicesMap(this.items || [], null);
       } else {
         this.selectedDeviceIds = this.selectedDeviceIds.filter((id) => !idsOnPage.has(id));
+        this.syncSelectedDevicesMap(null, [...idsOnPage]);
       }
     },
 
@@ -1064,8 +1083,10 @@ export default {
       const i = this.selectedDeviceIds.indexOf(item.id);
       if (i >= 0) {
         this.selectedDeviceIds.splice(i, 1);
+        this.syncSelectedDevicesMap(null, [item.id]);
       } else {
         this.selectedDeviceIds.push(item.id);
+        this.syncSelectedDevicesMap([item], null);
       }
     },
 
@@ -1075,6 +1096,7 @@ export default {
         return;
       }
       this.selectedDeviceIds = [];
+      this.selectedDevicesMap = {};
       EventBus.$emit('i-snackbar', {
         color: 'info',
         text: this.$i18n.t('deviceSelectionCleared', { count }),
@@ -1134,7 +1156,7 @@ export default {
       return params;
     },
 
-    async fetchDeviceIdsMatchingFilters() {
+    async fetchDevicesMatchingFilters() {
       const total = this.totalDevices || 0;
       if (total <= 0) {
         return [];
@@ -1154,7 +1176,7 @@ export default {
       });
       const { data } = await axios.get(this.getItemsUrl(), { params });
       const body = data || {};
-      return (body.devices || []).map((d) => d.id).filter((id) => id != null);
+      return (body.devices || []).filter((d) => d.id != null);
     },
 
     async selectAllMatchingFilters() {
@@ -1167,8 +1189,8 @@ export default {
       }
       this.selectAllFilteredLoading = true;
       try {
-        const ids = await this.fetchDeviceIdsMatchingFilters();
-        if (!ids.length) {
+        const devices = await this.fetchDevicesMatchingFilters();
+        if (!devices.length) {
           EventBus.$emit('i-snackbar', {
             color: 'info',
             text: this.$i18n.t('deviceSelectAllFilteredNone'),
@@ -1176,11 +1198,12 @@ export default {
           return;
         }
         const merged = new Set(this.selectedDeviceIds);
-        ids.forEach((id) => merged.add(id));
+        devices.forEach((d) => merged.add(d.id));
         this.selectedDeviceIds = [...merged];
+        this.syncSelectedDevicesMap(devices, null);
         EventBus.$emit('i-snackbar', {
           color: 'success',
-          text: this.$i18n.t('deviceSelectAllFilteredDone', { count: ids.length }),
+          text: this.$i18n.t('deviceSelectAllFilteredDone', { count: devices.length }),
         });
       } catch (e) {
         EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
