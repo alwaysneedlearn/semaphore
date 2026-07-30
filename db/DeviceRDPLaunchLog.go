@@ -5,6 +5,8 @@ import "time"
 const (
 	DeviceRDPLaunchPhaseRequested     = "requested"
 	DeviceRDPLaunchPhaseHelperFetched = "helper_fetched"
+	DeviceRDPLaunchPhaseMstscStarted  = "mstsc_started"
+	DeviceRDPLaunchPhaseMstscExited   = "mstsc_exited"
 )
 
 // DeviceRDPLaunchLog stores one remote-desktop launch attempt for audit/tracking.
@@ -21,6 +23,8 @@ type DeviceRDPLaunchLog struct {
 	ClientIP        string     `db:"client_ip" json:"client_ip"`
 	Created         time.Time  `db:"created" json:"created"`
 	HelperFetchedAt *time.Time `db:"helper_fetched_at" json:"helper_fetched_at,omitempty"`
+	MstscStartedAt  *time.Time `db:"mstsc_started_at" json:"mstsc_started_at,omitempty"`
+	MstscExitedAt   *time.Time `db:"mstsc_exited_at" json:"mstsc_exited_at,omitempty"`
 }
 
 // DeviceRDPLaunchLogList is a paginated list of RDP launch logs for one device.

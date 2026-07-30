@@ -17,3 +17,11 @@ func (d *BoltDb) CreateDeviceRDPLaunchLog(l db.DeviceRDPLaunchLog) (db.DeviceRDP
 func (d *BoltDb) MarkDeviceRDPLaunchHelperFetched(projectID, deviceID, logID int, fetchedAt time.Time) error {
 	return nil
 }
+
+func (d *BoltDb) MarkDeviceRDPLaunchMstscStarted(projectID, deviceID, logID int, startedAt time.Time) error {
+	return nil
+}
+
+func (d *BoltDb) MarkDeviceRDPLaunchMstscExited(projectID, deviceID, logID int, exitedAt time.Time) error {
+	return nil
+}

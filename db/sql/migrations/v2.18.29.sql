@@ -12,6 +12,8 @@ create table `project__device_rdp_launch_log` (
   `client_ip` varchar(64) not null default '',
   `created` datetime not null,
   `helper_fetched_at` datetime null,
+  `mstsc_started_at` datetime null,
+  `mstsc_exited_at` datetime null,
 
   foreign key (`project_id`) references `project`(`id`) on delete cascade,
   foreign key (`device_id`) references `project__device`(`id`) on delete cascade,
@@ -32,6 +34,8 @@ create table `project__device_rdp_launch_log` (
   `client_ip` varchar(64) not null default '',
   `created` timestamp not null,
   `helper_fetched_at` timestamp null,
+  `mstsc_started_at` timestamp null,
+  `mstsc_exited_at` timestamp null,
 
   foreign key (`project_id`) references `project`(`id`) on delete cascade,
   foreign key (`device_id`) references `project__device`(`id`) on delete cascade,
@@ -52,6 +56,8 @@ create table `project__device_rdp_launch_log` (
   `client_ip` varchar(64) not null default '',
   `created` datetime not null,
   `helper_fetched_at` datetime null,
+  `mstsc_started_at` datetime null,
+  `mstsc_exited_at` datetime null,
 
   key `project__device_rdp_launch_log_device_created_idx` (`project_id`, `device_id`, `created`),
   constraint `project__device_rdp_launch_log_project_fk` foreign key (`project_id`) references `project`(`id`) on delete cascade,

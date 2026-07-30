@@ -84,6 +84,8 @@
                   <th>{{ $t('deviceRdpLaunchTarget') }}</th>
                   <th>{{ $t('deviceRdpLaunchClientIp') }}</th>
                   <th>{{ $t('deviceRdpLaunchHelperAt') }}</th>
+                  <th>{{ $t('deviceRdpLaunchMstscStarted') }}</th>
+                  <th>{{ $t('deviceRdpLaunchMstscExited') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -101,6 +103,8 @@
                   </td>
                   <td class="caption">{{ row.client_ip || '-' }}</td>
                   <td class="caption">{{ formatTime(row.helper_fetched_at) }}</td>
+                  <td class="caption">{{ formatTime(row.mstsc_started_at) }}</td>
+                  <td class="caption">{{ formatTime(row.mstsc_exited_at) }}</td>
                 </tr>
               </tbody>
             </v-simple-table>
@@ -227,12 +231,17 @@ export default {
     },
 
     rdpPhaseLabel(phase) {
+      if (phase === 'mstsc_exited') return this.$t('deviceRdpLaunchPhaseExited');
+      if (phase === 'mstsc_started') return this.$t('deviceRdpLaunchPhaseStarted');
       if (phase === 'helper_fetched') return this.$t('deviceRdpLaunchPhaseFetched');
       return this.$t('deviceRdpLaunchPhaseRequested');
     },
 
     rdpPhaseColor(phase) {
-      return phase === 'helper_fetched' ? 'success' : 'info';
+      if (phase === 'mstsc_exited') return 'grey';
+      if (phase === 'mstsc_started') return 'success';
+      if (phase === 'helper_fetched') return 'primary';
+      return 'info';
     },
   },
 };

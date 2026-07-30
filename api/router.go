@@ -155,6 +155,7 @@ func Route(
 
 	// Native RDP Helper: one-time token exchange (no session cookie; token-only).
 	publicAPIRouter.HandleFunc("/rdp/launch-params", projects.GetRDPLaunchParams).Methods("GET", "HEAD")
+	publicAPIRouter.HandleFunc("/rdp/launch-events", projects.PostRDPLaunchEvent).Methods("POST")
 
 	internalAPI := publicAPIRouter.PathPrefix("/internal").Subrouter()
 	internalAPI.HandleFunc("/runners", runners.RegisterRunner).Methods("POST")

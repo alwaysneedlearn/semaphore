@@ -334,6 +334,8 @@ type DeviceManager interface {
 	GetDeviceRDPLaunchLogs(projectID, deviceID, limit, offset int) (DeviceRDPLaunchLogList, error)
 	CreateDeviceRDPLaunchLog(log DeviceRDPLaunchLog) (DeviceRDPLaunchLog, error)
 	MarkDeviceRDPLaunchHelperFetched(projectID, deviceID, logID int, fetchedAt time.Time) error
+	MarkDeviceRDPLaunchMstscStarted(projectID, deviceID, logID int, startedAt time.Time) error
+	MarkDeviceRDPLaunchMstscExited(projectID, deviceID, logID int, exitedAt time.Time) error
 	GetDeviceOperationLogs(projectID, deviceID, limit, offset int) (DeviceOperationLogList, error)
 	CreateDeviceOperationLogs(projectID int, logs []DeviceOperationLog) (int, error)
 	DeleteDevice(projectID, deviceID int) error
