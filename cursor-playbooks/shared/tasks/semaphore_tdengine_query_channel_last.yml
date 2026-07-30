@@ -100,132 +100,68 @@
       }}
   when: td_channel_query_enabled | bool
 
+# 勿把 JSON 放进 environment：column_meta 含反引号 last(`insert_time`)，
+# 部分环境下会损坏正文，json.loads 报 Expecting property name / 单引号 dict。
+- name: 创建临时文件保存 TDengine 响应正文
+  ansible.builtin.tempfile:
+    state: file
+    suffix: _tdengine_channel.json
+  register: _tdc_raw_tmp
+  when:
+    - td_channel_query_enabled | bool
+    - td_channel_query_result is defined
+    - not (td_channel_query_result.skipped | default(false))
+
+- name: 写入 TDengine 响应（优先 raw content）
+  ansible.builtin.copy:
+    dest: "{{ _tdc_raw_tmp.path }}"
+    content: "{{ td_channel_query_result.content }}"
+    mode: "0600"
+  when:
+    - _tdc_raw_tmp is defined
+    - not (_tdc_raw_tmp.skipped | default(false))
+    - (td_channel_query_result.content | default('') | string | length) > 0
+
+- name: 写入 TDengine 响应（content 空时用 json | to_json）
+  ansible.builtin.copy:
+    dest: "{{ _tdc_raw_tmp.path }}"
+    content: "{{ td_channel_query_result.json | default({}) | to_json }}"
+    mode: "0600"
+  when:
+    - _tdc_raw_tmp is defined
+    - not (_tdc_raw_tmp.skipped | default(false))
+    - (td_channel_query_result.content | default('') | string | length) == 0
+
 - name: 解析通道查询结果为 computer_name → 新鲜度 map
   ansible.builtin.command:
     argv:
       - python3
-      - -c
-      - |
-        import json, os, sys
-        from datetime import datetime, timezone, timedelta
-
-        raw = os.environ.get("TD_CHANNEL_RAW", "") or ""
-        stale_h = float(os.environ.get("TD_CHANNEL_STALE_HOURS", "6") or "6")
-        http_status = str(os.environ.get("TD_CHANNEL_HTTP_STATUS", "") or "").strip()
-        tz_name = (os.environ.get("TDENGINE_TIMEZONE") or "Asia/Shanghai").strip() or "Asia/Shanghai"
-        if http_status == "-1" or not raw.strip():
-            print(json.dumps({
-                "ok": False,
-                "error": "tdengine_http_failed status=%s" % (http_status or "n/a"),
-                "by_computer": {},
-            }))
-            sys.exit(0)
-        try:
-            body = json.loads(raw)
-        except Exception as e:
-            print(json.dumps({"ok": False, "error": "json_parse: %s" % e, "by_computer": {}}))
-            sys.exit(0)
-
-        code = body.get("code", -1)
-        if code not in (0, "0", None):
-            print(json.dumps({
-                "ok": False,
-                "error": "td_code=%s desc=%s" % (code, body.get("desc", "")),
-                "by_computer": {},
-            }))
-            sys.exit(0)
-
-        try:
-            from zoneinfo import ZoneInfo
-            now = datetime.now(ZoneInfo(tz_name))
-        except Exception:
-            if tz_name in ("Asia/Shanghai", "Asia/Chongqing", "PRC", "UTC+8"):
-                now = datetime.now(timezone(timedelta(hours=8)))
-            elif tz_name == "UTC":
-                now = datetime.now(timezone.utc)
-            else:
-                now = datetime.now(timezone.utc)
-
-        def parse_ts(v):
-            if v is None:
-                return None
-            if isinstance(v, (int, float)):
-                n = float(v)
-                if n > 1e12:
-                    n = n / 1000.0
-                elif n > 1e10:
-                    n = n / 1000.0
-                return datetime.fromtimestamp(n, tz=now.tzinfo)
-            s = str(v).strip()
-            if not s:
-                return None
-            s2 = s.replace("T", " ").split("+")[0].split("Z")[0].strip()
-            for fmt, n in (("%Y-%m-%d %H:%M:%S.%f", 26), ("%Y-%m-%d %H:%M:%S", 19)):
-                try:
-                    return datetime.strptime(s2[:n], fmt).replace(tzinfo=now.tzinfo)
-                except Exception:
-                    pass
-            return None
-
-        # column layout: LAST(insert_time), computer_name — tolerate meta names
-        cols = []
-        for c in body.get("column_meta") or []:
-            if isinstance(c, (list, tuple)) and c:
-                cols.append(str(c[0]).lower())
-            else:
-                cols.append(str(c).lower())
-        ts_idx, name_idx = 0, 1
-        for i, c in enumerate(cols):
-            if "computer_name" in c:
-                name_idx = i
-            if "insert_time" in c or c.startswith("last(") or c == "last":
-                ts_idx = i
-
-        by_computer = {}
-        for row in body.get("data") or []:
-            if not isinstance(row, (list, tuple)) or len(row) <= max(ts_idx, name_idx):
-                continue
-            name = str(row[name_idx] or "").strip()
-            if not name:
-                continue
-            dt = parse_ts(row[ts_idx])
-            if dt is None:
-                continue
-            age_h = max(0.0, (now - dt).total_seconds() / 3600.0)
-            fresh = age_h <= stale_h
-            entry = {
-                "computer_name": name,
-                "insert_time": dt.strftime("%Y-%m-%d %H:%M:%S"),
-                "age_hours": round(age_h, 3),
-                "fresh": fresh,
-                "stale": not fresh,
-            }
-            by_computer[name.lower()] = entry
-
-        print(json.dumps({
-            "ok": True,
-            "error": "",
-            "row_count": len(by_computer),
-            "stale_hours": stale_h,
-            "by_computer": by_computer,
-        }))
-  environment:
-    TD_CHANNEL_RAW: >-
-      {{
-        (td_channel_query_result.content | default(''))
-        if (td_channel_query_result.content is defined and (td_channel_query_result.content | string | length) > 0)
-        else (td_channel_query_result.json | default({}) | to_json)
-      }}
-    TD_CHANNEL_STALE_HOURS: "{{ _tdc_stale_hours }}"
-    TD_CHANNEL_HTTP_STATUS: "{{ td_channel_query_result.status | default(-1) }}"
-    TDENGINE_TIMEZONE: "{{ _tdc_timezone }}"
+      - "{{ _tdc_parse_script }}"
+      - "{{ _tdc_raw_tmp.path }}"
+      - "{{ _tdc_stale_hours }}"
+      - "{{ _tdc_timezone }}"
+      - "{{ td_channel_query_result.status | default(-1) }}"
+  vars:
+    _tdc_parse_script: >-
+      {{ (sem_tasks_dir | default(playbook_dir ~ '/../shared/tasks'))
+         ~ '/../files/sem_parse_tdengine_channel_last.py' }}
   register: _tdc_parse_cmd
   changed_when: false
   failed_when: false
   when:
     - td_channel_query_enabled | bool
-    - td_channel_query_result is defined
-    - not (td_channel_query_result.skipped | default(false))
+    - _tdc_raw_tmp is defined
+    - not (_tdc_raw_tmp.skipped | default(false))
+
+- name: 删除 TDengine 响应临时文件
+  ansible.builtin.file:
+    path: "{{ _tdc_raw_tmp.path }}"
+    state: absent
+  when:
+    - _tdc_raw_tmp is defined
+    - _tdc_raw_tmp.path is defined
+    - not (_tdc_raw_tmp.skipped | default(false))
+  failed_when: false
 
 - name: 解析通道 JSON 到临时事实
   ansible.builtin.set_fact:
