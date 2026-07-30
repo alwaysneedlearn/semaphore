@@ -28,13 +28,11 @@ const (
 )
 
 // rdpLaunchTokenEntry is a one-time launch grant bound to user + project + device.
-// Audit rows are created later when the Helper redeems this token.
 type rdpLaunchTokenEntry struct {
 	UserID    int
 	ProjectID int
 	DeviceID  int
-	Username  string
-	ClientIP  string
+	LogID     int
 	ExpiresAt time.Time
 }
 
@@ -47,17 +45,16 @@ type rdpLifecycleTokenEntry struct {
 	ExpiresAt time.Time
 }
 
-var rdpLaunchTokenStore sync.Map    // token string → rdpLaunchTokenEntry
+var rdpLaunchTokenStore sync.Map     // token string → rdpLaunchTokenEntry
 var rdpLifecycleTokenStore sync.Map // token string → rdpLifecycleTokenEntry
 
-func createRDPLaunchToken(userID, projectID, deviceID int, username, clientIP string) (token string, expiresIn int) {
+func createRDPLaunchToken(userID, projectID, deviceID, logID int) (token string, expiresIn int) {
 	token = random.String(rdpLaunchTokenLength)
 	rdpLaunchTokenStore.Store(token, rdpLaunchTokenEntry{
 		UserID:    userID,
 		ProjectID: projectID,
 		DeviceID:  deviceID,
-		Username:  username,
-		ClientIP:  clientIP,
+		LogID:     logID,
 		ExpiresAt: time.Now().Add(rdpLaunchTokenTTL),
 	})
 	return token, int(rdpLaunchTokenTTL.Seconds())
@@ -146,8 +143,6 @@ func requestClientIP(r *http.Request) string {
 }
 
 // LaunchDeviceRDP issues a one-time token for the Native RDP Helper protocol.
-// Does not write connection history — Helper creates the audit row when it
-// redeems the token via launch-params / lifecycle events.
 // POST /api/project/{project_id}/devices/{device_id}/rdp/launch
 func LaunchDeviceRDP(w http.ResponseWriter, r *http.Request) {
 	project := helpers.GetFromContext(r, "project").(db.Project)
@@ -159,15 +154,39 @@ func LaunchDeviceRDP(w http.ResponseWriter, r *http.Request) {
 		port = db.DefaultDeviceRDPPort
 	}
 
-	token, expiresIn := createRDPLaunchToken(
-		user.ID, project.ID, device.ID, user.Username, requestClientIP(r),
-	)
+	logRow, err := helpers.Store(r).CreateDeviceRDPLaunchLog(db.DeviceRDPLaunchLog{
+		ProjectID: project.ID,
+		DeviceID:  device.ID,
+		UserID:    user.ID,
+		Username:  user.Username,
+		Phase:     db.DeviceRDPLaunchPhaseRequested,
+		Host:      device.IPAddress,
+		RDPPort:   port,
+		RDPUser:   device.RDPUser,
+		ClientIP:  requestClientIP(r),
+		Created:   tz.Now(),
+	})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+
+	helpers.EventLog(r, helpers.EventLogCreate, helpers.EventLogItem{
+		UserID:      user.ID,
+		ProjectID:   project.ID,
+		ObjectType:  db.EventDevice,
+		ObjectID:    device.ID,
+		Description: fmt.Sprintf("RDP launch requested for device %s (%s)", device.Hostname, device.IPAddress),
+	})
+
+	token, expiresIn := createRDPLaunchToken(user.ID, project.ID, device.ID, logRow.ID)
 	helperURL := "semaphore-rdp://connect?token=" + url.QueryEscape(token)
 
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
 		"token":      token,
 		"expires_in": expiresIn,
 		"helper_url": helperURL,
+		"log_id":     logRow.ID,
 		"user_id":    user.ID,
 		"username":   user.Username,
 		"host":       device.IPAddress,
@@ -179,7 +198,6 @@ func LaunchDeviceRDP(w http.ResponseWriter, r *http.Request) {
 
 // GetRDPLaunchParams exchanges a one-time token for RDP connection parameters.
 // GET /api/rdp/launch-params?token=... — no session cookie; token-only auth.
-// Creates the connection-history row (Helper-triggered).
 func GetRDPLaunchParams(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	entry, ok := consumeRDPLaunchToken(token)
@@ -188,8 +206,7 @@ func GetRDPLaunchParams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store := helpers.Store(r)
-	device, err := store.GetDevice(entry.ProjectID, entry.DeviceID)
+	device, err := helpers.Store(r).GetDevice(entry.ProjectID, entry.DeviceID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -200,39 +217,19 @@ func GetRDPLaunchParams(w http.ResponseWriter, r *http.Request) {
 		port = db.DefaultDeviceRDPPort
 	}
 
-	username := strings.TrimSpace(entry.Username)
-	if username == "" {
-		if u, uerr := store.GetUser(entry.UserID); uerr == nil {
-			username = u.Username
-		}
+	if entry.LogID > 0 {
+		_ = helpers.Store(r).MarkDeviceRDPLaunchHelperFetched(
+			entry.ProjectID, entry.DeviceID, entry.LogID, tz.Now(),
+		)
+		desc := fmt.Sprintf("RDP helper fetched params for device %s (%s)", device.Hostname, device.IPAddress)
+		helpers.EventLog(r, helpers.EventLogUpdate, helpers.EventLogItem{
+			UserID:      entry.UserID,
+			ProjectID:   entry.ProjectID,
+			ObjectType:  db.EventDevice,
+			ObjectID:    entry.DeviceID,
+			Description: desc,
+		})
 	}
-
-	now := tz.Now()
-	logRow, err := store.CreateDeviceRDPLaunchLog(db.DeviceRDPLaunchLog{
-		ProjectID:       entry.ProjectID,
-		DeviceID:        entry.DeviceID,
-		UserID:          entry.UserID,
-		Username:        username,
-		Phase:           db.DeviceRDPLaunchPhaseHelperFetched,
-		Host:            device.IPAddress,
-		RDPPort:         port,
-		RDPUser:         device.RDPUser,
-		ClientIP:        entry.ClientIP,
-		Created:         now,
-		HelperFetchedAt: &now,
-	})
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-
-	helpers.EventLog(r, helpers.EventLogCreate, helpers.EventLogItem{
-		UserID:      entry.UserID,
-		ProjectID:   entry.ProjectID,
-		ObjectType:  db.EventDevice,
-		ObjectID:    entry.DeviceID,
-		Description: fmt.Sprintf("RDP helper fetched params for device %s (%s)", device.Hostname, device.IPAddress),
-	})
 
 	password := strings.TrimSpace(device.RDPPassword)
 	var rdpPassword *string
@@ -242,21 +239,25 @@ func GetRDPLaunchParams(w http.ResponseWriter, r *http.Request) {
 		passwordProvided = true
 	}
 
-	lifecycleToken, lifecycleExpiresIn := createRDPLifecycleToken(
-		entry.UserID, entry.ProjectID, entry.DeviceID, logRow.ID,
-	)
+	lifecycleToken := ""
+	lifecycleExpiresIn := 0
+	if entry.LogID > 0 {
+		lifecycleToken, lifecycleExpiresIn = createRDPLifecycleToken(
+			entry.UserID, entry.ProjectID, entry.DeviceID, entry.LogID,
+		)
+	}
 
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"project_id":           entry.ProjectID,
-		"device_id":            entry.DeviceID,
-		"log_id":               logRow.ID,
-		"host":                 device.IPAddress,
-		"rdp_port":             port,
-		"rdp_user":             device.RDPUser,
-		"rdp_password":         rdpPassword,
-		"password_provided":    passwordProvided,
-		"lifecycle_token":      lifecycleToken,
-		"lifecycle_expires_in": lifecycleExpiresIn,
+		"project_id":            entry.ProjectID,
+		"device_id":             entry.DeviceID,
+		"log_id":                entry.LogID,
+		"host":                  device.IPAddress,
+		"rdp_port":              port,
+		"rdp_user":              device.RDPUser,
+		"rdp_password":          rdpPassword,
+		"password_provided":     passwordProvided,
+		"lifecycle_token":       lifecycleToken,
+		"lifecycle_expires_in":  lifecycleExpiresIn,
 	})
 }
 

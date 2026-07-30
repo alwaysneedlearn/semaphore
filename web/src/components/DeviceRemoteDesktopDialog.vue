@@ -20,6 +20,19 @@
       </v-card-title>
 
       <v-card-text>
+        <v-alert v-if="formError" type="error" dense class="mb-3">
+          {{ formError }}
+        </v-alert>
+        <v-alert
+          v-if="status === 'helper_missing'"
+          type="warning"
+          dense
+          text
+          class="mb-3"
+        >
+          {{ $t('deviceRemoteDesktopHelperFailed') }}
+        </v-alert>
+
         <div class="caption grey--text mb-2">
           {{ $t('deviceRemoteDesktopLaunchSubtitle') }}
           <span v-if="device.rdp_port">
@@ -32,8 +45,8 @@
           <v-btn
             color="primary"
             depressed
-            :loading="busy === 'connect'"
-            :disabled="busy !== ''"
+            :loading="status === 'connecting'"
+            :disabled="status === 'connecting' || status === 'stopping'"
             @click="connect"
           >
             <v-icon left>mdi-lan-connect</v-icon>
@@ -42,13 +55,18 @@
           <v-btn
             color="error"
             outlined
-            :loading="busy === 'stop'"
-            :disabled="!canStop || busy === 'connect'"
+            :loading="status === 'stopping'"
+            :disabled="!canStop || status === 'connecting'"
             @click="stop"
           >
             <v-icon left>mdi-stop</v-icon>
             {{ $t('deviceRemoteDesktopStop') }}
           </v-btn>
+          <span v-if="lastOperator" class="caption grey--text ml-2">
+            {{ $t('deviceRemoteDesktopOperator') }}:
+            <strong>{{ lastOperator }}</strong>
+            <span v-if="lastLogId"> · #{{ lastLogId }}</span>
+          </span>
         </div>
 
         <v-divider class="my-3" />
@@ -109,6 +127,7 @@
 
 <script>
 import axios from 'axios';
+import { getErrorMessage } from '@/lib/error';
 
 export default {
   props: {
@@ -119,9 +138,14 @@ export default {
 
   data() {
     return {
-      busy: '', // '' | connect | stop
+      // idle | connecting | connected | stopping | helper_missing | error
+      status: 'idle',
+      formError: null,
+      lastOperator: '',
+      lastLogId: null,
       historyLogs: [],
       historyLoading: false,
+      launchSeq: 0,
       pollTimer: null,
     };
   },
@@ -134,7 +158,10 @@ export default {
     apiBase() {
       return `/api/project/${this.projectId}/devices/${this.device.id}`;
     },
-    activeSession() {
+    canStop() {
+      if (this.status === 'connected' || this.status === 'stopping') {
+        return true;
+      }
       const latest = this.historyLogs[0];
       return Boolean(
         latest
@@ -142,23 +169,30 @@ export default {
         && !latest.mstsc_exited_at,
       );
     },
-    canStop() {
-      return this.activeSession || this.busy === 'stop';
-    },
     sessionChipColor() {
-      if (this.activeSession) return 'success';
-      if (this.busy) return 'info';
+      if (this.status === 'connected' || this.canStop) return 'success';
+      if (this.status === 'connecting' || this.status === 'stopping') {
+        return 'info';
+      }
+      if (this.status === 'helper_missing') return 'warning';
+      if (this.status === 'error') return 'error';
       return 'grey';
     },
     sessionChipLabel() {
-      if (this.busy === 'connect') {
+      if (this.status === 'connecting') {
         return this.$t('deviceRemoteDesktopStatusLaunching');
       }
-      if (this.busy === 'stop') {
+      if (this.status === 'stopping') {
         return this.$t('deviceRemoteDesktopStatusStopping');
       }
-      if (this.activeSession) {
+      if (this.status === 'connected' || this.canStop) {
         return this.$t('deviceRemoteDesktopStatusConnected');
+      }
+      if (this.status === 'helper_missing') {
+        return this.$t('deviceRemoteDesktopStatusHelperMissing');
+      }
+      if (this.status === 'error') {
+        return this.$t('deviceRemoteDesktopStatusError');
       }
       return this.$t('deviceRemoteDesktopStatusIdle');
     },
@@ -205,8 +239,9 @@ export default {
   watch: {
     async value(open) {
       if (open && this.device) {
-        this.busy = '';
+        this.resetState();
         await this.loadHistory();
+        this.syncStatusFromHistory();
         this.startPolling();
       } else {
         this.stopPolling();
@@ -219,6 +254,13 @@ export default {
   },
 
   methods: {
+    resetState() {
+      this.status = 'idle';
+      this.formError = null;
+      this.lastOperator = '';
+      this.lastLogId = null;
+      this.launchSeq += 1;
+    },
     close() {
       this.stopPolling();
       this.dialog = false;
@@ -263,6 +305,23 @@ export default {
       if (phase === 'helper_fetched') return 'primary';
       return 'info';
     },
+    syncStatusFromHistory() {
+      if (this.status === 'connecting' || this.status === 'stopping') {
+        return;
+      }
+      const latest = this.historyLogs[0];
+      if (
+        latest
+        && latest.phase === 'mstsc_started'
+        && !latest.mstsc_exited_at
+      ) {
+        this.status = 'connected';
+        this.lastOperator = latest.username || '';
+        this.lastLogId = latest.id;
+      } else if (this.status === 'connected') {
+        this.status = 'idle';
+      }
+    },
     async loadHistory(silent) {
       if (!this.device?.id) return;
       if (!silent) this.historyLoading = true;
@@ -271,50 +330,93 @@ export default {
           params: { limit: 10 },
         });
         this.historyLogs = (res.data && res.data.logs) || [];
+        this.syncStatusFromHistory();
       } catch (e) {
-        // History refresh stays quiet — connection itself is Helper-driven.
+        if (!silent) this.formError = getErrorMessage(e);
       } finally {
         if (!silent) this.historyLoading = false;
       }
     },
     openHelperURL(helperUrl) {
+      let helperOpened = false;
+      const onBlur = () => {
+        helperOpened = true;
+      };
+      window.addEventListener('blur', onBlur);
       try {
-        window.location.href = helperUrl;
+        // Do not assign window.location — custom-protocol navigation can replace
+        // the page with the browser interstitial
+        // ("this site wants to open this application").
+        // A transient <a> click keeps the RDP history dialog in place.
+        const a = document.createElement('a');
+        a.href = helperUrl;
+        a.rel = 'noopener noreferrer';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       } catch (_) {
-        // Ignore protocol handler errors; Helper absence is not prompted here.
+        helperOpened = false;
       }
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          window.removeEventListener('blur', onBlur);
+          resolve(!helperOpened && document.hasFocus());
+        }, 1600);
+      });
     },
     async connect() {
-      if (!this.device?.id || this.busy) return;
-      this.busy = 'connect';
+      if (!this.device?.id) return;
+      this.launchSeq += 1;
+      const seq = this.launchSeq;
+      this.status = 'connecting';
+      this.formError = null;
       try {
         const { data } = await axios.post(`${this.apiBase}/rdp/launch`);
+        if (seq !== this.launchSeq) return;
+
+        this.lastOperator = (data && data.username) || '';
+        this.lastLogId = data && data.log_id;
+
         let helperUrl = (data && data.helper_url) || '';
         if (!helperUrl && data && data.token) {
           helperUrl = `semaphore-rdp://connect?token=${encodeURIComponent(data.token)}`;
         }
-        if (helperUrl) {
-          const base = encodeURIComponent(window.location.origin);
-          const sep = helperUrl.includes('?') ? '&' : '?';
-          this.openHelperURL(`${helperUrl}${sep}base=${base}`);
+        if (!helperUrl) {
+          throw new Error('empty helper_url');
         }
-      } catch (_) {
-        // No popup on connect failure; user can retry.
-      } finally {
-        this.busy = '';
-        // History appears after Helper redeem / mstsc callbacks.
-        setTimeout(() => this.loadHistory(true), 1500);
+        const base = encodeURIComponent(window.location.origin);
+        const sep = helperUrl.includes('?') ? '&' : '?';
+        helperUrl = `${helperUrl}${sep}base=${base}`;
+
+        const missing = await this.openHelperURL(helperUrl);
+        if (seq !== this.launchSeq) return;
+        if (missing) {
+          this.status = 'helper_missing';
+        } else {
+          this.status = 'connected';
+        }
+        await this.loadHistory();
+      } catch (e) {
+        if (seq !== this.launchSeq) return;
+        this.status = 'error';
+        this.formError = getErrorMessage(e);
       }
     },
     async stop() {
-      if (!this.device?.id || this.busy === 'connect') return;
-      this.busy = 'stop';
+      if (!this.device?.id) return;
+      this.status = 'stopping';
+      this.formError = null;
       const base = encodeURIComponent(window.location.origin);
-      this.openHelperURL(
-        `semaphore-rdp://stop?device_id=${encodeURIComponent(this.device.id)}&base=${base}`,
-      );
-      this.busy = '';
-      setTimeout(() => this.loadHistory(true), 1500);
+      const helperUrl = `semaphore-rdp://stop?device_id=${encodeURIComponent(this.device.id)}&base=${base}`;
+      const missing = await this.openHelperURL(helperUrl);
+      if (missing) {
+        this.status = 'helper_missing';
+        this.formError = this.$t('deviceRemoteDesktopStopHelperMissing');
+      } else {
+        this.status = 'idle';
+      }
+      await this.loadHistory();
     },
   },
 };
