@@ -1,13 +1,12 @@
 ---
 # check_restart：WinRM 建连失败时，用 TDengine 通道 LAST(insert_time) 辅助判定。
-# 先 include tdengine_channel_freshness_for_host.yml（若尚未执行）。
+# 依赖本机已跑过 tdengine_channel_freshness_for_host.yml。
 # 新鲜（≤ TDENGINE_CHANNEL_STALE_HOURS）→ 参考 healthy；否则 unhealthy。
 
 - name: 清除 WinRM unreachable 以便登记回调
   ansible.builtin.meta: clear_host_errors
 
 - name: WinRM 失败 + 通道数据新鲜 — 参考健康
-  when: td_channel_fresh | default(false) | bool
   ansible.builtin.set_fact:
     need_reconfigure: false
     log_status_ok: true
@@ -22,9 +21,9 @@
       abnormal_reason: >-
         WinRM unreachable; TDengine channel insert_time fresh
         ({{ td_channel_insert_time | default('?') }}, age_h={{ td_channel_age_hours | default('?') }})
+  when: td_channel_fresh | default(false) | bool
 
 - name: WinRM 失败 + 通道数据过期/缺失 — 不健康
-  when: not (td_channel_fresh | default(false) | bool)
   ansible.builtin.set_fact:
     need_reconfigure: true
     log_status_ok: false
@@ -47,8 +46,10 @@
           )
           if (td_channel_stale | default(false) | bool)
           else (
-            'WinRM unreachable; TDengine channel row missing for computer_name='
-            ~ (_sem_display_hostname | default(inventory_hostname) | string)
+            (
+              'WinRM unreachable; TDengine channel row missing for computer_name='
+              ~ (_sem_display_hostname | default(inventory_hostname) | string)
+            )
             if (td_channel_missing | default(false) | bool)
             else (
               'WinRM ping failed after '
@@ -62,6 +63,7 @@
             )
           )
         }}
+  when: not (td_channel_fresh | default(false) | bool)
 
 - name: DEBUG WinRM 失败通道辅助判定
   ansible.builtin.debug:

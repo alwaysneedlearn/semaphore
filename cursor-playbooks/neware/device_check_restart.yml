@@ -145,14 +145,12 @@
       block:
         - ansible.builtin.include_tasks: tasks/check_restart_winrm_fail_with_tdengine.yml
 
-    - name: 进程采集失败 — 结束本主机
-      ansible.builtin.set_fact:
-        host_failure_reason: "Process status collection failed"
+    - name: 进程采集失败 — 登记原因并结束本主机
       when: check_result is not defined
-
-    - name: 进程采集失败 — 结束本主机
-      ansible.builtin.meta: end_host
-      when: check_result is not defined
+      block:
+        - ansible.builtin.set_fact:
+            host_failure_reason: "Process status collection failed"
+        - ansible.builtin.meta: end_host
 
     # 参考路径：API 200 且信封有效，但 ExecResultData!=3 → 进程 + Kafka TCP
     - name: API 200 但未达上报已启动 — 进程/Kafka 参考检查

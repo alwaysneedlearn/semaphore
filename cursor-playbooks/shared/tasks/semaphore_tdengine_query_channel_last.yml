@@ -36,20 +36,26 @@
       {{ lookup('env', 'TDENGINE_URL') | default('', true) | trim
          | regex_replace('/rest/sql/?$', '') | regex_replace('/$', '') }}
 
-- name: 登记通道查询是否启用
+- name: 登记通道查询默认关闭
   ansible.builtin.set_fact:
-    td_channel_query_enabled: >-
-      {{ (_tdc_url | length) > 0 and (_tdc_table_raw | length) > 0 }}
     td_channel_stale_hours: "{{ _tdc_stale_hours }}"
     td_channel_last_by_computer: {}
     td_channel_query_ok: false
+    td_channel_query_enabled: false
+
+- name: 启用通道查询（已配置 URL 与表名）
+  ansible.builtin.set_fact:
+    td_channel_query_enabled: true
+  when:
+    - (_tdc_url | length) > 0
+    - (_tdc_table_raw | length) > 0
 
 - name: 跳过 TDengine 通道查询（未配置 URL 或表名）
   ansible.builtin.debug:
     msg: >-
       [DEBUG-TDENGINE-CHANNEL] query skipped: set TDENGINE_URL and
       TDENGINE_CHANNEL_STATUS_TABLE in Variable Group ENV.
-  when: not (td_channel_query_enabled | bool)
+  when: not (td_channel_query_enabled | default(false) | bool)
 
 - name: 组装通道 LAST(insert_time) SQL
   ansible.builtin.set_fact:
@@ -103,9 +109,17 @@
         import json, os, sys
         from datetime import datetime, timezone, timedelta
 
-        raw = os.environ.get("TD_CHANNEL_RAW", "") or "{}"
+        raw = os.environ.get("TD_CHANNEL_RAW", "") or ""
         stale_h = float(os.environ.get("TD_CHANNEL_STALE_HOURS", "6") or "6")
+        http_status = str(os.environ.get("TD_CHANNEL_HTTP_STATUS", "") or "").strip()
         tz_name = (os.environ.get("TDENGINE_TIMEZONE") or "Asia/Shanghai").strip() or "Asia/Shanghai"
+        if http_status == "-1" or not raw.strip():
+            print(json.dumps({
+                "ok": False,
+                "error": "tdengine_http_failed status=%s" % (http_status or "n/a"),
+                "by_computer": {},
+            }))
+            sys.exit(0)
         try:
             body = json.loads(raw)
         except Exception as e:
@@ -203,6 +217,7 @@
         else (td_channel_query_result.json | default({}) | to_json)
       }}
     TD_CHANNEL_STALE_HOURS: "{{ _tdc_stale_hours }}"
+    TD_CHANNEL_HTTP_STATUS: "{{ td_channel_query_result.status | default(-1) }}"
     TDENGINE_TIMEZONE: "{{ _tdc_timezone }}"
   register: _tdc_parse_cmd
   changed_when: false
@@ -212,18 +227,35 @@
     - td_channel_query_result is defined
     - not (td_channel_query_result.skipped | default(false))
 
-- name: 登记通道新鲜度 map
+- name: 解析通道 JSON 到临时事实
   ansible.builtin.set_fact:
-    td_channel_query_ok: "{{ (_parsed.ok | default(false)) | bool }}"
-    td_channel_query_error: "{{ _parsed.error | default('') }}"
-    td_channel_last_by_computer: "{{ _parsed.by_computer | default({}) }}"
-    td_channel_row_count: "{{ _parsed.row_count | default(0) }}"
-  vars:
-    _parsed: "{{ (_tdc_parse_cmd.stdout | default('{}') | trim) | from_json }}"
+    _tdc_parsed: "{{ (_tdc_parse_cmd.stdout | default('{}') | trim) | from_json }}"
   when:
-    - td_channel_query_enabled | bool
+    - td_channel_query_enabled | default(false) | bool
     - _tdc_parse_cmd is defined
     - not (_tdc_parse_cmd.skipped | default(false))
+
+- name: 登记通道新鲜度 map（成功）
+  ansible.builtin.set_fact:
+    td_channel_query_ok: true
+    td_channel_query_error: "{{ _tdc_parsed.error | default('') }}"
+    td_channel_last_by_computer: "{{ _tdc_parsed.by_computer | default({}) }}"
+    td_channel_row_count: "{{ _tdc_parsed.row_count | default(0) }}"
+  when:
+    - td_channel_query_enabled | default(false) | bool
+    - _tdc_parsed is defined
+    - (_tdc_parsed.ok | default(false)) | bool
+
+- name: 登记通道新鲜度 map（失败）
+  ansible.builtin.set_fact:
+    td_channel_query_ok: false
+    td_channel_query_error: "{{ _tdc_parsed.error | default('parse_or_query_failed') }}"
+    td_channel_last_by_computer: {}
+    td_channel_row_count: 0
+  when:
+    - td_channel_query_enabled | default(false) | bool
+    - _tdc_parsed is defined
+    - not ((_tdc_parsed.ok | default(false)) | bool)
 
 - name: DEBUG TDengine 通道查询
   ansible.builtin.debug:

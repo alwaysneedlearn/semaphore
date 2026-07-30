@@ -14,12 +14,8 @@
   ansible.builtin.set_fact:
     td_channel_lookup_key: "{{ _key }}"
     td_channel_row: "{{ _row }}"
-    td_channel_found: "{{ _row | length > 0 }}"
     td_channel_insert_time: "{{ _row.insert_time | default('') }}"
-    td_channel_age_hours: "{{ _row.age_hours | default(none) }}"
-    td_channel_fresh: "{{ (_row.fresh | default(false)) | bool }}"
-    td_channel_stale: "{{ (_row.stale | default(false)) | bool }}"
-    td_channel_missing: "{{ (_tdc_query_enabled | bool) and (_tdc_query_ok | bool) and (_row | length == 0) }}"
+    td_channel_age_hours: "{{ _row.age_hours | default('') }}"
   vars:
     _name: "{{ (_sem_display_hostname | default('', true) | trim) }}"
     _ip: "{{ inventory_hostname | string }}"
@@ -39,6 +35,48 @@
           true
         )
       }}
+
+# 布尔标记用 YAML 字面量，避免 set_fact "{{ false }}" 变成字符串 "False"
+- name: 登记通道 found/fresh/stale/missing（有行且新鲜）
+  ansible.builtin.set_fact:
+    td_channel_found: true
+    td_channel_fresh: true
+    td_channel_stale: false
+    td_channel_missing: false
+  when:
+    - (td_channel_row | default({}) | length) > 0
+    - (td_channel_row.fresh | default(false)) | bool
+
+- name: 登记通道 found/fresh/stale/missing（有行且过期）
+  ansible.builtin.set_fact:
+    td_channel_found: true
+    td_channel_fresh: false
+    td_channel_stale: true
+    td_channel_missing: false
+  when:
+    - (td_channel_row | default({}) | length) > 0
+    - not ((td_channel_row.fresh | default(false)) | bool)
+
+- name: 登记通道 found/fresh/stale/missing（查询成功但无本机行）
+  ansible.builtin.set_fact:
+    td_channel_found: false
+    td_channel_fresh: false
+    td_channel_stale: false
+    td_channel_missing: true
+  when:
+    - (td_channel_row | default({}) | length) == 0
+    - _tdc_query_enabled | bool
+    - _tdc_query_ok | bool
+
+- name: 登记通道 found/fresh/stale/missing（未启用或查询失败）
+  ansible.builtin.set_fact:
+    td_channel_found: false
+    td_channel_fresh: false
+    td_channel_stale: false
+    td_channel_missing: false
+  when:
+    - (td_channel_row | default({}) | length) == 0
+    - not ((_tdc_query_enabled | bool) and (_tdc_query_ok | bool))
 
 - name: DEBUG 本机通道新鲜度
   ansible.builtin.debug:
