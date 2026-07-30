@@ -15,11 +15,20 @@ func registerProtocol(exePath string) error {
 	}
 	key := `HKCU\Software\Classes\` + protocolScheme
 	cmdKey := key + `\shell\open\command`
+	iconKey := key + `\DefaultIcon`
+	appKey := key + `\Application`
+	// Friendly label shown in browser/OS "open this application" prompts.
+	displayName := "Semaphore RDP Helper"
 	cmd := fmt.Sprintf(`"%s" "%%1"`, exePath)
+	icon := fmt.Sprintf(`"%s",0`, exePath)
 
 	steps := [][]string{
-		{"reg", "add", key, "/ve", "/d", "URL:" + protocolScheme, "/f"},
+		{"reg", "add", key, "/ve", "/d", "URL:" + displayName, "/f"},
 		{"reg", "add", key, "/v", "URL Protocol", "/d", "", "/f"},
+		{"reg", "add", key, "/v", "FriendlyTypeName", "/d", displayName, "/f"},
+		{"reg", "add", appKey, "/v", "ApplicationName", "/d", displayName, "/f"},
+		{"reg", "add", appKey, "/v", "ApplicationDescription", "/d", displayName, "/f"},
+		{"reg", "add", iconKey, "/ve", "/d", icon, "/f"},
 		{"reg", "add", cmdKey, "/ve", "/d", cmd, "/f"},
 	}
 	for _, args := range steps {
