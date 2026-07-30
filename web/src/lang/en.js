@@ -566,7 +566,7 @@ export default {
   deviceRestartTemplateMissing: 'Configure a Restart template under Device types first.',
   deviceRedeployTemplateMissing: 'Configure a Redeploy template under Device types first.',
   deviceResendUnsupportedSkipped: 'Skipped {count} device(s) whose type does not support resend',
-  deviceDetailTitle: 'Device details',
+  deviceDetailTitle: 'Restart history',
   deviceOperationStatus: 'Status check',
   deviceOperationHistoryHint: 'Last 30 days: all restart/redeploy runs; status patrol and check-restart when unhealthy or restart executed (playbook callbacks).',
   deviceOperationHistoryEmpty: 'No operation history',

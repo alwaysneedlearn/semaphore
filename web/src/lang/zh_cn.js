@@ -492,7 +492,7 @@ export default {
   deviceRestartTemplateMissing: '请先在「设备类型」中配置「重新启动模板」。',
   deviceRedeployTemplateMissing: '请先在「设备类型」中配置「重新部署模板」。',
   deviceResendUnsupportedSkipped: '已跳过 {count} 台不支持重发的设备类型',
-  deviceDetailTitle: '设备详情',
+  deviceDetailTitle: '重启历史',
   deviceOperationStatus: '状态检查',
   deviceOperationHistoryHint: '近 30 天：重新启动/重新部署每次均记录；状态巡检与巡检重启在 unhealthy 或执行了 restart 时记录（playbook 回调）。',
   deviceOperationHistoryEmpty: '暂无操作记录',
