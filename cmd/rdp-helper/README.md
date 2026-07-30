@@ -26,6 +26,8 @@ Dev Actions 两个 Artifact：
 
 从网页点「远程桌面」走 `semaphore-rdp://` 协议时，Helper **会隐藏控制台窗口**（进程仍在后台等待 mstsc 结束，以便 SOCKS 转发与凭据清理）；只有双击 / 交互 `rdp>` 模式才显示命令行。Helper 在 **mstsc 启动 / 退出** 时回调 Semaphore（`POST /api/rdp/launch-events`），用于审计连接时长。弹窗内 **停止** 会唤起 `semaphore-rdp://stop?device_id=...`，结束本机对应 mstsc 进程。
 
+浏览器/系统会弹出「此网站想要打开此应用程序」确认框（无法由网页美化或关闭）；`install` 会注册友好显示名 **Semaphore RDP Helper**，便于识别。
+
 ## 用法
 
 ### 交互模式（推荐快捷方式 / 双击）
