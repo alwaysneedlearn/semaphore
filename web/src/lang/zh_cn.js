@@ -498,7 +498,7 @@ export default {
   deviceOperationHistoryEmpty: '暂无操作记录',
   deviceOperationHistoryTabOps: '任务操作',
   deviceOperationHistoryTabRdp: '远程桌面',
-  deviceRdpLaunchHistoryHint: '由本机 Helper 取参 / mstsc 启停回调写入；每设备仅保留最近 10 条。',
+  deviceRdpLaunchHistoryHint: '含操作人；记录点击、Helper 取参与 mstsc 启停。每设备仅保留最近 10 条。',
   deviceRdpLaunchHistoryEmpty: '暂无远程桌面启动记录',
   deviceRdpLaunchTime: '时间',
   deviceRdpLaunchUser: '操作人',

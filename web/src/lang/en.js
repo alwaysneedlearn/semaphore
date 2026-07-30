@@ -572,7 +572,7 @@ export default {
   deviceOperationHistoryEmpty: 'No operation history',
   deviceOperationHistoryTabOps: 'Operations',
   deviceOperationHistoryTabRdp: 'Remote desktop',
-  deviceRdpLaunchHistoryHint: 'Written by Helper callbacks (param fetch / mstsc start-exit). Latest 10 entries per device.',
+  deviceRdpLaunchHistoryHint: 'Includes operator; logs click, helper fetch, and mstsc start/exit. Latest 10 entries per device.',
   deviceRdpLaunchHistoryEmpty: 'No remote desktop launch history',
   deviceRdpLaunchTime: 'Time',
   deviceRdpLaunchUser: 'User',
