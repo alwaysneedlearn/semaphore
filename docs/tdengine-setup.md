@@ -73,7 +73,11 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 
 ## check_restart 通道新鲜度（只读）
 
-`neware/device_check_restart.yml` 在任务开头 **批量一次**查询通道表最新 `insert_time`（不写库），按设备 **hostname / computer_name** 匹配：
+`neware/device_check_restart.yml` 判定顺序：
+
+1. **批量一次**查询通道 `LAST(insert_time)`（按 hostname 匹配）
+2. **新鲜（≤ `TDENGINE_CHANNEL_STALE_HOURS`）** → `healthy`，**不**跑 API / WinRM
+3. **不新鲜 / 无行 / 查询失败 / 未配置** → 再跑 **API** → **WinRM** → 进程/Kafka → 必要时 restart
 
 ```sql
 SELECT LAST(`insert_time`), `computer_name`
@@ -86,10 +90,10 @@ PARTITION BY computer_name;
 |------|------|
 | `TDENGINE_CHANNEL_STATUS_TABLE` | 必填才启用；如 `lab_sync.dwd_channel_status` |
 | `TDENGINE_TAG_SUPPLIER` | `WHERE supplier=…`（与状态写入 TAG 共用） |
-| `TDENGINE_CHANNEL_STALE_HOURS` | 默认 **6**；超过则不健康 |
+| `TDENGINE_CHANNEL_STALE_HOURS` | 默认 **6**；超过则不健康 / 继续 API+WinRM |
 | `TDENGINE_URL` / 认证 / `TDENGINE_TIMEZONE` | 与写入相同 |
 
-任务日志搜 **`[DEBUG-TDENGINE-CHANNEL]`**。未配置表名时跳过查询，不影响 API/WinRM 原逻辑。
+任务日志搜 **`[DEBUG-TDENGINE-CHANNEL]`**。未配置表名时跳过查询并走 API/WinRM。
 
 ## 调试
 

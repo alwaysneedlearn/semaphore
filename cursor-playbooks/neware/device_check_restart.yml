@@ -18,7 +18,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_operation_type: restart
     sem_debug_tag: NEWARE
-    # WinRM 失败时由本 play 用 TDengine 辅助判定，勿在 ensure 内直接 unhealthy+end
+    # WinRM 失败时由本 play 自行登记回调并 end_host
     winrm_defer_fail_callback: true
     _exe_name_default: uu.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
@@ -54,17 +54,38 @@
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
 
-    # --- 必要：BTSClient 数据上报 API（controller HTTP，不依赖 WinRM）---
-    - name: 数据上报状态 API（巡检重启首要判定）
+    # --- 1) TDengine 通道新鲜度（首要；满足则 healthy，不跑 API/WinRM）---
+    - name: 应用本机 TDengine 通道新鲜度
+      ansible.builtin.include_tasks: tasks/tdengine_channel_freshness_for_host.yml
+
+    - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM / restart）
+      when: td_channel_fresh | default(false) | bool
+      block:
+        - name: 登记 Semaphore 状态回调行（通道新鲜快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            log_status_ok: true
+            upload_health_via_api: false
+            upload_health_via_tdengine: true
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: offline
+              api_status: online
+              abnormal_reason: ""
+
+        - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
+
+        - name: 通道新鲜 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    # --- 2) 新鲜度不满足：再查数据上报 API ---
+    - name: 数据上报状态 API（通道不新鲜时的次级判定）
       ansible.builtin.include_tasks: tasks/neware_query_upload_status_api.yml
       vars:
         neware_api_query_context: check_restart
 
-    # --- TDengine 通道新鲜度（play0 批量结果，按 computer_name 取本机）---
-    - name: 应用本机 TDengine 通道新鲜度
-      ansible.builtin.include_tasks: tasks/tdengine_channel_freshness_for_host.yml
-
-    # 快路径：ExecResultData==3 → 健康，跳过 restart
     - name: 数据上报 API 已健康（跳过 restart）
       when: api_upload_started | default(false) | bool
       block:
@@ -86,7 +107,7 @@
               api_status: online
               abnormal_reason: >-
                 {{
-                  'WinRM unreachable (API upload healthy; reference only)'
+                  'WinRM unreachable (API upload healthy; TDengine channel not fresh)'
                   if not (_winrm_session_ok | default(false) | bool)
                   else ''
                 }}
@@ -96,28 +117,27 @@
         - name: API 健康 — 结束本主机
           ansible.builtin.meta: end_host
 
-    # API 不可达 / 非 200 / 信封无效 → 需要 restart（与 Patrol 不同，不 end_host）
+    # API 不可达 / 非 200 / 信封无效 → 需要 restart
     - name: API 未通过 — 标记需要 restart
       ansible.builtin.set_fact:
         need_reconfigure: true
         upload_health_via_api: false
       when: not (api_upload_status_ok | default(false) | bool)
 
-    # API 通但未达 3，且通道数据已过期 → 强制 need_reconfigure
-    - name: 通道数据过期 — 标记需要 restart
+    # API 通但未达 3（通道已不新鲜）→ 需要 restart，再经 WinRM/进程/Kafka 确认
+    - name: API 未达上报已启动 — 标记需要 restart
       ansible.builtin.set_fact:
         need_reconfigure: true
         upload_health_via_api: false
       when:
         - api_upload_status_ok | default(false) | bool
         - not (api_upload_started | default(false) | bool)
-        - td_channel_stale | default(false) | bool
 
-    # restart 与参考路径均需要 WinRM
+    # --- 3) 仍需处理：WinRM + 进程/Kafka + restart ---
     - name: WinRM 建连（含重试）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
 
-    - name: WinRM 未连通 — TDengine 辅助判定后结束本主机
+    - name: WinRM 未连通 — 登记回调后结束本主机
       when: not (_winrm_session_ok | default(false) | bool)
       block:
         - ansible.builtin.include_tasks: tasks/check_restart_winrm_fail_with_tdengine.yml
@@ -140,7 +160,7 @@
             check_result: "{{ _sem_process_status }}"
       ignore_unreachable: true
 
-    - name: WinRM 中途不可达 — TDengine 辅助判定
+    - name: WinRM 中途不可达 — 登记回调后结束本主机
       when: check_result is defined and (check_result.unreachable | default(false))
       block:
         - ansible.builtin.include_tasks: tasks/check_restart_winrm_fail_with_tdengine.yml
@@ -152,8 +172,7 @@
             host_failure_reason: "Process status collection failed"
         - ansible.builtin.meta: end_host
 
-    # 参考路径：API 200 且信封有效，但 ExecResultData!=3 → 进程 + Kafka TCP
-    - name: API 200 但未达上报已启动 — 进程/Kafka 参考检查
+    - name: API 未达 3 — 进程/Kafka 参考检查
       when:
         - api_upload_status_ok | default(false) | bool
         - not (api_upload_started | default(false) | bool)
@@ -190,12 +209,12 @@
               ansible.builtin.set_fact:
                 upload_health_via_api: false
 
-            # Kafka 认为健康但通道数据过期 → 仍需 restart
-            - name: 通道数据过期覆盖 Kafka 健康判定
+            # 已在通道不新鲜路径：即使 Kafka OK 仍需 restart（通道滞后）
+            - name: 通道不新鲜 — 覆盖 Kafka 健康判定为需要 restart
               ansible.builtin.set_fact:
                 need_reconfigure: true
                 log_status_ok: false
-              when: td_channel_stale | default(false) | bool
+              when: not (td_channel_fresh | default(false) | bool)
 
             - name: 状态判断：输出综合判断结果（含程序状态）
               ansible.builtin.debug:
@@ -213,8 +232,6 @@
       ansible.builtin.set_fact:
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
       when: check_result is defined and 'stdout' in check_result
-
-    # API 不通只表示上报不健康，不能据此跳过 stop：进程仍在跑时必须先停再写配置/启动。
 
     - block:
         - ansible.builtin.set_fact:
@@ -256,14 +273,14 @@
                 )
                 else (
                   (
-                    'TDengine channel data stale (insert_time='
+                    'TDengine channel data not fresh (insert_time='
                     ~ (td_channel_insert_time | default('?') | string)
                     ~ ', age_h=' ~ (td_channel_age_hours | default('?') | string)
                     ~ ')'
                   )
                   if (
                     (need_reconfigure | default(false) | bool)
-                    and (td_channel_stale | default(false) | bool)
+                    and not (td_channel_fresh | default(false) | bool)
                     and not (final_start_ok | default(false) | bool)
                   )
                   else ''
