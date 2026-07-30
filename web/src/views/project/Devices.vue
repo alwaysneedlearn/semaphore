@@ -478,7 +478,8 @@
           </v-btn>
           <v-btn
             :title="$t('deviceRemoteDesktop')"
-            @click.stop="openRemoteDesktop(item)"
+            @mousedown.stop.prevent
+            @click.stop.prevent="openRemoteDesktop(item)"
           >
             <v-icon>mdi-remote-desktop</v-icon>
           </v-btn>

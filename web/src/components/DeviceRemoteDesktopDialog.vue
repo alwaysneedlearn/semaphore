@@ -1,5 +1,11 @@
 <template>
-  <v-dialog v-model="dialog" :max-width="960" scrollable persistent>
+  <v-dialog
+    v-model="dialog"
+    :max-width="960"
+    scrollable
+    persistent
+    :retain-focus="false"
+  >
     <v-card v-if="dialog && device">
       <v-card-title class="d-flex align-center">
         <v-icon class="mr-2">mdi-remote-desktop</v-icon>
@@ -49,8 +55,8 @@
             color="primary"
             depressed
             :loading="status === 'connecting'"
-            :disabled="status === 'connecting' || status === 'stopping'"
-            @click="connect"
+            :disabled="!actionsReady || status === 'connecting' || status === 'stopping'"
+            @click.stop="connect"
           >
             <v-icon left>mdi-lan-connect</v-icon>
             {{ $t('deviceRemoteDesktopConnect') }}
@@ -59,8 +65,8 @@
             color="error"
             outlined
             :loading="status === 'stopping'"
-            :disabled="!canStop || status === 'connecting'"
-            @click="stop"
+            :disabled="!actionsReady || !canStop || status === 'connecting'"
+            @click.stop="stop"
           >
             <v-icon left>mdi-stop</v-icon>
             {{ $t('deviceRemoteDesktopStop') }}
@@ -150,6 +156,9 @@ export default {
       historyLoading: false,
       launchSeq: 0,
       pollTimer: null,
+      // Prevent the toolbar click that opens this dialog from also hitting Connect.
+      actionsReady: false,
+      actionsReadyTimer: null,
     };
   },
 
@@ -243,21 +252,41 @@ export default {
     async value(open) {
       if (open && this.device) {
         // Idle only — do not call connect() / openHelperURL on open.
+        this.clearActionsReadyTimer();
+        this.actionsReady = false;
         this.resetState();
         await this.loadHistory();
         this.syncStatusFromHistory();
         this.startPolling();
+        // Arm buttons after the opening click (mousedown/mouseup) has finished,
+        // otherwise the same click lands on Connect and fires the protocol prompt
+        // before the user sees this dialog (common on a fresh browser tab).
+        this.actionsReadyTimer = setTimeout(() => {
+          if (this.dialog) {
+            this.actionsReady = true;
+          }
+          this.actionsReadyTimer = null;
+        }, 450);
       } else {
+        this.clearActionsReadyTimer();
+        this.actionsReady = false;
         this.stopPolling();
       }
     },
   },
 
   beforeDestroy() {
+    this.clearActionsReadyTimer();
     this.stopPolling();
   },
 
   methods: {
+    clearActionsReadyTimer() {
+      if (this.actionsReadyTimer) {
+        clearTimeout(this.actionsReadyTimer);
+        this.actionsReadyTimer = null;
+      }
+    },
     resetState() {
       this.status = 'idle';
       this.formError = null;
@@ -266,6 +295,8 @@ export default {
       this.launchSeq += 1;
     },
     close() {
+      this.clearActionsReadyTimer();
+      this.actionsReady = false;
       this.stopPolling();
       this.dialog = false;
     },
@@ -370,7 +401,7 @@ export default {
       });
     },
     async connect() {
-      if (!this.device?.id) return;
+      if (!this.actionsReady || !this.device?.id) return;
       this.launchSeq += 1;
       const seq = this.launchSeq;
       this.status = 'connecting';
@@ -408,7 +439,7 @@ export default {
       }
     },
     async stop() {
-      if (!this.device?.id) return;
+      if (!this.actionsReady || !this.device?.id) return;
       this.status = 'stopping';
       this.formError = null;
       const base = encodeURIComponent(window.location.origin);
