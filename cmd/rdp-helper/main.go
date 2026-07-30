@@ -96,6 +96,9 @@ func main() {
 	}
 	arg := os.Args[1]
 	if strings.HasPrefix(strings.ToLower(arg), protocolScheme+":") {
+		// Protocol launches must not leave a visible console for the whole mstsc session
+		// (helper waits so SOCKS local-forward / cmdkey cleanup stay alive).
+		hideConsoleWindow()
 		if err := handleProtocolURL(arg); err != nil {
 			logf("protocol error: %v", err)
 			notifyUser("RDP Helper", err.Error())
@@ -989,14 +992,13 @@ func launchMSTSC(host string, port int, user, password string) error {
 	termsrv := "TERMSRV/" + fullAddress
 
 	if password != "" && user != "" {
-		_ = exec.Command("cmdkey", "/delete:"+termsrv).Run()
-		cmd := exec.Command("cmdkey", "/generic:"+termsrv, "/user:"+user, "/pass:"+password)
-		if out, err := cmd.CombinedOutput(); err != nil {
+		_ = runHidden("cmdkey", "/delete:"+termsrv)
+		if out, err := combinedOutputHidden("cmdkey", "/generic:"+termsrv, "/user:"+user, "/pass:"+password); err != nil {
 			logf("cmdkey failed: %v %s", err, string(out))
 			// continue; mstsc will prompt
 		} else {
 			defer func() {
-				_ = exec.Command("cmdkey", "/delete:"+termsrv).Run()
+				_ = runHidden("cmdkey", "/delete:"+termsrv)
 			}()
 		}
 	}
@@ -1012,15 +1014,44 @@ func launchMSTSC(host string, port int, user, password string) error {
 	if err := os.WriteFile(rdpPath, []byte(rdpBody), 0o600); err != nil {
 		return fmt.Errorf("write rdp file: %w", err)
 	}
-	defer func() { _ = os.Remove(rdpPath) }()
+	defer removeFileWithRetry(rdpPath, 8, 400*time.Millisecond)
 
 	cmd := exec.Command("mstsc", rdpPath)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mstsc: %w", err)
 	}
 	logf("mstsc started target=%s user=%s rdp=%s", fullAddress, user, rdpPath)
+
+	// mstsc keeps the .rdp open briefly while parsing; delete early once it has loaded
+	// so leftover launch-*.rdp files do not accumulate when Remove-at-exit fails.
+	go func() {
+		time.Sleep(2 * time.Second)
+		removeFileWithRetry(rdpPath, 10, 500*time.Millisecond)
+	}()
+
 	_ = cmd.Wait()
 	return nil
+}
+
+// removeFileWithRetry deletes path, retrying while mstsc (or AV) still holds a lock.
+func removeFileWithRetry(path string, attempts int, delay time.Duration) {
+	if path == "" || attempts <= 0 {
+		return
+	}
+	for i := 0; i < attempts; i++ {
+		err := os.Remove(path)
+		if err == nil || os.IsNotExist(err) {
+			if i > 0 {
+				logf("rdp file removed after retry path=%s attempt=%d", path, i+1)
+			}
+			return
+		}
+		if i+1 < attempts {
+			time.Sleep(delay)
+		} else {
+			logf("rdp file remove failed path=%s err=%v", path, err)
+		}
+	}
 }
 
 func buildRDPFile(fullAddress string, port int, user string) string {

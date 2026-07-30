@@ -20,9 +20,11 @@ Dev Actions 两个 Artifact：
 | `config.json` | 项目 / 跳板配置 |
 | `state.json` | 各项目连接状态 |
 | `helper.log` | 本地日志 |
-| `launch-*.rdp` | 临时 RDP 文件（用完删除） |
+| `launch-*.rdp` | 临时 RDP 文件（mstsc 读入后尽快删除；失败会重试并写 `helper.log`） |
 
 可用桌面快捷方式启动：目标直接指向 exe 即可（无参数会进入交互提示符 `rdp>`，窗口不会秒关）。也可 `cmd.exe /k "...\semaphore-rdp-helper.exe"`。**起始位置**随意——程序按 exe 所在目录读写配置。移动文件夹后请再执行一次 `install`（更新协议注册路径）。
+
+从网页点「远程桌面」走 `semaphore-rdp://` 协议时，Helper **会隐藏控制台窗口**（进程仍在后台等待 mstsc 结束，以便 SOCKS 转发与凭据清理）；只有双击 / 交互 `rdp>` 模式才显示命令行。
 
 ## 用法
 
