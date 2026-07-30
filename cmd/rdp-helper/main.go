@@ -172,9 +172,10 @@ Usage:
   %s help                  Show this help
 
 Protocol (OS): %s://connect?token=...&base=...
+               %s://stop?device_id=...&base=...
 
 Config / state / log: same folder as this exe (%s, %s, %s)
-`, n, n, n, protocolScheme, n, n, n, n, n, n, protocolScheme, configFileName, stateFileName, logFileName)
+`, n, n, n, protocolScheme, n, n, n, n, n, n, protocolScheme, protocolScheme, configFileName, stateFileName, logFileName)
 }
 
 func printShellHelp() {
@@ -828,6 +829,39 @@ func handleProtocolURL(raw string) error {
 	if err != nil {
 		return err
 	}
+	action := strings.ToLower(strings.TrimSpace(u.Host))
+	if action == "" {
+		action = strings.ToLower(strings.Trim(strings.TrimSpace(u.Path), "/"))
+	}
+	switch action {
+	case "stop":
+		return handleProtocolStop(u)
+	case "connect", "":
+		return handleProtocolConnect(u)
+	default:
+		return fmt.Errorf("unknown protocol action %q (use connect or stop)", action)
+	}
+}
+
+func handleProtocolStop(u *url.URL) error {
+	q := u.Query()
+	deviceID, _ := strconv.Atoi(strings.TrimSpace(q.Get("device_id")))
+	if deviceID <= 0 {
+		return fmt.Errorf("missing or invalid device_id")
+	}
+	sess, ok := getActiveRDPSession(deviceID)
+	if !ok {
+		logf("stop: no active session device=%d", deviceID)
+		return fmt.Errorf("no active remote desktop session for device %d on this PC", deviceID)
+	}
+	logf("stop: killing mstsc device=%d pid=%d log_id=%d", deviceID, sess.PID, sess.LogID)
+	killProcess(sess.PID)
+	postRDPLaunchEvent(sess.APIBase, sess.LifecycleToken, "mstsc_exited")
+	clearActiveRDPSession(deviceID, sess.PID)
+	return nil
+}
+
+func handleProtocolConnect(u *url.URL) error {
 	q := u.Query()
 	token := strings.TrimSpace(q.Get("token"))
 	if token == "" {
@@ -909,10 +943,22 @@ func handleProtocolURL(raw string) error {
 	}
 	lifecycleAPI := apiBase
 	lifecycleTok := strings.TrimSpace(params.LifecycleToken)
-	onStarted := func() {
+	deviceID := params.DeviceID
+	logID := params.LogID
+	onStarted := func(pid int) {
+		putActiveRDPSession(ActiveRDPSession{
+			DeviceID:       deviceID,
+			LogID:          logID,
+			PID:            pid,
+			APIBase:        lifecycleAPI,
+			LifecycleToken: lifecycleTok,
+			Host:           targetHost,
+			StartedAt:      time.Now(),
+		})
 		postRDPLaunchEvent(lifecycleAPI, lifecycleTok, "mstsc_started")
 	}
-	onExited := func() {
+	onExited := func(pid int) {
+		clearActiveRDPSession(deviceID, pid)
 		postRDPLaunchEvent(lifecycleAPI, lifecycleTok, "mstsc_exited")
 	}
 	if err := launchMSTSC(mstscHost, mstscPort, params.RDPUser, pass, onStarted, onExited); err != nil {
@@ -1022,7 +1068,7 @@ func pickLocalPort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-func launchMSTSC(host string, port int, user, password string, onStarted, onExited func()) error {
+func launchMSTSC(host string, port int, user, password string, onStarted, onExited func(pid int)) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("mstsc only supported on Windows (got %s)", runtime.GOOS)
 	}
@@ -1066,9 +1112,13 @@ func launchMSTSC(host string, port int, user, password string, onStarted, onExit
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mstsc: %w", err)
 	}
-	logf("mstsc started target=%s user=%s rdp=%s", fullAddress, user, rdpPath)
+	pid := 0
+	if cmd.Process != nil {
+		pid = cmd.Process.Pid
+	}
+	logf("mstsc started target=%s user=%s rdp=%s pid=%d", fullAddress, user, rdpPath, pid)
 	if onStarted != nil {
-		onStarted()
+		onStarted(pid)
 	}
 
 	// mstsc keeps the .rdp open briefly while parsing; delete early once it has loaded
@@ -1080,7 +1130,7 @@ func launchMSTSC(host string, port int, user, password string, onStarted, onExit
 
 	_ = cmd.Wait()
 	if onExited != nil {
-		onExited()
+		onExited(pid)
 	}
 	return nil
 }
