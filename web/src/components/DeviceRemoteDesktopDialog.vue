@@ -40,6 +40,9 @@
           </span>
           <span v-if="device.rdp_user"> · {{ device.rdp_user }}</span>
         </div>
+        <div class="caption mb-3">
+          {{ $t('deviceRemoteDesktopConnectHint') }}
+        </div>
 
         <div class="d-flex align-center flex-wrap mb-4" style="gap: 8px;">
           <v-btn
@@ -239,6 +242,7 @@ export default {
   watch: {
     async value(open) {
       if (open && this.device) {
+        // Idle only — do not call connect() / openHelperURL on open.
         this.resetState();
         await this.loadHistory();
         this.syncStatusFromHistory();

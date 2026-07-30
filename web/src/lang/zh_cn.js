@@ -449,6 +449,7 @@ export default {
   deviceRemoteDesktopOperator: '操作人',
   deviceRemoteDesktopConnect: '连接',
   deviceRemoteDesktopStop: '停止',
+  deviceRemoteDesktopConnectHint: '打开本弹窗不会自动连接；请点击「连接」后再打开 Helper。',
   deviceRemoteDesktopStatusIdle: '未连接',
   deviceRemoteDesktopStatusLaunching: '正在连接…',
   deviceRemoteDesktopStatusConnected: '已连接',

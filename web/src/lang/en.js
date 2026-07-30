@@ -523,6 +523,7 @@ export default {
   deviceRemoteDesktopOperator: 'Operator',
   deviceRemoteDesktopConnect: 'Connect',
   deviceRemoteDesktopStop: 'Stop',
+  deviceRemoteDesktopConnectHint: 'Opening this dialog does not connect. Click Connect to open the Helper.',
   deviceRemoteDesktopStatusIdle: 'Idle',
   deviceRemoteDesktopStatusLaunching: 'Connecting…',
   deviceRemoteDesktopStatusConnected: 'Connected',

@@ -478,7 +478,7 @@
           </v-btn>
           <v-btn
             :title="$t('deviceRemoteDesktop')"
-            @click="openRemoteDesktop(item)"
+            @click.stop="openRemoteDesktop(item)"
           >
             <v-icon>mdi-remote-desktop</v-icon>
           </v-btn>
@@ -1295,8 +1295,15 @@ export default {
     },
 
     openRemoteDesktop(device) {
-      this.rdpDevice = device;
-      this.rdpDialog = true;
+      // Only open the dialog — never launch semaphore-rdp:// here.
+      // Protocol open happens when the user clicks Connect inside the dialog.
+      this.rdpDevice = device ? { ...device } : null;
+      this.rdpDialog = false;
+      this.$nextTick(() => {
+        if (this.rdpDevice) {
+          this.rdpDialog = true;
+        }
+      });
     },
 
     runAction(device, action) {
