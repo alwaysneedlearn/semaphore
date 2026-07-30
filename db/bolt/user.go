@@ -259,6 +259,26 @@ func (d *BoltDb) GetUserByLoginOrEmail(login string, email string) (existingUser
 	return
 }
 
+func (d *BoltDb) UserIdentityConflict(username, email string, excludeUserID int) error {
+	var users []db.User
+	err := d.getObjects(0, db.UserProps, db.RetrieveQueryParams{}, nil, &users)
+	if err != nil {
+		return err
+	}
+	for _, user := range users {
+		if user.ID == excludeUserID {
+			continue
+		}
+		if user.Username == username {
+			return &db.ValidationError{Message: "Username already exists"}
+		}
+		if user.Email == email {
+			return &db.ValidationError{Message: "Email already exists"}
+		}
+	}
+	return nil
+}
+
 func (d *BoltDb) GetAllAdmins() (users []db.User, err error) {
 	err = d.getObjects(0, db.UserProps, db.RetrieveQueryParams{}, func(i any) bool {
 		user := i.(db.User)

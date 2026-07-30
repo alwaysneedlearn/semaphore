@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image/png"
 	"net/http"
+	"strings"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -100,7 +101,11 @@ func (c *UsersController) AddUser(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Warn(editor.Username + " is not created: " + err.Error())
-		w.WriteHeader(http.StatusBadRequest)
+		if msg := userIdentityConflictMessage(err); msg != "" {
+			helpers.WriteErrorStatus(w, msg, http.StatusBadRequest)
+			return
+		}
+		helpers.WriteError(w, err)
 		return
 	}
 
@@ -173,6 +178,15 @@ func (c *UsersController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user.Name = strings.TrimSpace(user.Name)
+	user.Username = strings.TrimSpace(user.Username)
+	user.Email = strings.TrimSpace(user.Email)
+
+	if err := db.ValidateUser(user.User); err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+
 	if !editor.Admin && (user.Pro && !targetUser.Pro) {
 		log.Warn(editor.Username + " is not permitted to mark users as Pro")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -209,16 +223,31 @@ func (c *UsersController) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if targetUser.External && targetUser.Username != user.Username {
-		log.Warn("Username is not editable for external users")
-		w.WriteHeader(http.StatusBadRequest)
+	if targetUser.External {
+		if targetUser.Username != user.Username {
+			helpers.WriteErrorStatus(w, "Username is not editable for external users", http.StatusBadRequest)
+			return
+		}
+		if !strings.EqualFold(targetUser.Email, user.Email) {
+			helpers.WriteErrorStatus(w, "Email is not editable for external users", http.StatusBadRequest)
+			return
+		}
+		// Keep the stored email casing for external accounts.
+		user.Email = targetUser.Email
+	}
+
+	if err := helpers.Store(r).UserIdentityConflict(user.Username, user.Email, targetUser.ID); err != nil {
+		helpers.WriteError(w, err)
 		return
 	}
 
 	user.ID = targetUser.ID
 	if err := helpers.Store(r).UpdateUser(user); err != nil {
-		log.Error(err.Error())
-		w.WriteHeader(http.StatusBadRequest)
+		if msg := userIdentityConflictMessage(err); msg != "" {
+			helpers.WriteErrorStatus(w, msg, http.StatusBadRequest)
+			return
+		}
+		helpers.WriteError(w, err)
 		return
 	}
 
@@ -371,4 +400,25 @@ func disableTotp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func userIdentityConflictMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "unique") && strings.Contains(msg, "username"):
+		return "Username already exists"
+	case strings.Contains(msg, "unique") && strings.Contains(msg, "email"):
+		return "Email already exists"
+	case strings.Contains(msg, "duplicate") && strings.Contains(msg, "username"):
+		return "Username already exists"
+	case strings.Contains(msg, "duplicate") && strings.Contains(msg, "email"):
+		return "Email already exists"
+	case strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate"):
+		return "Username or email already exists"
+	default:
+		return ""
+	}
 }
