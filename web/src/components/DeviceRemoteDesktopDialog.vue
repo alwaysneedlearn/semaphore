@@ -344,7 +344,17 @@ export default {
       };
       window.addEventListener('blur', onBlur);
       try {
-        window.location.href = helperUrl;
+        // Do not assign window.location — custom-protocol navigation can replace
+        // the page with the browser interstitial
+        // ("this site wants to open this application").
+        // A transient <a> click keeps the RDP history dialog in place.
+        const a = document.createElement('a');
+        a.href = helperUrl;
+        a.rel = 'noopener noreferrer';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       } catch (_) {
         helperOpened = false;
       }
