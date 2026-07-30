@@ -65,6 +65,12 @@
       @device-updated="onWinrmDeviceUpdated"
     />
 
+    <DeviceRemoteDesktopDialog
+      v-model="rdpDialog"
+      :project-id="projectId"
+      :device="rdpDevice"
+    />
+
     <DeviceImportExportDialog
       v-model="importExportDialog"
       :project-id="projectId"
@@ -472,7 +478,6 @@
           </v-btn>
           <v-btn
             :title="$t('deviceRemoteDesktop')"
-            :loading="rdpBusyId === item.id"
             @click="openRemoteDesktop(item)"
           >
             <v-icon>mdi-remote-desktop</v-icon>
@@ -536,6 +541,7 @@ import ItemListPageBase from '@/components/ItemListPageBase';
 import DeviceForm from '@/components/DeviceForm.vue';
 import DeviceConfigDialog from '@/components/DeviceConfigDialog.vue';
 import DeviceWinrmConsoleDialog from '@/components/DeviceWinrmConsoleDialog.vue';
+import DeviceRemoteDesktopDialog from '@/components/DeviceRemoteDesktopDialog.vue';
 import DeviceProfilesForm from '@/components/DeviceProfilesForm.vue';
 import DeviceImportExportDialog from '@/components/DeviceImportExportDialog.vue';
 import DeviceOperationHistoryDialog from '@/components/DeviceOperationHistoryDialog.vue';
@@ -550,6 +556,7 @@ export default {
     DeviceForm,
     DeviceConfigDialog,
     DeviceWinrmConsoleDialog,
+    DeviceRemoteDesktopDialog,
     DeviceProfilesForm,
     DeviceImportExportDialog,
     DeviceOperationHistoryDialog,
@@ -565,7 +572,8 @@ export default {
       deviceProfilesDialog: false,
       importExportDialog: false,
       busyId: null,
-      rdpBusyId: null,
+      rdpDialog: false,
+      rdpDevice: null,
       configDialog: false,
       configDeviceId: null,
       configDeviceName: '',
@@ -1286,46 +1294,9 @@ export default {
       }
     },
 
-    async openRemoteDesktop(device) {
-      this.rdpBusyId = device.id;
-      try {
-        const { data } = await axios.post(`${this.getItemsUrl()}/${device.id}/rdp/launch`);
-        let helperUrl = (data && data.helper_url) || '';
-        if (!helperUrl && data && data.token) {
-          helperUrl = `semaphore-rdp://connect?token=${encodeURIComponent(data.token)}`;
-        }
-        if (!helperUrl) {
-          throw new Error('empty helper_url');
-        }
-        const base = encodeURIComponent(window.location.origin);
-        const sep = helperUrl.includes('?') ? '&' : '?';
-        helperUrl = `${helperUrl}${sep}base=${base}`;
-
-        let helperOpened = false;
-        const onBlur = () => {
-          helperOpened = true;
-        };
-        window.addEventListener('blur', onBlur);
-        try {
-          window.location.href = helperUrl;
-        } catch (_) {
-          helperOpened = false;
-        }
-        await new Promise((resolve) => {
-          setTimeout(resolve, 1600);
-        });
-        window.removeEventListener('blur', onBlur);
-        if (!helperOpened && document.hasFocus()) {
-          EventBus.$emit('i-snackbar', {
-            color: 'warning',
-            text: this.$t('deviceRemoteDesktopHelperFailed'),
-          });
-        }
-      } catch (e) {
-        EventBus.$emit('i-snackbar', { color: 'error', text: getErrorMessage(e) });
-      } finally {
-        this.rdpBusyId = null;
-      }
+    openRemoteDesktop(device) {
+      this.rdpDevice = device;
+      this.rdpDialog = true;
     },
 
     runAction(device, action) {

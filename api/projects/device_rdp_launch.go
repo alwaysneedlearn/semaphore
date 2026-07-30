@@ -187,6 +187,12 @@ func LaunchDeviceRDP(w http.ResponseWriter, r *http.Request) {
 		"expires_in": expiresIn,
 		"helper_url": helperURL,
 		"log_id":     logRow.ID,
+		"user_id":    user.ID,
+		"username":   user.Username,
+		"host":       device.IPAddress,
+		"hostname":   device.Hostname,
+		"rdp_port":   port,
+		"rdp_user":   device.RDPUser,
 	})
 }
 

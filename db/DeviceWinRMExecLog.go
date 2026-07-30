@@ -15,6 +15,9 @@ const (
 	DeviceWinRMExecMaxCommandLen   = 8192
 	DeviceWinRMExecMaxStoredOutput = 65536
 	DeviceWinRMExecMaxResponseOut  = 262144
+
+	// DeviceAuditLogRetainLimit is how many newest WinRM / RDP launch rows to keep per device.
+	DeviceAuditLogRetainLimit = 10
 )
 
 // DeviceWinRMExecLog stores one WinRM command execution for audit and UI history.

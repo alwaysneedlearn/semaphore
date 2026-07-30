@@ -83,7 +83,6 @@
                   <th>{{ $t('deviceRdpLaunchPhase') }}</th>
                   <th>{{ $t('deviceRdpLaunchTarget') }}</th>
                   <th>{{ $t('deviceRdpLaunchClientIp') }}</th>
-                  <th>{{ $t('deviceRdpLaunchHelperAt') }}</th>
                   <th>{{ $t('deviceRdpLaunchMstscStarted') }}</th>
                   <th>{{ $t('deviceRdpLaunchMstscExited') }}</th>
                 </tr>
@@ -102,7 +101,6 @@
                     <span v-if="row.rdp_user" class="grey--text"> ({{ row.rdp_user }})</span>
                   </td>
                   <td class="caption">{{ row.client_ip || '-' }}</td>
-                  <td class="caption">{{ formatTime(row.helper_fetched_at) }}</td>
                   <td class="caption">{{ formatTime(row.mstsc_started_at) }}</td>
                   <td class="caption">{{ formatTime(row.mstsc_exited_at) }}</td>
                 </tr>
@@ -177,7 +175,7 @@ export default {
         const base = `/api/project/${this.projectId}/devices/${this.device.id}`;
         const [opsRes, rdpRes] = await Promise.all([
           axios.get(`${base}/operations`, { params: { limit: 100, offset: 0 } }),
-          axios.get(`${base}/rdp/launch-logs`, { params: { limit: 100, offset: 0 } }),
+          axios.get(`${base}/rdp/launch-logs`, { params: { limit: 10, offset: 0 } }),
         ]);
         this.logs = opsRes.data.logs || [];
         this.total = opsRes.data.total || 0;

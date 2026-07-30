@@ -11,11 +11,8 @@ func (d *SqlDb) GetDeviceRDPLaunchLogs(projectID, deviceID, limit, offset int) (
 	if _, err := d.GetDevice(projectID, deviceID); err != nil {
 		return db.DeviceRDPLaunchLogList{}, err
 	}
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
+	if limit <= 0 || limit > db.DeviceAuditLogRetainLimit {
+		limit = db.DeviceAuditLogRetainLimit
 	}
 	if offset < 0 {
 		offset = 0
@@ -65,6 +62,7 @@ func (d *SqlDb) CreateDeviceRDPLaunchLog(l db.DeviceRDPLaunchLog) (db.DeviceRDPL
 		return db.DeviceRDPLaunchLog{}, err
 	}
 	l.ID = id
+	_ = d.pruneDeviceAuditLogs("project__device_rdp_launch_log", l.ProjectID, l.DeviceID, db.DeviceAuditLogRetainLimit)
 	return l, nil
 }
 

@@ -121,41 +121,20 @@
 
         <div class="d-flex align-center mb-2">
           <span class="subtitle-2">{{ $t('deviceWinrmHistory') }}</span>
+          <span class="caption grey--text ml-2">{{ $t('deviceAuditLogRetainHint') }}</span>
           <v-spacer />
-          <v-btn
-            text
-            small
-            color="error"
-            :disabled="!selectedLogIds.length || historyLoading"
-            @click="askDeleteSelected"
-          >
-            <v-icon left small>mdi-delete</v-icon>
-            {{ $t('deviceWinrmDeleteSelected') }}
-          </v-btn>
-          <v-btn
-            text
-            small
-            color="error"
-            :disabled="!historyLogs.length || historyLoading"
-            @click="askClearHistory"
-          >
-            <v-icon left small>mdi-delete-sweep</v-icon>
-            {{ $t('deviceWinrmClearHistory') }}
-          </v-btn>
           <v-btn icon small :loading="historyLoading" @click="loadHistory">
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
         </div>
 
         <v-data-table
-          v-model="selectedLogs"
           :headers="historyHeaders"
           :items="historyLogs"
           item-key="id"
-          show-select
           dense
           hide-default-footer
-          :items-per-page="50"
+          :items-per-page="10"
           :loading="historyLoading"
           class="winrm-history-table"
         >
@@ -174,9 +153,6 @@
             <v-btn icon x-small @click="viewLog(item)" :title="$t('deviceWinrmViewLog')">
               <v-icon small>mdi-eye</v-icon>
             </v-btn>
-            <v-btn icon x-small color="error" @click="askDeleteOne(item)" :title="$t('delete')">
-              <v-icon small>mdi-delete</v-icon>
-            </v-btn>
           </template>
         </v-data-table>
       </v-card-text>
@@ -193,30 +169,15 @@
       :text="$t('deviceWinrmRiskText')"
       @yes="executeCommand"
     />
-    <YesNoDialog
-      v-model="deleteOneDialog"
-      :title="$t('delete')"
-      :text="$t('deviceWinrmDeleteOneConfirm')"
-      @yes="deleteOne"
-    />
-    <YesNoDialog
-      v-model="deleteSelectedDialog"
-      :title="$t('deviceWinrmDeleteSelected')"
-      :text="$t('deviceWinrmDeleteSelectedConfirm', { count: selectedLogIds.length })"
-      @yes="deleteSelected"
-    />
-    <YesNoDialog
-      v-model="clearHistoryDialog"
-      :title="$t('deviceWinrmClearHistory')"
-      :text="$t('deviceWinrmClearHistoryConfirm')"
-      @yes="clearHistory"
-    />
 
     <v-dialog v-model="viewLogDialog" max-width="900">
       <v-card v-if="viewingLog">
         <v-card-title>{{ $t('deviceWinrmViewLog') }} #{{ viewingLog.id }}</v-card-title>
         <v-card-text>
-          <div class="caption mb-2">{{ viewingLog.command }}</div>
+          <div class="caption mb-2">
+            <span v-if="viewingLog.username">{{ viewingLog.username }} · </span>
+            {{ viewingLog.command }}
+          </div>
           <pre class="winrm-output">{{ formatLogDetail(viewingLog) }}</pre>
         </v-card-text>
         <v-card-actions>
@@ -255,12 +216,7 @@ export default {
       lastOutput: null,
       historyLogs: [],
       historyLoading: false,
-      selectedLogs: [],
       riskDialog: false,
-      deleteOneDialog: false,
-      deleteSelectedDialog: false,
-      clearHistoryDialog: false,
-      pendingDeleteLog: null,
       viewLogDialog: false,
       viewingLog: null,
       exampleGroups: DEVICE_WINRM_EXAMPLE_GROUPS,
@@ -293,12 +249,9 @@ export default {
         { text: 'OK', value: 'ok', width: '48px' },
         { text: this.$t('deviceWinrmCommand'), value: 'command' },
         {
-          text: '', value: 'actions', sortable: false, width: '88px',
+          text: '', value: 'actions', sortable: false, width: '48px',
         },
       ];
-    },
-    selectedLogIds() {
-      return (this.selectedLogs || []).map((x) => x.id);
     },
     apiBase() {
       return `/api/project/${this.projectId}/devices/${this.device.id}`;
@@ -313,7 +266,6 @@ export default {
         this.command = '';
         this.credentialMode = 'winrm';
         this.forceOffline = false;
-        this.selectedLogs = [];
         await this.probeDevice();
         await this.loadConnectionPreview();
         await this.loadHistory();
@@ -413,7 +365,7 @@ export default {
       if (!this.device) return;
       this.historyLoading = true;
       try {
-        const res = await axios.get(`${this.apiBase}/winrm/exec-logs`, { params: { limit: 50 } });
+        const res = await axios.get(`${this.apiBase}/winrm/exec-logs`, { params: { limit: 10 } });
         this.historyLogs = (res.data && res.data.logs) || [];
       } catch (e) {
         this.formError = getErrorMessage(e);
@@ -424,45 +376,6 @@ export default {
     viewLog(item) {
       this.viewingLog = item;
       this.viewLogDialog = true;
-    },
-    askDeleteOne(item) {
-      this.pendingDeleteLog = item;
-      this.deleteOneDialog = true;
-    },
-    async deleteOne() {
-      const item = this.pendingDeleteLog;
-      this.pendingDeleteLog = null;
-      if (!item) return;
-      try {
-        await axios.delete(`${this.apiBase}/winrm/exec-logs/${item.id}`);
-        await this.loadHistory();
-      } catch (e) {
-        this.formError = getErrorMessage(e);
-      }
-    },
-    askDeleteSelected() {
-      this.deleteSelectedDialog = true;
-    },
-    async deleteSelected() {
-      try {
-        await axios.post(`${this.apiBase}/winrm/exec-logs/batch`, { ids: this.selectedLogIds });
-        this.selectedLogs = [];
-        await this.loadHistory();
-      } catch (e) {
-        this.formError = getErrorMessage(e);
-      }
-    },
-    askClearHistory() {
-      this.clearHistoryDialog = true;
-    },
-    async clearHistory() {
-      try {
-        await axios.delete(`${this.apiBase}/winrm/exec-logs`);
-        this.selectedLogs = [];
-        await this.loadHistory();
-      } catch (e) {
-        this.formError = getErrorMessage(e);
-      }
     },
   },
 };
