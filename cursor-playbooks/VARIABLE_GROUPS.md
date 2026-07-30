@@ -149,9 +149,15 @@ CONFIG_FILE_NAME=NWReport_DBWB.iconf
 API_PORT=9002
 API_STATUS_CALL_TYPE=1
 SEMAPHORE_API_TOKEN=<token>
+# check_restart 通道新鲜度（批量一次 SELECT；未配置则跳过）
+TDENGINE_URL=http://tdengine:6041
+TDENGINE_CHANNEL_STATUS_TABLE=lab_sync.dwd_channel_status
+TDENGINE_TAG_SUPPLIER=newarerm
+TDENGINE_CHANNEL_STALE_HOURS=6
+TDENGINE_TIMEZONE=Asia/Shanghai
 ```
 
-路径：`{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}`（与 NBT 相同，`EXE_NAME` 已含 `.exe`）。详见 [`neware/README.md`](neware/README.md)。
+路径：`{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}`（与 NBT 相同，`EXE_NAME` 已含 `.exe`）。详见 [`neware/README.md`](neware/README.md)。`TDENGINE_CHANNEL_*` 仅 **check_restart** 读取通道 `LAST(insert_time)`；状态写入仍用 `TDENGINE_STATUS_TABLE`。
 
 ## Stop 模板注意事项
 
