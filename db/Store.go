@@ -242,6 +242,9 @@ type UserManager interface {
 	IncrementEmailOtpAttempts(userID int) error
 	GetUser(userID int) (User, error)
 	GetUserByLoginOrEmail(login string, email string) (User, error)
+	// UserIdentityConflict returns a ValidationError when username or email is
+	// already taken by a user other than excludeUserID.
+	UserIdentityConflict(username, email string, excludeUserID int) error
 	GetAllAdmins() ([]User, error)
 
 	GetNodeCount() (int, error)

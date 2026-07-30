@@ -322,6 +322,30 @@ func (d *SqlDb) GetUserByLoginOrEmail(login string, email string) (user db.User,
 	return
 }
 
+func (d *SqlDb) UserIdentityConflict(username, email string, excludeUserID int) error {
+	var id int
+	err := d.selectOne(&id, d.PrepareQuery(
+		"select id from `user` where username=? and id<>? limit 1"),
+		username, excludeUserID)
+	if err == nil {
+		return &db.ValidationError{Message: "Username already exists"}
+	}
+	if !errors.Is(err, db.ErrNotFound) {
+		return err
+	}
+
+	err = d.selectOne(&id, d.PrepareQuery(
+		"select id from `user` where email=? and id<>? limit 1"),
+		email, excludeUserID)
+	if err == nil {
+		return &db.ValidationError{Message: "Email already exists"}
+	}
+	if !errors.Is(err, db.ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
 func (d *SqlDb) GetAllAdmins() (users []db.User, err error) {
 	_, err = d.selectAll(&users, "select * from `user` where `admin` = true")
 
