@@ -8,7 +8,9 @@
           </v-avatar>
           <div>
             <div class="text-h6 font-weight-medium">{{ $t('deviceRemoteDesktop') }}</div>
-            <div class="caption rdp-launch-muted">{{ $t('deviceRemoteDesktopLaunchSubtitle') }}</div>
+            <div class="caption rdp-launch-muted">
+              {{ $t('deviceRemoteDesktopLaunchSubtitle') }}
+            </div>
           </div>
           <v-spacer />
           <v-btn icon small :disabled="status === 'launching'" @click="close">
@@ -42,8 +44,20 @@
             color="primary"
             class="mr-3 mt-1"
           />
-          <v-icon v-else-if="status === 'opened'" color="success" class="mr-3">mdi-check-circle</v-icon>
-          <v-icon v-else-if="status === 'helper_missing'" color="warning" class="mr-3">mdi-alert</v-icon>
+          <v-icon
+            v-else-if="status === 'opened'"
+            color="success"
+            class="mr-3"
+          >
+            mdi-check-circle
+          </v-icon>
+          <v-icon
+            v-else-if="status === 'helper_missing'"
+            color="warning"
+            class="mr-3"
+          >
+            mdi-alert
+          </v-icon>
           <v-icon v-else color="error" class="mr-3">mdi-alert-circle</v-icon>
           <div>
             <div class="subtitle-2">{{ statusTitle }}</div>
@@ -119,15 +133,27 @@ export default {
       set(v) { this.$emit('input', v); },
     },
     statusTitle() {
-      if (this.status === 'launching') return this.$t('deviceRemoteDesktopStatusLaunching');
-      if (this.status === 'opened') return this.$t('deviceRemoteDesktopStatusOpened');
-      if (this.status === 'helper_missing') return this.$t('deviceRemoteDesktopStatusHelperMissing');
+      if (this.status === 'launching') {
+        return this.$t('deviceRemoteDesktopStatusLaunching');
+      }
+      if (this.status === 'opened') {
+        return this.$t('deviceRemoteDesktopStatusOpened');
+      }
+      if (this.status === 'helper_missing') {
+        return this.$t('deviceRemoteDesktopStatusHelperMissing');
+      }
       return this.$t('deviceRemoteDesktopStatusError');
     },
     statusDetail() {
-      if (this.status === 'launching') return this.$t('deviceRemoteDesktopDetailLaunching');
-      if (this.status === 'opened') return this.$t('deviceRemoteDesktopDetailOpened');
-      if (this.status === 'helper_missing') return this.$t('deviceRemoteDesktopDetailHelperMissing');
+      if (this.status === 'launching') {
+        return this.$t('deviceRemoteDesktopDetailLaunching');
+      }
+      if (this.status === 'opened') {
+        return this.$t('deviceRemoteDesktopDetailOpened');
+      }
+      if (this.status === 'helper_missing') {
+        return this.$t('deviceRemoteDesktopDetailHelperMissing');
+      }
       return this.$t('deviceRemoteDesktopDetailError');
     },
   },
@@ -149,7 +175,8 @@ export default {
     },
     async startLaunch() {
       if (!this.device?.id) return;
-      const seq = ++this.launchSeq;
+      this.launchSeq += 1;
+      const seq = this.launchSeq;
       this.status = 'launching';
       this.errorText = '';
       this.operatorName = '';
