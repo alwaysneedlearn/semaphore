@@ -75,13 +75,16 @@ type State struct {
 }
 
 type launchParams struct {
-	ProjectID        int     `json:"project_id"`
-	DeviceID         int     `json:"device_id"`
-	Host             string  `json:"host"`
-	RDPPort          int     `json:"rdp_port"`
-	RDPUser          string  `json:"rdp_user"`
-	RDPPassword      *string `json:"rdp_password"`
-	PasswordProvided bool    `json:"password_provided"`
+	ProjectID           int     `json:"project_id"`
+	DeviceID            int     `json:"device_id"`
+	LogID               int     `json:"log_id"`
+	Host                string  `json:"host"`
+	RDPPort             int     `json:"rdp_port"`
+	RDPUser             string  `json:"rdp_user"`
+	RDPPassword         *string `json:"rdp_password"`
+	PasswordProvided    bool    `json:"password_provided"`
+	LifecycleToken      string  `json:"lifecycle_token"`
+	LifecycleExpiresIn  int     `json:"lifecycle_expires_in"`
 }
 
 func main() {
@@ -96,6 +99,9 @@ func main() {
 	}
 	arg := os.Args[1]
 	if strings.HasPrefix(strings.ToLower(arg), protocolScheme+":") {
+		// Protocol launches must not leave a visible console for the whole mstsc session
+		// (helper waits so SOCKS local-forward / cmdkey cleanup stay alive).
+		hideConsoleWindow()
 		if err := handleProtocolURL(arg); err != nil {
 			logf("protocol error: %v", err)
 			notifyUser("RDP Helper", err.Error())
@@ -901,7 +907,15 @@ func handleProtocolURL(raw string) error {
 	if params.PasswordProvided && params.RDPPassword != nil {
 		pass = *params.RDPPassword
 	}
-	if err := launchMSTSC(mstscHost, mstscPort, params.RDPUser, pass); err != nil {
+	lifecycleAPI := apiBase
+	lifecycleTok := strings.TrimSpace(params.LifecycleToken)
+	onStarted := func() {
+		postRDPLaunchEvent(lifecycleAPI, lifecycleTok, "mstsc_started")
+	}
+	onExited := func() {
+		postRDPLaunchEvent(lifecycleAPI, lifecycleTok, "mstsc_exited")
+	}
+	if err := launchMSTSC(mstscHost, mstscPort, params.RDPUser, pass, onStarted, onExited); err != nil {
 		return err
 	}
 	return nil
@@ -954,6 +968,41 @@ func fetchLaunchParams(apiBase, token string) (launchParams, error) {
 	return p, nil
 }
 
+func postRDPLaunchEvent(apiBase, lifecycleToken, event string) {
+	lifecycleToken = strings.TrimSpace(lifecycleToken)
+	if apiBase == "" || lifecycleToken == "" {
+		return
+	}
+	u := strings.TrimRight(apiBase, "/") + "/api/rdp/launch-events"
+	payload, err := json.Marshal(map[string]string{
+		"token": lifecycleToken,
+		"event": event,
+	})
+	if err != nil {
+		logf("launch-event marshal failed event=%s err=%v", event, err)
+		return
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, u, strings.NewReader(string(payload)))
+	if err != nil {
+		logf("launch-event request failed event=%s err=%v", event, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		logf("launch-event post failed event=%s err=%v", event, err)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		logf("launch-event HTTP %d event=%s body=%s", resp.StatusCode, event, truncate(string(body), 200))
+		return
+	}
+	logf("launch-event ok event=%s", event)
+}
+
 func tcpReachable(host string, port int, timeout time.Duration) bool {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, timeout)
@@ -973,7 +1022,7 @@ func pickLocalPort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-func launchMSTSC(host string, port int, user, password string) error {
+func launchMSTSC(host string, port int, user, password string, onStarted, onExited func()) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("mstsc only supported on Windows (got %s)", runtime.GOOS)
 	}
@@ -989,14 +1038,13 @@ func launchMSTSC(host string, port int, user, password string) error {
 	termsrv := "TERMSRV/" + fullAddress
 
 	if password != "" && user != "" {
-		_ = exec.Command("cmdkey", "/delete:"+termsrv).Run()
-		cmd := exec.Command("cmdkey", "/generic:"+termsrv, "/user:"+user, "/pass:"+password)
-		if out, err := cmd.CombinedOutput(); err != nil {
+		_ = runHidden("cmdkey", "/delete:"+termsrv)
+		if out, err := combinedOutputHidden("cmdkey", "/generic:"+termsrv, "/user:"+user, "/pass:"+password); err != nil {
 			logf("cmdkey failed: %v %s", err, string(out))
 			// continue; mstsc will prompt
 		} else {
 			defer func() {
-				_ = exec.Command("cmdkey", "/delete:"+termsrv).Run()
+				_ = runHidden("cmdkey", "/delete:"+termsrv)
 			}()
 		}
 	}
@@ -1012,15 +1060,50 @@ func launchMSTSC(host string, port int, user, password string) error {
 	if err := os.WriteFile(rdpPath, []byte(rdpBody), 0o600); err != nil {
 		return fmt.Errorf("write rdp file: %w", err)
 	}
-	defer func() { _ = os.Remove(rdpPath) }()
+	defer removeFileWithRetry(rdpPath, 8, 400*time.Millisecond)
 
 	cmd := exec.Command("mstsc", rdpPath)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("mstsc: %w", err)
 	}
 	logf("mstsc started target=%s user=%s rdp=%s", fullAddress, user, rdpPath)
+	if onStarted != nil {
+		onStarted()
+	}
+
+	// mstsc keeps the .rdp open briefly while parsing; delete early once it has loaded
+	// so leftover launch-*.rdp files do not accumulate when Remove-at-exit fails.
+	go func() {
+		time.Sleep(2 * time.Second)
+		removeFileWithRetry(rdpPath, 10, 500*time.Millisecond)
+	}()
+
 	_ = cmd.Wait()
+	if onExited != nil {
+		onExited()
+	}
 	return nil
+}
+
+// removeFileWithRetry deletes path, retrying while mstsc (or AV) still holds a lock.
+func removeFileWithRetry(path string, attempts int, delay time.Duration) {
+	if path == "" || attempts <= 0 {
+		return
+	}
+	for i := 0; i < attempts; i++ {
+		err := os.Remove(path)
+		if err == nil || os.IsNotExist(err) {
+			if i > 0 {
+				logf("rdp file removed after retry path=%s attempt=%d", path, i+1)
+			}
+			return
+		}
+		if i+1 < attempts {
+			time.Sleep(delay)
+		} else {
+			logf("rdp file remove failed path=%s err=%v", path, err)
+		}
+	}
 }
 
 func buildRDPFile(fullAddress string, port int, user string) string {

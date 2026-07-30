@@ -155,6 +155,7 @@ func Route(
 
 	// Native RDP Helper: one-time token exchange (no session cookie; token-only).
 	publicAPIRouter.HandleFunc("/rdp/launch-params", projects.GetRDPLaunchParams).Methods("GET", "HEAD")
+	publicAPIRouter.HandleFunc("/rdp/launch-events", projects.PostRDPLaunchEvent).Methods("POST")
 
 	internalAPI := publicAPIRouter.PathPrefix("/internal").Subrouter()
 	internalAPI.HandleFunc("/runners", runners.RegisterRunner).Methods("POST")
@@ -454,12 +455,10 @@ func Route(
 	projectDeviceManagement.HandleFunc("/{device_id}/probe", projects.ProbeDevice).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/action", projects.RunDeviceAction).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/rdp/launch", projects.LaunchDeviceRDP).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/rdp/launch-logs", projects.GetDeviceRDPLaunchLogs).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/connection-preview", projects.GetDeviceWinRMConnectionPreview).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec", projects.ExecDeviceWinRMCommand).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.GetDeviceWinRMExecLogs).Methods("GET", "HEAD")
-	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.ClearDeviceWinRMExecLogs).Methods("DELETE")
-	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs/batch", projects.DeleteDeviceWinRMExecLogsBatch).Methods("POST")
-	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs/{log_id}", projects.DeleteDeviceWinRMExecLog).Methods("DELETE")
 
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.GetTerraformInventoryAliases).Methods("GET", "HEAD")
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.AddTerraformInventoryAlias).Methods("POST")

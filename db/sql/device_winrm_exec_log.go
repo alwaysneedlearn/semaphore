@@ -1,6 +1,8 @@
 package sql
 
 import (
+	"strings"
+
 	"github.com/Masterminds/squirrel"
 	"github.com/semaphoreui/semaphore/db"
 )
@@ -9,11 +11,8 @@ func (d *SqlDb) GetDeviceWinRMExecLogs(projectID, deviceID, limit, offset int) (
 	if _, err := d.GetDevice(projectID, deviceID); err != nil {
 		return db.DeviceWinRMExecLogList{}, err
 	}
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
+	if limit <= 0 || limit > db.DeviceAuditLogRetainLimit {
+		limit = db.DeviceAuditLogRetainLimit
 	}
 	if offset < 0 {
 		offset = 0
@@ -59,7 +58,44 @@ func (d *SqlDb) CreateDeviceWinRMExecLog(l db.DeviceWinRMExecLog) (db.DeviceWinR
 		return db.DeviceWinRMExecLog{}, err
 	}
 	l.ID = id
+	_ = d.pruneDeviceAuditLogs("project__device_winrm_exec_log", l.ProjectID, l.DeviceID, db.DeviceAuditLogRetainLimit)
 	return l, nil
+}
+
+type deviceAuditLogIDRow struct {
+	ID int `db:"id"`
+}
+
+func (d *SqlDb) pruneDeviceAuditLogs(table string, projectID, deviceID, keep int) error {
+	if keep <= 0 {
+		keep = db.DeviceAuditLogRetainLimit
+	}
+	var keepRows []deviceAuditLogIDRow
+	_, err := d.selectAll(&keepRows, d.PrepareQuery(
+		"select id from "+table+" where project_id=? and device_id=? order by created desc, id desc limit ?",
+	), projectID, deviceID, keep)
+	if err != nil {
+		return err
+	}
+	if len(keepRows) == 0 {
+		return nil
+	}
+	args := make([]any, 0, 2+len(keepRows))
+	args = append(args, projectID, deviceID)
+	placeholders := make([]string, 0, len(keepRows))
+	for _, row := range keepRows {
+		placeholders = append(placeholders, "?")
+		args = append(args, row.ID)
+	}
+	_, err = d.exec(
+		d.PrepareQuery(
+			"delete from "+table+" where project_id=? and device_id=? and id not in ("+
+				strings.Join(placeholders, ",")+
+				")",
+		),
+		args...,
+	)
+	return err
 }
 
 func (d *SqlDb) DeleteDeviceWinRMExecLog(projectID, deviceID, logID int) error {
