@@ -331,6 +331,9 @@ type DeviceManager interface {
 	DeleteDeviceWinRMExecLog(projectID, deviceID, logID int) error
 	DeleteDeviceWinRMExecLogs(projectID, deviceID int, logIDs []int) (int, error)
 	ClearDeviceWinRMExecLogs(projectID, deviceID int) (int, error)
+	GetDeviceRDPLaunchLogs(projectID, deviceID, limit, offset int) (DeviceRDPLaunchLogList, error)
+	CreateDeviceRDPLaunchLog(log DeviceRDPLaunchLog) (DeviceRDPLaunchLog, error)
+	MarkDeviceRDPLaunchHelperFetched(projectID, deviceID, logID int, fetchedAt time.Time) error
 	GetDeviceOperationLogs(projectID, deviceID, limit, offset int) (DeviceOperationLogList, error)
 	CreateDeviceOperationLogs(projectID int, logs []DeviceOperationLog) (int, error)
 	DeleteDevice(projectID, deviceID int) error

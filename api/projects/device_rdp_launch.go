@@ -1,8 +1,11 @@
 package projects
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/semaphoreui/semaphore/api/helpers"
 	"github.com/semaphoreui/semaphore/db"
 	"github.com/semaphoreui/semaphore/pkg/random"
+	"github.com/semaphoreui/semaphore/pkg/tz"
 )
 
 const (
@@ -22,17 +26,19 @@ type rdpLaunchTokenEntry struct {
 	UserID    int
 	ProjectID int
 	DeviceID  int
+	LogID     int
 	ExpiresAt time.Time
 }
 
 var rdpLaunchTokenStore sync.Map // token string → rdpLaunchTokenEntry
 
-func createRDPLaunchToken(userID, projectID, deviceID int) (token string, expiresIn int) {
+func createRDPLaunchToken(userID, projectID, deviceID, logID int) (token string, expiresIn int) {
 	token = random.String(rdpLaunchTokenLength)
 	rdpLaunchTokenStore.Store(token, rdpLaunchTokenEntry{
 		UserID:    userID,
 		ProjectID: projectID,
 		DeviceID:  deviceID,
+		LogID:     logID,
 		ExpiresAt: time.Now().Add(rdpLaunchTokenTTL),
 	})
 	return token, int(rdpLaunchTokenTTL.Seconds())
@@ -62,6 +68,23 @@ func resetRDPLaunchTokenStoreForTest() {
 	})
 }
 
+func requestClientIP(r *http.Request) string {
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		return xri
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil && host != "" {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
 // LaunchDeviceRDP issues a one-time token for the Native RDP Helper protocol.
 // POST /api/project/{project_id}/devices/{device_id}/rdp/launch
 func LaunchDeviceRDP(w http.ResponseWriter, r *http.Request) {
@@ -69,13 +92,44 @@ func LaunchDeviceRDP(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
 	user := helpers.UserFromContext(r)
 
-	token, expiresIn := createRDPLaunchToken(user.ID, project.ID, device.ID)
+	port := device.RDPPort
+	if port == 0 {
+		port = db.DefaultDeviceRDPPort
+	}
+
+	logRow, err := helpers.Store(r).CreateDeviceRDPLaunchLog(db.DeviceRDPLaunchLog{
+		ProjectID: project.ID,
+		DeviceID:  device.ID,
+		UserID:    user.ID,
+		Username:  user.Username,
+		Phase:     db.DeviceRDPLaunchPhaseRequested,
+		Host:      device.IPAddress,
+		RDPPort:   port,
+		RDPUser:   device.RDPUser,
+		ClientIP:  requestClientIP(r),
+		Created:   tz.Now(),
+	})
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+
+	helpers.EventLog(r, helpers.EventLogCreate, helpers.EventLogItem{
+		UserID:      user.ID,
+		ProjectID:   project.ID,
+		ObjectType:  db.EventDevice,
+		ObjectID:    device.ID,
+		Description: fmt.Sprintf("RDP launch requested for device %s (%s)", device.Hostname, device.IPAddress),
+	})
+
+	token, expiresIn := createRDPLaunchToken(user.ID, project.ID, device.ID, logRow.ID)
 	helperURL := "semaphore-rdp://connect?token=" + url.QueryEscape(token)
 
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
 		"token":      token,
 		"expires_in": expiresIn,
 		"helper_url": helperURL,
+		"log_id":     logRow.ID,
 	})
 }
 
@@ -100,6 +154,20 @@ func GetRDPLaunchParams(w http.ResponseWriter, r *http.Request) {
 		port = db.DefaultDeviceRDPPort
 	}
 
+	if entry.LogID > 0 {
+		_ = helpers.Store(r).MarkDeviceRDPLaunchHelperFetched(
+			entry.ProjectID, entry.DeviceID, entry.LogID, tz.Now(),
+		)
+		desc := fmt.Sprintf("RDP helper fetched params for device %s (%s)", device.Hostname, device.IPAddress)
+		helpers.EventLog(r, helpers.EventLogUpdate, helpers.EventLogItem{
+			UserID:      entry.UserID,
+			ProjectID:   entry.ProjectID,
+			ObjectType:  db.EventDevice,
+			ObjectID:    entry.DeviceID,
+			Description: desc,
+		})
+	}
+
 	password := strings.TrimSpace(device.RDPPassword)
 	var rdpPassword *string
 	passwordProvided := false
@@ -117,4 +185,17 @@ func GetRDPLaunchParams(w http.ResponseWriter, r *http.Request) {
 		"rdp_password":      rdpPassword,
 		"password_provided": passwordProvided,
 	})
+}
+
+// GetDeviceRDPLaunchLogs lists remote-desktop launch history for one device.
+func GetDeviceRDPLaunchLogs(w http.ResponseWriter, r *http.Request) {
+	device := helpers.GetFromContext(r, "device").(db.Device)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	list, err := helpers.Store(r).GetDeviceRDPLaunchLogs(device.ProjectID, device.ID, limit, offset)
+	if err != nil {
+		helpers.WriteError(w, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, list)
 }

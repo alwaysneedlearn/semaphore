@@ -8,7 +8,7 @@ import (
 func TestRDPLaunchToken_createAndConsume(t *testing.T) {
 	resetRDPLaunchTokenStoreForTest()
 
-	token, expiresIn := createRDPLaunchToken(7, 3, 11)
+	token, expiresIn := createRDPLaunchToken(7, 3, 11, 99)
 	if token == "" {
 		t.Fatal("expected non-empty token")
 	}
@@ -20,7 +20,7 @@ func TestRDPLaunchToken_createAndConsume(t *testing.T) {
 	if !ok {
 		t.Fatal("expected consume to succeed")
 	}
-	if entry.UserID != 7 || entry.ProjectID != 3 || entry.DeviceID != 11 {
+	if entry.UserID != 7 || entry.ProjectID != 3 || entry.DeviceID != 11 || entry.LogID != 99 {
 		t.Fatalf("unexpected entry: %+v", entry)
 	}
 
@@ -43,7 +43,7 @@ func TestRDPLaunchToken_missingAndEmpty(t *testing.T) {
 func TestRDPLaunchToken_expired(t *testing.T) {
 	resetRDPLaunchTokenStoreForTest()
 
-	token, _ := createRDPLaunchToken(1, 2, 3)
+	token, _ := createRDPLaunchToken(1, 2, 3, 4)
 	v, ok := rdpLaunchTokenStore.Load(token)
 	if !ok {
 		t.Fatal("token missing after create")

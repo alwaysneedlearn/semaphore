@@ -454,6 +454,7 @@ func Route(
 	projectDeviceManagement.HandleFunc("/{device_id}/probe", projects.ProbeDevice).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/action", projects.RunDeviceAction).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/rdp/launch", projects.LaunchDeviceRDP).Methods("POST")
+	projectDeviceManagement.HandleFunc("/{device_id}/rdp/launch-logs", projects.GetDeviceRDPLaunchLogs).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/connection-preview", projects.GetDeviceWinRMConnectionPreview).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec", projects.ExecDeviceWinRMCommand).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.GetDeviceWinRMExecLogs).Methods("GET", "HEAD")
