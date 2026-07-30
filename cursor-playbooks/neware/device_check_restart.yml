@@ -1,14 +1,25 @@
 ---
+# Play 0：批量查一次 TDengine 通道 LAST(insert_time)（不依赖 WinRM）
+- name: NEWARE check_restart — 批量加载 TDengine 通道新鲜度
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_tdengine_query_channel_last.yml"
+
 - name: NEWARE 巡检重启（健康则跳过；不健康仅 restart，无 redeploy/zip）
   hosts: windows_hosts
   gather_facts: false
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/files"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_operation_type: restart
     sem_debug_tag: NEWARE
+    # WinRM 失败时由本 play 用 TDengine 辅助判定，勿在 ensure 内直接 unhealthy+end
+    winrm_defer_fail_callback: true
     _exe_name_default: uu.exe
     _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
     _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
@@ -49,6 +60,10 @@
       vars:
         neware_api_query_context: check_restart
 
+    # --- TDengine 通道新鲜度（play0 批量结果，按 computer_name 取本机）---
+    - name: 应用本机 TDengine 通道新鲜度
+      ansible.builtin.include_tasks: tasks/tdengine_channel_freshness_for_host.yml
+
     # 快路径：ExecResultData==3 → 健康，跳过 restart
     - name: 数据上报 API 已健康（跳过 restart）
       when: api_upload_started | default(false) | bool
@@ -88,9 +103,24 @@
         upload_health_via_api: false
       when: not (api_upload_status_ok | default(false) | bool)
 
+    # API 通但未达 3，且通道数据已过期 → 强制 need_reconfigure
+    - name: 通道数据过期 — 标记需要 restart
+      ansible.builtin.set_fact:
+        need_reconfigure: true
+        upload_health_via_api: false
+      when:
+        - api_upload_status_ok | default(false) | bool
+        - not (api_upload_started | default(false) | bool)
+        - td_channel_stale | default(false) | bool
+
     # restart 与参考路径均需要 WinRM
     - name: WinRM 建连（含重试）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+    - name: WinRM 未连通 — TDengine 辅助判定后结束本主机
+      when: not (_winrm_session_ok | default(false) | bool)
+      block:
+        - ansible.builtin.include_tasks: tasks/check_restart_winrm_fail_with_tdengine.yml
 
     - name: WinRM 未连通则不再执行本主机后续步骤
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
@@ -110,20 +140,10 @@
             check_result: "{{ _sem_process_status }}"
       ignore_unreachable: true
 
-    - name: 登记 Semaphore 状态回调行（WinRM/进程采集不可达）
-      ansible.builtin.set_fact:
-        semaphore_callback_row:
-          hostname: "{{ _sem_display_hostname }}"
-          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
-          device_status: unhealthy
-          api_status: offline
-          winrm_status: offline
-          abnormal_reason: "{{ 'WinRM unreachable: ' ~ (check_result.msg | default('connection failed') | string) }}"
+    - name: WinRM 中途不可达 — TDengine 辅助判定
       when: check_result is defined and (check_result.unreachable | default(false))
-
-    - name: WinRM 不可达 — 结束本主机
-      ansible.builtin.meta: end_host
-      when: check_result is defined and (check_result.unreachable | default(false))
+      block:
+        - ansible.builtin.include_tasks: tasks/check_restart_winrm_fail_with_tdengine.yml
 
     - name: 进程采集失败 — 结束本主机
       ansible.builtin.set_fact:
@@ -172,6 +192,13 @@
               ansible.builtin.set_fact:
                 upload_health_via_api: false
 
+            # Kafka 认为健康但通道数据过期 → 仍需 restart
+            - name: 通道数据过期覆盖 Kafka 健康判定
+              ansible.builtin.set_fact:
+                need_reconfigure: true
+                log_status_ok: false
+              when: td_channel_stale | default(false) | bool
+
             - name: 状态判断：输出综合判断结果（含程序状态）
               ansible.builtin.debug:
                 msg: >
@@ -180,6 +207,8 @@
                   ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
                   Kafka_OK={{ kafka_status_ok | default('n/a') }} |
                   kafka={{ kafka_check_result.stdout | default('') | trim }} |
+                  td_channel_fresh={{ td_channel_fresh | default('n/a') }} |
+                  td_age_h={{ td_channel_age_hours | default('n/a') }} |
                   需要重配={{ need_reconfigure | default('n/a') }}
 
     - name: 登记进程运行状态（供 stop 判断）
@@ -227,7 +256,20 @@
                   (final_start_ok | default(false) | bool)
                   and not (_start_verify_winrm_ok | default(_winrm_session_ok | default(false)) | bool)
                 )
-                else ''
+                else (
+                  (
+                    'TDengine channel data stale (insert_time='
+                    ~ (td_channel_insert_time | default('?') | string)
+                    ~ ', age_h=' ~ (td_channel_age_hours | default('?') | string)
+                    ~ ')'
+                  )
+                  if (
+                    (need_reconfigure | default(false) | bool)
+                    and (td_channel_stale | default(false) | bool)
+                    and not (final_start_ok | default(false) | bool)
+                  )
+                  else ''
+                )
               )
             }}
       when: semaphore_callback_row is not defined

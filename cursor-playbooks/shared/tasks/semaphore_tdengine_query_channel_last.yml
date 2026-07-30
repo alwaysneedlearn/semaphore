@@ -1,0 +1,237 @@
+---
+# 批量查询 TDengine 通道表：每台 computer_name 的 LAST(insert_time)。
+# 整 play 只需执行一次（独立 localhost play，或 run_once + delegate_to localhost 的 block）。
+#
+# Variable Group ENV：
+#   TDENGINE_URL（必填才启用）
+#   TDENGINE_CHANNEL_STATUS_TABLE（必填才启用；如 lab_sync.dwd_channel_status）
+#   TDENGINE_TAG_SUPPLIER（WHERE supplier=…；默认 newarerm）
+#   TDENGINE_DATABASE（表名无库前缀时使用；默认 lab）
+#   TDENGINE_USER / TDENGINE_PASSWORD
+#   TDENGINE_TIMEZONE（解析 insert_time / 算年龄；默认 Asia/Shanghai）
+#   TDENGINE_CHANNEL_STALE_HOURS（默认 6）
+#
+# 产出（localhost facts）：
+#   td_channel_query_enabled / td_channel_query_ok
+#   td_channel_last_by_computer  — { lower(name): { computer_name, insert_time, age_hours, fresh, stale } }
+#   td_channel_stale_hours / td_channel_sql / td_channel_query_result
+
+- name: 解析 TDengine 通道查询配置
+  ansible.builtin.set_fact:
+    _tdc_url: "{{ lookup('env', 'TDENGINE_URL') | default('', true) | trim }}"
+    _tdc_user: "{{ lookup('env', 'TDENGINE_USER') | default('', true) | trim }}"
+    _tdc_pass: "{{ lookup('env', 'TDENGINE_PASSWORD') | default('', true) | trim }}"
+    _tdc_db_default: "{{ (lookup('env', 'TDENGINE_DATABASE') | default('', true) | trim) | default('lab', true) }}"
+    _tdc_table_raw: "{{ lookup('env', 'TDENGINE_CHANNEL_STATUS_TABLE') | default('', true) | trim }}"
+    _tdc_supplier: >-
+      {{ (lookup('env', 'TDENGINE_TAG_SUPPLIER') | default('', true) | trim)
+         | default('newarerm', true) }}
+    _tdc_timezone: >-
+      {{ (lookup('env', 'TDENGINE_TIMEZONE') | default('', true) | trim)
+         | default('Asia/Shanghai', true) }}
+    _tdc_stale_hours: >-
+      {{ ((lookup('env', 'TDENGINE_CHANNEL_STALE_HOURS') | default('', true) | trim)
+          | default('6', true)) | float }}
+    _tdc_base: >-
+      {{ lookup('env', 'TDENGINE_URL') | default('', true) | trim
+         | regex_replace('/rest/sql/?$', '') | regex_replace('/$', '') }}
+
+- name: 登记通道查询是否启用
+  ansible.builtin.set_fact:
+    td_channel_query_enabled: >-
+      {{ (_tdc_url | length) > 0 and (_tdc_table_raw | length) > 0 }}
+    td_channel_stale_hours: "{{ _tdc_stale_hours }}"
+    td_channel_last_by_computer: {}
+    td_channel_query_ok: false
+
+- name: 跳过 TDengine 通道查询（未配置 URL 或表名）
+  ansible.builtin.debug:
+    msg: >-
+      [DEBUG-TDENGINE-CHANNEL] query skipped: set TDENGINE_URL and
+      TDENGINE_CHANNEL_STATUS_TABLE in Variable Group ENV.
+  when: not (td_channel_query_enabled | bool)
+
+- name: 组装通道 LAST(insert_time) SQL
+  ansible.builtin.set_fact:
+    _tdc_table_fq: "{{ _tbl }}"
+    _tdc_rest_db: "{{ _rest_db }}"
+    td_channel_sql: >-
+      SELECT LAST(`insert_time`), `computer_name`
+      FROM {{ _tbl_q }}
+      WHERE supplier='{{ _sup_esc }}'
+      PARTITION BY computer_name;
+  vars:
+    _tbl: >-
+      {{ _tdc_table_raw if ('.' in (_tdc_table_raw | string))
+         else (_tdc_db_default ~ '.' ~ _tdc_table_raw) }}
+    _rest_db: >-
+      {{ (_tdc_table_raw.split('.') | first)
+         if ('.' in (_tdc_table_raw | string))
+         else _tdc_db_default }}
+    _tbl_q: "{{ '`' ~ (_tbl | regex_replace('\\.', '`.`')) ~ '`' }}"
+    _sup_esc: "{{ _tdc_supplier | replace(\"'\", \"''\") }}"
+  when: td_channel_query_enabled | bool
+
+- name: POST TDengine 通道 LAST(insert_time) 查询
+  ansible.builtin.uri:
+    url: "{{ _tdc_base }}/rest/sql/{{ _tdc_rest_db }}"
+    method: POST
+    headers: "{{ _tdc_headers }}"
+    body: "{{ td_channel_sql }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 500, 502, 503]
+    timeout: 30
+  register: td_channel_query_result
+  failed_when: false
+  vars:
+    _tdc_headers: >-
+      {{
+        {'Content-Type': 'text/plain'}
+        | combine(
+            {'Authorization': 'Basic ' + ((_tdc_user + ':' + _tdc_pass) | b64encode)}
+            if (_tdc_user | trim | length) > 0 else {}
+          )
+      }}
+  when: td_channel_query_enabled | bool
+
+- name: 解析通道查询结果为 computer_name → 新鲜度 map
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json, os, sys
+        from datetime import datetime, timezone, timedelta
+
+        raw = os.environ.get("TD_CHANNEL_RAW", "") or "{}"
+        stale_h = float(os.environ.get("TD_CHANNEL_STALE_HOURS", "6") or "6")
+        tz_name = (os.environ.get("TDENGINE_TIMEZONE") or "Asia/Shanghai").strip() or "Asia/Shanghai"
+        try:
+            body = json.loads(raw)
+        except Exception as e:
+            print(json.dumps({"ok": False, "error": "json_parse: %s" % e, "by_computer": {}}))
+            sys.exit(0)
+
+        code = body.get("code", -1)
+        if code not in (0, "0", None):
+            print(json.dumps({
+                "ok": False,
+                "error": "td_code=%s desc=%s" % (code, body.get("desc", "")),
+                "by_computer": {},
+            }))
+            sys.exit(0)
+
+        try:
+            from zoneinfo import ZoneInfo
+            now = datetime.now(ZoneInfo(tz_name))
+        except Exception:
+            if tz_name in ("Asia/Shanghai", "Asia/Chongqing", "PRC", "UTC+8"):
+                now = datetime.now(timezone(timedelta(hours=8)))
+            elif tz_name == "UTC":
+                now = datetime.now(timezone.utc)
+            else:
+                now = datetime.now(timezone.utc)
+
+        def parse_ts(v):
+            if v is None:
+                return None
+            if isinstance(v, (int, float)):
+                n = float(v)
+                if n > 1e12:
+                    n = n / 1000.0
+                elif n > 1e10:
+                    n = n / 1000.0
+                return datetime.fromtimestamp(n, tz=now.tzinfo)
+            s = str(v).strip()
+            if not s:
+                return None
+            s2 = s.replace("T", " ").split("+")[0].split("Z")[0].strip()
+            for fmt, n in (("%Y-%m-%d %H:%M:%S.%f", 26), ("%Y-%m-%d %H:%M:%S", 19)):
+                try:
+                    return datetime.strptime(s2[:n], fmt).replace(tzinfo=now.tzinfo)
+                except Exception:
+                    pass
+            return None
+
+        # column layout: LAST(insert_time), computer_name — tolerate meta names
+        cols = []
+        for c in body.get("column_meta") or []:
+            if isinstance(c, (list, tuple)) and c:
+                cols.append(str(c[0]).lower())
+            else:
+                cols.append(str(c).lower())
+        ts_idx, name_idx = 0, 1
+        for i, c in enumerate(cols):
+            if "computer_name" in c:
+                name_idx = i
+            if "insert_time" in c or c.startswith("last(") or c == "last":
+                ts_idx = i
+
+        by_computer = {}
+        for row in body.get("data") or []:
+            if not isinstance(row, (list, tuple)) or len(row) <= max(ts_idx, name_idx):
+                continue
+            name = str(row[name_idx] or "").strip()
+            if not name:
+                continue
+            dt = parse_ts(row[ts_idx])
+            if dt is None:
+                continue
+            age_h = max(0.0, (now - dt).total_seconds() / 3600.0)
+            fresh = age_h <= stale_h
+            entry = {
+                "computer_name": name,
+                "insert_time": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "age_hours": round(age_h, 3),
+                "fresh": fresh,
+                "stale": not fresh,
+            }
+            by_computer[name.lower()] = entry
+
+        print(json.dumps({
+            "ok": True,
+            "error": "",
+            "row_count": len(by_computer),
+            "stale_hours": stale_h,
+            "by_computer": by_computer,
+        }))
+  environment:
+    TD_CHANNEL_RAW: >-
+      {{
+        (td_channel_query_result.content | default(''))
+        if (td_channel_query_result.content is defined and (td_channel_query_result.content | string | length) > 0)
+        else (td_channel_query_result.json | default({}) | to_json)
+      }}
+    TD_CHANNEL_STALE_HOURS: "{{ _tdc_stale_hours }}"
+    TDENGINE_TIMEZONE: "{{ _tdc_timezone }}"
+  register: _tdc_parse_cmd
+  changed_when: false
+  failed_when: false
+  when:
+    - td_channel_query_enabled | bool
+    - td_channel_query_result is defined
+    - not (td_channel_query_result.skipped | default(false))
+
+- name: 登记通道新鲜度 map
+  ansible.builtin.set_fact:
+    td_channel_query_ok: "{{ (_parsed.ok | default(false)) | bool }}"
+    td_channel_query_error: "{{ _parsed.error | default('') }}"
+    td_channel_last_by_computer: "{{ _parsed.by_computer | default({}) }}"
+    td_channel_row_count: "{{ _parsed.row_count | default(0) }}"
+  vars:
+    _parsed: "{{ (_tdc_parse_cmd.stdout | default('{}') | trim) | from_json }}"
+  when:
+    - td_channel_query_enabled | bool
+    - _tdc_parse_cmd is defined
+    - not (_tdc_parse_cmd.skipped | default(false))
+
+- name: DEBUG TDengine 通道查询
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-TDENGINE-CHANNEL] enabled={{ td_channel_query_enabled | default(false) }} ok={{ td_channel_query_ok | default(false) }} rows={{ td_channel_row_count | default(0) }} stale_hours={{ td_channel_stale_hours | default(6) }}"
+      - "[DEBUG-TDENGINE-CHANNEL] supplier={{ _tdc_supplier | default('') }} table={{ _tdc_table_fq | default(_tdc_table_raw | default('')) }}"
+      - "[DEBUG-TDENGINE-CHANNEL] sql={{ td_channel_sql | default('') }}"
+      - "[DEBUG-TDENGINE-CHANNEL] http_status={{ td_channel_query_result.status | default('n/a') }}"
+      - "[DEBUG-TDENGINE-CHANNEL] error={{ td_channel_query_error | default('') }}"
+      - "[DEBUG-TDENGINE-CHANNEL] raw_body={{ (td_channel_query_result.content | default('') | string) | truncate(400, True) }}"
+  when: td_channel_query_enabled | bool

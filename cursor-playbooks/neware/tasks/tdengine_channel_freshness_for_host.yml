@@ -1,0 +1,55 @@
+---
+# 从 localhost 批量查询结果取本机 computer_name 通道新鲜度。
+# 依赖 hostvars['localhost'].td_channel_last_by_computer（先跑 semaphore_tdengine_query_channel_last.yml）。
+# 匹配键：_sem_display_hostname（大小写不敏感），回退 inventory_hostname。
+
+- name: 读取 localhost 通道新鲜度 map
+  ansible.builtin.set_fact:
+    _tdc_map: "{{ hostvars['localhost'].td_channel_last_by_computer | default({}) }}"
+    _tdc_query_enabled: "{{ hostvars['localhost'].td_channel_query_enabled | default(false) }}"
+    _tdc_query_ok: "{{ hostvars['localhost'].td_channel_query_ok | default(false) }}"
+    _tdc_stale_hours_eff: "{{ hostvars['localhost'].td_channel_stale_hours | default(6) }}"
+
+- name: 按 computer_name 匹配本机通道行
+  ansible.builtin.set_fact:
+    td_channel_lookup_key: "{{ _key }}"
+    td_channel_row: "{{ _row }}"
+    td_channel_found: "{{ _row | length > 0 }}"
+    td_channel_insert_time: "{{ _row.insert_time | default('') }}"
+    td_channel_age_hours: "{{ _row.age_hours | default(none) }}"
+    td_channel_fresh: "{{ (_row.fresh | default(false)) | bool }}"
+    td_channel_stale: "{{ (_row.stale | default(false)) | bool }}"
+    td_channel_missing: "{{ (_tdc_query_enabled | bool) and (_tdc_query_ok | bool) and (_row | length == 0) }}"
+  vars:
+    _name: "{{ (_sem_display_hostname | default('', true) | trim) }}"
+    _ip: "{{ inventory_hostname | string }}"
+    _key: >-
+      {{
+        _name
+        if (_name | length > 0 and (_name | lower) in _tdc_map)
+        else (
+          _ip if (_ip | lower) in _tdc_map
+          else (_name if (_name | length > 0) else _ip)
+        )
+      }}
+    _row: >-
+      {{
+        _tdc_map[_name | lower] | default(
+          _tdc_map[_ip | lower] | default({}, true),
+          true
+        )
+      }}
+
+- name: DEBUG 本机通道新鲜度
+  ansible.builtin.debug:
+    msg: >-
+      [DEBUG-TDENGINE-CHANNEL] host={{ inventory_hostname }}
+      computer={{ _sem_display_hostname | default('') }}
+      found={{ td_channel_found | default(false) }}
+      insert_time={{ td_channel_insert_time | default('n/a') }}
+      age_hours={{ td_channel_age_hours | default('n/a') }}
+      fresh={{ td_channel_fresh | default(false) }}
+      stale={{ td_channel_stale | default(false) }}
+      missing={{ td_channel_missing | default(false) }}
+      query_ok={{ _tdc_query_ok | default(false) }}
+      stale_threshold_h={{ _tdc_stale_hours_eff | default(6) }}

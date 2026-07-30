@@ -40,10 +40,12 @@
       - "[DEBUG-WINRM] last_ping={{ _winrm_ping_last_success | default({}) }}"
   when: _winrm_ping_last_success is defined or _winrm_ping is defined
 
+# winrm_defer_fail_callback=true：由调用方（如 check_restart + TDengine）自行登记回调并 end_host。
 - name: WinRM 建连失败则登记 unhealthy 并结束本主机（bulk 回调 play）
   when:
     - not (_winrm_session_ok | default(false) | bool)
     - _semaphore_device_rows is defined
+    - not (winrm_defer_fail_callback | default(false) | bool)
   block:
     - name: 登记回调前清除 unreachable（ping 失败时否则跳过后续任务）
       ansible.builtin.meta: clear_host_errors

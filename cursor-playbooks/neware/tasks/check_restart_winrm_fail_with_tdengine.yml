@@ -1,0 +1,75 @@
+---
+# check_restart：WinRM 建连失败时，用 TDengine 通道 LAST(insert_time) 辅助判定。
+# 先 include tdengine_channel_freshness_for_host.yml（若尚未执行）。
+# 新鲜（≤ TDENGINE_CHANNEL_STALE_HOURS）→ 参考 healthy；否则 unhealthy。
+
+- name: 清除 WinRM unreachable 以便登记回调
+  ansible.builtin.meta: clear_host_errors
+
+- name: WinRM 失败 + 通道数据新鲜 — 参考健康
+  when: td_channel_fresh | default(false) | bool
+  ansible.builtin.set_fact:
+    need_reconfigure: false
+    log_status_ok: true
+    upload_health_via_api: false
+    td_channel_helped_winrm_fail: true
+    semaphore_callback_row:
+      hostname: "{{ _sem_display_hostname }}"
+      ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+      device_status: healthy
+      winrm_status: offline
+      api_status: "{{ 'online' if (api_upload_status_ok | default(false) | bool) else 'offline' }}"
+      abnormal_reason: >-
+        WinRM unreachable; TDengine channel insert_time fresh
+        ({{ td_channel_insert_time | default('?') }}, age_h={{ td_channel_age_hours | default('?') }})
+
+- name: WinRM 失败 + 通道数据过期/缺失 — 不健康
+  when: not (td_channel_fresh | default(false) | bool)
+  ansible.builtin.set_fact:
+    need_reconfigure: true
+    log_status_ok: false
+    upload_health_via_api: false
+    td_channel_helped_winrm_fail: true
+    semaphore_callback_row:
+      hostname: "{{ _sem_display_hostname }}"
+      ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+      device_status: unhealthy
+      winrm_status: offline
+      api_status: offline
+      abnormal_reason: >-
+        {{
+          (
+            'WinRM unreachable; TDengine channel data stale (insert_time='
+            ~ (td_channel_insert_time | default('?') | string)
+            ~ ', age_h=' ~ (td_channel_age_hours | default('?') | string)
+            ~ ', threshold_h=' ~ (hostvars['localhost'].td_channel_stale_hours | default(6) | string)
+            ~ ')'
+          )
+          if (td_channel_stale | default(false) | bool)
+          else (
+            'WinRM unreachable; TDengine channel row missing for computer_name='
+            ~ (_sem_display_hostname | default(inventory_hostname) | string)
+            if (td_channel_missing | default(false) | bool)
+            else (
+              'WinRM ping failed after '
+              ~ (winrm_connect_retries | default(2) | string)
+              ~ ' attempt(s)'
+              ~ (
+                '; TDengine channel query unavailable'
+                if not (hostvars['localhost'].td_channel_query_ok | default(false) | bool)
+                else ''
+              )
+            )
+          )
+        }}
+
+- name: DEBUG WinRM 失败通道辅助判定
+  ansible.builtin.debug:
+    msg: >-
+      [DEBUG-TDENGINE-CHANNEL] winrm_fail_gate fresh={{ td_channel_fresh | default(false) }}
+      stale={{ td_channel_stale | default(false) }}
+      missing={{ td_channel_missing | default(false) }}
+      device_status={{ (semaphore_callback_row | default({})).device_status | default('n/a') }}
+
+- name: WinRM 失败 — 结束本主机
+  ansible.builtin.meta: end_host
