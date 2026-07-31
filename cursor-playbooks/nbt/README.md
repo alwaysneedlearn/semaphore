@@ -16,7 +16,7 @@ Device type **NBT**: Windows **服务**启停（`win_service`），**不写 INI*
 | `device_stop.yml` | 停止服务 |
 | `device_restart.yml` | 停 → 启 → 心跳（不含 ResetData；重发见 `device_resend_data.yml`） |
 | `device_redeploy.yml` | 下发 `nbt.zip` 到 `SERVICE_PATH` + 服务重启 |
-| `device_check_restart.yml` | 不健康时服务重启 |
+| `device_check_restart.yml` | TDengine 通道新鲜度优先；不健康时服务重启 |
 
 ## 路径与 Redeploy
 

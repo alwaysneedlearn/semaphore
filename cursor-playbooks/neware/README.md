@@ -37,7 +37,7 @@ These playbooks call `PUT /api/project/{id}/devices/status/bulk` when **`SEMAPHO
 | `TDENGINE_TAG_SUPPLIER` | Super-table TAG `supplier` (not a column); default `newarerm`. Also used by **check_restart** channel freshness `WHERE supplier=…` |
 | `TDENGINE_TIMEZONE` | IANA tz for `updated_time` / `check_time` / channel age; default `Asia/Shanghai` |
 | `TDENGINE_CHANNEL_STATUS_TABLE` | **check_restart** only: channel table for `LAST(insert_time)` (e.g. `lab_sync.dwd_channel_status`). Requires `TDENGINE_URL`. Batch query once per task |
-| `TDENGINE_CHANNEL_STALE_HOURS` | **check_restart**: age threshold hours; default **6**. Older → unhealthy / force restart; WinRM-fail + fresh → reference healthy |
+| `TDENGINE_CHANNEL_STALE_HOURS` | **check_restart** (all types): age threshold hours; default **6**. Fresh → healthy skip API/WinRM; older/missing → continue API then WinRM |
 
 - **`../device_discovery.yml`** — **`PUT /api/project/{id}/devices/discovery/results`** (via **`tasks/semaphore_discovery_put_results.yml`**) when **`SEMAPHORE_API_TOKEN`** is set (`task_id` + `devices` array). Rows are **upserted in DB by IP** (`project__device_discovery_host`). UI **`GET .../discovery/results`** (persisted list) or **`?task_id=`** after a scan. Import to inventory is **Import selected** → **`discovery/import`** (with **`device_profile_id`**).
 - **`device_status.yml`**, **`device_restart.yml`**, **`device_stop.yml`**, **`device_check_restart_redeploy.yml`** — play1 在任务或 **`post_tasks`** 登记每台 **`semaphore_callback_row`**；**bulk PUT 仅在独立 `hosts: localhost` 第二 play**（不在 post_tasks 里 `run_once` bulk，避免批量时第一台抢跑）。**已移除** **`semaphore_bulk_put_immediate.yml`** 的 include。

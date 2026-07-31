@@ -73,11 +73,13 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 
 ## check_restart 通道新鲜度（只读）
 
-`neware/device_check_restart.yml` 判定顺序：
+`device_check_restart.yml`（**NEWARE / SINEXCEL / LAND / NBT / JHAI**）判定顺序：
 
 1. **批量一次**查询通道 `LAST(insert_time)`（按 hostname 匹配）
 2. **新鲜（≤ `TDENGINE_CHANNEL_STALE_HOURS`）** → `healthy`，**不**跑 API / WinRM
-3. **不新鲜 / 无行 / 查询失败 / 未配置** → 再跑 **API** → **WinRM** → 进程/Kafka → 必要时 restart
+3. **不新鲜 / 无行 / 查询失败 / 未配置** → 再跑各类型 **API** → **WinRM** → 必要时 restart
+
+Variable Group 仍用 `TDENGINE_CHANNEL_STATUS_TABLE` + `TDENGINE_TAG_SUPPLIER`（各类型 supplier 不同，如 `sinexcel` / `newarerm` / `nbt` / `jhai`）。
 
 ```sql
 SELECT LAST(`insert_time`), `computer_name`

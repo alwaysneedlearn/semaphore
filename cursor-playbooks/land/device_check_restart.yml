@@ -1,5 +1,14 @@
 ---
-- name: LAND 巡检重启（API 优先；不健康仅 restart）
+# Play 0：批量查一次 TDengine 通道 LAST(insert_time)
+- name: LAND check_restart — 批量加载 TDengine 通道新鲜度
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_tdengine_query_channel_last.yml"
+
+- name: LAND 巡检重启（通道新鲜度优先；不健康仅 restart）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -45,6 +54,19 @@
 
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+
+    - name: 应用本机 TDengine 通道新鲜度
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/tdengine_channel_freshness_for_host.yml"
+
+    - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM / restart）
+      when: td_channel_fresh | default(false) | bool
+      block:
+        - ansible.builtin.set_fact:
+            _land_need_reconfigure: false
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
+        - name: 通道新鲜 — 结束本主机
+          ansible.builtin.meta: end_host
+
 
     - name: LAND QueryStatus API（巡检重启首要判定）
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status.yml"

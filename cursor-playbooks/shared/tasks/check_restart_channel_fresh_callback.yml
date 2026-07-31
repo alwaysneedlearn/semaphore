@@ -1,0 +1,15 @@
+---
+# check_restart：通道数据已新鲜时登记 healthy 回调行（不跑 API/WinRM）。
+# 调用方负责：类型 need_reconfigure=false → include 本文件 →（可选 debug）→ meta: end_host。
+# 依赖：_sem_display_hostname、_sem_dev、td_channel_*（tdengine_channel_freshness_for_host.yml）
+
+- name: 登记 Semaphore 状态回调行（通道新鲜快路径）
+  ansible.builtin.set_fact:
+    upload_health_via_tdengine: true
+    semaphore_callback_row:
+      hostname: "{{ _sem_display_hostname }}"
+      ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+      device_status: healthy
+      winrm_status: offline
+      api_status: online
+      abnormal_reason: ""

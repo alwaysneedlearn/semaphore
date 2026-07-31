@@ -56,27 +56,18 @@
 
     # --- 1) TDengine 通道新鲜度（首要；满足则 healthy，不跑 API/WinRM）---
     - name: 应用本机 TDengine 通道新鲜度
-      ansible.builtin.include_tasks: tasks/tdengine_channel_freshness_for_host.yml
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/tdengine_channel_freshness_for_host.yml"
 
     - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM / restart）
       when: td_channel_fresh | default(false) | bool
       block:
-        - name: 登记 Semaphore 状态回调行（通道新鲜快路径）
+        - name: 登记 need_reconfigure=false（通道新鲜）
           ansible.builtin.set_fact:
             need_reconfigure: false
             log_status_ok: true
             upload_health_via_api: false
-            upload_health_via_tdengine: true
-            semaphore_callback_row:
-              hostname: "{{ _sem_display_hostname }}"
-              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
-              device_status: healthy
-              winrm_status: offline
-              api_status: online
-              abnormal_reason: ""
-
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
         - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
-
         - name: 通道新鲜 — 结束本主机
           ansible.builtin.meta: end_host
 

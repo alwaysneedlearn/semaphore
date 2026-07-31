@@ -15,7 +15,7 @@
 | `device_stop.yml` | 停止 `UploaderServiceDaemon` |
 | `device_restart.yml` | 停 → 启 → 心跳轮询（**不含** Kafka/重传 HTTP API） |
 | `device_redeploy.yml` | 下发 zip + 服务重启（不含 Kafka/重传 API） |
-| `device_check_restart.yml` | 不健康时仅服务 restart（不含 Kafka/重传 API） |
+| `device_check_restart.yml` | TDengine 通道新鲜度优先；不健康时仅服务 restart（不含 Kafka/重传 API） |
 | `device_resend_data.yml` | UI **重传数据**：`resend_params` → `POST /api/resend_data_part` 或 `/api/resend_data_all`（**不重启服务**） |
 
 ## HTTP API（默认端口 9002）

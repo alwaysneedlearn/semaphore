@@ -1,6 +1,6 @@
 # LAND playbooks (`cursor-playbooks/land/`)
 
-LAND device type uses API-first status/config with optional Windows process control.
+LAND device type uses TDengine channel-freshness-first check_restart, then API-first status/config with optional Windows process control.
 
 ## Playbooks
 
