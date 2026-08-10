@@ -20,6 +20,7 @@
     - block:
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
       ignore_unreachable: true
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resend_apply_from_params.yml"
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/dahua_run_lims_hist.yml"
@@ -31,15 +32,23 @@
             'WinRM unreachable'
             if not (_winrm_session_ok | default(false) | bool)
             else (
-              'lims-hist already running (exit 3)'
-              if (dahua_lims_hist_rc | default(1) | int) == 3
+              (dahua_lims_hist_stderr | default('') | string)
+              if (
+                (not (dahua_lims_hist_ok | default(false) | bool))
+                and ((dahua_lims_hist_stderr | default('') | string | trim | length) > 0)
+                and ('not found' in (dahua_lims_hist_stderr | default('') | string))
+              )
               else (
-                'lims-hist argument error (exit 2)'
-                if (dahua_lims_hist_rc | default(1) | int) == 2
+                'lims-hist already running (exit 3)'
+                if (dahua_lims_hist_rc | default(1) | int) == 3
                 else (
-                  ''
-                  if (dahua_lims_hist_ok | default(false) | bool)
-                  else ('lims-hist failed rc=' ~ (dahua_lims_hist_rc | default('?') | string))
+                  'lims-hist argument error (exit 2)'
+                  if (dahua_lims_hist_rc | default(1) | int) == 2
+                  else (
+                    ''
+                    if (dahua_lims_hist_ok | default(false) | bool)
+                    else ('lims-hist failed rc=' ~ (dahua_lims_hist_rc | default('?') | string))
+                  )
                 )
               )
             )

@@ -2,6 +2,7 @@
 # Run lims-hist.exe on the Windows host (CTSPro → LIMS Kafka).
 # Expects: dahua_lims_from, dahua_lims_to (ISO local: 2006-01-02T15:04:05).
 # Env (Variable Group): LIMS_HIST_EXE, optional LIMS_HIST_KAFKA_CFG / LIMS_HIST_ROOT / flags.
+# Soft-fail (no ansible.builtin.fail): always leave facts for post_tasks callback.
 
 - name: 解析 lims-hist 路径与可选参数
   ansible.builtin.set_fact:
@@ -32,121 +33,157 @@
     fail_msg: "DAHUA lims-hist requires dahua_lims_from / dahua_lims_to (from resend_params)"
 
 - name: 检查 lims-hist.exe 是否存在
-  ansible.windows.win_stat:
-    path: "{{ lims_hist_exe }}"
-  register: _lims_hist_stat
+  block:
+    - ansible.windows.win_stat:
+        path: "{{ lims_hist_exe }}"
+      register: _lims_hist_stat
+  ignore_unreachable: true
   when: _winrm_session_ok | default(false) | bool
 
-- name: lims-hist.exe 缺失则失败
-  ansible.builtin.fail:
-    msg: >-
-      lims-hist.exe not found at {{ lims_hist_exe }}.
-      Install the tool or set Variable Group LIMS_HIST_EXE.
+- name: 登记 lims-hist.exe 缺失（软失败，继续写回调）
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: ''
+    dahua_lims_hist_stderr: "lims-hist.exe not found at {{ lims_hist_exe }}"
+    dahua_lims_hist_skipped_run: true
   when:
     - _winrm_session_ok | default(false) | bool
+    - _lims_hist_stat is defined
+    - not (_lims_hist_stat.unreachable | default(false) | bool)
     - not (_lims_hist_stat.stat.exists | default(false) | bool)
 
-- name: 执行 lims-hist（历史原始数据上送 LIMS Kafka）
-  ansible.windows.win_shell: |
-    $ErrorActionPreference = 'Continue'
-    $exe = @'
-    {{ lims_hist_exe }}
-    '@.Trim()
-    $argList = New-Object System.Collections.Generic.List[string]
-    $argList.Add('-from')
-    $argList.Add(@'
-    {{ dahua_lims_from }}
-    '@.Trim())
-    $argList.Add('-to')
-    $argList.Add(@'
-    {{ dahua_lims_to }}
-    '@.Trim())
-    $kafkaCfg = @'
-    {{ lims_hist_kafka_cfg }}
-    '@.Trim()
-    if ($kafkaCfg -ne '') {
-      $argList.Add('-kafka-cfg')
-      $argList.Add($kafkaCfg)
-    }
-    $root = @'
-    {{ lims_hist_root }}
-    '@.Trim()
-    if ($root -ne '') {
-      $argList.Add('-root')
-      $argList.Add($root)
-    }
-    $equip = @'
-    {{ lims_hist_equip_no }}
-    '@.Trim()
-    if ($equip -ne '') {
-      $argList.Add('-equip-no')
-      $argList.Add($equip)
-    }
-    $stateDir = @'
-    {{ lims_hist_state_dir }}
-    '@.Trim()
-    if ($stateDir -ne '') {
-      $argList.Add('-state-dir')
-      $argList.Add($stateDir)
-    }
-    $logLevel = @'
-    {{ lims_hist_log_level }}
-    '@.Trim()
-    if ($logLevel -ne '') {
-      $argList.Add('-log-level')
-      $argList.Add($logLevel)
-    }
-    $maxDepth = @'
-    {{ lims_hist_max_depth }}
-    '@.Trim()
-    if ($maxDepth -ne '') {
-      $argList.Add('-max-depth')
-      $argList.Add($maxDepth)
-    }
-    $batchSize = @'
-    {{ lims_hist_batch_size }}
-    '@.Trim()
-    if ($batchSize -ne '') {
-      $argList.Add('-batch-size')
-      $argList.Add($batchSize)
-    }
-    {% if lims_hist_resume | bool %}
-    $argList.Add('-resume')
-    {% endif %}
-    {% if lims_hist_rescan | bool %}
-    $argList.Add('-rescan')
-    {% endif %}
-    {% if lims_hist_dry_run | bool %}
-    $argList.Add('-dry-run')
-    {% endif %}
-    {% if lims_hist_no_step_end | bool %}
-    $argList.Add('-no-step-end')
-    {% endif %}
-    {% if lims_hist_no_schedule | bool %}
-    $argList.Add('-no-schedule')
-    {% endif %}
-    Write-Output ("[DEBUG-DAHUA] lims-hist exe=" + $exe)
-    Write-Output ("[DEBUG-DAHUA] lims-hist args=" + ($argList -join ' '))
-    & $exe @argList
-    $code = $LASTEXITCODE
-    Write-Output ("[DEBUG-DAHUA] lims-hist exit=" + $code)
-    exit $code
-  args:
-    executable: powershell.exe
-  vars:
-    ansible_winrm_operation_timeout_sec: "{{ lims_hist_timeout_sec | int }}"
-    ansible_winrm_read_timeout_sec: "{{ (lims_hist_timeout_sec | int) + 100 }}"
-  register: _dahua_lims_hist
-  failed_when: false
-  when: _winrm_session_ok | default(false) | bool
+- name: 登记 lims-hist win_stat UNREACHABLE
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: ''
+    dahua_lims_hist_stderr: 'WinRM unreachable during lims-hist.exe check'
+    dahua_lims_hist_skipped_run: true
+    _winrm_session_ok: false
+  when:
+    - _lims_hist_stat is defined
+    - _lims_hist_stat.unreachable | default(false) | bool
 
-- name: 登记 lims-hist 结果
+- name: 执行 lims-hist（历史原始数据上送 LIMS Kafka）
+  block:
+    - ansible.windows.win_shell: |
+        $ErrorActionPreference = 'Continue'
+        $exe = @'
+        {{ lims_hist_exe }}
+        '@.Trim()
+        $argList = New-Object System.Collections.Generic.List[string]
+        $argList.Add('-from')
+        $argList.Add(@'
+        {{ dahua_lims_from }}
+        '@.Trim())
+        $argList.Add('-to')
+        $argList.Add(@'
+        {{ dahua_lims_to }}
+        '@.Trim())
+        $kafkaCfg = @'
+        {{ lims_hist_kafka_cfg }}
+        '@.Trim()
+        if ($kafkaCfg -ne '') {
+          $argList.Add('-kafka-cfg')
+          $argList.Add($kafkaCfg)
+        }
+        $root = @'
+        {{ lims_hist_root }}
+        '@.Trim()
+        if ($root -ne '') {
+          $argList.Add('-root')
+          $argList.Add($root)
+        }
+        $equip = @'
+        {{ lims_hist_equip_no }}
+        '@.Trim()
+        if ($equip -ne '') {
+          $argList.Add('-equip-no')
+          $argList.Add($equip)
+        }
+        $stateDir = @'
+        {{ lims_hist_state_dir }}
+        '@.Trim()
+        if ($stateDir -ne '') {
+          $argList.Add('-state-dir')
+          $argList.Add($stateDir)
+        }
+        $logLevel = @'
+        {{ lims_hist_log_level }}
+        '@.Trim()
+        if ($logLevel -ne '') {
+          $argList.Add('-log-level')
+          $argList.Add($logLevel)
+        }
+        $maxDepth = @'
+        {{ lims_hist_max_depth }}
+        '@.Trim()
+        if ($maxDepth -ne '') {
+          $argList.Add('-max-depth')
+          $argList.Add($maxDepth)
+        }
+        $batchSize = @'
+        {{ lims_hist_batch_size }}
+        '@.Trim()
+        if ($batchSize -ne '') {
+          $argList.Add('-batch-size')
+          $argList.Add($batchSize)
+        }
+        {% if lims_hist_resume | bool %}
+        $argList.Add('-resume')
+        {% endif %}
+        {% if lims_hist_rescan | bool %}
+        $argList.Add('-rescan')
+        {% endif %}
+        {% if lims_hist_dry_run | bool %}
+        $argList.Add('-dry-run')
+        {% endif %}
+        {% if lims_hist_no_step_end | bool %}
+        $argList.Add('-no-step-end')
+        {% endif %}
+        {% if lims_hist_no_schedule | bool %}
+        $argList.Add('-no-schedule')
+        {% endif %}
+        Write-Output ("[DEBUG-DAHUA] lims-hist exe=" + $exe)
+        Write-Output ("[DEBUG-DAHUA] lims-hist args=" + ($argList -join ' '))
+        & $exe @argList
+        $code = $LASTEXITCODE
+        if ($null -eq $code) { $code = 1 }
+        Write-Output ("[DEBUG-DAHUA] lims-hist exit=" + $code)
+        exit $code
+      vars:
+        ansible_winrm_operation_timeout_sec: "{{ lims_hist_timeout_sec | int }}"
+        ansible_winrm_read_timeout_sec: "{{ (lims_hist_timeout_sec | int) + 100 }}"
+      register: _dahua_lims_hist
+      failed_when: false
+  ignore_unreachable: true
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+
+- name: 登记 lims-hist 运行结果
   ansible.builtin.set_fact:
     dahua_lims_hist_rc: "{{ _dahua_lims_hist.rc | default(1) | int }}"
     dahua_lims_hist_ok: "{{ (_dahua_lims_hist.rc | default(1) | int) == 0 }}"
     dahua_lims_hist_stdout: "{{ (_dahua_lims_hist.stdout | default('')) | string }}"
     dahua_lims_hist_stderr: "{{ (_dahua_lims_hist.stderr | default('')) | string }}"
-  when: _winrm_session_ok | default(false) | bool
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - not (_dahua_lims_hist.unreachable | default(false) | bool)
+    - _dahua_lims_hist is defined
+
+- name: 登记 lims-hist 运行中 UNREACHABLE
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: "{{ (_dahua_lims_hist.stdout | default('')) | string }}"
+    dahua_lims_hist_stderr: 'WinRM unreachable while running lims-hist'
+    _winrm_session_ok: false
+  when:
+    - _dahua_lims_hist is defined
+    - _dahua_lims_hist.unreachable | default(false) | bool
 
 - name: 登记 lims-hist 跳过（WinRM 未通）
   ansible.builtin.set_fact:
@@ -154,13 +191,15 @@
     dahua_lims_hist_ok: false
     dahua_lims_hist_stdout: ''
     dahua_lims_hist_stderr: 'WinRM unreachable; lims-hist not run'
-  when: not (_winrm_session_ok | default(false) | bool)
+  when:
+    - not (_winrm_session_ok | default(false) | bool)
+    - dahua_lims_hist_ok is not defined
 
 - name: DEBUG DAHUA lims-hist
   ansible.builtin.debug:
     msg:
-      - "[DEBUG-DAHUA] from={{ dahua_lims_from }} to={{ dahua_lims_to }}"
-      - "[DEBUG-DAHUA] exe={{ lims_hist_exe }}"
-      - "[DEBUG-DAHUA] ok={{ dahua_lims_hist_ok }} rc={{ dahua_lims_hist_rc }}"
-      - "[DEBUG-DAHUA] stdout_tail={{ dahua_lims_hist_stdout | truncate(800, True) }}"
-      - "[DEBUG-DAHUA] stderr_tail={{ dahua_lims_hist_stderr | truncate(400, True) }}"
+      - "[DEBUG-DAHUA] from={{ dahua_lims_from | default('') }} to={{ dahua_lims_to | default('') }}"
+      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }}"
+      - "[DEBUG-DAHUA] ok={{ dahua_lims_hist_ok | default(false) }} rc={{ dahua_lims_hist_rc | default('?') }}"
+      - "[DEBUG-DAHUA] stdout_tail={{ (dahua_lims_hist_stdout | default('')) | truncate(800, True) }}"
+      - "[DEBUG-DAHUA] stderr_tail={{ (dahua_lims_hist_stderr | default('')) | truncate(400, True) }}"
