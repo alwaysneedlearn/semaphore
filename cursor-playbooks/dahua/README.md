@@ -17,7 +17,7 @@
 ## lims-hist
 
 - 默认路径：`C:\Apps\lims-hist\lims-hist.exe`（变量组 `LIMS_HIST_EXE` 可改）
-- **目标机无 exe 时**：从控制器复制（同重新部署 `win_copy`）→ 默认源 `/root/dahua/pkg/lims-hist.exe`（`LIMS_HIST_SRC` / `LIMS_HIST_PKG_DIR`+`LIMS_HIST_PKG_NAME` / `ZIP_PATH`）
+- **目标机无 exe 时**：从控制器复制（同重新部署 `win_copy`）→ 默认源 `/root/software/dahua/lims-hist.exe`（`LIMS_HIST_SRC` / `LIMS_HIST_PKG_DIR`+`LIMS_HIST_PKG_NAME` / `ZIP_PATH`）
 - 源可为 **`.exe`**（直接拷到 `LIMS_HIST_EXE`）或 **`.zip`**（拷到目标目录后 `Expand-Archive`；zip 内需在目标目录下解出 `lims-hist.exe`）
 - 时间格式：`yyyy-MM-ddTHH:mm:ss`（本地时区；与 lims-hist CLI 一致）
 - Kafka / equipNo：读目标机 PNE `KafkaCfg.ini`（可用 `LIMS_HIST_KAFKA_CFG` 覆盖路径）
@@ -29,9 +29,9 @@
 ```env
 LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
 # 控制器制品（目标机缺失时复制）
-LIMS_HIST_PKG_DIR=/root/dahua/pkg
-# LIMS_HIST_PKG_NAME=lims-hist.exe
-# 或完整路径：LIMS_HIST_SRC=/root/dahua/pkg/lims-hist.exe
+LIMS_HIST_PKG_DIR=/root/software/dahua
+LIMS_HIST_PKG_NAME=lims-hist.exe
+# 或完整路径：LIMS_HIST_SRC=/root/software/dahua/lims-hist.exe
 # 可选运行参数
 # LIMS_HIST_KAFKA_CFG=C:\Program Files (x86)\PNE CTSPro\KafkaCfg.ini
 # LIMS_HIST_ROOT=D:\Data,E:\CTSPro\Data
@@ -43,7 +43,7 @@ SEMAPHORE_API_TOKEN=<token>
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LIMS_HIST_EXE` | `C:\Apps\lims-hist\lims-hist.exe` | 目标机可执行文件路径 |
-| `LIMS_HIST_PKG_DIR` / `ZIP_PATH` | `/root/dahua/pkg` | 控制器上制品目录 |
+| `LIMS_HIST_PKG_DIR` / `ZIP_PATH` | `/root/software/dahua` | 控制器上制品目录 |
 | `LIMS_HIST_PKG_NAME` | `lims-hist.exe` | 控制器文件名（`.exe` 或 `.zip`） |
 | `LIMS_HIST_SRC` | `{PKG_DIR}/{PKG_NAME}` | 控制器完整路径（优先） |
 | `LIMS_HIST_KAFKA_CFG` | （工具默认） | PNE `KafkaCfg.ini` 路径 |

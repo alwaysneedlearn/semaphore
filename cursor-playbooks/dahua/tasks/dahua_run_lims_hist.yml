@@ -27,8 +27,10 @@
     lims_hist_timeout_sec: "{{ ((lookup('env', 'LIMS_HIST_TIMEOUT_SEC') | default('', true) | trim) | default('7200', true)) | int }}"
     lims_hist_pkg_dir: >-
       {{
-        (lookup('env', 'LIMS_HIST_PKG_DIR') | default(lookup('env', 'ZIP_PATH') | default('', true), true) | trim)
-        | default('/root/dahua/pkg', true)
+        (
+          (lookup('env', 'LIMS_HIST_PKG_DIR') | default(lookup('env', 'ZIP_PATH') | default('', true), true) | trim)
+          | default('/root/software/dahua', true)
+        ) | regex_replace('/$', '')
       }}
     lims_hist_pkg_name: >-
       {{
@@ -45,6 +47,12 @@
         if ((lookup('env', 'LIMS_HIST_SRC') | default('', true) | trim) | length > 0)
         else (lims_hist_pkg_dir ~ '/' ~ lims_hist_pkg_name)
       }}
+
+- name: DEBUG DAHUA lims-hist 控制器源路径
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-DAHUA] pkg_dir={{ lims_hist_pkg_dir }} pkg_name={{ lims_hist_pkg_name }}"
+      - "[DEBUG-DAHUA] controller_src={{ lims_hist_src }} target_exe={{ lims_hist_exe }}"
 
 - name: 解析 lims-hist 制品类型与 zip 落盘路径
   ansible.builtin.set_fact:
