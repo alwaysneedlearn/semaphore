@@ -1,0 +1,143 @@
+---
+# Ensure lims-hist.exe on target (redeploy-style): copy from controller when missing.
+# Play facts: lims_hist_exe, lims_hist_exe_dir, lims_hist_src, lims_hist_src_is_zip
+# Soft-fail: sets dahua_lims_hist_* + dahua_lims_hist_skipped_run when copy/extract fails.
+
+- name: 检查控制器上 lims-hist 制品是否存在
+  ansible.builtin.stat:
+    path: "{{ lims_hist_src }}"
+  register: _lims_hist_src_stat
+  delegate_to: localhost
+
+- name: 控制器制品缺失则登记软失败
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: ''
+    dahua_lims_hist_stderr: "lims-hist package missing on controller: {{ lims_hist_src }}"
+    dahua_lims_hist_skipped_run: true
+  when: not (_lims_hist_src_stat.stat.exists | default(false) | bool)
+
+- name: DEBUG DAHUA 准备从控制器复制 lims-hist
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-DAHUA] ensure_copy src={{ lims_hist_src }} exists={{ _lims_hist_src_stat.stat.exists | default(false) }}"
+      - "[DEBUG-DAHUA] ensure_copy dest_exe={{ lims_hist_exe }} dest_dir={{ lims_hist_exe_dir }}"
+      - "[DEBUG-DAHUA] ensure_copy is_zip={{ lims_hist_src_is_zip | default(false) }}"
+  when: not (dahua_lims_hist_skipped_run | default(false) | bool)
+
+- name: 确保目标机 lims-hist 目录存在
+  block:
+    - ansible.windows.win_file:
+        path: "{{ lims_hist_exe_dir }}"
+        state: directory
+  ignore_unreachable: true
+  when:
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _winrm_session_ok | default(false) | bool
+
+- name: 从控制器复制 lims-hist.exe
+  block:
+    - ansible.windows.win_copy:
+        src: "{{ lims_hist_src }}"
+        dest: "{{ lims_hist_exe }}"
+      register: _lims_hist_exe_copy
+  ignore_unreachable: true
+  when:
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _winrm_session_ok | default(false) | bool
+    - not (lims_hist_src_is_zip | default(false) | bool)
+
+- name: 从控制器复制 lims-hist zip 到目标机
+  block:
+    - ansible.windows.win_copy:
+        src: "{{ lims_hist_src }}"
+        dest: "{{ lims_hist_zip_dest }}"
+      register: _lims_hist_zip_copy
+  ignore_unreachable: true
+  when:
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _winrm_session_ok | default(false) | bool
+    - lims_hist_src_is_zip | default(false) | bool
+
+- name: 解压 lims-hist zip 到目标目录
+  block:
+    - ansible.windows.win_shell: |
+        $zipPath = @'
+        {{ lims_hist_zip_dest }}
+        '@.Trim()
+        $destDir = @'
+        {{ lims_hist_exe_dir }}
+        '@.Trim()
+        try {
+          Expand-Archive -Path $zipPath -DestinationPath $destDir -Force
+          Write-Output 'EXTRACT_OK'
+        } catch {
+          Write-Output ("EXTRACT_ERROR:" + $_.Exception.Message)
+        }
+      register: _lims_hist_extract
+      failed_when: false
+  ignore_unreachable: true
+  when:
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _winrm_session_ok | default(false) | bool
+    - lims_hist_src_is_zip | default(false) | bool
+    - not ((_lims_hist_zip_copy.unreachable | default(false)) | bool)
+
+- name: 登记 zip 解压失败
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: "{{ (_lims_hist_extract.stdout | default('')) | string }}"
+    dahua_lims_hist_stderr: 'lims-hist zip extract failed'
+    dahua_lims_hist_skipped_run: true
+  when:
+    - lims_hist_src_is_zip | default(false) | bool
+    - _lims_hist_extract is defined
+    - not (_lims_hist_extract.unreachable | default(false) | bool)
+    - "'EXTRACT_ERROR' in (_lims_hist_extract.stdout | default(''))"
+
+- name: 登记复制/解压过程 UNREACHABLE
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: ''
+    dahua_lims_hist_stderr: 'WinRM unreachable while copying lims-hist'
+    dahua_lims_hist_skipped_run: true
+    _winrm_session_ok: false
+  when: >-
+    (
+      (_lims_hist_exe_copy is defined and (_lims_hist_exe_copy.unreachable | default(false) | bool))
+      or (_lims_hist_zip_copy is defined and (_lims_hist_zip_copy.unreachable | default(false) | bool))
+      or (_lims_hist_extract is defined and (_lims_hist_extract.unreachable | default(false) | bool))
+    )
+
+- name: 复制后再次检查 lims-hist.exe
+  block:
+    - ansible.windows.win_stat:
+        path: "{{ lims_hist_exe }}"
+      register: _lims_hist_stat_after
+  ignore_unreachable: true
+  when:
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _winrm_session_ok | default(false) | bool
+
+- name: 复制后仍缺失则登记软失败
+  ansible.builtin.set_fact:
+    dahua_lims_hist_rc: 1
+    dahua_lims_hist_ok: false
+    dahua_lims_hist_stdout: ''
+    dahua_lims_hist_stderr: "lims-hist.exe still missing after copy: {{ lims_hist_exe }} (src={{ lims_hist_src }})"
+    dahua_lims_hist_skipped_run: true
+  when:
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _lims_hist_stat_after is defined
+    - not (_lims_hist_stat_after.unreachable | default(false) | bool)
+    - not (_lims_hist_stat_after.stat.exists | default(false) | bool)
+
+- name: DEBUG DAHUA lims-hist 复制完成
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-DAHUA] ensure_copy done exists={{ _lims_hist_stat_after.stat.exists | default(false) }}"
+      - "[DEBUG-DAHUA] ensure_copy skipped_run={{ dahua_lims_hist_skipped_run | default(false) }}"
+  when: _lims_hist_stat_after is defined or (dahua_lims_hist_skipped_run | default(false) | bool)

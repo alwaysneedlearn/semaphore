@@ -562,6 +562,8 @@ export default {
   deviceResendHintLAND: 'LAND: Redeliver API, yyyy-M-d HH:mm:ss',
   deviceResendHintSINEXCEL: 'SINEXCEL: Retransmit API, yyyy-M-d HH:mm:ss',
   deviceResendHintJHAI: 'JHAI: partial resend uses testStartTime / testEndTime; optional full resend',
+  deviceResendHintDAHUA: 'DAHUA: runs lims-hist.exe on the host; times as yyyy-MM-ddTHH:mm:ss (local)',
+  deviceResendOnlySkipped: 'Skipped {count} device(s) that only support resend (no status/restart/redeploy)',
   deviceResendNoEligible: 'No selected device supports resend or has a resend template configured',
   deviceResendTemplateMissing: 'Configure a Resend data template under Device types first.',
   deviceRestartTemplateMissing: 'Configure a Restart template under Device types first.',
