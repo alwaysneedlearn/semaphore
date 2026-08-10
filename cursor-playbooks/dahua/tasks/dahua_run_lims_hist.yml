@@ -1,10 +1,11 @@
 ---
 # Run lims-hist.exe on the Windows host (CTSPro → LIMS Kafka).
 # Expects: dahua_lims_from, dahua_lims_to (ISO local: 2006-01-02T15:04:05).
-# Env (Variable Group): LIMS_HIST_EXE, optional LIMS_HIST_KAFKA_CFG / LIMS_HIST_ROOT / flags.
-# Soft-fail (no ansible.builtin.fail): always leave facts for post_tasks callback.
+# Env: LIMS_HIST_EXE, LIMS_HIST_SRC / LIMS_HIST_PKG_DIR (+ ZIP_PATH), optional flags.
+# If exe missing on target: copy from controller (redeploy-style), then run.
+# Soft-fail: always leave facts for post_tasks callback.
 
-- name: 解析 lims-hist 路径与可选参数
+- name: 解析 lims-hist 目标路径
   ansible.builtin.set_fact:
     lims_hist_exe: >-
       {{
@@ -24,6 +25,34 @@
     lims_hist_no_step_end: "{{ ((lookup('env', 'LIMS_HIST_NO_STEP_END') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_no_schedule: "{{ ((lookup('env', 'LIMS_HIST_NO_SCHEDULE') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_timeout_sec: "{{ ((lookup('env', 'LIMS_HIST_TIMEOUT_SEC') | default('', true) | trim) | default('7200', true)) | int }}"
+    lims_hist_pkg_dir: >-
+      {{
+        (lookup('env', 'LIMS_HIST_PKG_DIR') | default(lookup('env', 'ZIP_PATH') | default('', true), true) | trim)
+        | default('/root/dahua/pkg', true)
+      }}
+    lims_hist_pkg_name: >-
+      {{
+        (lookup('env', 'LIMS_HIST_PKG_NAME') | default('', true) | trim)
+        | default('lims-hist.exe', true)
+      }}
+
+- name: 解析 lims-hist 控制器制品与目标目录
+  ansible.builtin.set_fact:
+    lims_hist_exe_dir: "{{ lims_hist_exe | regex_replace('\\\\[^\\\\]+$', '') }}"
+    lims_hist_src: >-
+      {{
+        (lookup('env', 'LIMS_HIST_SRC') | default('', true) | trim)
+        if ((lookup('env', 'LIMS_HIST_SRC') | default('', true) | trim) | length > 0)
+        else (lims_hist_pkg_dir ~ '/' ~ lims_hist_pkg_name)
+      }}
+
+- name: 解析 lims-hist 制品类型与 zip 落盘路径
+  ansible.builtin.set_fact:
+    lims_hist_src_is_zip: >-
+      {{
+        ((lims_hist_src | lower | regex_search('\.zip$') | default('', true) | length) > 0)
+      }}
+    lims_hist_zip_dest: "{{ lims_hist_exe_dir }}\\lims-hist.zip"
 
 - name: 校验 lims-hist 时间窗
   ansible.builtin.assert:
@@ -40,19 +69,6 @@
   ignore_unreachable: true
   when: _winrm_session_ok | default(false) | bool
 
-- name: 登记 lims-hist.exe 缺失（软失败，继续写回调）
-  ansible.builtin.set_fact:
-    dahua_lims_hist_rc: 1
-    dahua_lims_hist_ok: false
-    dahua_lims_hist_stdout: ''
-    dahua_lims_hist_stderr: "lims-hist.exe not found at {{ lims_hist_exe }}"
-    dahua_lims_hist_skipped_run: true
-  when:
-    - _winrm_session_ok | default(false) | bool
-    - _lims_hist_stat is defined
-    - not (_lims_hist_stat.unreachable | default(false) | bool)
-    - not (_lims_hist_stat.stat.exists | default(false) | bool)
-
 - name: 登记 lims-hist win_stat UNREACHABLE
   ansible.builtin.set_fact:
     dahua_lims_hist_rc: 1
@@ -64,6 +80,26 @@
   when:
     - _lims_hist_stat is defined
     - _lims_hist_stat.unreachable | default(false) | bool
+
+- name: 目标机无 lims-hist.exe 则从控制器复制（同重新部署）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/dahua_ensure_lims_hist.yml"
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - not (dahua_lims_hist_skipped_run | default(false) | bool)
+    - _lims_hist_stat is defined
+    - not (_lims_hist_stat.unreachable | default(false) | bool)
+    - not (_lims_hist_stat.stat.exists | default(false) | bool)
+
+- name: DEBUG DAHUA lims-hist 已存在（跳过复制）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-DAHUA] ensure_copy skipped=already_on_host"
+      - "[DEBUG-DAHUA] exe={{ lims_hist_exe }}"
+  when:
+    - _winrm_session_ok | default(false) | bool
+    - _lims_hist_stat is defined
+    - not (_lims_hist_stat.unreachable | default(false) | bool)
+    - _lims_hist_stat.stat.exists | default(false) | bool
 
 - name: 执行 lims-hist（历史原始数据上送 LIMS Kafka）
   block:
@@ -199,7 +235,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-DAHUA] from={{ dahua_lims_from | default('') }} to={{ dahua_lims_to | default('') }}"
-      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }}"
+      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }} src={{ lims_hist_src | default('') }}"
       - "[DEBUG-DAHUA] ok={{ dahua_lims_hist_ok | default(false) }} rc={{ dahua_lims_hist_rc | default('?') }}"
       - "[DEBUG-DAHUA] stdout_tail={{ (dahua_lims_hist_stdout | default('')) | truncate(800, True) }}"
       - "[DEBUG-DAHUA] stderr_tail={{ (dahua_lims_hist_stderr | default('')) | truncate(400, True) }}"

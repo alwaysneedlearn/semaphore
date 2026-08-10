@@ -17,6 +17,8 @@
 ## lims-hist
 
 - 默认路径：`C:\Apps\lims-hist\lims-hist.exe`（变量组 `LIMS_HIST_EXE` 可改）
+- **目标机无 exe 时**：从控制器复制（同重新部署 `win_copy`）→ 默认源 `/root/dahua/pkg/lims-hist.exe`（`LIMS_HIST_SRC` / `LIMS_HIST_PKG_DIR`+`LIMS_HIST_PKG_NAME` / `ZIP_PATH`）
+- 源可为 **`.exe`**（直接拷到 `LIMS_HIST_EXE`）或 **`.zip`**（拷到目标目录后 `Expand-Archive`；zip 内需在目标目录下解出 `lims-hist.exe`）
 - 时间格式：`yyyy-MM-ddTHH:mm:ss`（本地时区；与 lims-hist CLI 一致）
 - Kafka / equipNo：读目标机 PNE `KafkaCfg.ini`（可用 `LIMS_HIST_KAFKA_CFG` 覆盖路径）
 - 数据根：默认工具 `auto`（本机本地固定盘）；可用 `LIMS_HIST_ROOT` 指定逗号分隔**本地**路径（勿用 UNC）
@@ -26,25 +28,24 @@
 
 ```env
 LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
-# 可选
+# 控制器制品（目标机缺失时复制）
+LIMS_HIST_PKG_DIR=/root/dahua/pkg
+# LIMS_HIST_PKG_NAME=lims-hist.exe
+# 或完整路径：LIMS_HIST_SRC=/root/dahua/pkg/lims-hist.exe
+# 可选运行参数
 # LIMS_HIST_KAFKA_CFG=C:\Program Files (x86)\PNE CTSPro\KafkaCfg.ini
 # LIMS_HIST_ROOT=D:\Data,E:\CTSPro\Data
-# LIMS_HIST_EQUIP_NO=
-# LIMS_HIST_LOG_LEVEL=info
-# LIMS_HIST_MAX_DEPTH=8
-# LIMS_HIST_BATCH_SIZE=200
-# LIMS_HIST_RESUME=false
-# LIMS_HIST_RESCAN=false
-# LIMS_HIST_DRY_RUN=false
-# LIMS_HIST_NO_STEP_END=false
-# LIMS_HIST_NO_SCHEDULE=false
 # LIMS_HIST_TIMEOUT_SEC=7200
+# LIMS_HIST_DRY_RUN=false
 SEMAPHORE_API_TOKEN=<token>
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LIMS_HIST_EXE` | `C:\Apps\lims-hist\lims-hist.exe` | 目标机可执行文件 |
+| `LIMS_HIST_EXE` | `C:\Apps\lims-hist\lims-hist.exe` | 目标机可执行文件路径 |
+| `LIMS_HIST_PKG_DIR` / `ZIP_PATH` | `/root/dahua/pkg` | 控制器上制品目录 |
+| `LIMS_HIST_PKG_NAME` | `lims-hist.exe` | 控制器文件名（`.exe` 或 `.zip`） |
+| `LIMS_HIST_SRC` | `{PKG_DIR}/{PKG_NAME}` | 控制器完整路径（优先） |
 | `LIMS_HIST_KAFKA_CFG` | （工具默认） | PNE `KafkaCfg.ini` 路径 |
 | `LIMS_HIST_ROOT` | （工具 `auto`） | 逗号分隔本地数据根 |
 | `LIMS_HIST_TIMEOUT_SEC` | `7200` | WinRM 单次操作超时（秒） |
@@ -70,4 +71,4 @@ SEMAPHORE_API_TOKEN=<token>
 |------|------|
 | `rows=0` / `orig=0` 但仍有 schedule | CSV 行时间不在 `-from/-to` 内 |
 | exit `3` | 目标机已有 lims-hist 实例；结束旧进程后再跑 |
-| exe not found | 部署 lims-hist 或改 `LIMS_HIST_EXE` |
+| exe not found / copy failed | 把 `lims-hist.exe`（或 zip）放到控制器 `LIMS_HIST_PKG_DIR`；查 `[DEBUG-DAHUA] ensure_copy` |

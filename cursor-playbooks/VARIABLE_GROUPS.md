@@ -165,12 +165,17 @@ DAHUA **仅支持重发数据**：在目标机运行 **`lims-hist.exe`**（CTSPr
 
 ```env
 LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
+LIMS_HIST_PKG_DIR=/root/dahua/pkg
+# LIMS_HIST_PKG_NAME=lims-hist.exe
+# LIMS_HIST_SRC=/root/dahua/pkg/lims-hist.exe
 # LIMS_HIST_KAFKA_CFG=C:\Program Files (x86)\PNE CTSPro\KafkaCfg.ini
 # LIMS_HIST_ROOT=D:\Data
 # LIMS_HIST_TIMEOUT_SEC=7200
 # LIMS_HIST_DRY_RUN=false
 SEMAPHORE_API_TOKEN=<token>
 ```
+
+目标机无 `LIMS_HIST_EXE` 时，从控制器 `LIMS_HIST_SRC`（或 `LIMS_HIST_PKG_DIR`/`ZIP_PATH` + `LIMS_HIST_PKG_NAME`）`win_copy` 下发，逻辑同重新部署。
 
 详见 [`dahua/README.md`](dahua/README.md)。
 
