@@ -28,6 +28,7 @@
 | **LAND** | GUI `LHBTS.exe` | 优雅停止（关窗+弹窗） | 计划任务 | **HTTP** `ModifyConfig`（进程在跑时） | exe+进程+`QueryStatus`（`real_status==true`） | zip + API 启停 | **`Redeliver`**（仅 restart） |
 | **SINEXCEL** | GUI agent | 强杀或优雅 | 计划任务 | **HTTP** Kafka API（无 INI） | `QueryConfig` | zip + API | **`Retransmit`**（restart） |
 | **NBT** | Windows **服务** | `win_service` stop | `win_service` start | 无 INI | 服务 Running + `SendStatus` 心跳 | zip + 服务重启 | **`ResetData`**（restart） |
+| **DAHUA** | `lims-hist.exe` | — | — | — | —（不支持） | — | **仅** WinRM 跑 lims-hist `-from/-to` |
 
 **已无独立 `device_start`**：启动合并在 restart/redeploy 流程。
 

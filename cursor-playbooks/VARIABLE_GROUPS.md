@@ -6,7 +6,7 @@ Semaphore **变量组**通过模板绑定的 **Environment** 注入 Ansible `loo
 
 | 原则 | 说明 |
 |------|------|
-| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE 各建 **独立变量组**，绑定到该类型的 Status / Start / Stop / Restart / Redeploy 模板。不要混用跨类型默认值。 |
+| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE / DAHUA 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
 | **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退、浅层扫描（SINEXCEL）。 |
 | **SINEXCEL 安装路径** | **变量组即可**：`EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 在各盘符下自动找最新 exe，**不必**逐台配 `Install.ExeDir` / `ExePath`。 |
 | **Install（可选）** | 仅当某台机无法被盘符扫描覆盖时，才在设备/类型配置里写 **`Install`** / **`Paths`** 覆盖。见 [`sinexcel/README.md`](sinexcel/README.md)。 |
@@ -158,6 +158,21 @@ TDENGINE_TIMEZONE=Asia/Shanghai
 ```
 
 路径：`{{ EXE_DIR }}\{{ ZIP_NAME }}\{{ EXE_NAME }}`（与 NBT 相同，`EXE_NAME` 已含 `.exe`）。详见 [`neware/README.md`](neware/README.md)。`TDENGINE_CHANNEL_*` 仅 **check_restart** 读取通道 `LAST(insert_time)`；状态写入仍用 `TDENGINE_STATUS_TABLE`。
+
+### DAHUA
+
+DAHUA **仅支持重发数据**：在目标机运行 **`lims-hist.exe`**（CTSPro → LIMS Kafka）。不配置 Status / Restart / Redeploy / check_restart 模板。
+
+```env
+LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
+# LIMS_HIST_KAFKA_CFG=C:\Program Files (x86)\PNE CTSPro\KafkaCfg.ini
+# LIMS_HIST_ROOT=D:\Data
+# LIMS_HIST_TIMEOUT_SEC=7200
+# LIMS_HIST_DRY_RUN=false
+SEMAPHORE_API_TOKEN=<token>
+```
+
+详见 [`dahua/README.md`](dahua/README.md)。
 
 ## Stop 模板注意事项
 

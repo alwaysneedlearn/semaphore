@@ -69,6 +69,7 @@ const PROFILE_HINT_KEYS = {
   LAND: 'deviceResendHintLAND',
   SINEXCEL: 'deviceResendHintSINEXCEL',
   JHAI: 'deviceResendHintJHAI',
+  DAHUA: 'deviceResendHintDAHUA',
 };
 
 function pad2(n) {

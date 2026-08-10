@@ -62,6 +62,11 @@ func formatNewareDate(t time.Time) string {
 	return t.Format("2006-01-02")
 }
 
+// lims-hist CLI (-from/-to): 2006-01-02T15:04:05 local.
+func formatLimsHistDateTime(t time.Time) string {
+	return t.Format("2006-01-02T15:04:05")
+}
+
 // BuildResendParams validates UI input and formats per device profile_key for Ansible.
 func BuildResendParams(profileKey string, in ResendRangeInput) (ResendParams, error) {
 	key := strings.ToUpper(strings.TrimSpace(profileKey))
@@ -108,6 +113,10 @@ func BuildResendParams(profileKey string, in ResendRangeInput) (ResendParams, er
 		startFmt = formatLandLikeDateTime(startT)
 		endFmt = formatLandLikeDateTime(endT)
 		display = startFmt + " → " + endFmt
+	case "DAHUA":
+		startFmt = formatLimsHistDateTime(startT)
+		endFmt = formatLimsHistDateTime(endT)
+		display = startFmt + " → " + endFmt
 	default:
 		return ResendParams{}, fmt.Errorf("resend is not supported for profile %q", key)
 	}
@@ -143,6 +152,8 @@ func ResendFormatHint(profileKey string) string {
 		return "yyyy-M-d HH:mm:ss (e.g. 2026-6-1 10:10:10)"
 	case "SINEXCEL", "JHAI":
 		return "yyyy-M-d HH:mm:ss"
+	case "DAHUA":
+		return "lims-hist: yyyy-MM-ddTHH:mm:ss (local)"
 	default:
 		return ""
 	}
@@ -151,7 +162,17 @@ func ResendFormatHint(profileKey string) string {
 // ProfileSupportsResend reports whether profile_key has a resend_data implementation.
 func ProfileSupportsResend(profileKey string) bool {
 	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
-	case "JHAI", "LAND", "SINEXCEL", "NBT", "NEWARE":
+	case "JHAI", "LAND", "SINEXCEL", "NBT", "NEWARE", "DAHUA":
+		return true
+	default:
+		return false
+	}
+}
+
+// ProfileResendOnly reports types that only support resend_data (no status/restart/redeploy).
+func ProfileResendOnly(profileKey string) bool {
+	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
+	case "DAHUA":
 		return true
 	default:
 		return false

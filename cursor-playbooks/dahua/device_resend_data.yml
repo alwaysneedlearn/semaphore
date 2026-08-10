@@ -1,0 +1,66 @@
+---
+# DAHUA 重发数据：在目标机运行 lims-hist.exe（CTSPro 历史原始数据 → LIMS Kafka）。
+# 仅支持 resend；不提供 status / stop / restart / redeploy / check_restart。
+- name: DAHUA 重发数据（lims-hist）
+  hosts: windows_hosts
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: resend_data
+    sem_operation_force_log: true
+    sem_debug_tag: DAHUA
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      ignore_unreachable: true
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resend_apply_from_params.yml"
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/dahua_run_lims_hist.yml"
+
+  post_tasks:
+    - ansible.builtin.set_fact:
+        _dahua_abnormal: >-
+          {{
+            'WinRM unreachable'
+            if not (_winrm_session_ok | default(false) | bool)
+            else (
+              'lims-hist already running (exit 3)'
+              if (dahua_lims_hist_rc | default(1) | int) == 3
+              else (
+                'lims-hist argument error (exit 2)'
+                if (dahua_lims_hist_rc | default(1) | int) == 2
+                else (
+                  ''
+                  if (dahua_lims_hist_ok | default(false) | bool)
+                  else ('lims-hist failed rc=' ~ (dahua_lims_hist_rc | default('?') | string))
+                )
+              )
+            )
+          }}
+
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if (dahua_lims_hist_ok | default(false) | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if (dahua_lims_hist_ok | default(false) | bool) else 'offline' }}"
+          abnormal_reason: "{{ _dahua_abnormal | default('') }}"
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

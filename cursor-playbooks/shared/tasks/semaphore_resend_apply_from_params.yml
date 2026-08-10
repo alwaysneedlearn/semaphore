@@ -64,3 +64,9 @@
           }, recursive=True)
       }}
   when: (resend_params.profile_key | default('') | upper) == 'NEWARE'
+
+- name: DAHUA 重发参数（lims-hist -from/-to）
+  ansible.builtin.set_fact:
+    dahua_lims_from: "{{ resend_params.start | default('') }}"
+    dahua_lims_to: "{{ resend_params.end | default('') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'DAHUA'

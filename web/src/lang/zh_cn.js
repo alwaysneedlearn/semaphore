@@ -488,6 +488,8 @@ export default {
   deviceResendHintLAND: 'LAND：Redeliver API，格式 yyyy-M-d HH:mm:ss（如 2026-6-1 10:10:10）',
   deviceResendHintSINEXCEL: 'SINEXCEL：Retransmit API，格式 yyyy-M-d HH:mm:ss',
   deviceResendHintJHAI: 'JHAI：分段重传 testStartTime / testEndTime；可勾选全量重传',
+  deviceResendHintDAHUA: 'DAHUA：在目标机运行 lims-hist.exe；时间格式 yyyy-MM-ddTHH:mm:ss（本地时区）',
+  deviceResendOnlySkipped: '已跳过 {count} 台仅支持重发的设备（无巡检/重启/重部署）',
   deviceResendNoEligible: '所选设备均不支持或未配置重发数据模板',
   deviceResendTemplateMissing: '请先在「设备类型」中配置「重发数据模板」。',
   deviceRestartTemplateMissing: '请先在「设备类型」中配置「重新启动模板」。',

@@ -37,6 +37,25 @@ func TestBuildResendParamsNBT(t *testing.T) {
 	}
 }
 
+func TestBuildResendParamsDAHUA(t *testing.T) {
+	params, err := BuildResendParams("DAHUA", ResendRangeInput{
+		Start: "2026-07-01 00:00:00",
+		End:   "2026-07-20 23:59:59",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params.Start != "2026-07-01T00:00:00" {
+		t.Fatalf("start=%q", params.Start)
+	}
+	if params.End != "2026-07-20T23:59:59" {
+		t.Fatalf("end=%q", params.End)
+	}
+	if !ProfileSupportsResend("DAHUA") || !ProfileResendOnly("DAHUA") {
+		t.Fatal("DAHUA should be resend-only")
+	}
+}
+
 func TestBuildResendParamsJHAIFull(t *testing.T) {
 	params, err := BuildResendParams("JHAI", ResendRangeInput{Full: true})
 	if err != nil {
