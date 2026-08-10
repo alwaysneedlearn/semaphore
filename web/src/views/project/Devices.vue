@@ -152,31 +152,19 @@
             <v-list-item-icon><v-icon>mdi-radar</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceProbe') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item
-            v-if="selectionHasLifecycleActions"
-            @click="runBulkAction('status')"
-          >
+          <v-list-item @click="runBulkAction('status')">
             <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item
-            v-if="selectionHasResendData"
-            @click="runBulkAction('resend_data')"
-          >
+          <v-list-item @click="runBulkAction('resend_data')">
             <v-list-item-icon><v-icon>mdi-database-sync</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceResendData') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item
-            v-if="selectionHasLifecycleActions"
-            @click="runBulkAction('restart')"
-          >
+          <v-list-item @click="runBulkAction('restart')">
             <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceRestart') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item
-            v-if="selectionHasLifecycleActions"
-            @click="runBulkAction('redeploy')"
-          >
+          <v-list-item @click="runBulkAction('redeploy')">
             <v-list-item-icon><v-icon>mdi-package-down</v-icon></v-list-item-icon>
             <v-list-item-title>{{ $t('deviceRedeploy') }}</v-list-item-title>
           </v-list-item>
@@ -506,31 +494,19 @@
               </v-btn>
             </template>
             <v-list dense>
-              <v-list-item
-                v-if="deviceSupportsLifecycleActions(item)"
-                @click="runAction(item, 'status')"
-              >
+              <v-list-item @click="runAction(item, 'status')">
                 <v-list-item-icon><v-icon>mdi-stethoscope</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceStatusCheck') }}</v-list-item-title>
               </v-list-item>
-              <v-list-item
-                v-if="deviceSupportsResendData(item)"
-                @click="runAction(item, 'resend_data')"
-              >
+              <v-list-item @click="runAction(item, 'resend_data')">
                 <v-list-item-icon><v-icon>mdi-database-sync</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceResendData') }}</v-list-item-title>
               </v-list-item>
-              <v-list-item
-                v-if="deviceSupportsLifecycleActions(item)"
-                @click="runAction(item, 'restart')"
-              >
+              <v-list-item @click="runAction(item, 'restart')">
                 <v-list-item-icon><v-icon>mdi-restart</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceRestart') }}</v-list-item-title>
               </v-list-item>
-              <v-list-item
-                v-if="deviceSupportsLifecycleActions(item)"
-                @click="runAction(item, 'redeploy')"
-              >
+              <v-list-item @click="runAction(item, 'redeploy')">
                 <v-list-item-icon><v-icon>mdi-package-down</v-icon></v-list-item-icon>
                 <v-list-item-title>{{ $t('deviceRedeploy') }}</v-list-item-title>
               </v-list-item>
@@ -566,9 +542,6 @@ import DeviceImportExportDialog from '@/components/DeviceImportExportDialog.vue'
 import DeviceOperationHistoryDialog from '@/components/DeviceOperationHistoryDialog.vue';
 import DeviceResendDataDialog from '@/components/DeviceResendDataDialog.vue';
 import { getErrorMessage } from '@/lib/error';
-
-const RESEND_DATA_PROFILE_KEYS = new Set(['JHAI', 'LAND', 'SINEXCEL', 'NBT', 'NEWARE', 'DAHUA']);
-const RESEND_ONLY_PROFILE_KEYS = new Set(['DAHUA']);
 
 export default {
   mixins: [ItemListPageBase],
@@ -726,18 +699,6 @@ export default {
         || this.devicesLoading
         || this.bulkLoading
         || this.selectAllFilteredLoading;
-    },
-    selectionHasResendData() {
-      return this.selectedDeviceIds.some((id) => {
-        const d = this.selectedDevicesMap[id];
-        return d && this.deviceSupportsResendData(d);
-      });
-    },
-    selectionHasLifecycleActions() {
-      return this.selectedDeviceIds.some((id) => {
-        const d = this.selectedDevicesMap[id];
-        return d && this.deviceSupportsLifecycleActions(d);
-      });
     },
   },
 
@@ -898,72 +859,22 @@ export default {
       });
     },
 
-    deviceProfileKey(device) {
-      const profileId = device && device.device_profile_id;
-      if (!profileId) {
-        return '';
-      }
-      return String(this.profileById[profileId] || '').toUpperCase();
-    },
-
-    deviceSupportsResendData(device) {
-      const key = this.deviceProfileKey(device);
-      return key !== '' && RESEND_DATA_PROFILE_KEYS.has(key);
-    },
-
-    deviceSupportsLifecycleActions(device) {
-      const key = this.deviceProfileKey(device);
-      if (key === '') {
-        return true;
-      }
-      return !RESEND_ONLY_PROFILE_KEYS.has(key);
-    },
-
     deviceResendTemplateConfigured(device) {
       return this.deviceActionTemplateConfigured(device, 'resend_data');
     },
 
-    filterDevicesReadyForResend(devices) {
-      const supported = (devices || []).filter((d) => this.deviceSupportsResendData(d));
-      if (!supported.length) {
-        return { ready: [], skippedUnsupported: (devices || []).length };
-      }
-      const ready = supported.filter((d) => this.deviceResendTemplateConfigured(d));
-      return {
-        ready,
-        skippedUnsupported: (devices || []).length - supported.length,
-        skippedNoTemplate: supported.length - ready.length,
-      };
-    },
-
-    notifyResendSelectionIssues({ skippedUnsupported, skippedNoTemplate }) {
-      if (skippedUnsupported > 0) {
-        EventBus.$emit('i-snackbar', {
-          color: 'warning',
-          text: this.$t('deviceResendUnsupportedSkipped', { count: skippedUnsupported }),
-        });
-      }
-      if (skippedNoTemplate > 0) {
-        this.notifyDeviceActionTemplateMissing('resend_data');
-      }
-    },
-
     openResendDialog(devices) {
-      const filtered = this.filterDevicesReadyForResend(devices);
-      const { ready, skippedUnsupported, skippedNoTemplate } = filtered;
-      if (!ready.length) {
-        if (skippedNoTemplate > 0) {
-          this.notifyDeviceActionTemplateMissing('resend_data');
-        } else {
-          EventBus.$emit('i-snackbar', {
-            color: 'warning',
-            text: this.$t('deviceResendNoEligible'),
-          });
-        }
+      const list = devices || [];
+      if (!list.length) {
         return;
       }
-      if (skippedUnsupported > 0 || skippedNoTemplate > 0) {
-        this.notifyResendSelectionIssues({ skippedUnsupported, skippedNoTemplate });
+      const ready = list.filter((d) => this.deviceResendTemplateConfigured(d));
+      if (!ready.length) {
+        this.notifyDeviceActionTemplateMissing('resend_data');
+        return;
+      }
+      if (ready.length < list.length) {
+        this.notifyDeviceActionTemplateMissing('resend_data');
       }
       this.pendingResendDevices = ready;
       this.resendDataDialog = true;
@@ -975,54 +886,36 @@ export default {
         .filter(Boolean);
     },
 
-    selectedDevicesForLifecycleAction() {
-      return this.selectedDevicesFull().filter((d) => this.deviceSupportsLifecycleActions(d));
-    },
-
     runBulkAction(action) {
       if (action === 'resend_data') {
-        const devices = this.selectedDevicesFull();
-        this.openResendDialog(devices);
+        this.openResendDialog(this.selectedDevicesFull());
         return;
       }
-      const lifecycleDevices = this.selectedDevicesForLifecycleAction();
-      if (!lifecycleDevices.length) {
-        EventBus.$emit('i-snackbar', {
-          color: 'warning',
-          text: this.$t('deviceResendOnlySkipped', {
-            count: this.selectedDeviceIds.length,
-          }),
-        });
+      const devices = this.selectedDevicesFull();
+      if (!devices.length) {
         return;
-      }
-      const skippedResendOnly = this.selectedDeviceIds.length - lifecycleDevices.length;
-      if (skippedResendOnly > 0) {
-        EventBus.$emit('i-snackbar', {
-          color: 'warning',
-          text: this.$t('deviceResendOnlySkipped', { count: skippedResendOnly }),
-        });
       }
       if (this.deviceActionNeedsConfirm(action)) {
-        if (!this.bulkActionProfilesHaveTemplate(action, lifecycleDevices)) {
+        if (!this.bulkActionProfilesHaveTemplate(action, devices)) {
           this.notifyDeviceActionTemplateMissing(action);
           return;
         }
         this.pendingDeviceAction = action;
         this.pendingDeviceActionTarget = null;
-        this.pendingBulkDeviceIds = lifecycleDevices.map((d) => d.id);
-        this.pendingBulkTaskCount = this.countProfileGroupsForDevices(lifecycleDevices);
+        this.pendingBulkDeviceIds = devices.map((d) => d.id);
+        this.pendingBulkTaskCount = this.countProfileGroupsForDevices(devices);
         this.deviceActionConfirmDialog = true;
         return;
       }
-      const n = this.countProfileGroupsForDevices(lifecycleDevices);
+      const n = this.countProfileGroupsForDevices(devices);
       if (n > 1) {
         this.pendingBulkAction = action;
-        this.pendingBulkDeviceIds = lifecycleDevices.map((d) => d.id);
+        this.pendingBulkDeviceIds = devices.map((d) => d.id);
         this.pendingBulkTaskCount = n;
         this.bulkActionConfirmDialog = true;
         return;
       }
-      this.executeBulkAction(action, lifecycleDevices.map((d) => d.id));
+      this.executeBulkAction(action, devices.map((d) => d.id));
     },
 
     countProfileGroupsForDevices(devices) {
