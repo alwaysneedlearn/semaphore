@@ -1,20 +1,17 @@
 ---
-# LANH 状态巡检：判断 ccsmon.exe 是否运行；未运行则启动（不停止、无需确认弹窗）。
-# 另提供 resend / check_restart；不提供 restart / redeploy / stop。
-- name: LANH 状态巡检（进程未运行则启动）
+# LANH 状态巡检：QueryStatus API 优先（同 LAND SyncLims）；API 未健康时 WinRM/进程参考。
+- name: LANH 状态巡检（API 优先 + 进程参考）
   hosts: windows_hosts
   strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/../land/tasks"
+    sem_land_tasks_dir: "{{ playbook_dir }}/../land/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: LANH
     sem_operation_type: status
-    # 启动脚本会读 start_popup_*；LANH 强制空关键字（不点确认）
-    start_popup_keyword: ""
-    start_popup_wait_seconds: 0
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LANH', true) }}"
     exe_dir: "{{ exe_dir_preferred }}"
     exe_dir_fallback_drives: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) | default('D,E,C', true) }}"
@@ -27,51 +24,132 @@
     _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
     app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else '.' }}"
     exe_path: "{% if app_dir in ['.', ''] %}{{ exe_dir }}\\{{ exe_name }}{% else %}{{ exe_dir }}\\{{ app_dir }}\\{{ exe_name }}{% endif %}"
-    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
-    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('15', true)) | int }}"
-    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
     process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
+    land_api_scheme: "{{ (lookup('env', 'LANH_API_SCHEME') | default(lookup('env', 'LAND_API_SCHEME') | default('', true), true) | trim) | default('http', true) }}"
+    land_api_port: "{{ ((lookup('env', 'LANH_API_PORT') | default(lookup('env', 'LAND_API_PORT') | default('', true), true) | trim) | default('8080', true)) | int }}"
+    land_api_status_path: "{{ (lookup('env', 'LANH_API_STATUS_PATH') | default(lookup('env', 'LAND_API_STATUS_PATH') | default('', true), true) | trim) | default('/SyncLims/QueryStatus', true) }}"
+    land_api_timeout: "{{ ((lookup('env', 'LANH_API_TIMEOUT') | default(lookup('env', 'LAND_API_TIMEOUT') | default('', true), true) | trim) | default('8', true)) | int }}"
+    land_api_token: "{{ (lookup('env', 'LANH_API_TOKEN') | default(lookup('env', 'LAND_API_TOKEN') | default('', true), true) | trim) | default('landapi', true) }}"
+    land_api_verify_tls: "{{ ((lookup('env', 'LANH_API_VERIFY_TLS') | default(lookup('env', 'LAND_API_VERIFY_TLS') | default('', true), true) | trim) | default('true', true)) | bool }}"
+    land_query_status_require_real_status: "{{ ((lookup('env', 'LANH_QUERY_STATUS_REQUIRE_REAL_STATUS') | default(lookup('env', 'LAND_QUERY_STATUS_REQUIRE_REAL_STATUS') | default('', true), true) | trim) | default('true', true)) | bool }}"
     _devices_from_extra: "{{ devices | default([]) }}"
     _device_singleton: "{{ [device] if (device is defined) else [] }}"
     _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
 
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
-    - block:
-        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
-      ignore_unreachable: true
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
 
-    - block:
-        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanh_ensure_running.yml"
-      ignore_unreachable: true
-      rescue:
-        - ansible.builtin.set_fact:
-            lanh_ensure_ok: false
-            lanh_process_running: false
-            host_failure_reason: "{{ (ansible_failed_result.msg | default('LANH ensure-running failed')) | string | truncate(400, True) }}"
+    - name: LANH QueryStatus API（Patrol 首要判定）
+      ansible.builtin.include_tasks: "{{ sem_land_tasks_dir }}/land_api_query_status.yml"
+
+    - name: LANH API 已健康（跳过 WinRM/进程参考）
+      when: land_api_status_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "LANH Patrol API 快路径"
+
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: >-
+                {{
+                  'WinRM unreachable (API healthy; reference only)'
+                  if not (_winrm_session_ok | default(false) | bool)
+                  else ''
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LANH API 不可达或非 2xx — 快速失败
+      when: not (land_api_http_ok | default(false) | bool)
+      block:
+        - name: 登记 Semaphore 状态回调行（API 快速失败）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: >-
+                {{
+                  'API unreachable: ' ~ (_land_api_status_raw.msg | default('connection failed') | string)
+                  if (_land_api_status_raw.status | default(0) | int) in [0, -1]
+                  else 'API HTTP ' ~ (_land_api_status_raw.status | default(0) | string) ~ ' (expected 2xx)'
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 快速失败 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LANH API 2xx 但未达健康 — WinRM/进程参考检查
+      when:
+        - land_api_http_ok | default(false) | bool
+        - not (land_api_status_ok | default(false) | bool)
+      block:
+        - name: WinRM 建连（含重试）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+        - name: WinRM 未连通则不再执行本主机后续步骤
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+        - name: 部署 Windows 启动辅助脚本
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+        - name: 解析 EXE_DIR（盘符回退）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
+
+        - name: 检查 LANH 进程状态
+          ansible.windows.win_shell: |
+            $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $p) {
+              $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+              "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+            } else {
+              "NOT_RUNNING"
+            }
+          register: _lanh_process_check
+          changed_when: false
+          ignore_unreachable: true
+
+        - name: 状态判断并组装回调行（参考路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: "{{ _lanh_need_reconfig | bool }}"
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: "{{ 'healthy' if not (_lanh_need_reconfig | bool) else 'unhealthy' }}"
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: "{{ 'online' if not (_lanh_need_reconfig | bool) else 'offline' }}"
+              abnormal_reason: "{{ _lanh_abnormal_reason | trim }}"
+          vars:
+            _lanh_proc_out: "{{ ((_lanh_process_check | default({})).stdout | default('')) | trim }}"
+            _lanh_proc_running: "{{ (_lanh_proc_out.split('|') | first) == 'RUNNING' }}"
+            _lanh_need_reconfig: >-
+              {{
+                (not (_lanh_proc_running | bool))
+                or (not (land_api_status_ok | default(false) | bool))
+              }}
+            _lanh_abnormal_reason: >-
+              {% if not (_lanh_proc_running | bool) %}Process not running: {{ process_name }} ({{ _lanh_proc_out }})
+              {% elif not (land_api_status_ok | default(false) | bool) %}API QueryStatus: real_status={{ land_api_real_status | default('n/a') }} history_status={{ land_api_history_status | default('n/a') }} body={{ (_land_api_status_raw.content | default('') | string) | truncate(200, True) }}
+              {% else %}{% endif %}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
 
   post_tasks:
-    - ansible.builtin.set_fact:
-        semaphore_callback_row:
-          hostname: "{{ _sem_display_hostname }}"
-          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
-          device_status: "{{ 'healthy' if (lanh_ensure_ok | default(false) | bool) else 'unhealthy' }}"
-          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
-          api_status: "{{ 'online' if (lanh_ensure_ok | default(false) | bool) else 'offline' }}"
-          abnormal_reason: >-
-            {{
-              host_failure_reason | default('')
-              if (host_failure_reason is defined)
-              else (
-                ''
-                if (lanh_ensure_ok | default(false) | bool)
-                else ('Process not running after ensure: ' ~ (process_name | default('ccsmon')))
-              )
-            }}
-
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
       when: semaphore_callback_row is defined
 

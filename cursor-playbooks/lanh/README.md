@@ -1,25 +1,24 @@
 # LANH playbooks (`cursor-playbooks/lanh/`)
 
-设备类型 **LANH**（参照 LAND 路径/WinRM/交互启动，行为更简）：
+设备类型 **LANH**（参照 LAND 路径/WinRM/API，行为更简）：
 
 - **提供**：`device_status.yml`、`device_resend_data.yml`；另有 `device_check_restart.yml` 供 **Schedule** 定时跑
 - **不提供**：restart、redeploy、stop（设备列表无对应入口）
-- 判断 **`ccsmon.exe`** 是否运行；**未运行则启动**
-- **不停止**已有进程
-- 启动 **无需** 确认弹窗（`START_POPUP_KEYWORD` 强制为空）
+- **Patrol / check_restart**：HTTP **QueryStatus**（同 LAND `POST …/SyncLims/QueryStatus`，`real_status=true` 为健康）
+- **check_restart 修复**：API 不健康时 **ensure 启动** `ccsmon.exe`（只启动、不停止、无弹窗），启动后轮询 QueryStatus
 - 重发：HTTP **Redeliver**（同 LAND SyncLims）
 
-任务日志：搜 **`[DEBUG-LANH]`**。
+任务日志：搜 **`[DEBUG-LANH]`**（QueryStatus 解析仍可能带 `[DEBUG-LAND]`，因复用 `land/tasks/land_api_query_status*.yml`）。
 
 ## Semaphore templates
 
 | Playbook | 说明 |
 |----------|------|
-| `device_status.yml` | 建连 → 解析 exe → 进程检查 → 必要时启动 → 回调（设备 **检查状态** / Patrol） |
+| `device_status.yml` | **QueryStatus API 优先** → 不健康时 WinRM/进程参考 → bulk 回调（设备 **检查状态** / Patrol） |
 | `device_resend_data.yml` | UI **重发数据**：`resend_params` → `POST …/SyncLims/Redeliver`（不启停进程） |
-| `device_check_restart.yml` | **仅 Schedule**：TDengine 通道新鲜度优先；不新鲜则仅 **ensure 启动**（不停止）。设备列表无 check_restart 按钮 |
+| `device_check_restart.yml` | **仅 Schedule**：TDengine 通道新鲜度 → QueryStatus → 不健康则 ensure 启动 + API 轮询 |
 
-在 **Device types** 中绑定 **Status / Patrol** 与 **Resend** 即可；Restart / Redeploy 留空。UI 已无 Check-restart 绑定项。定时巡检：在 Semaphore **Schedules** 里直接调度指向 `device_check_restart.yml` 的模板。
+在 **Device types** 中绑定 **Status / Patrol** 与 **Resend** 即可；Restart / Redeploy 留空。定时巡检：在 Semaphore **Schedules** 里直接调度指向 `device_check_restart.yml` 的模板。
 
 ## Variable Group ENV
 
@@ -30,9 +29,12 @@ APP_DIR=.
 EXE_DIR_FALLBACK_DRIVES=D,E,C
 EXE_SCAN_LATEST=true
 EXE_SCAN_MAX_DEPTH=3
-# Redeliver（可与 LAND 共用 LAND_API_*）
+# QueryStatus / Redeliver（可与 LAND 共用 LAND_API_*）
 LANH_API_PORT=8080
 LANH_API_TOKEN=landapi
+LANH_API_STATUS_PATH=/SyncLims/QueryStatus
+# LANH_QUERY_STATUS_REQUIRE_REAL_STATUS=true
+# LANH_START_CHECK_API=true
 # check_restart 通道新鲜度（可选）
 # TDENGINE_URL=http://tdengine:6041
 # TDENGINE_CHANNEL_STATUS_TABLE=lab_sync.dwd_channel_status
@@ -47,19 +49,23 @@ SEMAPHORE_API_TOKEN=<token>
 | `PROCESS_NAME` | 由 `EXE_NAME` 推导（`ccsmon`） | `Get-Process -Name` |
 | `EXE_DIR` | `C:\Program Files\LANH` | 首选安装目录 |
 | `APP_DIR` | `.` | `.` / 空 = `EXE_DIR\EXE_NAME` |
-| `LANH_API_*` / `LAND_API_*` | 同 LAND Redeliver 默认 | 重发 HTTP |
+| `LANH_API_*` / `LAND_API_*` | 同 LAND SyncLims 默认 | QueryStatus / Redeliver |
+| `LANH_QUERY_STATUS_REQUIRE_REAL_STATUS` / `LAND_*` | `true` | Patrol 健康需 `data.real_status=true` |
 | `TDENGINE_CHANNEL_*` | — | 仅 check_restart 新鲜度门禁 |
 
 ## 行为摘要
 
 ```text
-status / check_restart(非新鲜):
-  WinRM → resolve exe → Get-Process ccsmon
-    RUNNING → healthy（不重启）
-    NOT_RUNNING → 交互启动（无弹窗）→ 再查进程
+status (Patrol):
+  POST QueryStatus（同 LAND）
+    real_status=true → healthy 快路径
+    HTTP 不可达/非 2xx → unhealthy 快失败
+    2xx 但未健康 → WinRM 进程参考（不自动启动）
 
-check_restart(通道新鲜):
-  healthy 快路径（不连 WinRM）
+check_restart(通道不新鲜):
+  POST QueryStatus
+    健康 → 结束
+    不健康 → WinRM ensure 启动 ccsmon → 轮询 QueryStatus
 
 resend:
   POST Redeliver（不启停 ccsmon）
