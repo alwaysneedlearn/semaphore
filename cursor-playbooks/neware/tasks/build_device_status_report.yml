@@ -1,6 +1,7 @@
 ---
-# 在 localhost 上 run_once：构建 _status_report_msg_lines（每台设备一行）。
-# 期望变量：status_report_hosts（本 play 实际执行的主机列表）、status_report_exe_name
+# 在 localhost 第二 play 上构建 _status_report_msg_lines（每台设备一行）。
+# 不可放在 windows_hosts play 的 run_once post_tasks：strategy: free 会在第一台完成时抢跑。
+# 期望变量：status_report_hosts（groups['windows_hosts']）、status_report_exe_name
 # 行首展示 Semaphore hostname（若有），并带 ip=；不再把 inventory_hostname 单独顶在任务 ok 行上。
 
 - name: 初始化状态报告行

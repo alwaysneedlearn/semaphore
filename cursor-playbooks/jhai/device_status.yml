@@ -1,6 +1,7 @@
 ---
 - name: JHAI 状态巡检（上传心跳 API 优先 + 服务参考）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

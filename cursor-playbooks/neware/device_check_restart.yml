@@ -10,6 +10,7 @@
 
 - name: NEWARE 巡检重启（健康则跳过；不健康仅 restart，无 redeploy/zip）
   hosts: windows_hosts
+  strategy: free
   gather_facts: false
   max_fail_percentage: 100
   vars:

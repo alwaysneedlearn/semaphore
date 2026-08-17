@@ -11,6 +11,7 @@
 # 通道不新鲜或未配置 TDengine：确保 ccsmon 运行（只启动、不停止、无弹窗）
 - name: LANH 巡检确保运行（通道新鲜度优先；不健康仅启动）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

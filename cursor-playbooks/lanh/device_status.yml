@@ -3,6 +3,7 @@
 # 另提供 resend / check_restart；不提供 restart / redeploy / stop。
 - name: LANH 状态巡检（进程未运行则启动）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

@@ -1,6 +1,7 @@
 ---
 - name: NBT 重新部署（制品 + 服务重启，无 INI 写配置）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

@@ -1,6 +1,7 @@
 ---
 - name: NEWARE 重新部署（目标机 zip 检查 → 条件复制 → 配置 → 启停验证）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

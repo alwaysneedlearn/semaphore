@@ -10,6 +10,7 @@
 
 - name: SINEXCEL 巡检重启（通道新鲜度优先；不健康仅 restart）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars_files:

@@ -1,6 +1,7 @@
 ---
 - name: NBT 重启服务（无配置修改）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

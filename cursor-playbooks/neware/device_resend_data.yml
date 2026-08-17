@@ -1,6 +1,7 @@
 ---
 - name: NEWARE 重发数据（写 INI 时间范围并重启，无制品下发）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:
