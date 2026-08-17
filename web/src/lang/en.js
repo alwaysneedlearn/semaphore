@@ -627,7 +627,6 @@ export default {
   deviceWinrmExamplesFilesystem: 'Directories',
   deviceWinrmExamplesService: 'Services',
   deviceWinrmExamplesDisk: 'Disk',
-  deviceCheckRestartTemplate: 'Check-restart template',
   deviceStatusCheck: 'Check status',
   deviceConfig: 'Configuration',
   deviceConfigPush: 'Apply configuration',

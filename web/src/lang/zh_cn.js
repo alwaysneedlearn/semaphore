@@ -552,7 +552,6 @@ export default {
   deviceWinrmExamplesFilesystem: '目录',
   deviceWinrmExamplesService: '服务',
   deviceWinrmExamplesDisk: '磁盘',
-  deviceCheckRestartTemplate: '巡检重启模板',
   deviceStatusCheck: '检查状态',
   deviceConfig: '配置',
   deviceConfigPush: '下发配置',
