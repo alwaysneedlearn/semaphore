@@ -1,0 +1,84 @@
+---
+# LANH 状态巡检：判断 ccsmon.exe 是否运行；未运行则启动（不停止、无需确认弹窗）。
+# 不提供 restart / redeploy / check_restart / stop / resend。
+- name: LANH 状态巡检（进程未运行则启动）
+  hosts: windows_hosts
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: LANH
+    sem_operation_type: status
+    # 启动脚本会读 start_popup_*；LANH 强制空关键字（不点确认）
+    start_popup_keyword: ""
+    start_popup_wait_seconds: 0
+    exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LANH', true) }}"
+    exe_dir: "{{ exe_dir_preferred }}"
+    exe_dir_fallback_drives: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) | default('D,E,C', true) }}"
+    exe_scan_latest: "{{ ((lookup('env', 'EXE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
+    exe_scan_max_depth: "{{ ((lookup('env', 'EXE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int }}"
+    _exe_name_default: ccsmon.exe
+    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
+    exe_name: "{{ _exe_name_base ~ '.exe' }}"
+    _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
+    app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else '.' }}"
+    exe_path: "{% if app_dir in ['.', ''] %}{{ exe_dir }}\\{{ exe_name }}{% else %}{{ exe_dir }}\\{{ app_dir }}\\{{ exe_name }}{% endif %}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('15', true)) | int }}"
+    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
+    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      ignore_unreachable: true
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
+
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanh_ensure_running.yml"
+      ignore_unreachable: true
+      rescue:
+        - ansible.builtin.set_fact:
+            lanh_ensure_ok: false
+            lanh_process_running: false
+            host_failure_reason: "{{ (ansible_failed_result.msg | default('LANH ensure-running failed')) | string | truncate(400, True) }}"
+
+  post_tasks:
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if (lanh_ensure_ok | default(false) | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if (lanh_ensure_ok | default(false) | bool) else 'offline' }}"
+          abnormal_reason: >-
+            {{
+              host_failure_reason | default('')
+              if (host_failure_reason is defined)
+              else (
+                ''
+                if (lanh_ensure_ok | default(false) | bool)
+                else ('Process not running after ensure: ' ~ (process_name | default('ccsmon')))
+              )
+            }}
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: semaphore_callback_row is defined
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

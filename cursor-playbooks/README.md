@@ -13,6 +13,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 | **`nbt/`** | NBT (Windows service + heartbeat API) |
 | **`jhai/`** | JHAI (`UploaderServiceDaemon` + BTS upload HTTP API) |
 | **`dahua/`** | DAHUA（**仅** `device_resend_data.yml`：目标机运行 `lims-hist.exe`） |
+| **`lanh/`** | LANH（**仅** `device_status.yml`：确保 `ccsmon.exe` 运行，不停止、无弹窗） |
 | **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 
 **Semaphore templates** examples:
@@ -26,7 +27,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 
 Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NEWARE also sets `sem_profile_tasks_dir` / `sem_profile_files_dir` for type-specific tasks (e.g. TDengine).
 
-**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
+**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 
 ## Documentation
 
@@ -37,6 +38,7 @@ Each type playbook sets `sem_tasks_dir` / `sem_files_dir` to `../shared/…`. NE
 - **NBT:** [`nbt/README.md`](nbt/README.md)
 - **JHAI:** [`jhai/README.md`](jhai/README.md)
 - **DAHUA:** [`dahua/README.md`](dahua/README.md)
+- **LANH:** [`lanh/README.md`](lanh/README.md)
 - **Shared tasks:** [`shared/README.md`](shared/README.md)
 - **Cloud agent:** `AGENTS.md` (Devices section)
 

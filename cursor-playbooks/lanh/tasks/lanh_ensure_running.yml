@@ -1,0 +1,90 @@
+---
+# LANH：若 ccsmon 未运行则启动（不停止、不点确认弹窗）。
+
+- name: 检查 LANH 进程是否运行
+  ansible.windows.win_shell: |
+    $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $p) {
+      $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+      "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+    } else {
+      "NOT_RUNNING"
+    }
+  register: _lanh_process_check
+  changed_when: false
+  failed_when: false
+
+- name: 登记进程已在运行
+  ansible.builtin.set_fact:
+    lanh_process_running: true
+    lanh_started_this_run: false
+    lanh_ensure_ok: true
+  when: ((_lanh_process_check.stdout | default('') | trim).split('|') | first) == 'RUNNING'
+
+- name: 进程未运行则启动（无停止、无启动弹窗确认）
+  when: ((_lanh_process_check.stdout | default('') | trim).split('|') | first) != 'RUNNING'
+  block:
+    - name: 获取当前登录用户（交互启动）
+      ansible.windows.win_shell: |
+        $explorerUser = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction SilentlyContinue |
+          ForEach-Object {
+            $o = Invoke-CimMethod -InputObject $_ -MethodName GetOwner
+            if ($o -and $o.ReturnValue -eq 0 -and $o.User) {
+              $user = $o.User.Trim()
+              $dom = [string]$o.Domain
+              $dom = $dom.Trim()
+              if ($dom.Length -gt 0) { "$dom\$user" } else { ".\$user" }
+            }
+          } |
+          Where-Object { $_ } |
+          Select-Object -First 1
+        if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
+      register: _lanh_get_username
+      changed_when: false
+
+    - name: 规范化启动用户
+      ansible.builtin.set_fact:
+        _reconfig_profile_user: "{{ (_lanh_get_username.stdout_lines | default([]) | last | default(_lanh_get_username.stdout | default(''))) | trim }}"
+
+    - name: 启动 ccsmon
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanh_start_program.yml"
+
+    - name: 启动后确认进程
+      ansible.windows.win_shell: |
+        Start-Sleep -Seconds 3
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) {
+          $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+          "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+        } else {
+          "NOT_RUNNING"
+        }
+      register: _lanh_process_after
+      changed_when: false
+      failed_when: false
+      when: not (lanh_exe_missing_at_start | default(false) | bool)
+
+    - name: 登记启动结果（exe 缺失）
+      ansible.builtin.set_fact:
+        lanh_process_running: false
+        lanh_started_this_run: true
+        lanh_ensure_ok: false
+        host_failure_reason: "程序不存在，无法启动: {{ exe_path }}"
+      when: lanh_exe_missing_at_start | default(false) | bool
+
+    - name: 登记启动结果（已尝试启动）
+      ansible.builtin.set_fact:
+        lanh_process_running: "{{ ((_lanh_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING' }}"
+        lanh_started_this_run: true
+        lanh_ensure_ok: "{{ ((_lanh_process_after.stdout | default('') | trim).split('|') | first) == 'RUNNING' }}"
+      when:
+        - not (lanh_exe_missing_at_start | default(false) | bool)
+        - _lanh_process_after is defined
+
+- name: DEBUG LANH ensure-running
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANH] process={{ process_name }} exe_path={{ exe_path | default('') }}"
+      - "[DEBUG-LANH] before={{ (_lanh_process_check.stdout | default('')) | truncate(200, True) }}"
+      - "[DEBUG-LANH] after={{ (_lanh_process_after.stdout | default('(not started)')) | truncate(200, True) }}"
+      - "[DEBUG-LANH] running={{ lanh_process_running | default(false) }} started_this_run={{ lanh_started_this_run | default(false) }} ok={{ lanh_ensure_ok | default(false) }}"

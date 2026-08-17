@@ -1,0 +1,40 @@
+---
+# LANH start only: same PS1 as shared reconfig_start, but no popup and no abort end_host.
+# Expects: exe_path, exe_name, exe_args, _reconfig_profile_user, restart_delay, process_verify_poll_seconds
+
+- name: LANH 启动程序（无确认弹窗）
+  environment:
+    SEMAPHORE_EXE_PATH: "{{ exe_path }}"
+    SEMAPHORE_EXE_NAME: "{{ exe_name }}"
+    PROCESS_ALIVE_MIN_HANDLES: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_HANDLES') | default('', true) | trim) | default('1', true) }}"
+    PROCESS_ALIVE_MIN_WS_KB: "{{ (lookup('env', 'PROCESS_ALIVE_MIN_WS_KB') | default('', true) | trim) | default('512', true) }}"
+    SEMAPHORE_EXE_ARGS: "{{ exe_args | default('', true) }}"
+    SEMAPHORE_PROFILE_USER: "{{ _reconfig_profile_user }}"
+    SEMAPHORE_RESTART_DELAY: "{{ restart_delay | string }}"
+    SEMAPHORE_PROCESS_VERIFY_POLL_SECONDS: "{{ process_verify_poll_seconds | default(5) | string }}"
+    SEMAPHORE_TASK_NAME: "Start-{{ exe_name }}"
+    SEMAPHORE_START_POPUP_KEYWORD: ""
+    SEMAPHORE_START_POPUP_WAIT_SECONDS: "0"
+    SEMAPHORE_START_POPUP_MATCH_MODE: "title_or_content"
+  ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_reconfig_start_program_windows.ps1
+  register: relaunch_result
+  failed_when: false
+
+- name: 登记 LANH 启动脚本输出
+  ansible.builtin.set_fact:
+    lanh_start_stdout: "{{ (relaunch_result.stdout | default('')) | string }}"
+    lanh_start_stderr: "{{ (relaunch_result.stderr | default('')) | string }}"
+    lanh_exe_missing_at_start: "{{ 'EXE_NOT_FOUND_AT_START' in (relaunch_result.stdout | default('')) }}"
+    lanh_start_script_failed: >-
+      {{
+        ('START_ERROR' in (relaunch_result.stdout | default('')))
+        or ('VERIFY_FAILED' in (relaunch_result.stdout | default('')))
+        or ('EXE_NOT_FOUND_AT_START' in (relaunch_result.stdout | default('')))
+      }}
+
+- name: DEBUG LANH 启动脚本
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANH] start rc={{ relaunch_result.rc | default('n/a') }}"
+      - "[DEBUG-LANH] start stdout_tail={{ (lanh_start_stdout | default('')) | truncate(600, True) }}"
+      - "[DEBUG-LANH] start_failed={{ lanh_start_script_failed | default(false) }} exe_missing={{ lanh_exe_missing_at_start | default(false) }}"
