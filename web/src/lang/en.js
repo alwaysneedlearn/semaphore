@@ -39,6 +39,8 @@ export default {
   newProject2: 'New Project...',
   demoMode: 'DEMO MODE',
   task: 'Task #{expr}',
+  taskLogPanelWiden: 'Widen task panel',
+  taskLogPanelNarrow: 'Narrow task panel',
   youCanRunAnyTasks: 'You can run any tasks',
   youHaveReadonlyAccess: 'You have read-only access',
   taskTemplates: 'Task Templates',

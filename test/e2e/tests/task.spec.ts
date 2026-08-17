@@ -42,7 +42,7 @@ test.describe("task running", () => {
 
   test("stop task on waiting", async ({ page }) => {
     await page
-      .getByRole("dialog")
+      .getByTestId("taskLogDialog")
       .getByRole("button", { name: "Stop" })
       .click();
 
@@ -53,12 +53,12 @@ test.describe("task running", () => {
 
   test("stop task on cloning", async ({ page }) => {
     await page
-      .getByRole("dialog")
+      .getByTestId("taskLogDialog")
       .getByText("Get current commit hash")
       .waitFor();
 
     await page
-      .getByRole("dialog")
+      .getByTestId("taskLogDialog")
       .getByRole("button", { name: "Stop" })
       .click();
 
@@ -69,14 +69,14 @@ test.describe("task running", () => {
 
   test("stop task on running", async ({ page }) => {
     await page
-      .getByRole("dialog")
+      .getByTestId("taskLogDialog")
       .getByText(
         "TASK [Gathering Facts] *********************************************************"
       )
       .waitFor({ timeout: 100000 });
 
     await page
-      .getByRole("dialog")
+      .getByTestId("taskLogDialog")
       .getByRole("button", { name: "Stop" })
       .click();
 
