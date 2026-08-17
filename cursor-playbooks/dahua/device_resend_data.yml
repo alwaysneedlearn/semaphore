@@ -3,6 +3,7 @@
 # 仅支持 resend；不提供 status / stop / restart / redeploy / check_restart。
 - name: DAHUA 重发数据（lims-hist）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:

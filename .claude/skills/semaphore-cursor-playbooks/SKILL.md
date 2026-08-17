@@ -110,9 +110,12 @@ If the second command shows `include_tasks` immediately followed by `delegate_to
 - **`tasks/winrm_refresh_midplay.yml`** re-includes `winrm_ensure_reachable` with `winrm_force_reconnect: true` before long `win_shell` chains (log check, reconfig) on **start/restart/check_restart** — **not** on **`device_status.yml`** (patrol: play-start ensure only).
 - Reconnect failure uses the **same** ping-failure callback path.
 
-### Patrol batch
+### Patrol / batch (`strategy: free`)
 
-- `device_status.yml`: `max_fail_percentage: 100` on the `windows_hosts` play so one bad host does not abort the whole batch.
+- Every `hosts: windows_hosts` play sets **`strategy: free`** and **`max_fail_percentage: 100`**. Default **linear** waits for **all** hosts to finish task N before any starts N+1 — one hung WinRM task stalls the whole selected batch. **`free`** lets each fork run a host through the **entire play**; a hung host occupies **one** worker only.
+- **`forks`** (default **50** in `cursor-playbooks/ansible.cfg`, override `ANSIBLE_FORKS` / `--forks`) caps how many hosts run at once. Ansible default is **5**.
+- **Do not** put **`run_once`** (status report, bulk PUT) on the `windows_hosts` play — with `free` it fires when the **first** host reaches that task. Keep bulk PUT (and NEWARE status overview) on the **`hosts: localhost` second play**.
+- Play 2 still starts only after **all** play-1 hosts finish (or `end_host`). Fast hosts have already completed WinRM/`semaphore_callback_row`; UI bulk PUT still waits for the last host.
 
 ---
 
@@ -141,7 +144,7 @@ _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length
 
 ### Bulk PUT execution
 
-- **Bulk PUT** only in a **`hosts: localhost` second play** after all `windows_hosts` hosts have **`semaphore_callback_row`** (play1 **`post_tasks` 登记** or failure-path **`set_fact`** before `end_host`). **Do not** use `run_once` bulk in play1 post_tasks (batch race). **Do not** include **`semaphore_bulk_put_immediate.yml`** (removed; file kept for reference only).
+- **Bulk PUT** only in a **`hosts: localhost` second play** after all `windows_hosts` hosts have **`semaphore_callback_row`** (play1 **`post_tasks` 登记** or failure-path **`set_fact`** before `end_host`). **Do not** use `run_once` bulk or reports in play1 post_tasks (`strategy: free` + first-host race). **Do not** include **`semaphore_bulk_put_immediate.yml`** (removed; file kept for reference only).
 - When all hosts `end_host` early, play1 post_tasks may skip; **second play** still bulk PUTs from **`hostvars`** (and **`semaphore_callback_winrm_fallback_missing_rows.yml`** for missing rows). **`semaphore_operation_ensure_host_records.yml`** runs before operation-log bulk PUT for the same reason (unhealthy patrol / early `end_host` paths).
 - **`semaphore_callback_winrm_fallback_missing_rows.yml`** runs in **`semaphore_bulk_put_from_hostvars.yml`** only.
 - **Requires** env **`SEMAPHORE_API_TOKEN`**; optional `SEMAPHORE_URL` (default `http://127.0.0.1:3000`); **`semaphore_project_id`** from Semaphore extra-vars.
@@ -277,7 +280,7 @@ cursor-playbooks/
 - [ ] New `win_*` task: is `winrm_ensure_reachable` still first? Mid-play reconnect if long chain?
 - [ ] Any new unreachable path: **`semaphore_callback_row`** + bulk/fallback still reached?
 - [ ] Ping failure: `ignore_unreachable` + `always` clear + shared failed callback task?
-- [ ] Bulk PUT in **`post_tasks`** block on localhost, not bare `include_tasks`?
+- [ ] Bulk PUT in **`hosts: localhost` second play**, not `run_once` on `windows_hosts` (`strategy: free`)?
 - [ ] Booleans and `final_start_ok` defaults sane?
 - [ ] README / AGENTS.md updated if behavior or env vars changed?
 

@@ -1,6 +1,7 @@
 ---
 - name: LAND 重发数据（HTTP Redeliver，不重启服务）
   hosts: windows_hosts
+  strategy: free
   gather_facts: no
   max_fail_percentage: 100
   vars:
