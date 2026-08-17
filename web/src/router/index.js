@@ -2,6 +2,7 @@ import Vue from 'vue';
 import VueRouter from 'vue-router';
 import RestoreProject from '@/views/project/RestoreProject.vue';
 import Tasks from '@/views/Tasks.vue';
+import TaskLogPage from '@/views/project/TaskLogPage.vue';
 import TaskList from '@/components/TaskList.vue';
 import TemplateDetails from '@/views/project/template/TemplateDetails.vue';
 import TemplateTerraformState from '@/views/project/template/TemplateTerraformState.vue';
@@ -52,6 +53,10 @@ const routes = [
   {
     path: '/project/:projectId/secret_storages',
     component: SecretStorage,
+  },
+  {
+    path: '/project/:projectId/history/:taskId',
+    component: TaskLogPage,
   },
   {
     path: '/project/:projectId/history',

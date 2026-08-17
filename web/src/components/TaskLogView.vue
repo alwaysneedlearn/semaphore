@@ -4,6 +4,7 @@
     :class="{
       'task-log-view--with-message': item.message || item.commit_message,
       'task-log-view--drawer': layout === 'drawer',
+      'task-log-view--page': layout === 'page',
     }"
   >
     <div class="px-5 task-log-view__message">
@@ -224,6 +225,20 @@ $drawer-header-height: 56px;
   }
 }
 
+/* Full page (new tab): fill viewport under page toolbar (~64px). */
+$toolbar-height: 64px;
+
+.task-log-view--page {
+  .task-log-records {
+    height: calc(100dvh - #{$toolbar-height + $task-log-status-tab-height});
+  }
+
+  &.task-log-view--with-message .task-log-records {
+    height: calc(100dvh -
+      #{$toolbar-height + $task-log-message-height-total + $task-log-status-tab-height});
+  }
+}
+
 .task-log-records__record {
   display: flex;
   flex-direction: row;
@@ -263,7 +278,7 @@ export default {
     projectId: Number,
     systemInfo: Object,
     premiumFeatures: null,
-    /** 'dialog' (default) | 'drawer' — height calc for side panel */
+    /** 'dialog' (default) | 'drawer' | 'page' */
     layout: {
       type: String,
       default: 'dialog',

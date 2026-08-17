@@ -44,14 +44,6 @@
       </template>
     </EditDialog>
 
-    <TaskLogDialog
-      v-model="taskLogDialog"
-      @close="onTaskLogDialogClosed()"
-      :project-id="projectId"
-      :item-id="taskId"
-      :system-info="systemInfo"
-    />
-
     <EditDialog
       v-model="newProjectDialog"
       save-button-text="Create"
@@ -959,9 +951,8 @@ import socket from '@/socket';
 import SubscriptionForm from '@/components/SubscriptionForm.vue';
 import RestoreProjectForm from '@/components/RestoreProjectForm.vue';
 import YesNoDialog from '@/components/YesNoDialog.vue';
-import TaskLogDialog from '@/components/TaskLogDialog.vue';
 import SystemInfoDialog from '@/components/SystemInfoDialog.vue';
-import delay from '@/lib/delay';
+import { taskLogPath } from '@/lib/taskLog';
 
 const PROJECT_COLORS = ['red', 'blue', 'orange', 'green'];
 
@@ -1034,7 +1025,6 @@ export default {
   name: 'App',
   components: {
     SubscriptionForm,
-    TaskLogDialog,
     YesNoDialog,
     RestoreProjectForm,
     UserForm,
@@ -1069,9 +1059,6 @@ export default {
       restoreProjectResult: null,
       restoreProjectResultDialog: null,
 
-      taskLogDialog: null,
-      taskId: null,
-      template: null,
       darkMode: false,
       languages: [
         {
@@ -1105,14 +1092,7 @@ export default {
     },
 
     async $route(val) {
-      if (val.query.t == null) {
-        this.taskLogDialog = false;
-      } else {
-        const taskId = parseInt(this.$route.query.t || '', 10);
-        if (taskId) {
-          EventBus.$emit('i-show-task', { taskId });
-        }
-      }
+      await this.redirectLegacyTaskQuery(val);
 
       if ((this.projects || []).length > 0 && this.$route.query.new_project) {
         EventBus.$emit('i-new-project', { projectType: this.$route.query.new_project });
@@ -1236,16 +1216,8 @@ export default {
       }, 500);
     });
 
-    EventBus.$on('i-show-task', async (e) => {
-      if (parseInt(this.$route.query.t || '', 10) !== e.taskId) {
-        const query = { ...this.$route.query, t: e.taskId };
-        await this.$router.replace({ query });
-        return;
-      }
-
-      this.taskId = e.taskId;
-      await delay(1);
-      this.taskLogDialog = true;
+    EventBus.$on('i-show-task', (e) => {
+      this.openTaskLogTab(e.taskId);
     });
 
     EventBus.$on('i-open-last-project', async () => {
@@ -1365,9 +1337,37 @@ export default {
       await this.$router.replace({ query });
     },
 
-    async onTaskLogDialogClosed() {
-      const query = { ...this.$route.query, t: undefined };
-      await this.$router.replace({ query });
+    openTaskLogTab(taskId) {
+      const id = Number(taskId);
+      const path = this.projectId && id ? taskLogPath(this.projectId, id) : null;
+      if (!path) {
+        return;
+      }
+      if (this.$route.path === path) {
+        return;
+      }
+      const href = this.$router.resolve({ path }).href;
+      const win = window.open(href, '_blank');
+      if (win) {
+        try {
+          win.opener = null;
+        } catch (_err) {
+          // ignore
+        }
+      } else {
+        this.$router.push({ path });
+      }
+    },
+
+    async redirectLegacyTaskQuery(route) {
+      const t = parseInt((route.query && route.query.t) || '', 10);
+      if (!t || !this.projectId) {
+        return;
+      }
+      const path = taskLogPath(this.projectId, t);
+      const query = { ...route.query };
+      delete query.t;
+      await this.$router.replace({ path, query });
     },
 
     async loadData() {
@@ -1390,13 +1390,7 @@ export default {
         await this.trySelectMostSuitableProject();
       }
 
-      // display task dialog if query param t specified
-      if (this.$route.query.t) {
-        const taskId = parseInt(this.$route.query.t || '', 10);
-        if (taskId) {
-          EventBus.$emit('i-show-task', { taskId });
-        }
-      }
+      await this.redirectLegacyTaskQuery(this.$route);
 
       if ((this.projects || []).length > 0 && this.$route.query.new_project != null) {
         EventBus.$emit('i-new-project', { projectType: this.$route.query.new_project });
