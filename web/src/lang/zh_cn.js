@@ -39,6 +39,8 @@ export default {
   newProject2: '新项目...',
   demoMode: '演示模式',
   task: '任务 #{expr}',
+  taskLogPanelWiden: '加宽任务面板',
+  taskLogPanelNarrow: '收窄任务面板',
   youCanRunAnyTasks: '您可以运行任何任务',
   youHaveReadonlyAccess: '您具有只读访问权限',
   taskTemplates: '任务模板',

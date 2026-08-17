@@ -1,7 +1,10 @@
 <template>
   <div
     class="task-log-view"
-    :class="{'task-log-view--with-message': item.message || item.commit_message}"
+    :class="{
+      'task-log-view--with-message': item.message || item.commit_message,
+      'task-log-view--drawer': layout === 'drawer',
+    }"
   >
     <div class="px-5 task-log-view__message">
       <span
@@ -207,6 +210,20 @@ $task-log-status-tab-height:
   }
 }
 
+/* Side panel (non-modal): fill viewport under drawer header (~56px). */
+$drawer-header-height: 56px;
+
+.task-log-view--drawer {
+  .task-log-records {
+    height: calc(100dvh - #{$drawer-header-height + $task-log-status-tab-height});
+  }
+
+  &.task-log-view--with-message .task-log-records {
+    height: calc(100dvh -
+      #{$drawer-header-height + $task-log-message-height-total + $task-log-status-tab-height});
+  }
+}
+
 .task-log-records__record {
   display: flex;
   flex-direction: row;
@@ -246,6 +263,11 @@ export default {
     projectId: Number,
     systemInfo: Object,
     premiumFeatures: null,
+    /** 'dialog' (default) | 'drawer' — height calc for side panel */
+    layout: {
+      type: String,
+      default: 'dialog',
+    },
   },
 
   data() {
