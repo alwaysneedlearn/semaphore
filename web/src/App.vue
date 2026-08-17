@@ -952,7 +952,7 @@ import SubscriptionForm from '@/components/SubscriptionForm.vue';
 import RestoreProjectForm from '@/components/RestoreProjectForm.vue';
 import YesNoDialog from '@/components/YesNoDialog.vue';
 import SystemInfoDialog from '@/components/SystemInfoDialog.vue';
-import { taskLogPath } from '@/lib/taskLog';
+import taskLogPath from '@/lib/taskLog';
 
 const PROJECT_COLORS = ['red', 'blue', 'orange', 'green'];
 
