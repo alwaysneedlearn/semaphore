@@ -560,6 +560,7 @@ export default {
   deviceResendHintNBT: 'NBT: date only, yyyy-M-d (e.g. 2026-6-1)',
   deviceResendHintNEWARE: 'NEWARE: HisDataFromTime / HisDataToTime as yyyy-MM-dd, then restart',
   deviceResendHintLAND: 'LAND: Redeliver API, yyyy-M-d HH:mm:ss',
+  deviceResendHintLANH: 'LANH: Redeliver API (same as LAND), yyyy-M-d HH:mm:ss',
   deviceResendHintSINEXCEL: 'SINEXCEL: Retransmit API, yyyy-M-d HH:mm:ss',
   deviceResendHintJHAI: 'JHAI: partial resend uses testStartTime / testEndTime; optional full resend',
   deviceResendHintDAHUA: 'DAHUA: runs lims-hist.exe on the host; times as yyyy-MM-ddTHH:mm:ss (local)',

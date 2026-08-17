@@ -1,7 +1,15 @@
 ---
-# LANH 状态巡检：判断 ccsmon.exe 是否运行；未运行则启动（不停止、无需确认弹窗）。
-# 另提供 resend / check_restart；不提供 restart / redeploy / stop。
-- name: LANH 状态巡检（进程未运行则启动）
+# Play 0：批量查一次 TDengine 通道 LAST(insert_time)
+- name: LANH check_restart — 批量加载 TDengine 通道新鲜度
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_tdengine_query_channel_last.yml"
+
+# 通道不新鲜或未配置 TDengine：确保 ccsmon 运行（只启动、不停止、无弹窗）
+- name: LANH 巡检确保运行（通道新鲜度优先；不健康仅启动）
   hosts: windows_hosts
   gather_facts: no
   max_fail_percentage: 100
@@ -10,8 +18,7 @@
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_files_dir: "{{ playbook_dir }}/../shared/files"
     sem_debug_tag: LANH
-    sem_operation_type: status
-    # 启动脚本会读 start_popup_*；LANH 强制空关键字（不点确认）
+    sem_operation_type: restart
     start_popup_keyword: ""
     start_popup_wait_seconds: 0
     exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LANH', true) }}"
@@ -36,6 +43,20 @@
 
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+
+    - name: 应用本机 TDengine 通道新鲜度
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/tdengine_channel_freshness_for_host.yml"
+
+    - name: 通道数据新鲜 — 健康快路径（跳过 WinRM / 启动）
+      when: td_channel_fresh | default(false) | bool
+      block:
+        - ansible.builtin.set_fact:
+            lanh_ensure_ok: true
+            lanh_started_this_run: false
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
+        - name: 通道新鲜 — 结束本主机
+          ansible.builtin.meta: end_host
+
     - block:
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
       ignore_unreachable: true
@@ -50,7 +71,13 @@
         - ansible.builtin.set_fact:
             lanh_ensure_ok: false
             lanh_process_running: false
-            host_failure_reason: "{{ (ansible_failed_result.msg | default('LANH ensure-running failed')) | string | truncate(400, True) }}"
+            lanh_started_this_run: false
+            host_failure_reason: "{{ (ansible_failed_result.msg | default('LANH check_restart ensure failed')) | string | truncate(400, True) }}"
+
+    - name: 标记启动已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: lanh_started_this_run | default(false) | bool
 
   post_tasks:
     - ansible.builtin.set_fact:
@@ -70,6 +97,7 @@
                 else ('Process not running after ensure: ' ~ (process_name | default('ccsmon')))
               )
             }}
+      when: semaphore_callback_row is not defined
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
       when: semaphore_callback_row is defined
