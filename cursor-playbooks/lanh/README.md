@@ -19,7 +19,7 @@
 | `device_resend_data.yml` | UI **重发数据**：`resend_params` → `POST …/SyncLims/Redeliver`（不启停进程） |
 | `device_check_restart.yml` | **仅 Schedule**：TDengine 通道新鲜度优先；不新鲜则仅 **ensure 启动**（不停止）。设备列表无 check_restart 按钮 |
 
-在 **Device types** 中绑定 **Status / Patrol** 与 **Resend** 即可；Restart / Redeploy / **Check-restart 留空**。定时巡检：在 Semaphore **Schedules** 里直接调度指向 `device_check_restart.yml` 的模板。
+在 **Device types** 中绑定 **Status / Patrol** 与 **Resend** 即可；Restart / Redeploy 留空。UI 已无 Check-restart 绑定项。定时巡检：在 Semaphore **Schedules** 里直接调度指向 `device_check_restart.yml` 的模板。
 
 ## Variable Group ENV
 

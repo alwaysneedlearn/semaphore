@@ -98,7 +98,6 @@ const TEMPLATE_ID_FIELDS = [
   'restart_template_id',
   'status_template_id',
   'redeploy_template_id',
-  'check_restart_template_id',
   'resend_data_template_id',
 ];
 
@@ -117,9 +116,9 @@ export default {
       saving: false,
       saveError: null,
       defaultConfigItems: [],
+      // check_restart is Schedule-only (no device-list button); do not bind here.
       templateActions: [
         { field: 'status_template_id', label: 'Status / Patrol template' },
-        { field: 'check_restart_template_id', label: 'Check-restart template' },
         { field: 'restart_template_id', label: 'Restart template' },
         { field: 'redeploy_template_id', label: 'Redeploy template' },
         { field: 'resend_data_template_id', label: 'Resend data template' },
@@ -251,6 +250,8 @@ export default {
       delete payload.config_template_id;
       delete payload.discover_template_id;
       payload.stop_template_id = null;
+      // Clear legacy profile binding; run check_restart via Schedules instead.
+      payload.check_restart_template_id = null;
       return payload;
     },
     addDefaultConfigRow() {
