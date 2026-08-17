@@ -21,7 +21,7 @@
     >
       <template v-slot:item.task_id="{ item }">
         <router-link
-          :to="'/project/' + item.project_id + '?t=' + item.task_id"
+          :to="'/project/' + item.project_id + '/history/' + item.task_id"
         >
           #{{ item.task_id }}
         </router-link>

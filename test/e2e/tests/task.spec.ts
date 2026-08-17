@@ -1,6 +1,8 @@
 import { test, expect } from "./fixtures";
 
 test.describe("task running", () => {
+  let taskLogPage;
+
   test.beforeEach(async ({ page, login, project }) => {
     await login(true);
 
@@ -17,71 +19,82 @@ test.describe("task running", () => {
       .getByRole("textbox", { name: "Message (Optional)" })
       .fill("Test");
 
+    const popupPromise = page.waitForEvent("popup");
     await page
       .getByTestId("newTaskDialog")
       .getByTestId("editDialog-save")
       .click();
+    taskLogPage = await popupPromise;
+    await taskLogPage.waitForLoadState("domcontentloaded");
 
     test.setTimeout(90000);
   });
 
   test.afterEach(async ({ page, project }) => {
-    await page
-      .getByTestId("taskLogDialog")
-      .getByTestId("editDialog-close")
-      .click();
+    if (taskLogPage && !taskLogPage.isClosed()) {
+      const closeBtn = taskLogPage
+        .getByTestId("taskLogDialog")
+        .getByTestId("editDialog-close");
+      if (await closeBtn.count()) {
+        await closeBtn.click();
+      }
+      if (!taskLogPage.isClosed()) {
+        await taskLogPage.close();
+      }
+    }
 
     await project.delete();
   });
 
   test("run task from demo project", async ({ page }) => {
-    await page.getByTestId("task-rawLog").waitFor({ timeout: 90000 });
+    await taskLogPage.getByTestId("task-rawLog").waitFor({ timeout: 90000 });
 
-    await expect(page.getByTestId("task-status")).toHaveText("Success");
+    await expect(taskLogPage.getByTestId("task-status")).toHaveText("Success");
+    await expect(page).toHaveURL(/\/templates\//);
   });
 
-  test("stop task on waiting", async ({ page }) => {
-    await page
+  test("stop task on waiting", async () => {
+    await taskLogPage
       .getByTestId("taskLogDialog")
       .getByRole("button", { name: "Stop" })
       .click();
 
-    await page.getByTestId("task-rawLog").waitFor({ timeout: 600000 });
+    await taskLogPage.getByTestId("task-rawLog").waitFor({ timeout: 600000 });
 
-    await expect(page.getByTestId("task-status")).toHaveText("Stopped");
+    await expect(taskLogPage.getByTestId("task-status")).toHaveText("Stopped");
   });
 
-  test("stop task on cloning", async ({ page }) => {
-    await page
+  test("stop task on cloning", async () => {
+    await taskLogPage
       .getByTestId("taskLogDialog")
       .getByText("Get current commit hash")
       .waitFor();
 
-    await page
+    await taskLogPage
       .getByTestId("taskLogDialog")
       .getByRole("button", { name: "Stop" })
       .click();
 
-    await page.getByTestId("task-rawLog").waitFor({ timeout: 60000 });
+    await taskLogPage.getByTestId("task-rawLog").waitFor({ timeout: 60000 });
 
-    await expect(page.getByTestId("task-status")).toHaveText("Stopped");
+    await expect(taskLogPage.getByTestId("task-status")).toHaveText("Stopped");
   });
 
-  test("stop task on running", async ({ page }) => {
-    await page
+  test("stop task on running", async () => {
+    await taskLogPage
       .getByTestId("taskLogDialog")
       .getByText(
         "TASK [Gathering Facts] *********************************************************"
       )
       .waitFor({ timeout: 100000 });
 
-    await page
+    await taskLogPage
       .getByTestId("taskLogDialog")
       .getByRole("button", { name: "Stop" })
       .click();
 
-    await page.getByTestId("task-rawLog").waitFor({ timeout: 60000 });
+    await taskLogPage.getByTestId("task-rawLog").waitFor({ timeout: 60000 });
 
-    await expect(page.getByTestId("task-status")).toHaveText("Stopped");
+    await expect(taskLogPage.getByTestId("task-status")).toHaveText("Stopped");
   });
 });
