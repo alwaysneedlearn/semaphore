@@ -30,6 +30,7 @@
     lims_hist_dry_run: "{{ ((lookup('env', 'LIMS_HIST_DRY_RUN') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_no_step_end: "{{ ((lookup('env', 'LIMS_HIST_NO_STEP_END') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_no_schedule: "{{ ((lookup('env', 'LIMS_HIST_NO_SCHEDULE') | default('', true) | trim) | default('true', true)) | bool }}"
+    lims_hist_mtime_prefilter: "{{ ((lookup('env', 'LIMS_HIST_MTIME_PREFILTER') | default('', true) | trim) | default('true', true)) | bool }}"
     lims_hist_kill_stale: "{{ ((lookup('env', 'LIMS_HIST_KILL_STALE') | default('', true) | trim) | default('true', true)) | bool }}"
     lims_hist_pkg_dir: >-
       {{
@@ -131,6 +132,9 @@
         $argList.Add(@'
         {{ dahua_lims_to }}
         '@.Trim())
+        {% if lims_hist_mtime_prefilter | bool %}
+        $argList.Add('-mtime-prefilter')
+        {% endif %}
         $kafkaCfg = @'
         {{ lims_hist_kafka_cfg }}
         '@.Trim()
@@ -278,7 +282,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-DAHUA] from={{ dahua_lims_from | default('') }} to={{ dahua_lims_to | default('') }}"
-      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }} state_dir={{ lims_hist_state_dir | default('') }}"
+      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }} state_dir={{ lims_hist_state_dir | default('') }} mtime_prefilter={{ lims_hist_mtime_prefilter | default(true) }}"
       - "[DEBUG-DAHUA] ok={{ dahua_lims_hist_ok | default(false) }} rc={{ dahua_lims_hist_rc | default('?') }}"
       - "[DEBUG-DAHUA] stdout_tail={{ (dahua_lims_hist_stdout | default('')) | truncate(800, True) }}"
       - "[DEBUG-DAHUA] stderr_tail={{ (dahua_lims_hist_stderr | default('')) | truncate(400, True) }}"
