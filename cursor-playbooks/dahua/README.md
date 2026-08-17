@@ -25,7 +25,7 @@
 - 默认 **`-state-dir C:\Apps\lims-hist\state`**（`LIMS_HIST_STATE_DIR` 可改）
 - 默认加 **`-mtime-prefilter`**（`LIMS_HIST_MTIME_PREFILTER=false` 可关）
 - **后台启动**：Semaphore 任务只负责拉起进程即结束；`lims-hist` 跑完自己退出（不超时杀进程）
-- 默认加 `-no-schedule`（一次性重发）。启动前默认结束已有 `lims-hist`（`LIMS_HIST_KILL_STALE`）
+- 启动前默认结束已有 `lims-hist`（`LIMS_HIST_KILL_STALE`）
 - 退出码（启动脚本）：`0` 已后台拉起；目标机上工具自身：`0` 成功；`1` 业务错误；`2` 参数错误；`3` 已有实例
 
 ## Variable Group ENV
@@ -41,7 +41,6 @@ LIMS_HIST_PKG_NAME=lims-hist.exe
 # LIMS_HIST_ROOT=D:\Data,E:\CTSPro\Data
 # LIMS_HIST_STATE_DIR=C:\Apps\lims-hist\state
 # LIMS_HIST_MTIME_PREFILTER=true
-# LIMS_HIST_NO_SCHEDULE=true
 # LIMS_HIST_KILL_STALE=true
 # LIMS_HIST_DRY_RUN=false
 SEMAPHORE_API_TOKEN=<token>
@@ -57,7 +56,6 @@ SEMAPHORE_API_TOKEN=<token>
 | `LIMS_HIST_ROOT` | （工具 `auto`） | 逗号分隔本地数据根 |
 | `LIMS_HIST_STATE_DIR` | `C:\Apps\lims-hist\state` | `-state-dir` |
 | `LIMS_HIST_MTIME_PREFILTER` | `true` | 传 `-mtime-prefilter`；`false` 则不加 |
-| `LIMS_HIST_NO_SCHEDULE` | `true` | 一次性重发；`false` 则带调度 |
 | `LIMS_HIST_KILL_STALE` | `true` | 启动前结束已有 lims-hist 进程 |
 | `LIMS_HIST_DRY_RUN` | `false` | 只解析不发 Kafka |
 | `LIMS_HIST_RESUME` | `false` | 跳过已成功发送的文件 |

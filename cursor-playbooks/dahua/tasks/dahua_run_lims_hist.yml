@@ -29,7 +29,6 @@
     lims_hist_rescan: "{{ ((lookup('env', 'LIMS_HIST_RESCAN') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_dry_run: "{{ ((lookup('env', 'LIMS_HIST_DRY_RUN') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_no_step_end: "{{ ((lookup('env', 'LIMS_HIST_NO_STEP_END') | default('', true) | trim) | default('false', true)) | bool }}"
-    lims_hist_no_schedule: "{{ ((lookup('env', 'LIMS_HIST_NO_SCHEDULE') | default('', true) | trim) | default('true', true)) | bool }}"
     lims_hist_mtime_prefilter: "{{ ((lookup('env', 'LIMS_HIST_MTIME_PREFILTER') | default('', true) | trim) | default('true', true)) | bool }}"
     lims_hist_kill_stale: "{{ ((lookup('env', 'LIMS_HIST_KILL_STALE') | default('', true) | trim) | default('true', true)) | bool }}"
     lims_hist_pkg_dir: >-
@@ -196,9 +195,6 @@
         {% endif %}
         {% if lims_hist_no_step_end | bool %}
         $argList.Add('-no-step-end')
-        {% endif %}
-        {% if lims_hist_no_schedule | bool %}
-        $argList.Add('-no-schedule')
         {% endif %}
         Write-Output ("[DEBUG-DAHUA] lims-hist exe=" + $exe)
         Write-Output ("[DEBUG-DAHUA] lims-hist args=" + ($argList -join ' '))
