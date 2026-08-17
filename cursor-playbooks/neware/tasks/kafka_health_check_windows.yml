@@ -1,6 +1,7 @@
 ---
 # 状态检测 Kafka TCP 回退（API ExecResultData!=3 且进程在跑）：
 # 进程对 RemotePort ∈ KAFKA_REMOTE_PORTS 有 Established → 工作正常。
+# 用 netstat.exe（限时），不用无过滤 Get-NetTCPConnection（会挂很久）。
 # 前置：deploy_sem_windows_helper_scripts.yml
 # 产出 register：kafka_check_result（KAFKA_OK|… / KAFKA_FAIL|…）
 
@@ -17,6 +18,7 @@
         )
       }}
     KAFKA_REMOTE_PORTS: "{{ kafka_remote_ports | default(((lookup('env', 'KAFKA_REMOTE_PORTS') | default('', true) | trim) | default('9092,9093,9094', true)), true) }}"
+    KAFKA_TCP_TIMEOUT_SEC: "{{ kafka_tcp_timeout_sec | default(((lookup('env', 'KAFKA_TCP_TIMEOUT_SEC') | default('', true) | trim) | default('12', true)), true) }}"
   ansible.windows.win_shell: >-
     powershell.exe -NoProfile -ExecutionPolicy Bypass
     -File C:\Windows\Temp\sem_check_kafka_tcp_windows.ps1
