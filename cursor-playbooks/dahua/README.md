@@ -22,7 +22,10 @@
 - 时间格式：`yyyy-MM-ddTHH:mm:ss`（本地时区；与 lims-hist CLI 一致）
 - Kafka / equipNo：读目标机 PNE `KafkaCfg.ini`（可用 `LIMS_HIST_KAFKA_CFG` 覆盖路径）
 - 数据根：默认工具 `auto`（本机本地固定盘）；可用 `LIMS_HIST_ROOT` 指定逗号分隔**本地**路径（勿用 UNC）
-- 退出码：`0` 成功；`1` 业务错误；`2` 参数错误；`3` 已有实例在跑
+- 默认 **`-state-dir C:\Apps\lims-hist\state`**（`LIMS_HIST_STATE_DIR` 可改）
+- **后台启动**：Semaphore 任务只负责拉起进程即结束；`lims-hist` 跑完自己退出（不超时杀进程）
+- 默认加 `-no-schedule`（一次性重发）。启动前默认结束已有 `lims-hist`（`LIMS_HIST_KILL_STALE`）
+- 退出码（启动脚本）：`0` 已后台拉起；目标机上工具自身：`0` 成功；`1` 业务错误；`2` 参数错误；`3` 已有实例
 
 ## Variable Group ENV
 
@@ -35,7 +38,9 @@ LIMS_HIST_PKG_NAME=lims-hist.exe
 # 可选运行参数
 # LIMS_HIST_KAFKA_CFG=C:\Program Files (x86)\PNE CTSPro\KafkaCfg.ini
 # LIMS_HIST_ROOT=D:\Data,E:\CTSPro\Data
-# LIMS_HIST_TIMEOUT_SEC=7200
+# LIMS_HIST_STATE_DIR=C:\Apps\lims-hist\state
+# LIMS_HIST_NO_SCHEDULE=true
+# LIMS_HIST_KILL_STALE=true
 # LIMS_HIST_DRY_RUN=false
 SEMAPHORE_API_TOKEN=<token>
 ```
@@ -48,7 +53,9 @@ SEMAPHORE_API_TOKEN=<token>
 | `LIMS_HIST_SRC` | `{PKG_DIR}/{PKG_NAME}` | 控制器完整路径（优先） |
 | `LIMS_HIST_KAFKA_CFG` | （工具默认） | PNE `KafkaCfg.ini` 路径 |
 | `LIMS_HIST_ROOT` | （工具 `auto`） | 逗号分隔本地数据根 |
-| `LIMS_HIST_TIMEOUT_SEC` | `7200` | WinRM 单次操作超时（秒） |
+| `LIMS_HIST_STATE_DIR` | `C:\Apps\lims-hist\state` | `-state-dir` |
+| `LIMS_HIST_NO_SCHEDULE` | `true` | 一次性重发；`false` 则带调度 |
+| `LIMS_HIST_KILL_STALE` | `true` | 启动前结束已有 lims-hist 进程 |
 | `LIMS_HIST_DRY_RUN` | `false` | 只解析不发 Kafka |
 | `LIMS_HIST_RESUME` | `false` | 跳过已成功发送的文件 |
 | `SEMAPHORE_API_TOKEN` | — | bulk 回调（写设备状态 / 操作历史） |
@@ -70,5 +77,6 @@ SEMAPHORE_API_TOKEN=<token>
 | 现象 | 说明 |
 |------|------|
 | `rows=0` / `orig=0` 但仍有 schedule | CSV 行时间不在 `-from/-to` 内 |
-| exit `3` | 目标机已有 lims-hist 实例；结束旧进程后再跑 |
+| Semaphore 任务很快成功 | 正常：只负责后台拉起；exe 在目标机继续跑，结束后自己退出 |
+| exit `3` | 目标机已有 lims-hist 实例；现默认会先杀旧进程。若仍出现，查是否 `LIMS_HIST_KILL_STALE=false` |
 | exe not found / copy failed | 把 `lims-hist.exe`（或 zip）放到控制器 `LIMS_HIST_PKG_DIR`；查 `[DEBUG-DAHUA] ensure_copy` |

@@ -170,12 +170,14 @@ LIMS_HIST_PKG_NAME=lims-hist.exe
 # LIMS_HIST_SRC=/root/software/dahua/lims-hist.exe
 # LIMS_HIST_KAFKA_CFG=C:\Program Files (x86)\PNE CTSPro\KafkaCfg.ini
 # LIMS_HIST_ROOT=D:\Data
-# LIMS_HIST_TIMEOUT_SEC=7200
+# LIMS_HIST_STATE_DIR=C:\Apps\lims-hist\state
+# LIMS_HIST_NO_SCHEDULE=true
+# LIMS_HIST_KILL_STALE=true
 # LIMS_HIST_DRY_RUN=false
 SEMAPHORE_API_TOKEN=<token>
 ```
 
-目标机无 `LIMS_HIST_EXE` 时，从控制器复制：`LIMS_HIST_PKG_DIR`/`LIMS_HIST_PKG_NAME` → `/root/software/dahua/lims-hist.exe`（或 `LIMS_HIST_SRC` 完整路径）。
+目标机无 `LIMS_HIST_EXE` 时，从控制器复制：`LIMS_HIST_PKG_DIR`/`LIMS_HIST_PKG_NAME` → `/root/software/dahua/lims-hist.exe`（或 `LIMS_HIST_SRC` 完整路径）。重发默认 `-state-dir C:\Apps\lims-hist\state`，**后台拉起**（Semaphore 不等待）；进程跑完自己退出。
 
 详见 [`dahua/README.md`](dahua/README.md)。
 
