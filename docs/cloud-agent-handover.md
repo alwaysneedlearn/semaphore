@@ -29,7 +29,7 @@
 | **SINEXCEL** | GUI agent | 强杀或优雅 | 计划任务 | **HTTP** Kafka API（无 INI） | `QueryConfig` | zip + API | **`Retransmit`**（restart） |
 | **NBT** | Windows **服务** | `win_service` stop | `win_service` start | 无 INI | 服务 Running + `SendStatus` 心跳 | zip + 服务重启 | **`ResetData`**（restart） |
 | **DAHUA** | `lims-hist.exe` | — | — | — | —（不支持） | — | **仅** WinRM 跑 lims-hist `-from/-to` |
-| **LANH** | GUI `ccsmon.exe` | —（不停止） | 未运行则交互启动（无弹窗） | — | 进程 Running（status/check_restart） | — | **Redeliver**（同 LAND） |
+| **LANH** | GUI `ccsmon.exe` | —（不停止） | 未运行则交互启动（无弹窗） | — | 进程 Running（status；check_restart 走 Schedule） | — | **Redeliver**（同 LAND） |
 
 **已无独立 `device_start`**：启动合并在 restart/redeploy 流程。
 

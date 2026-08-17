@@ -181,7 +181,7 @@ SEMAPHORE_API_TOKEN=<token>
 
 ### LANH
 
-LANH 提供 **status / check_restart / resend**：确保 **`ccsmon.exe`** 在跑（未运行则启动，**不停止**、**无确认弹窗**）；重发走 SyncLims **Redeliver**（同 LAND）。不配置 Restart / Redeploy。
+LANH 提供 **status / resend**（设备类型绑定这两项即可）；**check_restart** 留给 **Schedule** 定时执行（设备列表无该按钮，Device types 不必绑 Check-restart）。确保 **`ccsmon.exe`** 在跑（未运行则启动，**不停止**、**无确认弹窗**）；重发走 SyncLims **Redeliver**（同 LAND）。不配置 Restart / Redeploy。
 
 ```env
 EXE_NAME=ccsmon.exe
