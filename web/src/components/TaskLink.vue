@@ -22,7 +22,9 @@
         <a
             v-bind="attrs"
             v-on="on"
-            @click="showTaskLog()"
+            :href="href"
+            target="_blank"
+            rel="noopener noreferrer"
             :class="{'task-link-with-tooltip': tooltip}"
         >
           {{ label }}
@@ -53,17 +55,27 @@ a.task-link-with-tooltip {
 
 </style>
 <script>
-import EventBus from '@/event-bus';
+import taskLogPath from '@/lib/taskLog';
 
 export default {
   props: {
     label: String,
     tooltip: String,
     taskId: Number,
+    projectId: Number,
     disabled: Boolean,
     status: String,
   },
   computed: {
+    resolvedProjectId() {
+      return this.projectId || parseInt(this.$route.params.projectId, 10) || null;
+    },
+    href() {
+      if (!this.resolvedProjectId || !this.taskId) {
+        return '#';
+      }
+      return taskLogPath(this.resolvedProjectId, this.taskId);
+    },
     statusColor() {
       switch (this.status) {
         case 'success':
@@ -83,13 +95,6 @@ export default {
         default:
           return 'clock-time-three-outline';
       }
-    },
-  },
-  methods: {
-    showTaskLog() {
-      EventBus.$emit('i-show-task', {
-        taskId: this.taskId,
-      });
     },
   },
 };

@@ -1347,16 +1347,11 @@ export default {
         return;
       }
       const href = this.$router.resolve({ path }).href;
-      const win = window.open(href, '_blank');
-      if (win) {
-        try {
-          win.opener = null;
-        } catch (_err) {
-          // ignore
-        }
-      } else {
-        this.$router.push({ path });
-      }
+      const a = document.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.click();
     },
 
     async redirectLegacyTaskQuery(route) {
