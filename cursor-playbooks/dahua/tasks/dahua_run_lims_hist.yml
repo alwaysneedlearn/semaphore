@@ -1,6 +1,8 @@
 ---
 # Run lims-hist.exe on the Windows host (CTSPro → LIMS Kafka).
 # Expects: dahua_lims_from, dahua_lims_to (ISO local: 2006-01-02T15:04:05).
+# Default -state-dir C:\Apps\lims-hist\state. Launch in background (Win32_Process.Create);
+# Semaphore does not wait; the process exits on its own when finished.
 # Env: LIMS_HIST_EXE, LIMS_HIST_SRC / LIMS_HIST_PKG_DIR (+ ZIP_PATH), optional flags.
 # If exe missing on target: copy from controller (redeploy-style), then run.
 # Soft-fail: always leave facts for post_tasks callback.
@@ -15,7 +17,11 @@
     lims_hist_kafka_cfg: "{{ lookup('env', 'LIMS_HIST_KAFKA_CFG') | default('', true) | trim }}"
     lims_hist_root: "{{ lookup('env', 'LIMS_HIST_ROOT') | default('', true) | trim }}"
     lims_hist_equip_no: "{{ lookup('env', 'LIMS_HIST_EQUIP_NO') | default('', true) | trim }}"
-    lims_hist_state_dir: "{{ lookup('env', 'LIMS_HIST_STATE_DIR') | default('', true) | trim }}"
+    lims_hist_state_dir: >-
+      {{
+        (lookup('env', 'LIMS_HIST_STATE_DIR') | default('', true) | trim)
+        | default('C:\\Apps\\lims-hist\\state', true)
+      }}
     lims_hist_log_level: "{{ lookup('env', 'LIMS_HIST_LOG_LEVEL') | default('', true) | trim }}"
     lims_hist_max_depth: "{{ lookup('env', 'LIMS_HIST_MAX_DEPTH') | default('', true) | trim }}"
     lims_hist_batch_size: "{{ lookup('env', 'LIMS_HIST_BATCH_SIZE') | default('', true) | trim }}"
@@ -23,9 +29,7 @@
     lims_hist_rescan: "{{ ((lookup('env', 'LIMS_HIST_RESCAN') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_dry_run: "{{ ((lookup('env', 'LIMS_HIST_DRY_RUN') | default('', true) | trim) | default('false', true)) | bool }}"
     lims_hist_no_step_end: "{{ ((lookup('env', 'LIMS_HIST_NO_STEP_END') | default('', true) | trim) | default('false', true)) | bool }}"
-    # Resend is one-shot: default -no-schedule so lims-hist exits after -from/-to (else it stays as a scheduler).
     lims_hist_no_schedule: "{{ ((lookup('env', 'LIMS_HIST_NO_SCHEDULE') | default('', true) | trim) | default('true', true)) | bool }}"
-    lims_hist_timeout_sec: "{{ ((lookup('env', 'LIMS_HIST_TIMEOUT_SEC') | default('', true) | trim) | default('7200', true)) | int }}"
     lims_hist_kill_stale: "{{ ((lookup('env', 'LIMS_HIST_KILL_STALE') | default('', true) | trim) | default('true', true)) | bool }}"
     lims_hist_pkg_dir: >-
       {{
@@ -154,6 +158,7 @@
         if ($stateDir -ne '') {
           $argList.Add('-state-dir')
           $argList.Add($stateDir)
+          New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
         }
         $logLevel = @'
         {{ lims_hist_log_level }}
@@ -193,12 +198,10 @@
         {% endif %}
         Write-Output ("[DEBUG-DAHUA] lims-hist exe=" + $exe)
         Write-Output ("[DEBUG-DAHUA] lims-hist args=" + ($argList -join ' '))
-        $timeoutSec = {{ lims_hist_timeout_sec | int }}
-        if ($timeoutSec -lt 30) { $timeoutSec = 30 }
         $killStale = [bool]::Parse('{{ lims_hist_kill_stale | bool | lower }}')
         $procName = [System.IO.Path]::GetFileNameWithoutExtension($exe)
         $workDir = [System.IO.Path]::GetDirectoryName($exe)
-        if ([string]::IsNullOrWhiteSpace($workDir)) { $workDir = 'C:\Windows\Temp' }
+        if ([string]::IsNullOrWhiteSpace($workDir)) { $workDir = 'C:\Apps\lims-hist' }
         if ($killStale -and -not [string]::IsNullOrWhiteSpace($procName)) {
           Get-Process -Name $procName -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Output ("[DEBUG-DAHUA] stale kill pid=" + $_.Id + " name=" + $procName)
@@ -211,78 +214,26 @@
           if ($s -notmatch '[ \t"]') { return $s }
           return '"' + ($s.Replace('\', '\\').Replace('"', '\"')) + '"'
         }
-        $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-        $outFile = Join-Path $workDir ("lims-hist.out." + $stamp + ".log")
-        $errFile = Join-Path $workDir ("lims-hist.err." + $stamp + ".log")
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $exe
-        $psi.Arguments = ($argList | ForEach-Object { Format-DahuaProcArg ([string]$_) }) -join ' '
-        $psi.WorkingDirectory = $workDir
-        $psi.UseShellExecute = $false
-        $psi.CreateNoWindow = $true
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        $p = New-Object System.Diagnostics.Process
-        $p.StartInfo = $psi
-        $outFs = $null
-        $errFs = $null
-        $code = 1
-        $timedOut = $false
+        $argStr = ($argList | ForEach-Object { Format-DahuaProcArg ([string]$_) }) -join ' '
+        $cmdLine = '"' + $exe + '" ' + $argStr
+        Write-Output ("[DEBUG-DAHUA] background cmdline=" + $cmdLine)
         try {
-          $outFs = [System.IO.File]::Create($outFile)
-          $errFs = [System.IO.File]::Create($errFile)
-          [void]$p.Start()
-          $p.StandardInput.Close()
-          $outTask = $p.StandardOutput.BaseStream.CopyToAsync($outFs)
-          $errTask = $p.StandardError.BaseStream.CopyToAsync($errFs)
-          Write-Output ("[DEBUG-DAHUA] lims-hist started pid=" + $p.Id + " timeout_sec=" + $timeoutSec)
-          $timeoutMsLong = [long]$timeoutSec * 1000
-          if ($timeoutMsLong -gt [int]::MaxValue) {
-            $timeoutMs = [int]::MaxValue
-          } else {
-            $timeoutMs = [int]$timeoutMsLong
+          $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+            CommandLine = $cmdLine
+            CurrentDirectory = $workDir
           }
-          $exited = $p.WaitForExit($timeoutMs)
-          if (-not $exited) {
-            $timedOut = $true
-            Write-Output ("[DEBUG-DAHUA] lims-hist timeout; killing pid=" + $p.Id)
-            cmd.exe /c ("taskkill /F /T /PID " + $p.Id) | Out-Null
-            Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            $code = 124
-          } else {
-            $code = $p.ExitCode
-            if ($null -eq $code) { $code = 1 }
-          }
-          [void][System.Threading.Tasks.Task]::WaitAll(@($outTask, $errTask), 15000)
         } catch {
-          Write-Output ("[DEBUG-DAHUA] lims-hist launch error=" + $_.Exception.Message)
-          $code = 1
-        } finally {
-          try {
-            if ($p -and -not $p.HasExited) { $p.Kill() }
-          } catch { }
-          if ($null -ne $outFs) { try { $outFs.Dispose() } catch { } }
-          if ($null -ne $errFs) { try { $errFs.Dispose() } catch { } }
-          try { $p.Dispose() } catch { }
+          Write-Output ("[DEBUG-DAHUA] Win32_Process.Create error=" + $_.Exception.Message)
+          exit 1
         }
-        if (Test-Path -LiteralPath $outFile) {
-          Write-Output ("[DEBUG-DAHUA] stdout_file=" + $outFile)
-          Get-Content -LiteralPath $outFile -Tail 80 -ErrorAction SilentlyContinue
+        if ($null -eq $created -or [int]$created.ReturnValue -ne 0) {
+          $rv = 'null'
+          if ($null -ne $created) { $rv = [string]$created.ReturnValue }
+          Write-Output ("[DEBUG-DAHUA] Win32_Process.Create rc=" + $rv)
+          exit 1
         }
-        if (Test-Path -LiteralPath $errFile) {
-          Write-Output ("[DEBUG-DAHUA] stderr_file=" + $errFile)
-          Get-Content -LiteralPath $errFile -Tail 40 -ErrorAction SilentlyContinue
-        }
-        if ($timedOut) {
-          Write-Output ("[DEBUG-DAHUA] lims-hist exit=124 timeout_sec=" + $timeoutSec)
-        } else {
-          Write-Output ("[DEBUG-DAHUA] lims-hist exit=" + $code)
-        }
-        exit $code
-      vars:
-        ansible_winrm_operation_timeout_sec: "{{ (lims_hist_timeout_sec | int) + 90 }}"
-        ansible_winrm_read_timeout_sec: "{{ (lims_hist_timeout_sec | int) + 180 }}"
+        Write-Output ("[DEBUG-DAHUA] lims-hist background pid=" + $created.ProcessId)
+        exit 0
       register: _dahua_lims_hist
       failed_when: false
   ignore_unreachable: true
@@ -327,7 +278,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-DAHUA] from={{ dahua_lims_from | default('') }} to={{ dahua_lims_to | default('') }}"
-      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }} src={{ lims_hist_src | default('') }}"
+      - "[DEBUG-DAHUA] exe={{ lims_hist_exe | default('') }} state_dir={{ lims_hist_state_dir | default('') }}"
       - "[DEBUG-DAHUA] ok={{ dahua_lims_hist_ok | default(false) }} rc={{ dahua_lims_hist_rc | default('?') }}"
       - "[DEBUG-DAHUA] stdout_tail={{ (dahua_lims_hist_stdout | default('')) | truncate(800, True) }}"
       - "[DEBUG-DAHUA] stderr_tail={{ (dahua_lims_hist_stderr | default('')) | truncate(400, True) }}"

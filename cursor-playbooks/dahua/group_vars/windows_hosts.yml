@@ -1,6 +1,6 @@
 ---
-# DAHUA / lims-hist：补发可能扫盘+Kafka 很久，拉高 WinRM 读超时（单任务还可再覆盖）。
+# DAHUA: copy may take a bit; resend launches lims-hist in background (no long wait).
 ansible_winrm_connection_timeout: 60
-ansible_winrm_operation_timeout_sec: 7200
-ansible_winrm_read_timeout_sec: 7300
+ansible_winrm_operation_timeout_sec: 180
+ansible_winrm_read_timeout_sec: 200
 ansible_winrm_server_cert_validation: ignore

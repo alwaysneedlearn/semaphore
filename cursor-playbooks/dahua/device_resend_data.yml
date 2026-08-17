@@ -42,16 +42,12 @@
                 'lims-hist already running (exit 3)'
                 if (dahua_lims_hist_rc | default(1) | int) == 3
                 else (
-                  'lims-hist timed out (exit 124)'
-                  if (dahua_lims_hist_rc | default(1) | int) == 124
+                  'lims-hist argument error (exit 2)'
+                  if (dahua_lims_hist_rc | default(1) | int) == 2
                   else (
-                    'lims-hist argument error (exit 2)'
-                    if (dahua_lims_hist_rc | default(1) | int) == 2
-                    else (
-                      ''
-                      if (dahua_lims_hist_ok | default(false) | bool)
-                      else ('lims-hist failed rc=' ~ (dahua_lims_hist_rc | default('?') | string))
-                    )
+                    ''
+                    if (dahua_lims_hist_ok | default(false) | bool)
+                    else ('lims-hist failed rc=' ~ (dahua_lims_hist_rc | default('?') | string))
                   )
                 )
               )
