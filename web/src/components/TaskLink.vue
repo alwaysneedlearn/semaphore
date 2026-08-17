@@ -19,16 +19,16 @@
         :disabled="!tooltip"
     >
       <template v-slot:activator="{ on, attrs }">
-        <a
-            v-bind="attrs"
-            v-on="on"
-            :href="href"
-            target="_blank"
-            rel="noopener noreferrer"
-            :class="{'task-link-with-tooltip': tooltip}"
-        >
-          {{ label }}
-        </a>
+        <span v-bind="attrs" v-on="on">
+          <a
+              :href="href"
+              target="_blank"
+              rel="noopener noreferrer"
+              :class="{'task-link-with-tooltip': tooltip}"
+          >
+            {{ label }}
+          </a>
+        </span>
       </template>
 
       <span>{{ tooltip }}</span>
