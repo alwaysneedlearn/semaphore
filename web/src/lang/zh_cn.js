@@ -547,6 +547,8 @@ export default {
   deviceWinrmRiskText:
     '命令将直接在目标主机上执行，可能改变系统状态（停止进程、删除文件等）。是否继续？',
   deviceWinrmExamples: '示例',
+  deviceWinrmExamplesTop5: '占用 Top 5',
+  deviceWinrmExamplesTop5Hint: '点「占用 Top 5」填入 CPU/内存命令，再点执行。无需远程桌面。',
   deviceWinrmExamplesProcess: '进程',
   deviceWinrmExamplesNetwork: '端口',
   deviceWinrmExamplesFilesystem: '目录',

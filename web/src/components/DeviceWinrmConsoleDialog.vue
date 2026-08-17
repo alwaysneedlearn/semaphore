@@ -45,10 +45,15 @@
             :key="group.key"
             small
             class="mr-1 mb-1"
+            :color="group.key === 'top5' ? 'primary' : undefined"
+            :outlined="group.key === 'top5'"
             @click="showExampleMenu(group)"
           >
             {{ $t(group.labelKey) }}
           </v-chip>
+          <div class="caption grey--text mt-1">
+            {{ $t('deviceWinrmExamplesTop5Hint') }}
+          </div>
           <v-menu v-model="exampleMenu" offset-y :close-on-content-click="true">
             <template v-slot:activator="{ on, attrs }">
               <span v-bind="attrs" v-on="on" ref="exampleMenuActivator" />
@@ -287,7 +292,13 @@ export default {
       }
     },
     showExampleMenu(group) {
-      this.exampleMenuCommands = group.commands || [];
+      const commands = group.commands || [];
+      if (commands.length === 1) {
+        this.command = commands[0];
+        this.exampleMenu = false;
+        return;
+      }
+      this.exampleMenuCommands = commands;
       this.exampleMenu = true;
     },
     async loadConnectionPreview() {
