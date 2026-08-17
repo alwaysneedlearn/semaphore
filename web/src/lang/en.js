@@ -624,6 +624,8 @@ export default {
   deviceWinrmRiskText:
     'Commands run directly on the target host and may change system state (stop processes, delete files, etc.). Continue?',
   deviceWinrmExamples: 'Examples',
+  deviceWinrmExamplesTop5: 'Top 5 load',
+  deviceWinrmExamplesTop5Hint: 'Click Top 5 load to fill CPU/memory, then Execute. No RDP needed.',
   deviceWinrmExamplesProcess: 'Process',
   deviceWinrmExamplesNetwork: 'Ports',
   deviceWinrmExamplesFilesystem: 'Directories',
