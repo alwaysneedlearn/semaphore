@@ -6,7 +6,7 @@ Semaphore **变量组**通过模板绑定的 **Environment** 注入 Ansible `loo
 
 | 原则 | 说明 |
 |------|------|
-| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE / DAHUA 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
+| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE / DAHUA / LANH 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
 | **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退、浅层扫描（SINEXCEL）。 |
 | **SINEXCEL 安装路径** | **变量组即可**：`EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 在各盘符下自动找最新 exe，**不必**逐台配 `Install.ExeDir` / `ExePath`。 |
 | **Install（可选）** | 仅当某台机无法被盘符扫描覆盖时，才在设备/类型配置里写 **`Install`** / **`Paths`** 覆盖。见 [`sinexcel/README.md`](sinexcel/README.md)。 |
@@ -178,6 +178,21 @@ SEMAPHORE_API_TOKEN=<token>
 目标机无 `LIMS_HIST_EXE` 时，从控制器复制：`LIMS_HIST_PKG_DIR`/`LIMS_HIST_PKG_NAME` → `/root/software/dahua/lims-hist.exe`（或 `LIMS_HIST_SRC` 完整路径）。
 
 详见 [`dahua/README.md`](dahua/README.md)。
+
+### LANH
+
+LANH **仅支持状态巡检**：确保 **`ccsmon.exe`** 在跑；未运行则交互启动（**不停止**、**无确认弹窗**）。不配置 Restart / Redeploy / check_restart / Resend。
+
+```env
+EXE_NAME=ccsmon.exe
+EXE_DIR=C:\Program Files\LANH
+APP_DIR=.
+EXE_DIR_FALLBACK_DRIVES=D,E,C
+EXE_SCAN_LATEST=true
+SEMAPHORE_API_TOKEN=<token>
+```
+
+详见 [`lanh/README.md`](lanh/README.md)。
 
 ## Stop 模板注意事项
 
