@@ -42,7 +42,9 @@
           :title="wide ? $t('taskLogPanelNarrow') : $t('taskLogPanelWiden')"
           @click="wide = !wide"
         >
-          <v-icon small>{{ wide ? 'mdi-arrow-collapse-horizontal' : 'mdi-arrow-expand-horizontal' }}</v-icon>
+          <v-icon small>
+            {{ wide ? 'mdi-arrow-collapse-horizontal' : 'mdi-arrow-expand-horizontal' }}
+          </v-icon>
         </v-btn>
         <v-btn
           icon
