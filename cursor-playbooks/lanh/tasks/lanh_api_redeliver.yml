@@ -1,0 +1,66 @@
+---
+# LANH Redeliver（与 LAND SyncLims 同形）：POST token + startTime/endTime。
+# Play vars: lanh_redeliver_cfg, lanh_api_*, _lanh_target_host
+
+- name: 解析 Redeliver 时间字段
+  ansible.builtin.set_fact:
+    _lanh_redeliver_start: "{{ lanh_redeliver_cfg.startTime | default('') | trim }}"
+    _lanh_redeliver_end: "{{ lanh_redeliver_cfg.endTime | default('') | trim }}"
+    _lanh_redeliver_time_pattern: '^\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{2}:\d{2}$'
+
+- name: 校验 Redeliver 时间格式
+  ansible.builtin.set_fact:
+    _lanh_redeliver_start_ok: >-
+      {{
+        (_lanh_redeliver_start | default('') | trim | length > 0) and
+        ((_lanh_redeliver_start | regex_search(_lanh_redeliver_time_pattern) | default('', true) | length) > 0)
+      }}
+    _lanh_redeliver_end_ok: >-
+      {{
+        (_lanh_redeliver_end | default('') | trim | length > 0) and
+        ((_lanh_redeliver_end | regex_search(_lanh_redeliver_time_pattern) | default('', true) | length) > 0)
+      }}
+
+- name: DEBUG LANH Redeliver 请求参数
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANH] redeliver host={{ inventory_hostname }} target={{ _lanh_target_host | default(inventory_hostname) }}"
+      - "[DEBUG-LANH] redeliver url={{ lanh_api_scheme }}://{{ _lanh_target_host | default(inventory_hostname) }}:{{ lanh_api_port }}{{ lanh_api_redeliver_path }}"
+      - "[DEBUG-LANH] redeliver startTime={{ _lanh_redeliver_start | default('') }} valid={{ _lanh_redeliver_start_ok | default(false) }}"
+      - "[DEBUG-LANH] redeliver endTime={{ _lanh_redeliver_end | default('') }} valid={{ _lanh_redeliver_end_ok | default(false) }}"
+
+- name: 数据重传：API Redeliver
+  ansible.builtin.uri:
+    url: "{{ lanh_api_scheme }}://{{ _lanh_target_host }}:{{ lanh_api_port }}{{ lanh_api_redeliver_path }}"
+    method: POST
+    body_format: json
+    body:
+      token: "{{ lanh_api_token }}"
+      startTime: "{{ _lanh_redeliver_start }}"
+      endTime: "{{ _lanh_redeliver_end }}"
+    timeout: "{{ lanh_api_timeout }}"
+    validate_certs: "{{ lanh_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _lanh_api_redeliver
+  delegate_to: localhost
+  failed_when: false
+  when:
+    - _lanh_redeliver_start_ok | default(false) | bool
+    - _lanh_redeliver_end_ok | default(false) | bool
+
+- name: DEBUG LANH Redeliver 跳过（时间无效）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANH] redeliver skipped=invalid_time"
+      - "[DEBUG-LANH] expected_format=yyyy-M-d HH:mm:ss"
+  when: not (_lanh_redeliver_start_ok | default(false) | bool) or not (_lanh_redeliver_end_ok | default(false) | bool)
+
+- name: DEBUG LANH Redeliver 结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANH] redeliver http_status={{ _lanh_api_redeliver.status | default('skipped') }}"
+      - "[DEBUG-LANH] redeliver response_body={{ _lanh_api_redeliver.content | default('') | truncate(1500, True) }}"
+  when:
+    - _lanh_api_redeliver is defined
+    - not (_lanh_api_redeliver.skipped | default(false))

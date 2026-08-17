@@ -181,7 +181,7 @@ SEMAPHORE_API_TOKEN=<token>
 
 ### LANH
 
-LANH **仅支持状态巡检**：确保 **`ccsmon.exe`** 在跑；未运行则交互启动（**不停止**、**无确认弹窗**）。不配置 Restart / Redeploy / check_restart / Resend。
+LANH 提供 **status / check_restart / resend**：确保 **`ccsmon.exe`** 在跑（未运行则启动，**不停止**、**无确认弹窗**）；重发走 SyncLims **Redeliver**（同 LAND）。不配置 Restart / Redeploy。
 
 ```env
 EXE_NAME=ccsmon.exe
@@ -189,6 +189,12 @@ EXE_DIR=C:\Program Files\LANH
 APP_DIR=.
 EXE_DIR_FALLBACK_DRIVES=D,E,C
 EXE_SCAN_LATEST=true
+LANH_API_PORT=8080
+LANH_API_TOKEN=landapi
+# TDENGINE_URL=http://tdengine:6041
+# TDENGINE_CHANNEL_STATUS_TABLE=lab_sync.dwd_channel_status
+# TDENGINE_TAG_SUPPLIER=lanh
+# TDENGINE_CHANNEL_STALE_HOURS=6
 SEMAPHORE_API_TOKEN=<token>
 ```
 
