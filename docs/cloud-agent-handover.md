@@ -22,11 +22,14 @@
 
 ## 2. 设备类型与操作实现（速查）
 
+> 注：下表主要描述各类型的 **playbook / 运维实现路径**，不等同于当前设备列表 UI 的按钮集合。  
+> 当前设备列表 UI 仅保留 **巡检 / 重发数据 / 重启 / 重部署**；`stop` 不再作为设备列表入口，`check_restart` 仅通过 **Schedules** 运行。
+
 | 类型 | 管控对象 | 停止 | 启动 | 改配置 | 状态检测 | 重部署 | 数据重传 |
 |------|----------|------|------|--------|----------|--------|----------|
 | **NEWARE** | GUI `uu.exe` | WinRM 强杀脚本 | 计划任务启动 + 启动验证 | **INI** 写用户目录 | 进程 + `POST :api_port` `ExecResultData==3` 或日志关键字 | zip + INI + 验证 | 无（INI 字段） |
 | **LAND** | GUI `LHBTS.exe` | 优雅停止（关窗+弹窗） | 计划任务 | **HTTP** `ModifyConfig`（进程在跑时） | exe+进程+`QueryStatus`（`real_status==true`） | zip + API 启停 | **`Redeliver`**（仅 restart） |
-| **SINEXCEL** | GUI agent | 强杀或优雅 | 计划任务 | **HTTP** Kafka API（无 INI） | `QueryConfig` | zip + API | **`Retransmit`**（restart） |
+| **SINEXCEL** | GUI agent | 优雅停止（默认不强杀） | 计划任务 | **HTTP** Kafka API（无 INI） | `QueryConfig` | zip + API | **`Retransmit`**（restart） |
 | **NBT** | Windows **服务** | `win_service` stop | `win_service` start | 无 INI | 服务 Running + `SendStatus` 心跳 | zip + 服务重启 | **`ResetData`**（restart） |
 | **DAHUA** | `lims-hist.exe` | — | — | — | —（不支持） | — | **仅** WinRM 跑 lims-hist `-from/-to` |
 | **LANH** | GUI `ccsmon.exe` | —（不停止） | check_restart：未运行则交互启动 | — | **QueryStatus**（同 LAND；Patrol + Schedule check_restart） | — | **Redeliver**（同 LAND） |

@@ -39,9 +39,10 @@ grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
 | `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryConfig**（不含 Retransmit；重发见 `device_resend_data.yml`） |
 | `device_redeploy.yml` | **进程定位目录** → zip → **Kafka** → 优雅停止 → **备份** → **解压覆盖** → **INI 改配** → 启动 → **Kafka** 验证 |
 | `device_check_restart.yml` | TDengine channel freshness first; else Kafka QueryConfig gate; restart only when needed |
-| `device_stop.yml` | Force stop process |
 
 Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
+
+> 当前仓库中的 SINEXCEL 生命周期为 **优雅停止优先**。默认 `STOP_FORCE_AFTER_GRACEFUL=false`，即优雅停失败时任务失败；只有显式传入 `STOP_FORCE_AFTER_GRACEFUL=true` 时才会启用 force fallback。
 
 ## Agent HTTP API（默认端口 **9002**，变量组 `SINEXCEL_API_PORT`）
 

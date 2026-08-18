@@ -67,7 +67,7 @@ Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** a 
 
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 
-Used by `land/device_stop.yml` and `sinexcel/device_stop.yml` (and restart via `stop_program_graceful_before_reconfig.yml`). Task log should show **`[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=4`** — if missing, the runner playbook copy is stale (sync `develop` / refresh template repo).
+Used by `land/device_stop.yml` and SINEXCEL restart/redeploy flows via `stop_program_graceful_before_reconfig.yml`. Task log should show **`[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=4`** — if missing, the runner playbook copy is stale (sync `develop` / refresh template repo).
 
 Variable Group / play vars:
 
