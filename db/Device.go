@@ -240,22 +240,19 @@ type DeviceConfigItem struct {
 // ProjectDeviceSettings holds the per-project mapping of device actions to
 // templates plus the periodic refresh interval.
 type ProjectDeviceSettings struct {
-	ProjectID                               int        `db:"project_id" json:"project_id"`
-	DiscoverTemplateID                      *int       `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	RestartTemplateID                       *int       `db:"restart_template_id" json:"restart_template_id,omitempty"`
-	StatusTemplateID                        *int       `db:"status_template_id" json:"status_template_id,omitempty"`
-	ConfigTemplateID                        *int       `db:"config_template_id" json:"config_template_id,omitempty"`
-	DefaultInventoryID                      *int       `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
-	DefaultAnsibleUser                      string     `db:"default_ansible_user" json:"default_ansible_user"`
-	DefaultAnsiblePassword                  string     `db:"default_ansible_password" json:"default_ansible_password"`
-	DefaultAnsibleConnection                string     `db:"default_ansible_connection" json:"default_ansible_connection"`
-	DefaultAnsibleWinRMTransport            string     `db:"default_ansible_winrm_transport" json:"default_ansible_winrm_transport"`
-	DefaultAnsibleWinRMScheme               string     `db:"default_ansible_winrm_scheme" json:"default_ansible_winrm_scheme"`
-	DefaultAnsiblePort                      int        `db:"default_ansible_port" json:"default_ansible_port"`
-	DefaultAnsibleWinRMServerCertValidation string     `db:"default_ansible_winrm_server_cert_validation" json:"default_ansible_winrm_server_cert_validation"`
-	DefaultConfigJSON                       string     `db:"default_config_json" json:"default_config_json"`
-	StatusRefreshIntervalMin                int        `db:"status_refresh_interval_min" json:"status_refresh_interval_min"`
-	LastStatusRefreshAt                     *time.Time `db:"last_status_refresh_at" json:"last_status_refresh_at,omitempty"`
+	ProjectID                               int    `db:"project_id" json:"project_id"`
+	DiscoverTemplateID                      *int   `db:"discover_template_id" json:"discover_template_id,omitempty"`
+	RestartTemplateID                       *int   `db:"restart_template_id" json:"restart_template_id,omitempty"`
+	StatusTemplateID                        *int   `db:"status_template_id" json:"status_template_id,omitempty"`
+	DefaultInventoryID                      *int   `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
+	DefaultAnsibleUser                      string `db:"default_ansible_user" json:"default_ansible_user"`
+	DefaultAnsiblePassword                  string `db:"default_ansible_password" json:"default_ansible_password"`
+	DefaultAnsibleConnection                string `db:"default_ansible_connection" json:"default_ansible_connection"`
+	DefaultAnsibleWinRMTransport            string `db:"default_ansible_winrm_transport" json:"default_ansible_winrm_transport"`
+	DefaultAnsibleWinRMScheme               string `db:"default_ansible_winrm_scheme" json:"default_ansible_winrm_scheme"`
+	DefaultAnsiblePort                      int    `db:"default_ansible_port" json:"default_ansible_port"`
+	DefaultAnsibleWinRMServerCertValidation string `db:"default_ansible_winrm_server_cert_validation" json:"default_ansible_winrm_server_cert_validation"`
+	DefaultConfigJSON                       string `db:"default_config_json" json:"default_config_json"`
 }
 
 // TemplateIDForAction returns the configured template id for the given action,

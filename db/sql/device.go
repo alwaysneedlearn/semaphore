@@ -514,11 +514,10 @@ func (d *SqlDb) SetDeviceConfigItems(projectID, deviceID int, items []db.DeviceC
 
 const projectDeviceSettingsColumns = "" +
 	"project_id, discover_template_id, restart_template_id, " +
-	"status_template_id, config_template_id, default_inventory_id, " +
+	"status_template_id, default_inventory_id, " +
 	"default_ansible_user, default_ansible_password, default_ansible_connection, " +
 	"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, " +
-	"default_ansible_winrm_server_cert_validation, default_config_json, " +
-	"status_refresh_interval_min, last_status_refresh_at"
+	"default_ansible_winrm_server_cert_validation, default_config_json"
 
 func (d *SqlDb) GetProjectDeviceSettings(projectID int) (settings db.ProjectDeviceSettings, err error) {
 	err = d.selectOne(&settings,
@@ -536,16 +535,15 @@ func (d *SqlDb) GetProjectDeviceSettings(projectID int) (settings db.ProjectDevi
 func (d *SqlDb) UpdateProjectDeviceSettings(s db.ProjectDeviceSettings) error {
 	res, err := d.exec(
 		"update project__device_settings set "+
-			"discover_template_id=?, restart_template_id=?, status_template_id=?, config_template_id=?, "+
+			"discover_template_id=?, restart_template_id=?, status_template_id=?, "+
 			"default_inventory_id=?, default_ansible_user=?, default_ansible_password=?, default_ansible_connection=?, "+
 			"default_ansible_winrm_transport=?, default_ansible_winrm_scheme=?, default_ansible_port=?, default_ansible_winrm_server_cert_validation=?, "+
-			"default_config_json=?, status_refresh_interval_min=? "+
+			"default_config_json=? "+
 			"where project_id=?",
-		s.DiscoverTemplateID, s.RestartTemplateID, s.StatusTemplateID, s.ConfigTemplateID,
+		s.DiscoverTemplateID, s.RestartTemplateID, s.StatusTemplateID,
 		s.DefaultInventoryID, s.DefaultAnsibleUser, s.DefaultAnsiblePassword, s.DefaultAnsibleConnection,
 		s.DefaultAnsibleWinRMTransport, s.DefaultAnsibleWinRMScheme, s.DefaultAnsiblePort, s.DefaultAnsibleWinRMServerCertValidation,
 		s.DefaultConfigJSON,
-		s.StatusRefreshIntervalMin,
 		s.ProjectID,
 	)
 	if err != nil {
@@ -561,16 +559,15 @@ func (d *SqlDb) UpdateProjectDeviceSettings(s db.ProjectDeviceSettings) error {
 
 	_, err = d.exec(
 		"insert into project__device_settings ("+
-			"project_id, discover_template_id, restart_template_id, status_template_id, config_template_id, "+
+			"project_id, discover_template_id, restart_template_id, status_template_id, "+
 			"default_inventory_id, default_ansible_user, default_ansible_password, default_ansible_connection, "+
 			"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, default_ansible_winrm_server_cert_validation, "+
-			"default_config_json, status_refresh_interval_min) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"default_config_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.ProjectID,
-		s.DiscoverTemplateID, s.RestartTemplateID, s.StatusTemplateID, s.ConfigTemplateID,
+		s.DiscoverTemplateID, s.RestartTemplateID, s.StatusTemplateID,
 		s.DefaultInventoryID, s.DefaultAnsibleUser, s.DefaultAnsiblePassword, s.DefaultAnsibleConnection,
 		s.DefaultAnsibleWinRMTransport, s.DefaultAnsibleWinRMScheme, s.DefaultAnsiblePort, s.DefaultAnsibleWinRMServerCertValidation,
 		s.DefaultConfigJSON,
-		s.StatusRefreshIntervalMin,
 	)
 	return err
 }

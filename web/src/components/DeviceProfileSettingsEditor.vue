@@ -234,8 +234,6 @@ export default {
     buildSavePayload() {
       const payload = { ...this.settings };
       payload.default_config_json = this.buildDefaultConfigJson();
-      // Built-in scheduled status refresh removed; use Semaphore Schedules for check_restart.
-      payload.status_refresh_interval_min = 0;
       TEMPLATE_ID_FIELDS.forEach((field) => {
         payload[field] = this.normalizeTemplateId(payload[field]);
       });
@@ -247,10 +245,6 @@ export default {
       delete payload.default_ansible_winrm_scheme;
       delete payload.default_ansible_port;
       delete payload.default_ansible_winrm_server_cert_validation;
-      delete payload.config_template_id;
-      delete payload.discover_template_id;
-      // Clear legacy profile binding; run check_restart via Schedules instead.
-      payload.check_restart_template_id = null;
       return payload;
     },
     addDefaultConfigRow() {

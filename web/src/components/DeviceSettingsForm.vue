@@ -276,7 +276,6 @@ export default {
       try {
         const payload = { ...this.settings };
         payload.default_config_json = this.buildDefaultConfigJson();
-        payload.status_refresh_interval_min = 0;
         payload.default_ansible_port = Number(payload.default_ansible_port) || 5985;
         await axios.put(`/api/project/${this.projectId}/devices/settings`, payload);
         EventBus.$emit('i-snackbar', { color: 'success', text: this.$i18n.t('deviceSettingsSaved') });

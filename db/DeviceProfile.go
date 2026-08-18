@@ -32,13 +32,10 @@ type ProjectDeviceProfileSettings struct {
 	ProjectID int `db:"project_id" json:"project_id"`
 	ProfileID int `db:"profile_id" json:"profile_id"`
 
-	DiscoverTemplateID     *int `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	RestartTemplateID      *int `db:"restart_template_id" json:"restart_template_id,omitempty"`
-	StatusTemplateID       *int `db:"status_template_id" json:"status_template_id,omitempty"`
-	RedeployTemplateID     *int `db:"redeploy_template_id" json:"redeploy_template_id,omitempty"`
-	CheckRestartTemplateID *int `db:"check_restart_template_id" json:"check_restart_template_id,omitempty"`
-	ConfigTemplateID       *int `db:"config_template_id" json:"config_template_id,omitempty"`
-	ResendDataTemplateID   *int `db:"resend_data_template_id" json:"resend_data_template_id,omitempty"`
+	RestartTemplateID    *int `db:"restart_template_id" json:"restart_template_id,omitempty"`
+	StatusTemplateID     *int `db:"status_template_id" json:"status_template_id,omitempty"`
+	RedeployTemplateID   *int `db:"redeploy_template_id" json:"redeploy_template_id,omitempty"`
+	ResendDataTemplateID *int `db:"resend_data_template_id" json:"resend_data_template_id,omitempty"`
 
 	DefaultInventoryID                      *int   `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
 	DefaultAnsibleUser                      string `db:"default_ansible_user" json:"default_ansible_user"`
@@ -50,16 +47,11 @@ type ProjectDeviceProfileSettings struct {
 	DefaultAnsibleWinRMServerCertValidation string `db:"default_ansible_winrm_server_cert_validation" json:"default_ansible_winrm_server_cert_validation"`
 	DefaultConfigJSON                       string `db:"default_config_json" json:"default_config_json"`
 
-	StatusRefreshIntervalMin int        `db:"status_refresh_interval_min" json:"status_refresh_interval_min"`
-	LastStatusRefreshAt      *time.Time `db:"last_status_refresh_at" json:"last_status_refresh_at,omitempty"`
-
 	TDengineStatusTable string `db:"tdengine_status_table" json:"tdengine_status_table"`
 }
 
 func (s ProjectDeviceProfileSettings) TemplateIDForAction(action DeviceAction) *int {
 	switch action {
-	case DeviceActionDiscover:
-		return s.DiscoverTemplateID
 	case DeviceActionRestart:
 		return s.RestartTemplateID
 	case DeviceActionRedeploy:

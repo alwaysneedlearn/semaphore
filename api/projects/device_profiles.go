@@ -115,30 +115,26 @@ func ListDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 
 // deviceProfileSettingsView is per-type template/config only (connection defaults are project-level).
 type deviceProfileSettingsView struct {
-	ProjectID                int    `json:"project_id"`
-	ProfileID                int    `json:"profile_id"`
-	RestartTemplateID        *int   `json:"restart_template_id,omitempty"`
-	StatusTemplateID         *int   `json:"status_template_id,omitempty"`
-	RedeployTemplateID       *int   `json:"redeploy_template_id,omitempty"`
-	CheckRestartTemplateID   *int   `json:"check_restart_template_id,omitempty"`
-	ResendDataTemplateID     *int   `json:"resend_data_template_id,omitempty"`
-	DefaultInventoryID       *int   `json:"default_inventory_id,omitempty"`
-	DefaultConfigJSON        string `json:"default_config_json"`
-	StatusRefreshIntervalMin int    `json:"status_refresh_interval_min"`
+	ProjectID            int    `json:"project_id"`
+	ProfileID            int    `json:"profile_id"`
+	RestartTemplateID    *int   `json:"restart_template_id,omitempty"`
+	StatusTemplateID     *int   `json:"status_template_id,omitempty"`
+	RedeployTemplateID   *int   `json:"redeploy_template_id,omitempty"`
+	ResendDataTemplateID *int   `json:"resend_data_template_id,omitempty"`
+	DefaultInventoryID   *int   `json:"default_inventory_id,omitempty"`
+	DefaultConfigJSON    string `json:"default_config_json"`
 }
 
 func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSettingsView {
 	return deviceProfileSettingsView{
-		ProjectID:                ps.ProjectID,
-		ProfileID:                ps.ProfileID,
-		RestartTemplateID:        ps.RestartTemplateID,
-		StatusTemplateID:         ps.StatusTemplateID,
-		RedeployTemplateID:       ps.RedeployTemplateID,
-		CheckRestartTemplateID:   ps.CheckRestartTemplateID,
-		ResendDataTemplateID:     ps.ResendDataTemplateID,
-		DefaultInventoryID:       ps.DefaultInventoryID,
-		DefaultConfigJSON:        ps.DefaultConfigJSON,
-		StatusRefreshIntervalMin: 0,
+		ProjectID:            ps.ProjectID,
+		ProfileID:            ps.ProfileID,
+		RestartTemplateID:    ps.RestartTemplateID,
+		StatusTemplateID:     ps.StatusTemplateID,
+		RedeployTemplateID:   ps.RedeployTemplateID,
+		ResendDataTemplateID: ps.ResendDataTemplateID,
+		DefaultInventoryID:   ps.DefaultInventoryID,
+		DefaultConfigJSON:    ps.DefaultConfigJSON,
 	}
 }
 
@@ -146,12 +142,9 @@ func applyProfileSettingsView(existing *db.ProjectDeviceProfileSettings, body de
 	existing.RestartTemplateID = body.RestartTemplateID
 	existing.StatusTemplateID = body.StatusTemplateID
 	existing.RedeployTemplateID = body.RedeployTemplateID
-	existing.CheckRestartTemplateID = body.CheckRestartTemplateID
 	existing.ResendDataTemplateID = body.ResendDataTemplateID
 	existing.DefaultInventoryID = body.DefaultInventoryID
 	existing.DefaultConfigJSON = body.DefaultConfigJSON
-	// Built-in DeviceStatusScheduler removed; schedule check_restart via Semaphore Schedules.
-	existing.StatusRefreshIntervalMin = 0
 }
 
 func GetDeviceProfileSettings(w http.ResponseWriter, r *http.Request) {

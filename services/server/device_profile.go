@@ -32,10 +32,8 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 	ps := db.ProjectDeviceProfileSettings{
 		ProjectID:                               projectID,
 		ProfileID:                               p.ID,
-		DiscoverTemplateID:                      projectSettings.DiscoverTemplateID,
 		RestartTemplateID:                       projectSettings.RestartTemplateID,
 		StatusTemplateID:                        projectSettings.StatusTemplateID,
-		ConfigTemplateID:                        projectSettings.ConfigTemplateID,
 		DefaultAnsibleUser:                      projectSettings.DefaultAnsibleUser,
 		DefaultAnsiblePassword:                  projectSettings.DefaultAnsiblePassword,
 		DefaultAnsibleConnection:                projectSettings.DefaultAnsibleConnection,
@@ -44,7 +42,6 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 		DefaultAnsiblePort:                      projectSettings.DefaultAnsiblePort,
 		DefaultAnsibleWinRMServerCertValidation: projectSettings.DefaultAnsibleWinRMServerCertValidation,
 		DefaultConfigJSON:                       projectSettings.DefaultConfigJSON,
-		StatusRefreshIntervalMin:                projectSettings.StatusRefreshIntervalMin,
 	}
 	if err := store.UpdateProjectDeviceProfileSettings(ps); err != nil {
 		log.WithError(err).WithField("project_id", projectID).Warn("device profile: failed to seed profile settings")
@@ -65,9 +62,7 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 	if err != nil {
 		return err
 	}
-	needsTemplates := ps.DiscoverTemplateID == nil &&
-		ps.RestartTemplateID == nil &&
-		ps.StatusTemplateID == nil && ps.ConfigTemplateID == nil
+	needsTemplates := ps.RestartTemplateID == nil && ps.StatusTemplateID == nil
 	if !needsTemplates {
 		return nil
 	}
@@ -75,10 +70,8 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 	if err != nil {
 		return err
 	}
-	ps.DiscoverTemplateID = projectSettings.DiscoverTemplateID
 	ps.RestartTemplateID = projectSettings.RestartTemplateID
 	ps.StatusTemplateID = projectSettings.StatusTemplateID
-	ps.ConfigTemplateID = projectSettings.ConfigTemplateID
 	MergeProfileSettingsFromProject(&ps, projectSettings)
 	return store.UpdateProjectDeviceProfileSettings(ps)
 }
@@ -163,8 +156,6 @@ func ProfileSettingsAsProjectDeviceSettings(ps db.ProjectDeviceProfileSettings) 
 		DefaultAnsiblePort:                      ps.DefaultAnsiblePort,
 		DefaultAnsibleWinRMServerCertValidation: ps.DefaultAnsibleWinRMServerCertValidation,
 		StatusTemplateID:                        ps.StatusTemplateID,
-		StatusRefreshIntervalMin:                ps.StatusRefreshIntervalMin,
-		LastStatusRefreshAt:                     ps.LastStatusRefreshAt,
 	}
 }
 

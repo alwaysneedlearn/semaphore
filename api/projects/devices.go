@@ -775,14 +775,11 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 		return db.Task{}, err
 	}
 	ps := db.ProjectDeviceProfileSettings{
-		ProjectID:                project.ID,
-		DiscoverTemplateID:       settings.DiscoverTemplateID,
-		RestartTemplateID:        settings.RestartTemplateID,
-		StatusTemplateID:         settings.StatusTemplateID,
-		ConfigTemplateID:         settings.ConfigTemplateID,
-		DefaultInventoryID:       settings.DefaultInventoryID,
-		DefaultConfigJSON:        settings.DefaultConfigJSON,
-		StatusRefreshIntervalMin: settings.StatusRefreshIntervalMin,
+		ProjectID:          project.ID,
+		RestartTemplateID:  settings.RestartTemplateID,
+		StatusTemplateID:   settings.StatusTemplateID,
+		DefaultInventoryID: settings.DefaultInventoryID,
+		DefaultConfigJSON:  settings.DefaultConfigJSON,
 	}
 	return runDeviceTemplateWithProfileSettings(r, project, ps, action, extraVars, inventoryID)
 }

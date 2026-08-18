@@ -59,12 +59,11 @@ func (d *SqlDb) CreateDeviceProfile(p db.DeviceProfile) (db.DeviceProfile, error
 }
 
 const projectDeviceProfileSettingsColumns = "" +
-	"project_id, profile_id, discover_template_id, restart_template_id, " +
-	"status_template_id, redeploy_template_id, check_restart_template_id, config_template_id, resend_data_template_id, " +
+	"project_id, profile_id, restart_template_id, " +
+	"status_template_id, redeploy_template_id, resend_data_template_id, " +
 	"default_inventory_id, default_ansible_user, default_ansible_password, default_ansible_connection, " +
 	"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, " +
-	"default_ansible_winrm_server_cert_validation, default_config_json, " +
-	"status_refresh_interval_min, last_status_refresh_at, tdengine_status_table"
+	"default_ansible_winrm_server_cert_validation, default_config_json, tdengine_status_table"
 
 func (d *SqlDb) GetProjectDeviceProfileSettings(projectID, profileID int) (db.ProjectDeviceProfileSettings, error) {
 	var s db.ProjectDeviceProfileSettings
@@ -83,15 +82,15 @@ func (d *SqlDb) GetProjectDeviceProfileSettings(projectID, profileID int) (db.Pr
 func (d *SqlDb) UpdateProjectDeviceProfileSettings(s db.ProjectDeviceProfileSettings) error {
 	res, err := d.exec(
 		"update project__device_profile_settings set "+
-			"discover_template_id=?, restart_template_id=?, status_template_id=?, redeploy_template_id=?, check_restart_template_id=?, config_template_id=?, resend_data_template_id=?, "+
+			"restart_template_id=?, status_template_id=?, redeploy_template_id=?, resend_data_template_id=?, "+
 			"default_inventory_id=?, default_ansible_user=?, default_ansible_password=?, default_ansible_connection=?, "+
 			"default_ansible_winrm_transport=?, default_ansible_winrm_scheme=?, default_ansible_port=?, default_ansible_winrm_server_cert_validation=?, "+
-			"default_config_json=?, status_refresh_interval_min=?, tdengine_status_table=? "+
+			"default_config_json=?, tdengine_status_table=? "+
 			"where project_id=? and profile_id=?",
-		s.DiscoverTemplateID, s.RestartTemplateID, s.StatusTemplateID, s.RedeployTemplateID, s.CheckRestartTemplateID, s.ConfigTemplateID, s.ResendDataTemplateID,
+		s.RestartTemplateID, s.StatusTemplateID, s.RedeployTemplateID, s.ResendDataTemplateID,
 		s.DefaultInventoryID, s.DefaultAnsibleUser, s.DefaultAnsiblePassword, s.DefaultAnsibleConnection,
 		s.DefaultAnsibleWinRMTransport, s.DefaultAnsibleWinRMScheme, s.DefaultAnsiblePort, s.DefaultAnsibleWinRMServerCertValidation,
-		s.DefaultConfigJSON, s.StatusRefreshIntervalMin, s.TDengineStatusTable,
+		s.DefaultConfigJSON, s.TDengineStatusTable,
 		s.ProjectID, s.ProfileID,
 	)
 	if err != nil {
@@ -103,16 +102,16 @@ func (d *SqlDb) UpdateProjectDeviceProfileSettings(s db.ProjectDeviceProfileSett
 	}
 	_, err = d.exec(
 		"insert into project__device_profile_settings ("+
-			"project_id, profile_id, discover_template_id, restart_template_id, status_template_id, redeploy_template_id, check_restart_template_id, config_template_id, resend_data_template_id, "+
+			"project_id, profile_id, restart_template_id, status_template_id, redeploy_template_id, resend_data_template_id, "+
 			"default_inventory_id, default_ansible_user, default_ansible_password, default_ansible_connection, "+
 			"default_ansible_winrm_transport, default_ansible_winrm_scheme, default_ansible_port, default_ansible_winrm_server_cert_validation, "+
-			"default_config_json, status_refresh_interval_min, tdengine_status_table) "+
-			"values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"default_config_json, tdengine_status_table) "+
+			"values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.ProjectID, s.ProfileID,
-		s.DiscoverTemplateID, s.RestartTemplateID, s.StatusTemplateID, s.RedeployTemplateID, s.CheckRestartTemplateID, s.ConfigTemplateID, s.ResendDataTemplateID,
+		s.RestartTemplateID, s.StatusTemplateID, s.RedeployTemplateID, s.ResendDataTemplateID,
 		s.DefaultInventoryID, s.DefaultAnsibleUser, s.DefaultAnsiblePassword, s.DefaultAnsibleConnection,
 		s.DefaultAnsibleWinRMTransport, s.DefaultAnsibleWinRMScheme, s.DefaultAnsiblePort, s.DefaultAnsibleWinRMServerCertValidation,
-		s.DefaultConfigJSON, s.StatusRefreshIntervalMin, s.TDengineStatusTable,
+		s.DefaultConfigJSON, s.TDengineStatusTable,
 	)
 	return err
 }
