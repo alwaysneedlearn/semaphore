@@ -150,6 +150,7 @@ func GetMigrations(dialect string) []Migration {
 		{Version: "2.18.27"},
 		{Version: "2.18.28"},
 		{Version: "2.18.29"},
+		{Version: "2.18.30"},
 	}
 
 	return append(initScripts, commonScripts...)

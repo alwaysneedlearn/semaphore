@@ -30,22 +30,21 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 	}
 
 	ps := db.ProjectDeviceProfileSettings{
-		ProjectID:                projectID,
-		ProfileID:                  p.ID,
-		DiscoverTemplateID:       projectSettings.DiscoverTemplateID,
-		StopTemplateID:           projectSettings.StopTemplateID,
-		RestartTemplateID:        projectSettings.RestartTemplateID,
-		StatusTemplateID:         projectSettings.StatusTemplateID,
-		ConfigTemplateID:         projectSettings.ConfigTemplateID,
-		DefaultAnsibleUser:       projectSettings.DefaultAnsibleUser,
-		DefaultAnsiblePassword:   projectSettings.DefaultAnsiblePassword,
-		DefaultAnsibleConnection: projectSettings.DefaultAnsibleConnection,
-		DefaultAnsibleWinRMTransport: projectSettings.DefaultAnsibleWinRMTransport,
-		DefaultAnsibleWinRMScheme:    projectSettings.DefaultAnsibleWinRMScheme,
-		DefaultAnsiblePort:           projectSettings.DefaultAnsiblePort,
+		ProjectID:                               projectID,
+		ProfileID:                               p.ID,
+		DiscoverTemplateID:                      projectSettings.DiscoverTemplateID,
+		RestartTemplateID:                       projectSettings.RestartTemplateID,
+		StatusTemplateID:                        projectSettings.StatusTemplateID,
+		ConfigTemplateID:                        projectSettings.ConfigTemplateID,
+		DefaultAnsibleUser:                      projectSettings.DefaultAnsibleUser,
+		DefaultAnsiblePassword:                  projectSettings.DefaultAnsiblePassword,
+		DefaultAnsibleConnection:                projectSettings.DefaultAnsibleConnection,
+		DefaultAnsibleWinRMTransport:            projectSettings.DefaultAnsibleWinRMTransport,
+		DefaultAnsibleWinRMScheme:               projectSettings.DefaultAnsibleWinRMScheme,
+		DefaultAnsiblePort:                      projectSettings.DefaultAnsiblePort,
 		DefaultAnsibleWinRMServerCertValidation: projectSettings.DefaultAnsibleWinRMServerCertValidation,
-		DefaultConfigJSON:            projectSettings.DefaultConfigJSON,
-		StatusRefreshIntervalMin:     projectSettings.StatusRefreshIntervalMin,
+		DefaultConfigJSON:                       projectSettings.DefaultConfigJSON,
+		StatusRefreshIntervalMin:                projectSettings.StatusRefreshIntervalMin,
 	}
 	if err := store.UpdateProjectDeviceProfileSettings(ps); err != nil {
 		log.WithError(err).WithField("project_id", projectID).Warn("device profile: failed to seed profile settings")
@@ -67,7 +66,7 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 		return err
 	}
 	needsTemplates := ps.DiscoverTemplateID == nil &&
-		ps.StopTemplateID == nil && ps.RestartTemplateID == nil &&
+		ps.RestartTemplateID == nil &&
 		ps.StatusTemplateID == nil && ps.ConfigTemplateID == nil
 	if !needsTemplates {
 		return nil
@@ -77,7 +76,6 @@ func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID
 		return err
 	}
 	ps.DiscoverTemplateID = projectSettings.DiscoverTemplateID
-	ps.StopTemplateID = projectSettings.StopTemplateID
 	ps.RestartTemplateID = projectSettings.RestartTemplateID
 	ps.StatusTemplateID = projectSettings.StatusTemplateID
 	ps.ConfigTemplateID = projectSettings.ConfigTemplateID

@@ -249,7 +249,6 @@ export default {
       delete payload.default_ansible_winrm_server_cert_validation;
       delete payload.config_template_id;
       delete payload.discover_template_id;
-      payload.stop_template_id = null;
       // Clear legacy profile binding; run check_restart via Schedules instead.
       payload.check_restart_template_id = null;
       return payload;

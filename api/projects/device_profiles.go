@@ -117,7 +117,6 @@ func ListDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 type deviceProfileSettingsView struct {
 	ProjectID                int    `json:"project_id"`
 	ProfileID                int    `json:"profile_id"`
-	StopTemplateID           *int   `json:"stop_template_id,omitempty"`
 	RestartTemplateID        *int   `json:"restart_template_id,omitempty"`
 	StatusTemplateID         *int   `json:"status_template_id,omitempty"`
 	RedeployTemplateID       *int   `json:"redeploy_template_id,omitempty"`
@@ -132,7 +131,6 @@ func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSett
 	return deviceProfileSettingsView{
 		ProjectID:                ps.ProjectID,
 		ProfileID:                ps.ProfileID,
-		StopTemplateID:           ps.StopTemplateID,
 		RestartTemplateID:        ps.RestartTemplateID,
 		StatusTemplateID:         ps.StatusTemplateID,
 		RedeployTemplateID:       ps.RedeployTemplateID,
@@ -145,7 +143,6 @@ func profileSettingsToView(ps db.ProjectDeviceProfileSettings) deviceProfileSett
 }
 
 func applyProfileSettingsView(existing *db.ProjectDeviceProfileSettings, body deviceProfileSettingsView) {
-	existing.StopTemplateID = body.StopTemplateID
 	existing.RestartTemplateID = body.RestartTemplateID
 	existing.StatusTemplateID = body.StatusTemplateID
 	existing.RedeployTemplateID = body.RedeployTemplateID

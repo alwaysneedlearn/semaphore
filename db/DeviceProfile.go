@@ -9,12 +9,12 @@ const DefaultDeviceProfileKey = "NEWARE"
 
 // DeviceProfile is a device type within a project (playbook family + template bindings).
 type DeviceProfile struct {
-	ID        int       `db:"id" json:"id" backup:"-"`
-	ProjectID int       `db:"project_id" json:"project_id" backup:"-"`
-	ProfileKey string   `db:"profile_key" json:"profile_key"`
-	Name      string    `db:"name" json:"name"`
-	Enabled   bool      `db:"enabled" json:"enabled"`
-	Created   time.Time `db:"created" json:"created" backup:"-"`
+	ID         int       `db:"id" json:"id" backup:"-"`
+	ProjectID  int       `db:"project_id" json:"project_id" backup:"-"`
+	ProfileKey string    `db:"profile_key" json:"profile_key"`
+	Name       string    `db:"name" json:"name"`
+	Enabled    bool      `db:"enabled" json:"enabled"`
+	Created    time.Time `db:"created" json:"created" backup:"-"`
 }
 
 func (p DeviceProfile) Validate() error {
@@ -32,11 +32,10 @@ type ProjectDeviceProfileSettings struct {
 	ProjectID int `db:"project_id" json:"project_id"`
 	ProfileID int `db:"profile_id" json:"profile_id"`
 
-	DiscoverTemplateID *int `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	StopTemplateID     *int `db:"stop_template_id" json:"stop_template_id,omitempty"`
-	RestartTemplateID  *int `db:"restart_template_id" json:"restart_template_id,omitempty"`
-	StatusTemplateID   *int `db:"status_template_id" json:"status_template_id,omitempty"`
-	RedeployTemplateID *int `db:"redeploy_template_id" json:"redeploy_template_id,omitempty"`
+	DiscoverTemplateID     *int `db:"discover_template_id" json:"discover_template_id,omitempty"`
+	RestartTemplateID      *int `db:"restart_template_id" json:"restart_template_id,omitempty"`
+	StatusTemplateID       *int `db:"status_template_id" json:"status_template_id,omitempty"`
+	RedeployTemplateID     *int `db:"redeploy_template_id" json:"redeploy_template_id,omitempty"`
 	CheckRestartTemplateID *int `db:"check_restart_template_id" json:"check_restart_template_id,omitempty"`
 	ConfigTemplateID       *int `db:"config_template_id" json:"config_template_id,omitempty"`
 	ResendDataTemplateID   *int `db:"resend_data_template_id" json:"resend_data_template_id,omitempty"`
@@ -61,8 +60,6 @@ func (s ProjectDeviceProfileSettings) TemplateIDForAction(action DeviceAction) *
 	switch action {
 	case DeviceActionDiscover:
 		return s.DiscoverTemplateID
-	case DeviceActionStop:
-		return s.StopTemplateID
 	case DeviceActionRestart:
 		return s.RestartTemplateID
 	case DeviceActionRedeploy:

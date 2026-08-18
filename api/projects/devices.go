@@ -17,7 +17,6 @@ import (
 	"github.com/semaphoreui/semaphore/services/server"
 )
 
-
 func normalizeProtocolStatus(status db.DeviceStatus) db.DeviceStatus {
 	if status == db.DeviceStatusOnline {
 		return db.DeviceStatusOnline
@@ -776,14 +775,13 @@ func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceActi
 		return db.Task{}, err
 	}
 	ps := db.ProjectDeviceProfileSettings{
-		ProjectID:            project.ID,
-		DiscoverTemplateID:   settings.DiscoverTemplateID,
-		StopTemplateID:       settings.StopTemplateID,
-		RestartTemplateID:    settings.RestartTemplateID,
-		StatusTemplateID:     settings.StatusTemplateID,
-		ConfigTemplateID:     settings.ConfigTemplateID,
-		DefaultInventoryID:   settings.DefaultInventoryID,
-		DefaultConfigJSON:    settings.DefaultConfigJSON,
+		ProjectID:                project.ID,
+		DiscoverTemplateID:       settings.DiscoverTemplateID,
+		RestartTemplateID:        settings.RestartTemplateID,
+		StatusTemplateID:         settings.StatusTemplateID,
+		ConfigTemplateID:         settings.ConfigTemplateID,
+		DefaultInventoryID:       settings.DefaultInventoryID,
+		DefaultConfigJSON:        settings.DefaultConfigJSON,
 		StatusRefreshIntervalMin: settings.StatusRefreshIntervalMin,
 	}
 	return runDeviceTemplateWithProfileSettings(r, project, ps, action, extraVars, inventoryID)
@@ -1430,8 +1428,8 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 	device := helpers.GetFromContext(r, "device").(db.Device)
 
 	var body struct {
-		Action db.DeviceAction              `json:"action"`
-		Resend *server.ResendRangeInput     `json:"resend,omitempty"`
+		Action db.DeviceAction          `json:"action"`
+		Resend *server.ResendRangeInput `json:"resend,omitempty"`
 	}
 	if !helpers.Bind(w, r, &body) {
 		return

@@ -41,13 +41,12 @@ func DeviceStatusFromChannelProbes(rdp, winrm, api DeviceStatus) DeviceStatus {
 type DeviceAction string
 
 const (
-	DeviceActionDiscover DeviceAction = "discover"
-	DeviceActionStop     DeviceAction = "stop"
-	DeviceActionRestart  DeviceAction = "restart"
-	DeviceActionRedeploy DeviceAction = "redeploy"
-	DeviceActionStatus    DeviceAction = "status"
+	DeviceActionDiscover   DeviceAction = "discover"
+	DeviceActionRestart    DeviceAction = "restart"
+	DeviceActionRedeploy   DeviceAction = "redeploy"
+	DeviceActionStatus     DeviceAction = "status"
 	DeviceActionResendData DeviceAction = "resend_data"
-	DeviceActionConfig    DeviceAction = "config"
+	DeviceActionConfig     DeviceAction = "config"
 )
 
 // Device is a managed host belonging to a project.
@@ -243,7 +242,6 @@ type DeviceConfigItem struct {
 type ProjectDeviceSettings struct {
 	ProjectID                               int        `db:"project_id" json:"project_id"`
 	DiscoverTemplateID                      *int       `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	StopTemplateID                          *int       `db:"stop_template_id" json:"stop_template_id,omitempty"`
 	RestartTemplateID                       *int       `db:"restart_template_id" json:"restart_template_id,omitempty"`
 	StatusTemplateID                        *int       `db:"status_template_id" json:"status_template_id,omitempty"`
 	ConfigTemplateID                        *int       `db:"config_template_id" json:"config_template_id,omitempty"`
@@ -266,8 +264,6 @@ func (s ProjectDeviceSettings) TemplateIDForAction(action DeviceAction) *int {
 	switch action {
 	case DeviceActionDiscover:
 		return s.DiscoverTemplateID
-	case DeviceActionStop:
-		return s.StopTemplateID
 	case DeviceActionRestart:
 		return s.RestartTemplateID
 	case DeviceActionStatus:
