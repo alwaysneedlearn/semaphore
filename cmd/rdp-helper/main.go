@@ -1,5 +1,6 @@
 // Package main is the Semaphore Native RDP Helper (Windows).
-// See docs/plan-rdp-helper.md.
+// It bridges the web UI "Remote Desktop" action to a local mstsc workflow
+// with ssh tunneling, protocol registration, and launch auditing.
 package main
 
 import (

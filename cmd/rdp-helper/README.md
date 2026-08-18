@@ -1,6 +1,6 @@
 # Semaphore RDP Helper
 
-Windows CLI helper：`ssh` 跳板 + `mstsc` 远程桌面。见 [`docs/plan-rdp-helper.md`](../docs/plan-rdp-helper.md)。
+Windows CLI helper：`ssh` 跳板 + `mstsc` 远程桌面，用于承接 Web 端“远程桌面”操作并回传启动/结束审计事件。
 
 ## 下载
 
