@@ -681,7 +681,6 @@ export default {
 
   // Device settings (project Settings page)
   deviceSettingsTitle: 'Device actions',
-  deviceSettingsHelp: 'Bind a task template to each device action. Selected templates are executed when the corresponding action is triggered. Pass {device.ip}, {device.hostname} as Ansible extra-vars in your playbooks.',
   deviceConnectionDefaultsTitle: 'Project connection defaults',
   deviceConnectionDefaultsHelp:
     'WinRM defaults used when generating windows_hosts inventory (auto and temporary inventories). Shared for the whole project; not per device type.',
@@ -692,5 +691,4 @@ export default {
   deviceTemplateResendData: 'Resend data template',
   deviceTemplateStatus: 'Status template',
   deviceTemplateConfig: 'Config template',
-  deviceSettingsSaved: 'Device settings saved.',
 };

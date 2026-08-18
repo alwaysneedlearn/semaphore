@@ -605,7 +605,6 @@ export default {
 
   // 设备设置（项目设置页）
   deviceSettingsTitle: '设备操作模板',
-  deviceSettingsHelp: '为每个设备操作绑定一个任务模板。当触发对应操作时执行所选模板。在 playbook 中可使用 {device.ip}、{device.hostname} 等 extra-vars。',
   deviceConnectionDefaultsTitle: '项目级连接默认值',
   deviceConnectionDefaultsHelp:
     '生成 windows_hosts 清单（自动清单与批量任务临时清单）时使用的 WinRM 默认值，全项目共用，与设备类型无关。',
@@ -616,5 +615,4 @@ export default {
   deviceTemplateResendData: '重发数据模板',
   deviceTemplateStatus: '状态模板',
   deviceTemplateConfig: '配置模板',
-  deviceSettingsSaved: '设备设置已保存。',
 };
