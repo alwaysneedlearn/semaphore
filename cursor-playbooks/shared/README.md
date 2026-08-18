@@ -67,7 +67,7 @@ Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** a 
 
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 
-Used by `land/device_stop.yml` and SINEXCEL restart/redeploy flows via `stop_program_graceful_before_reconfig.yml`. Task log should show **`[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=4`** — if missing, the runner playbook copy is stale (sync `develop` / refresh template repo).
+Used by the interactive graceful-stop path (including LAND/SINEXCEL restart and redeploy via `stop_program_graceful_before_reconfig.yml`). Task log should show **`[DEBUG-STOP] STOP_GRACEFUL_CONFIRM_REV=4`** — if missing, the runner playbook copy is stale (sync `develop` / refresh template repo).
 
 Variable Group / play vars:
 
@@ -95,7 +95,7 @@ After the interactive scheduled task launches the EXE, `sem_reconfig_start_progr
 
 Set `START_POPUP_KEYWORD` empty to disable (other device types). Log lines: `START_POPUP_TASK`, `POPUP_CONFIRMED`, `POPUP_NOT_FOUND`.
 
-**Restart / redeploy:** `land/device_restart.yml`, `land/device_check_restart_redeploy.yml` (and SINEXCEL equivalents) include `stop_program_graceful_before_reconfig.yml` before ModifyConfig + start — same behavior as `device_stop.yml`, not `Stop-Process -Force`.
+**Restart / redeploy:** `land/device_restart.yml`, `land/device_check_restart.yml` (and SINEXCEL equivalents) include `stop_program_graceful_before_reconfig.yml` before ModifyConfig + start when they enter the restart path — same graceful-stop behavior as the historical stop-only flow, not `Stop-Process -Force`.
 
 **LAND config:** `land_prepare_merged_cfg.yml` splits `SystemConfig` (ModifyConfig) vs `Redeliver` (restart-only redeliver). ModifyConfig two-phase while `RUNNING`; `land_api_redeliver.yml` only from `land/device_restart.yml` after API OK with valid `startTime`/`endTime`.
 

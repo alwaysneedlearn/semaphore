@@ -1,6 +1,8 @@
 # 实施计划：TDengine 状态同步 + 多设备类型（Profile）
 
 > **状态：已完成**（`develop`，2026-06）— Profile CRUD/UI、多类型调度、playbook bulk 后 TDengine 写入均已落地。运维说明见 [tdengine-setup.md](./tdengine-setup.md)。
+>
+> **历史说明**：本文保留设计与迁移过程，因此会出现 `start_template_id` / `stop_template_id` 等阶段性字段名；若与当前代码不一致，请以 `develop` 分支中的结构体、SQL 迁移和 UI 实现为准。
 
 本文档为技术计划与实现对照。**已实现（develop）**：Profile CRUD/UI（Devices → Device types）、`v2.18.15`、NEWARE 默认、Patrol/批量/调度按 Profile、bulk 后 TDengine 分表快照（playbook Variable Group，非服务端 Admin 页）、列表按类型筛选、多任务前端提示、Discover 用 NEWARE 发现模板。**延期/可选**：服务端 TDengine Admin 页、`pkg/tdengine` Go 客户端、AnsibleHook.End 写 TD、Bolt profile 持久化、DELETE profile、playbooks `profiles/<key>/` 目录。
 

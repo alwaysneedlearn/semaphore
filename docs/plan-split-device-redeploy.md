@@ -1,6 +1,8 @@
 # Plan: split_device_redeploy
 
 > **状态：已完成**（`develop`，2026-06）— DB/API/UI/playbook 均已落地；`check_restart_redeploy_template_id` 已删除；四类设备类型均有 `device_redeploy.yml` / `device_check_restart.yml`。
+>
+> **历史说明**：本文保留了方案设计阶段的对比内容，因此会出现 `device_start.yml`、`device_stop.yml`、`device_check_restart_redeploy.yml`、`check_restart_redeploy_template_id` 等旧名；请以文首状态说明和当前仓库文件为准。
 
 > 设备操作拆分：独立「重新部署」，启动/重启/巡检重启均不做制品下发；**启动每次写配置**；**重新部署先查目标机压缩包，不存在再复制**。
 >

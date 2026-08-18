@@ -248,8 +248,8 @@ cursor-playbooks/
   neware/                # NEWARE Windows hosts (current production tree)
     device_status.yml    # Patrol — upload-status API first, log fallback
     device_restart.yml
-    device_stop.yml
-    device_check_restart_redeploy.yml
+    device_check_restart.yml
+    device_redeploy.yml
     ansible.cfg
     files/sem_*.ps1      # Deployed once via deploy_sem_windows_helper_scripts.yml
     tasks/
