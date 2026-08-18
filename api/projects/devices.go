@@ -448,24 +448,6 @@ func PutDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GetDeviceSettings returns the per-project device action template bindings.
-func GetDeviceSettings(w http.ResponseWriter, r *http.Request) {
-	project := helpers.GetFromContext(r, "project").(db.Project)
-	s, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
-	if err != nil {
-		helpers.WriteError(w, err)
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, s)
-}
-
-// UpdateDeviceSettings is deprecated; use per-profile settings under /devices/profiles/{id}/settings.
-func UpdateDeviceSettings(w http.ResponseWriter, r *http.Request) {
-	helpers.WriteJSON(w, http.StatusGone, map[string]string{
-		"error": "Project-level device settings are removed. Configure Devices → Device types instead.",
-	})
-}
-
 // deviceConnectionSettingsPayload is project-level WinRM defaults for windows_hosts inventory generation.
 type deviceConnectionSettingsPayload struct {
 	DefaultAnsibleUser                      string `json:"default_ansible_user"`
@@ -768,35 +750,11 @@ func PutDeviceDiscoveryResults(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// runDeviceTemplate enqueues the template configured for the given action (project-level fallback).
-func runDeviceTemplate(r *http.Request, project db.Project, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
-	settings, err := helpers.Store(r).GetProjectDeviceSettings(project.ID)
-	if err != nil {
-		return db.Task{}, err
+func enqueueTemplateTask(r *http.Request, project db.Project, templateID int, extraVars map[string]any, inventoryID *int) (db.Task, error) {
+	if templateID <= 0 {
+		return db.Task{}, &db.ValidationError{Message: "No template configured"}
 	}
-	ps := db.ProjectDeviceProfileSettings{
-		ProjectID:          project.ID,
-		RestartTemplateID:  settings.RestartTemplateID,
-		StatusTemplateID:   settings.StatusTemplateID,
-		DefaultInventoryID: settings.DefaultInventoryID,
-		DefaultConfigJSON:  settings.DefaultConfigJSON,
-	}
-	return runDeviceTemplateWithProfileSettings(r, project, ps, action, extraVars, inventoryID)
-}
-
-// runDeviceTemplateWithProfileSettings uses per-profile template bindings.
-func runDeviceTemplateWithProfileSettings(r *http.Request, project db.Project, ps db.ProjectDeviceProfileSettings, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
-	tplID := ps.TemplateIDForAction(action)
-	if tplID == nil || *tplID == 0 {
-		return db.Task{}, &db.ValidationError{
-			Message: fmt.Sprintf("No template configured for action %q on this device profile", action),
-		}
-	}
-	if inventoryID == nil || *inventoryID == 0 {
-		inventoryID = ps.DefaultInventoryID
-	}
-
-	tpl, err := helpers.Store(r).GetTemplate(project.ID, *tplID)
+	tpl, err := helpers.Store(r).GetTemplate(project.ID, templateID)
 	if err != nil {
 		return db.Task{}, err
 	}
@@ -834,6 +792,20 @@ func runDeviceTemplateWithProfileSettings(r *http.Request, project db.Project, p
 	}
 
 	return taskPool(r).AddTask(task, userID, username, project.ID, tpl.App.NeedTaskAlias())
+}
+
+// runDeviceTemplateWithProfileSettings uses per-profile template bindings.
+func runDeviceTemplateWithProfileSettings(r *http.Request, project db.Project, ps db.ProjectDeviceProfileSettings, action db.DeviceAction, extraVars map[string]any, inventoryID *int) (db.Task, error) {
+	tplID := ps.TemplateIDForAction(action)
+	if tplID == nil || *tplID == 0 {
+		return db.Task{}, &db.ValidationError{
+			Message: fmt.Sprintf("No template configured for action %q on this device profile", action),
+		}
+	}
+	if inventoryID == nil || *inventoryID == 0 {
+		inventoryID = ps.DefaultInventoryID
+	}
+	return enqueueTemplateTask(r, project, *tplID, extraVars, inventoryID)
 }
 
 // DiscoverDevices triggers the project's discover template (if configured).
@@ -878,8 +850,11 @@ func DiscoverDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	invID := settings.DefaultInventoryID
-
-	task, err := runDeviceTemplate(r, project, db.DeviceActionDiscover, extraVars, invID)
+	discoverTplID := 0
+	if settings.DiscoverTemplateID != nil {
+		discoverTplID = *settings.DiscoverTemplateID
+	}
+	task, err := enqueueTemplateTask(r, project, discoverTplID, extraVars, invID)
 	if err != nil {
 		helpers.WriteError(w, err)
 		return
@@ -1391,16 +1366,6 @@ func createTemporaryInventoryForDevices(r *http.Request, projectID int, devices 
 		return nil, err
 	}
 	return &inv.ID, nil
-}
-
-func enqueueDeviceActionTask(
-	r *http.Request,
-	project db.Project,
-	action db.DeviceAction,
-	extraVars map[string]any,
-	inventoryID *int,
-) (db.Task, error) {
-	return runDeviceTemplate(r, project, action, extraVars, inventoryID)
 }
 
 func parseDefaultDeviceConfigJSON(raw string) map[string]any {

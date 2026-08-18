@@ -604,15 +604,8 @@ export default {
   deviceAnsibleWinrmCertValidation: 'WinRM 证书校验',
 
   // 设备设置（项目设置页）
-  deviceSettingsTitle: '设备操作模板',
   deviceConnectionDefaultsTitle: '项目级连接默认值',
   deviceConnectionDefaultsHelp:
     '生成 windows_hosts 清单（自动清单与批量任务临时清单）时使用的 WinRM 默认值，全项目共用，与设备类型无关。',
   deviceTemplateDiscover: '发现模板',
-  deviceTemplateStop: '停止模板',
-  deviceTemplateRestart: '重新启动模板',
-  deviceTemplateRedeploy: '重新部署模板',
-  deviceTemplateResendData: '重发数据模板',
-  deviceTemplateStatus: '状态模板',
-  deviceTemplateConfig: '配置模板',
 };

@@ -237,13 +237,11 @@ type DeviceConfigItem struct {
 	Remark   string `db:"remark" json:"remark"`
 }
 
-// ProjectDeviceSettings holds the per-project mapping of device actions to
-// templates plus the periodic refresh interval.
+// ProjectDeviceSettings holds project-level discovery bindings, WinRM defaults,
+// and optional legacy default_config_json used when seeding device profiles.
 type ProjectDeviceSettings struct {
 	ProjectID                               int    `db:"project_id" json:"project_id"`
 	DiscoverTemplateID                      *int   `db:"discover_template_id" json:"discover_template_id,omitempty"`
-	RestartTemplateID                       *int   `db:"restart_template_id" json:"restart_template_id,omitempty"`
-	StatusTemplateID                        *int   `db:"status_template_id" json:"status_template_id,omitempty"`
 	DefaultInventoryID                      *int   `db:"default_inventory_id" json:"default_inventory_id,omitempty"`
 	DefaultAnsibleUser                      string `db:"default_ansible_user" json:"default_ansible_user"`
 	DefaultAnsiblePassword                  string `db:"default_ansible_password" json:"default_ansible_password"`
@@ -261,10 +259,6 @@ func (s ProjectDeviceSettings) TemplateIDForAction(action DeviceAction) *int {
 	switch action {
 	case DeviceActionDiscover:
 		return s.DiscoverTemplateID
-	case DeviceActionRestart:
-		return s.RestartTemplateID
-	case DeviceActionStatus:
-		return s.StatusTemplateID
 	}
 	return nil
 }

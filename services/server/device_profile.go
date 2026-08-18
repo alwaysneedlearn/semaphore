@@ -32,8 +32,6 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 	ps := db.ProjectDeviceProfileSettings{
 		ProjectID:                               projectID,
 		ProfileID:                               p.ID,
-		RestartTemplateID:                       projectSettings.RestartTemplateID,
-		StatusTemplateID:                        projectSettings.StatusTemplateID,
 		DefaultAnsibleUser:                      projectSettings.DefaultAnsibleUser,
 		DefaultAnsiblePassword:                  projectSettings.DefaultAnsiblePassword,
 		DefaultAnsibleConnection:                projectSettings.DefaultAnsibleConnection,
@@ -56,24 +54,32 @@ func EnsureDefaultDeviceProfile(store db.Store, projectID int) (db.DeviceProfile
 	return p, nil
 }
 
-// syncProfileSettingsFromProjectIfNeeded copies project__device_settings into NEWARE profile when templates are unset.
+// syncProfileSettingsFromProjectIfNeeded copies empty profile connection defaults from project settings.
 func syncProfileSettingsFromProjectIfNeeded(store db.Store, projectID, profileID int) error {
 	ps, err := store.GetProjectDeviceProfileSettings(projectID, profileID)
 	if err != nil {
 		return err
 	}
-	needsTemplates := ps.RestartTemplateID == nil && ps.StatusTemplateID == nil
-	if !needsTemplates {
+	if !profileNeedsProjectConnectionDefaults(ps) {
 		return nil
 	}
 	projectSettings, err := store.GetProjectDeviceSettings(projectID)
 	if err != nil {
 		return err
 	}
-	ps.RestartTemplateID = projectSettings.RestartTemplateID
-	ps.StatusTemplateID = projectSettings.StatusTemplateID
 	MergeProfileSettingsFromProject(&ps, projectSettings)
 	return store.UpdateProjectDeviceProfileSettings(ps)
+}
+
+func profileNeedsProjectConnectionDefaults(ps db.ProjectDeviceProfileSettings) bool {
+	return strings.TrimSpace(ps.DefaultAnsibleUser) == "" ||
+		strings.TrimSpace(ps.DefaultAnsiblePassword) == "" ||
+		strings.TrimSpace(ps.DefaultAnsibleConnection) == "" ||
+		strings.TrimSpace(ps.DefaultAnsibleWinRMTransport) == "" ||
+		strings.TrimSpace(ps.DefaultAnsibleWinRMScheme) == "" ||
+		ps.DefaultAnsiblePort == 0 ||
+		strings.TrimSpace(ps.DefaultAnsibleWinRMServerCertValidation) == "" ||
+		strings.TrimSpace(ps.DefaultConfigJSON) == ""
 }
 
 // ResolveDeviceProfileSettings returns profile settings, falling back to project-level templates.
@@ -141,22 +147,6 @@ func SeedDeviceProfileSettings(store db.Store, prof db.DeviceProfile) error {
 		ProfileID: prof.ID,
 	}
 	return store.UpdateProjectDeviceProfileSettings(ps)
-}
-
-// ProfileSettingsAsProjectDeviceSettings adapts profile settings for probe/enqueue helpers.
-func ProfileSettingsAsProjectDeviceSettings(ps db.ProjectDeviceProfileSettings) db.ProjectDeviceSettings {
-	return db.ProjectDeviceSettings{
-		ProjectID:                               ps.ProjectID,
-		DefaultInventoryID:                      ps.DefaultInventoryID,
-		DefaultAnsibleUser:                      ps.DefaultAnsibleUser,
-		DefaultAnsiblePassword:                  ps.DefaultAnsiblePassword,
-		DefaultAnsibleConnection:                ps.DefaultAnsibleConnection,
-		DefaultAnsibleWinRMTransport:            ps.DefaultAnsibleWinRMTransport,
-		DefaultAnsibleWinRMScheme:               ps.DefaultAnsibleWinRMScheme,
-		DefaultAnsiblePort:                      ps.DefaultAnsiblePort,
-		DefaultAnsibleWinRMServerCertValidation: ps.DefaultAnsibleWinRMServerCertValidation,
-		StatusTemplateID:                        ps.StatusTemplateID,
-	}
 }
 
 // GroupDevicesByProfile groups devices by device_profile_id.

@@ -680,15 +680,8 @@ export default {
   deviceAnsibleWinrmCertValidation: 'WinRM cert validation',
 
   // Device settings (project Settings page)
-  deviceSettingsTitle: 'Device actions',
   deviceConnectionDefaultsTitle: 'Project connection defaults',
   deviceConnectionDefaultsHelp:
     'WinRM defaults used when generating windows_hosts inventory (auto and temporary inventories). Shared for the whole project; not per device type.',
   deviceTemplateDiscover: 'Discover template',
-  deviceTemplateStop: 'Stop template',
-  deviceTemplateRestart: 'Restart template',
-  deviceTemplateRedeploy: 'Redeploy template',
-  deviceTemplateResendData: 'Resend data template',
-  deviceTemplateStatus: 'Status template',
-  deviceTemplateConfig: 'Config template',
 };
