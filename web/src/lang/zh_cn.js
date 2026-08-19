@@ -449,6 +449,7 @@ export default {
   deviceRemoteDesktopLaunchSubtitle: '通过本机 Helper 拉起 / 停止 mstsc',
   deviceRemoteDesktopOperator: '操作人',
   deviceRemoteDesktopConnect: '连接',
+  deviceRemoteDesktopConnectDisabled: '已连接，请先停止再重新连接',
   deviceRemoteDesktopStop: '停止',
   deviceRemoteDesktopConnectHint: '打开本弹窗不会自动连接；请点击「连接」后再打开 Helper。',
   deviceRemoteDesktopStatusIdle: '未连接',

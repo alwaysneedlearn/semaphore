@@ -523,6 +523,8 @@ export default {
   deviceRemoteDesktopLaunchSubtitle: 'Start or stop mstsc via the local Helper',
   deviceRemoteDesktopOperator: 'Operator',
   deviceRemoteDesktopConnect: 'Connect',
+  deviceRemoteDesktopConnectDisabled:
+    'Already connected. Stop the session before connecting again.',
   deviceRemoteDesktopStop: 'Stop',
   deviceRemoteDesktopConnectHint: 'Opening this dialog does not connect. Click Connect to open the Helper.',
   deviceRemoteDesktopStatusIdle: 'Idle',
