@@ -166,6 +166,7 @@ export default {
   forceStopAllTasks: 'Force Stop All Tasks',
   askForceStopAllTasks: 'Are you sure you want to force stop all tasks?',
   raw_log: 'Raw log',
+  taskLogOpenNewTab: 'Open in new tab',
 
   confirmTask: 'Confirm',
   deleteTeamMember: 'Delete team member',

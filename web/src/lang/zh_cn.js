@@ -164,6 +164,7 @@ export default {
   forceStopAllTasks: '强制停止所有任务',
   askForceStopAllTasks: '您确定要强制停止所有任务吗？',
   raw_log: '原始日志',
+  taskLogOpenNewTab: '新标签页打开',
 
   confirmTask: '确认',
   deleteTeamMember: '删除团队成员',

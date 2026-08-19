@@ -44,6 +44,14 @@
       </template>
     </EditDialog>
 
+    <TaskLogDialog
+      v-model="taskLogDialog"
+      @close="onTaskLogDialogClosed()"
+      :project-id="projectId"
+      :item-id="taskId"
+      :system-info="systemInfo"
+    />
+
     <EditDialog
       v-model="newProjectDialog"
       save-button-text="Create"
@@ -947,10 +955,12 @@
 import axios from 'axios';
 import { getErrorMessage } from '@/lib/error';
 import EditDialog from '@/components/EditDialog.vue';
+import TaskLogDialog from '@/components/TaskLogDialog.vue';
 import ProjectForm from '@/components/ProjectForm.vue';
 import UserForm from '@/components/UserForm.vue';
 import EventBus from '@/event-bus';
 import socket from '@/socket';
+import delay from '@/lib/delay';
 
 import SubscriptionForm from '@/components/SubscriptionForm.vue';
 import RestoreProjectForm from '@/components/RestoreProjectForm.vue';
@@ -1033,6 +1043,7 @@ export default {
     RestoreProjectForm,
     UserForm,
     EditDialog,
+    TaskLogDialog,
     ProjectForm,
     SystemInfoDialog,
   },
@@ -1063,6 +1074,8 @@ export default {
       restoreProjectResult: null,
       restoreProjectResultDialog: null,
 
+      taskLogDialog: null,
+      taskId: null,
       darkMode: false,
       languages: [
         {
@@ -1096,7 +1109,16 @@ export default {
     },
 
     async $route(val) {
-      await this.redirectLegacyTaskQuery(val);
+      if (this.isTaskLogPage) {
+        this.taskLogDialog = false;
+      } else if (val.query.t == null) {
+        this.taskLogDialog = false;
+      } else {
+        const taskId = parseInt(val.query.t || '', 10);
+        if (taskId) {
+          EventBus.$emit('i-show-task', { taskId });
+        }
+      }
 
       if ((this.projects || []).length > 0 && this.$route.query.new_project) {
         EventBus.$emit('i-new-project', { projectType: this.$route.query.new_project });
@@ -1226,8 +1248,25 @@ export default {
       }, 500);
     });
 
-    EventBus.$on('i-show-task', (e) => {
-      this.openTaskLogTab(e.taskId);
+    EventBus.$on('i-show-task', async (e) => {
+      if (this.isTaskLogPage) {
+        const path = this.projectId && e.taskId
+          ? taskLogPath(this.projectId, e.taskId)
+          : null;
+        if (path && this.$route.path !== path) {
+          await this.$router.push({ path });
+        }
+        return;
+      }
+      if (parseInt(this.$route.query.t || '', 10) !== e.taskId) {
+        const query = { ...this.$route.query, t: e.taskId };
+        await this.$router.replace({ query });
+        return;
+      }
+
+      this.taskId = e.taskId;
+      await delay(1);
+      this.taskLogDialog = true;
     });
 
     EventBus.$on('i-open-last-project', async () => {
@@ -1347,32 +1386,9 @@ export default {
       await this.$router.replace({ query });
     },
 
-    openTaskLogTab(taskId) {
-      const id = Number(taskId);
-      const path = this.projectId && id ? taskLogPath(this.projectId, id) : null;
-      if (!path) {
-        return;
-      }
-      if (this.$route.path === path) {
-        return;
-      }
-      const href = this.$router.resolve({ path }).href;
-      const a = document.createElement('a');
-      a.href = href;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.click();
-    },
-
-    async redirectLegacyTaskQuery(route) {
-      const t = parseInt((route.query && route.query.t) || '', 10);
-      if (!t || !this.projectId) {
-        return;
-      }
-      const path = taskLogPath(this.projectId, t);
-      const query = { ...route.query };
-      delete query.t;
-      await this.$router.replace({ path, query });
+    async onTaskLogDialogClosed() {
+      const query = { ...this.$route.query, t: undefined };
+      await this.$router.replace({ query });
     },
 
     async loadData() {
@@ -1395,7 +1411,12 @@ export default {
         await this.trySelectMostSuitableProject();
       }
 
-      await this.redirectLegacyTaskQuery(this.$route);
+      if (!this.isTaskLogPage && this.$route.query.t) {
+        const taskId = parseInt(this.$route.query.t || '', 10);
+        if (taskId) {
+          EventBus.$emit('i-show-task', { taskId });
+        }
+      }
 
       if ((this.projects || []).length > 0 && this.$route.query.new_project != null) {
         EventBus.$emit('i-new-project', { projectType: this.$route.query.new_project });
