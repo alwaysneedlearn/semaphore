@@ -161,12 +161,14 @@ TDENGINE_TIMEZONE=Asia/Shanghai
 
 ### DAHUA
 
-DAHUA 提供 **status（进程巡检）** + **resend_data（lims-hist）**；不配置 Restart / Redeploy / check_restart。
+DAHUA 提供 **status（进程巡检）** + **check_restart（定时确保运行）** + **resend_data（lims-hist）**；不配置 Restart / Redeploy。
 
 ```env
-# 状态巡检：CTSMonPro 在跑即 healthy
+# 状态巡检 / check_restart
 EXE_NAME=CTSMonPro.exe
 # PROCESS_NAME=CTSMonPro
+EXE_DIR=C:\Program Files\DAHUA
+EXE_DIR_FALLBACK_DRIVES=D,E,C
 LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
 LIMS_HIST_PKG_DIR=/root/software/dahua
 LIMS_HIST_PKG_NAME=lims-hist.exe
