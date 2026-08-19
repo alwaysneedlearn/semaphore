@@ -1,8 +1,10 @@
 ---
 # 由 winrm_connect_one_attempt 在 attempt>1 时 include；meta 任务勿写 when（Ansible 不支持）
+# 勿用 ansible.builtin.pause：strategy: free 下会报错（bypasses host loop）。
 - name: 重置 WinRM 连接
   ansible.builtin.meta: reset_connection
 
 - name: 等待重试间隔
-  ansible.builtin.pause:
-    seconds: "{{ winrm_connect_retry_delay | int }}"
+  ansible.builtin.command: sleep {{ winrm_connect_retry_delay | int }}
+  delegate_to: localhost
+  changed_when: false
