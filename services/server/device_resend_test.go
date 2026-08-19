@@ -51,8 +51,11 @@ func TestBuildResendParamsDAHUA(t *testing.T) {
 	if params.End != "2026-07-20T23:59:59" {
 		t.Fatalf("end=%q", params.End)
 	}
-	if !ProfileSupportsResend("DAHUA") || !ProfileResendOnly("DAHUA") {
-		t.Fatal("DAHUA should be resend-only")
+	if !ProfileSupportsResend("DAHUA") {
+		t.Fatal("DAHUA should support resend")
+	}
+	if ProfileResendOnly("DAHUA") {
+		t.Fatal("DAHUA should support status patrol")
 	}
 }
 

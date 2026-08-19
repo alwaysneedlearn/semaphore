@@ -1,8 +1,8 @@
 # DAHUA playbooks (`cursor-playbooks/dahua/`)
 
-设备类型 **DAHUA**：**仅支持数据重发**。在目标 Windows 机通过 WinRM 运行 **`lims-hist.exe`**，按时间窗解析 CTSPro 历史原始数据并上送 LIMS Kafka。
+设备类型 **DAHUA**：**状态巡检**（`CTSMonPro` 进程）+ **数据重发**（`lims-hist.exe`）。在目标 Windows 机通过 WinRM 运行 **`lims-hist.exe`**，按时间窗解析 CTSPro 历史原始数据并上送 LIMS Kafka。
 
-不提供：`device_status` / `device_stop` / `device_restart` / `device_redeploy` / `device_check_restart`。设备列表 UI 对 DAHUA 隐藏巡检 / 重启 / 重部署菜单项。
+不提供：`device_stop` / `device_restart` / `device_redeploy` / `device_check_restart`。
 
 任务日志：搜 **`[DEBUG-DAHUA]`**。
 
@@ -10,9 +10,18 @@
 
 | Playbook | 说明 |
 |----------|------|
+| `device_status.yml` | UI **巡检 / Patrol all**：WinRM + **`Get-Process`**；进程在跑 → `healthy` |
 | `device_resend_data.yml` | UI **重发数据**：`resend_params.start/end` → `lims-hist -from/-to` |
 
-在 **Device types** 中只绑定 **Resend data template** 即可；其它模板留空。
+在 **Device types** 中绑定 **Status** 与 **Resend data** 模板；Restart / Redeploy / check_restart 留空。
+
+## 状态巡检（CTSMonPro）
+
+- 默认进程名 **`CTSMonPro`**（`Get-Process -Name`，不带 `.exe`）
+- 变量组 **`PROCESS_NAME`** 可覆盖（不带 `.exe`）；或设 **`EXE_NAME=CTSMonPro.exe`**，未设 `PROCESS_NAME` 时自动推导
+- **WinRM 不可达** → `unhealthy` / `winrm_status=offline`
+- **WinRM 可达但进程未运行** → `unhealthy`，`abnormal_reason=Process not running: …`
+- **进程在跑** → `healthy`（`api_status=online` 表示应用层在跑；DAHUA 无独立 HTTP 巡检 API）
 
 ## lims-hist
 
@@ -31,6 +40,9 @@
 ## Variable Group ENV
 
 ```env
+# 状态巡检（device_status.yml）
+EXE_NAME=CTSMonPro.exe
+# PROCESS_NAME=CTSMonPro
 LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
 # 控制器制品（目标机缺失时复制）
 LIMS_HIST_PKG_DIR=/root/software/dahua
@@ -48,6 +60,8 @@ SEMAPHORE_API_TOKEN=<token>
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `EXE_NAME` | `CTSMonPro.exe` | 状态巡检默认程序名（推导 `process_name`） |
+| `PROCESS_NAME` | （从 `EXE_NAME` 推导） | `Get-Process -Name`，**不带** `.exe` |
 | `LIMS_HIST_EXE` | `C:\Apps\lims-hist\lims-hist.exe` | 目标机可执行文件路径 |
 | `LIMS_HIST_PKG_DIR` / `ZIP_PATH` | `/root/software/dahua` | 控制器上制品目录 |
 | `LIMS_HIST_PKG_NAME` | `lims-hist.exe` | 控制器文件名（`.exe` 或 `.zip`） |

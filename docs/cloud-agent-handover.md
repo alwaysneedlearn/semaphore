@@ -57,7 +57,7 @@
 | **SINEXCEL** | GUI agent | `QueryConfig` | Kafka API 改配；默认优雅停止，不强杀 | `Retransmit` |
 | **NBT** | Windows 服务 | 服务 + `SendStatus` | 服务重启 / zip redeploy | `ResetData` |
 | **JHAI** | Windows 服务 + HTTP | 上传心跳 API | 服务重启 / zip redeploy | API resend |
-| **DAHUA** | `lims-hist.exe` | 无 Patrol | 仅命令行重发 | WinRM 跑 `-from/-to` |
+| **DAHUA** | `CTSMonPro` | 进程 `Get-Process` | 无 | WinRM 跑 `lims-hist -from/-to` |
 | **LANH** | GUI `ccsmon.exe` | `QueryStatus` | check_restart 仅 ensure 启动，不做完整 stop/start | `Redeliver` |
 
 共同点：
