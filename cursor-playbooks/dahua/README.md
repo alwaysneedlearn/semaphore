@@ -11,9 +11,10 @@
 | Playbook | 说明 |
 |----------|------|
 | `device_status.yml` | UI **巡检 / Patrol all**：WinRM + **`Get-Process`**；进程在跑 → `healthy` |
+| `device_check_restart.yml` | **Schedule 定时**：进程在跑 → 跳过；未运行则启动（只启动、不停止） |
 | `device_resend_data.yml` | UI **重发数据**：`resend_params.start/end` → `lims-hist -from/-to` |
 
-在 **Device types** 中绑定 **Status** 与 **Resend data** 模板；Restart / Redeploy / check_restart 留空。
+在 **Device types** 中绑定 **Status**、**check_restart**（Schedule）与 **Resend data** 模板；Restart / Redeploy 留空。
 
 ## 状态巡检（CTSMonPro）
 
@@ -22,6 +23,21 @@
 - **WinRM 不可达** → `unhealthy` / `winrm_status=offline`
 - **WinRM 可达但进程未运行** → `unhealthy`，`abnormal_reason=Process not running: …`
 - **进程在跑** → `healthy`（`api_status=online` 表示应用层在跑；DAHUA 无独立 HTTP 巡检 API）
+
+## check_restart（定时确保运行）
+
+- 进程在跑 → `healthy`，跳过启动
+- 进程未跑 → 通过 `sem_reconfig_start_program_windows.ps1` 后台启动，再确认进程
+- **不停止**现有进程；无弹窗确认
+- EXE 路径通过 `EXE_DIR` + 盘符回退解析（`EXE_DIR_FALLBACK_DRIVES`，默认 `D,E,C`）
+
+| Variable | Default | 说明 |
+|----------|---------|------|
+| `EXE_DIR` | `C:\Program Files\DAHUA` | EXE 首选目录 |
+| `EXE_DIR_FALLBACK_DRIVES` | `D,E,C` | 盘符回退顺序 |
+| `EXE_ARGS` | `""` | 启动参数 |
+| `RESTART_DELAY` | `15` | 启动后等待秒数 |
+| `PROCESS_VERIFY_POLL_SECONDS` | `5` | 进程轮询间隔 |
 
 ## lims-hist
 
