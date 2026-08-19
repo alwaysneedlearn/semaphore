@@ -26,14 +26,6 @@
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resend_apply_from_params.yml"
     - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/sinexcel_kafka_retransmit.yml"
 
-    - ansible.builtin.set_fact:
-        sinexcel_retransmit_ok: >-
-          {{
-            (_sinexcel_kafka_retransmit_raw is defined)
-            and not (_sinexcel_kafka_retransmit_raw.skipped | default(false))
-            and ((_sinexcel_kafka_retransmit_raw.status | default(0) | int) == 200)
-          }}
-
   post_tasks:
     - ansible.builtin.set_fact:
         semaphore_callback_row:
@@ -42,7 +34,22 @@
           device_status: "{{ 'healthy' if (sinexcel_retransmit_ok | default(false) | bool) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if (sinexcel_retransmit_ok | default(false) | bool) else 'offline' }}"
-          abnormal_reason: "{{ '' if (sinexcel_retransmit_ok | default(false) | bool) else 'SINEXCEL Retransmit API failed or empty time range' }}"
+          abnormal_reason: "{{ _sinexcel_resend_abnormal }}"
+      vars:
+        _sinexcel_resend_abnormal: >-
+          {{
+            ''
+            if (sinexcel_retransmit_ok | default(false) | bool)
+            else (
+              'SINEXCEL Retransmit empty time range'
+              if not (_sinexcel_retransmit_time_ok | default(false) | bool)
+              else (
+                'SINEXCEL QueryHistory API failed'
+                if not (sinexcel_query_history_ok | default(false) | bool)
+                else 'SINEXCEL Retransmit API failed'
+              )
+            )
+          }}
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
 

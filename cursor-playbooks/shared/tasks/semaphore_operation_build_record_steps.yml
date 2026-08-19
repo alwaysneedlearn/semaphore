@@ -226,7 +226,14 @@
             if (_h.jhai_config_apis_ok is defined) else (
               'LAND Redeliver'
               if (_h.land_redeliver_ok is defined) else (
-                'SINEXCEL Retransmit'
+                (
+                  'SINEXCEL QueryHistory empty (nothing to retransmit)'
+                  if (
+                    (_h.sinexcel_retransmit_ok | default(false) | bool)
+                    and ((_h._sinexcel_kafka_history_rows | default([]) | length) == 0)
+                  )
+                  else 'SINEXCEL Retransmit'
+                )
                 if (_h.sinexcel_retransmit_ok is defined) else (
                   'NBT ResetData'
                   if (_h.nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
