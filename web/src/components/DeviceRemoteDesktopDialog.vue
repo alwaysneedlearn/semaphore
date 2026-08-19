@@ -51,16 +51,19 @@
         </div>
 
         <div class="d-flex align-center flex-wrap mb-4" style="gap: 8px;">
-          <v-btn
-            color="primary"
-            depressed
-            :loading="status === 'connecting'"
-            :disabled="!actionsReady || status === 'connecting' || status === 'stopping'"
-            @click.stop="connect"
-          >
-            <v-icon left>mdi-lan-connect</v-icon>
-            {{ $t('deviceRemoteDesktopConnect') }}
-          </v-btn>
+          <span :title="connectDisabledReason">
+            <v-btn
+              color="primary"
+              depressed
+              data-testid="deviceRdp-connect"
+              :loading="status === 'connecting'"
+              :disabled="connectDisabled"
+              @click.stop="connect"
+            >
+              <v-icon left>mdi-lan-connect</v-icon>
+              {{ $t('deviceRemoteDesktopConnect') }}
+            </v-btn>
+          </span>
           <v-btn
             color="error"
             outlined
@@ -170,7 +173,7 @@ export default {
     apiBase() {
       return `/api/project/${this.projectId}/devices/${this.device.id}`;
     },
-    canStop() {
+    sessionActive() {
       if (this.status === 'connected' || this.status === 'stopping') {
         return true;
       }
@@ -180,6 +183,38 @@ export default {
         && latest.phase === 'mstsc_started'
         && !latest.mstsc_exited_at,
       );
+    },
+    canStop() {
+      return this.sessionActive;
+    },
+    connectDisabled() {
+      if (!this.actionsReady) {
+        return true;
+      }
+      if (this.status === 'connecting' || this.status === 'stopping') {
+        return true;
+      }
+      // Gray out after a live session so a second click does not issue another
+      // launch token / mstsc. Retry stays available on helper_missing / error.
+      if (this.status === 'helper_missing' || this.status === 'error') {
+        return false;
+      }
+      return this.status === 'connected' || this.sessionActive;
+    },
+    connectDisabledReason() {
+      if (!this.connectDisabled) {
+        return '';
+      }
+      if (this.status === 'connecting') {
+        return this.$t('deviceRemoteDesktopStatusLaunching');
+      }
+      if (this.status === 'stopping') {
+        return this.$t('deviceRemoteDesktopStatusStopping');
+      }
+      if (this.status === 'connected' || this.sessionActive) {
+        return this.$t('deviceRemoteDesktopConnectDisabled');
+      }
+      return '';
     },
     sessionChipColor() {
       if (this.status === 'connected' || this.canStop) return 'success';
@@ -401,7 +436,7 @@ export default {
       });
     },
     async connect() {
-      if (!this.actionsReady || !this.device?.id) return;
+      if (this.connectDisabled || !this.device?.id) return;
       this.launchSeq += 1;
       const seq = this.launchSeq;
       this.status = 'connecting';
