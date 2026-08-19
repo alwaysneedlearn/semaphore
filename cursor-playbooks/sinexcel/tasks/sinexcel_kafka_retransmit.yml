@@ -117,3 +117,45 @@
           ] if (_sinexcel_kafka_retransmit_raw is defined) and not (_sinexcel_kafka_retransmit_raw.skipped | default(false)) else []
         )
       }}
+
+- name: 判定 QueryHistory 是否成功
+  ansible.builtin.set_fact:
+    sinexcel_query_history_ok: "{{ _qh_ok | bool }}"
+  vars:
+    _qh_ok: >-
+      {{
+        (_sinexcel_kafka_history_raw is defined)
+        and not (_sinexcel_kafka_history_raw.skipped | default(false))
+        and ((_sinexcel_kafka_history_raw.status | default(0) | int) == 200)
+        and (
+          '成功' in (
+            (
+              (_sinexcel_kafka_history_raw.content | default('{}') | from_json).Result | default('')
+            ) | string
+          )
+        )
+      }}
+
+- name: 判定 Retransmit 是否成功（查询成功但无历史视为成功）
+  ansible.builtin.set_fact:
+    sinexcel_retransmit_ok: "{{ _rtx_ok | bool }}"
+  vars:
+    _rtx_ok: >-
+      {{
+        (sinexcel_query_history_ok | default(false) | bool)
+        and (
+          ((_sinexcel_kafka_history_rows | default([]) | length) == 0)
+          or (
+            (_sinexcel_kafka_retransmit_raw is defined)
+            and not (_sinexcel_kafka_retransmit_raw.skipped | default(false))
+            and ((_sinexcel_kafka_retransmit_raw.status | default(0) | int) == 200)
+          )
+        )
+      }}
+
+- name: DEBUG SINEXCEL Retransmit 判定结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-SINEXCEL] query_history_ok={{ sinexcel_query_history_ok | default(false) | bool }}"
+      - "[DEBUG-SINEXCEL] retransmit_ok={{ sinexcel_retransmit_ok | default(false) | bool }}"
+      - "[DEBUG-SINEXCEL] history_rows={{ _sinexcel_kafka_history_rows | default([]) | length }}"

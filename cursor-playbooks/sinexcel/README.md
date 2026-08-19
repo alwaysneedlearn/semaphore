@@ -39,6 +39,7 @@ grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
 | `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryConfig**（不含 Retransmit；重发见 `device_resend_data.yml`） |
 | `device_redeploy.yml` | **进程定位目录** → zip → **Kafka** → 优雅停止 → **备份** → **解压覆盖** → **INI 改配** → 启动 → **Kafka** 验证 |
 | `device_check_restart.yml` | TDengine channel freshness first; else Kafka QueryConfig gate; restart only when needed |
+| `device_resend_data.yml` | QueryHistory + 批量 Retransmit。QueryHistory HTTP 200 且 Result 含「成功」、历史为空时视为成功（无 FlowId 可传，**不**把 `api_status` 打成 offline） |
 
 Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 
@@ -61,7 +62,7 @@ Shared core: `../shared/tasks/sinexcel_config_stop_start.yml`
 | `KafkaConfig` | **仅**此分类参与 `POST /kafka/SetConfig`（**不会**回落 `SystemConfig`，避免误发 `IsHisDataFromFirst` 等无关字段） |
 | `ConfigFile1` | **Redeploy 磁盘改配**：写入 `program_dir\config\` 下第 1 个 INI/JSON（文件名由 `SINEXCEL_CONFIG_FILES` 第 1 段指定） |
 | `ConfigFile2` | **Redeploy 磁盘改配**：第 2 个配置文件（`SINEXCEL_CONFIG_FILES` 第 2 段） |
-| `Retransmit` | `StartTime`, `EndTime` — **原样传给 API**（仅 trim），常见如 `2024-01-01 00:00:00` 或 `2026/01/01 00:00:00.000`。Restart 先 QueryHistory，再对查询到的**全部**历史行批量 Retransmit。 |
+| `Retransmit` | `StartTime`, `EndTime` — **原样传给 API**（仅 trim），常见如 `2024-01-01 00:00:00` 或 `2026/01/01 00:00:00.000`。`device_resend_data.yml` 先 QueryHistory，再对查询到的历史行批量 Retransmit；**无历史行不算失败**。 |
 | **`Install`** (or **`Paths`**) | **可选**：仅极个别机台扫描仍找不到 exe 时覆盖路径（日常用变量组即可） |
 
 ### EXE 路径：变量组为主（推荐）
