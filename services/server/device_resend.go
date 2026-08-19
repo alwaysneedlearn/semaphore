@@ -172,8 +172,6 @@ func ProfileSupportsResend(profileKey string) bool {
 // ProfileResendOnly reports types that only support resend_data (no status/restart/redeploy).
 func ProfileResendOnly(profileKey string) bool {
 	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
-	case "DAHUA":
-		return true
 	default:
 		return false
 	}

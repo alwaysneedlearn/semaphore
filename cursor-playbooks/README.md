@@ -12,7 +12,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 | **`sinexcel/`** | SINEXCEL (LAND lifecycle + HTTP API config; no INI) |
 | **`nbt/`** | NBT (Windows service + heartbeat API) |
 | **`jhai/`** | JHAI (`UploaderServiceDaemon` + BTS upload HTTP API) |
-| **`dahua/`** | DAHUA（**仅** `device_resend_data.yml`：目标机运行 `lims-hist.exe`） |
+| **`dahua/`** | DAHUA（`device_status.yml`：CTSMonPro 进程；`device_resend_data.yml`：lims-hist） |
 | **`lanh/`** | LANH：`status` + `resend`；`check_restart` 仅 Schedule（只启动不停止） |
 | **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 

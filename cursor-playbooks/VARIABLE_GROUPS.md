@@ -161,9 +161,12 @@ TDENGINE_TIMEZONE=Asia/Shanghai
 
 ### DAHUA
 
-DAHUA **仅支持重发数据**：在目标机运行 **`lims-hist.exe`**（CTSPro → LIMS Kafka）。不配置 Status / Restart / Redeploy / check_restart 模板。
+DAHUA 提供 **status（进程巡检）** + **resend_data（lims-hist）**；不配置 Restart / Redeploy / check_restart。
 
 ```env
+# 状态巡检：CTSMonPro 在跑即 healthy
+EXE_NAME=CTSMonPro.exe
+# PROCESS_NAME=CTSMonPro
 LIMS_HIST_EXE=C:\Apps\lims-hist\lims-hist.exe
 LIMS_HIST_PKG_DIR=/root/software/dahua
 LIMS_HIST_PKG_NAME=lims-hist.exe

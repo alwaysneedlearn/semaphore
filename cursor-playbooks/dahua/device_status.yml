@@ -1,0 +1,105 @@
+---
+# DAHUA 状态巡检：WinRM 可达且 CTSMonPro（或变量组 PROCESS_NAME / EXE_NAME）进程在跑 → healthy。
+- name: DAHUA 状态巡检（CTSMonPro 进程）
+  hosts: windows_hosts
+  strategy: free
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_debug_tag: DAHUA
+    sem_operation_type: status
+    _exe_name_default: CTSMonPro.exe
+    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
+    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      ignore_unreachable: true
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+    - name: 检查 CTSMonPro 进程状态
+      ansible.windows.win_shell: |
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) {
+          $wsMb = [math]::Round($p.WorkingSet64 / 1MB, 1)
+          "RUNNING|pid=$($p.Id)|ws=${wsMb}MB|path=$($p.Path)"
+        } else {
+          "NOT_RUNNING"
+        }
+      register: status
+      changed_when: false
+      ignore_unreachable: true
+      when: _winrm_session_ok | default(false) | bool
+
+    - name: 登记 Semaphore 状态回调行（进程检查 UNREACHABLE）
+      when:
+        - status is defined
+        - status.unreachable | default(false) | bool
+      block:
+        - ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: "WinRM unreachable during process check: {{ process_name }}"
+
+        - ansible.builtin.meta: end_host
+
+    - name: 登记 Semaphore 状态回调行（进程巡检）
+      ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'healthy' if (_dahua_proc_running | bool) else 'unhealthy' }}"
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: "{{ 'online' if (_dahua_proc_running | bool) else 'offline' }}"
+          abnormal_reason: "{{ '' if (_dahua_proc_running | bool) else ('Process not running: ' ~ process_name ~ ' (' ~ _dahua_proc_out ~ ')') }}"
+      vars:
+        _dahua_proc_out: "{{ (status.stdout | default('')) | trim }}"
+        _dahua_proc_running: "{{ (_dahua_proc_out.split('|') | first) == 'RUNNING' }}"
+      when:
+        - _winrm_session_ok | default(false) | bool
+        - status is defined
+        - not (status.unreachable | default(false) | bool)
+
+    - name: DEBUG DAHUA 进程巡检
+      ansible.builtin.debug:
+        msg:
+          - "[DEBUG-DAHUA] process_name={{ process_name }}"
+          - "[DEBUG-DAHUA] proc_out={{ _dahua_proc_out | default('') }}"
+          - "[DEBUG-DAHUA] running={{ _dahua_proc_running | default(false) }}"
+          - "[DEBUG-DAHUA] device_status={{ (semaphore_callback_row | default({})).device_status | default('n/a') }}"
+      vars:
+        _dahua_proc_out: "{{ (status.stdout | default('')) | trim }}"
+        _dahua_proc_running: "{{ (_dahua_proc_out.split('|') | first) == 'RUNNING' }}"
+      when:
+        - status is defined
+        - not (status.unreachable | default(false) | bool)
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+      when: semaphore_callback_row is defined
+
+  post_tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: semaphore_callback_row is defined
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"
