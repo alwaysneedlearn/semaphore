@@ -225,17 +225,19 @@ $drawer-header-height: 56px;
   }
 }
 
-/* Full page (new tab): fill viewport under page toolbar (~64px). */
-$toolbar-height: 64px;
-
+/* Full page (new tab): fill viewport; no app toolbar. */
 .task-log-view--page {
   .task-log-records {
-    height: calc(100dvh - #{$toolbar-height + $task-log-status-tab-height});
+    height: calc(100dvh - #{$task-log-status-tab-height});
+  }
+
+  .task-log-view__tabs {
+    padding-right: 48px;
   }
 
   &.task-log-view--with-message .task-log-records {
     height: calc(100dvh -
-      #{$toolbar-height + $task-log-message-height-total + $task-log-status-tab-height});
+      #{$task-log-message-height-total + $task-log-status-tab-height});
   }
 }
 

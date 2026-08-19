@@ -1,5 +1,5 @@
 <template>
-  <v-app v-if="state === 'success'" class="app">
+  <v-app v-if="state === 'success'" class="app" :class="{ 'app--task-log': isTaskLogPage }">
     <YesNoDialog
       :title="$t('projectRestoreResult')"
       v-model="restoreProjectResultDialog"
@@ -141,7 +141,7 @@
       width="260"
       v-model="drawer"
       mobile-breakpoint="960"
-      v-if="$route.path.startsWith('/project/')"
+      v-if="$route.path.startsWith('/project/') && !isTaskLogPage"
       class="NavDrawer"
     >
       <v-menu bottom max-width="235" max-height="100%" v-if="project">
@@ -677,6 +677,10 @@
   height: 100dvh !important;
 }
 
+.app--task-log .v-main {
+  padding: 0 !important;
+}
+
 .snackbar-message {
   display: inline-flex;
   align-items: center;
@@ -1126,6 +1130,12 @@ export default {
 
     projectId() {
       return parseInt(this.$route.params.projectId, 10) || null;
+    },
+
+    isTaskLogPage() {
+      return this.projectId != null
+        && this.$route.params.taskId != null
+        && /\/history\/\d+/.test(this.$route.path);
     },
 
     project() {
