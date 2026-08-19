@@ -15,7 +15,7 @@
 - **设备状态回写**：playbook 通过 bulk callback 回写 `device_status / winrm_status / api_status`。
 - **TDengine 集成**：bulk callback 后按设备类型写时序状态快照。
 - **RDP Helper**：通过本地 Windows helper 承接 Web 端“远程桌面”操作并回传审计事件。
-- **任务日志页面改造**：任务日志从抽屉改为新标签页 `/project/{id}/history/{taskId}`。
+- **任务日志页面改造**：触发任务时仍用弹窗查看日志；弹窗可「新标签页打开」独立页 `/project/{id}/history/{taskId}`（无侧栏，顶栏模板名/任务名不可跳转）。
 
 ---
 

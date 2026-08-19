@@ -22,9 +22,8 @@
         <span v-bind="attrs" v-on="on">
           <a
               :href="href"
-              target="_blank"
-              rel="noopener noreferrer"
               :class="{'task-link-with-tooltip': tooltip}"
+              @click="onClick"
           >
             {{ label }}
           </a>
@@ -56,6 +55,7 @@ a.task-link-with-tooltip {
 </style>
 <script>
 import taskLogPath from '@/lib/taskLog';
+import EventBus from '@/event-bus';
 
 export default {
   props: {
@@ -95,6 +95,18 @@ export default {
         default:
           return 'clock-time-three-outline';
       }
+    },
+  },
+  methods: {
+    onClick(e) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+        return;
+      }
+      e.preventDefault();
+      if (!this.taskId) {
+        return;
+      }
+      EventBus.$emit('i-show-task', { taskId: this.taskId });
     },
   },
 };

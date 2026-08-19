@@ -25,6 +25,7 @@ Can use used in tandem with ItemFormBase.js. See KeyForm.vue for example.
         <v-spacer></v-spacer>
 
         <div class="item-dialog__title-actions">
+          <slot name="title-extra"></slot>
           <v-btn
             icon
             @click="toggleHelp()"
