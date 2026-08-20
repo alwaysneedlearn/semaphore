@@ -25,17 +25,24 @@ Each device-type playbook should set:
 
 ```yaml
 sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-sem_files_dir: "{{ playbook_dir }}/../shared/files"
+```
+
+**`sem_files_dir`** — source directory copied to `C:\Windows\Temp\` by `deploy_sem_windows_helper_scripts.yml`:
+
+| When | Set `sem_files_dir` to |
+|------|-------------------------|
+| Profile has `<type>/files/` with type-specific `sem_*.ps1` (NEWARE, LAND, SINEXCEL, NBT, JHAI) | `{{ playbook_dir }}/files` |
+| Profile has **no** local `files/` and only needs shared helpers (LANH, DAHUA) | `{{ playbook_dir }}/../shared/files` |
+
+If **`sem_files_dir` is omitted**, deploy defaults to **`{{ playbook_dir }}/files`** (relative to the playbook’s directory). Do **not** point at `shared/files` when the play runs tasks that call scripts that exist **only** under the type’s `files/` (e.g. NEWARE `sem_collect_process_status_windows.ps1` — hosts that never ran Patrol then fail with `-File … does not exist`).
+
+Types with extra tasks also set:
+
+```yaml
+sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
 ```
 
 SyncLims-style types (LAND/SINEXCEL/NBT) use `tasks/prepare_device_exe_paths.yml` + `tasks/resolve_exe_dir_windows.yml` + `files/sem_resolve_exe_dir_windows.ps1`. **SINEXCEL**：变量组 `EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 即可在各盘符浅层扫描最新 exe，**不必**逐台 `Install.ExeDir`（`Install` 仅作可选覆盖，见 `prepare_device_exe_paths.yml`）。**LAND** / 固定布局类型：脚本在各盘符探测 `app_dir\EXE_NAME`；`EXE_DIR=D:\` / `F:\` 为盘根，`EXE_DIR=D:` → `D:\`。LAND zip：`tasks/land_prepare_zip_vars.yml`（`ZIP_NAME` 无 `.zip` 后缀）。
-
-NEWARE (and any type with extra `sem_*.ps1` / TDengine) also sets:
-
-```yaml
-sem_profile_files_dir: "{{ playbook_dir }}/files"
-sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
-```
 
 Root **`device_discovery.yml`** uses:
 
@@ -63,7 +70,7 @@ NEWARE uses `neware/tasks/debug_patrol_snapshot.yml` and `debug_action_snapshot.
 
 ## Windows helper scripts (`deploy_sem_windows_helper_scripts.yml`)
 
-Copies `shared/files/*.ps1` to `C:\Windows\Temp\` on the target. **Verifies** a fixed set of helper scripts (including `sem_force_stop_process_by_name_windows.ps1`) exists; re-copies the whole `shared/files/` directory when **any** required script is missing (not only `sem_resolve_exe_dir_windows.ps1`). Playbooks must set **`sem_files_dir`** (or rely on deploy’s default `{{ playbook_dir }}/../shared/files`). `resolve_exe_dir_windows.yml` also includes deploy when `sem_tasks_dir` is set.
+Copies **`{{ sem_files_dir }}/`** (whole directory) to `C:\Windows\Temp\` on the target. Play var **`sem_files_dir`** must list every `sem_*.ps1` the play will invoke via `-File C:\Windows\Temp\…`. If unset, deploy defaults to **`{{ playbook_dir }}/files`**. `resolve_exe_dir_windows.yml` also includes deploy when `sem_tasks_dir` is set.
 
 ## Graceful stop (`stop_program_close_main_window_confirm.yml`)
 

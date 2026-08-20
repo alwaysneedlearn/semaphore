@@ -13,11 +13,12 @@ Start/restart flow now follows the NEWARE-style skeleton: pre-check health first
 
 **ModifyConfig timing:** LAND only accepts config changes while the app is running. Playbooks call `POST …/ModifyConfig` **while the process is still running (before graceful stop on restart/redeploy)**, then after start/restart **retry once** if that attempt failed (`http_status` not 2xx, e.g. `-1` when the API was down) **and** process + `QueryStatus` are healthy. They do **not** POST ModifyConfig between stop and start (that always yields connection errors).
 
-All playbooks reuse shared WinRM/callback tasks from `../shared/tasks/` and helper scripts from `../shared/files/`. Each LAND play sets:
+All playbooks reuse shared WinRM/callback tasks from `../shared/tasks/`. Helper scripts are copied from the profile **`files/`** directory (includes shared-equivalent scripts plus LAND-only `sem_land_*.ps1`). Each LAND play sets:
 
 ```yaml
 sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-sem_files_dir: "{{ playbook_dir }}/../shared/files"
+sem_files_dir: "{{ playbook_dir }}/files"
+sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
 ```
 
 LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
