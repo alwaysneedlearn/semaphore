@@ -15,7 +15,8 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    # NEWARE helpers (sem_collect_process_status_windows.ps1, Kafka TCP, …) live in ./files, not shared/files.
+    sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_operation_type: restart
     sem_debug_tag: NEWARE
@@ -157,11 +158,29 @@
       block:
         - ansible.builtin.include_tasks: tasks/check_restart_winrm_fail_with_tdengine.yml
 
-    - name: 进程采集失败 — 登记原因并结束本主机
-      when: check_result is not defined
+    - name: 进程采集失败 — 登记回调后结束本主机
+      when: >
+        (check_result is not defined)
+        or (
+          (check_result is defined)
+          and not (check_result.unreachable | default(false))
+          and (check_result.rc | default(0) | int) != 0
+        )
       block:
-        - ansible.builtin.set_fact:
+        - name: 登记 Semaphore 状态回调行（进程采集失败）
+          ansible.builtin.set_fact:
             host_failure_reason: "Process status collection failed"
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: online
+              api_status: offline
+              abnormal_reason: >-
+                Process status collection failed
+                (rc={{ (check_result | default({})).rc | default('n/a') | string }};
+                {{ ((check_result | default({})).stderr | default((check_result | default({})).msg | default('helper script missing or non-zero rc')) | string | trim) }})
+        - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
         - ansible.builtin.meta: end_host
 
     - name: API 未达 3 — 进程/Kafka 参考检查

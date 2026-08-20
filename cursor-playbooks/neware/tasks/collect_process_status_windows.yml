@@ -14,3 +14,4 @@
     chdir: C:\Windows\Temp
   register: _sem_process_status
   changed_when: false
+  failed_when: false
