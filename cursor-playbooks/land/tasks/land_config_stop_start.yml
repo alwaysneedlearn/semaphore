@@ -90,6 +90,12 @@
       ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_redeploy_gui_install.yml"
       when: land_include_gui_installer | default(false) | bool
 
+    - name: 重新部署：更新桌面快捷方式（管理员启动）
+      block:
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/update_desktop_shortcut_windows.yml"
+      ignore_unreachable: true
+      when: land_include_gui_installer | default(false) | bool
+
     - name: 启动程序
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
 

@@ -6,7 +6,7 @@ LAND device type uses TDengine channel-freshness-first check_restart, then API-f
 
 - `device_status.yml` — check exe existence + process running + API status, then bulk callback
 - `device_restart.yml` — graceful stop then ModifyConfig + interactive start
-- `device_redeploy.yml` — ModifyConfig (if running) → **copy installer to Desktop if missing** → graceful stop → GUI wizard → interactive start → API verify
+- `device_redeploy.yml` — ModifyConfig (if running) → **copy installer to Desktop if missing** → graceful stop → GUI wizard → **update desktop shortcut Run as administrator** → interactive start → API verify
 - `device_check_restart.yml` — check process/API health; when unhealthy, graceful stop + ModifyConfig + start, then bulk callback
 
 Start/restart flow now follows the NEWARE-style skeleton: pre-check health first, run reconfigure only when needed, then start+verify. LAND substitutes API-based steps for NEWARE file/log steps (health via `QueryStatus`, config via `ModifyConfig`).
@@ -26,6 +26,8 @@ LAND-specific logic (SyncLims API, registry, zip) stays in this directory only.
 **Install layout:** `exe_path` = `{{ EXE_DIR }}\{{ APP_DIR }}\{{ EXE_NAME }}` (default **`APP_DIR=LHBTS`**). **`EXE_DIR`** use `D:\` or `F:\` (not `D:` alone — or rely on script mapping `D:` → `D:\`). **`EXE_DIR_FALLBACK_DRIVES=D,F`**: probes `LHBTS\LHBTS.exe` on each drive before picking the first existing disk.
 
 **Redeploy (GUI installer):** copy installer exe from controller to **current interactive user's Desktop** by default (`C:\Users\{user}\Desktop\{installer}.exe`). Override with **`LAND_INSTALLER_DEST`** or set **`LAND_INSTALLER_USE_DESKTOP=false`** to use `{{ EXE_DIR }}\{installer}.exe`. Wizard clicks: `LHBTS 安装` / **升级** → `提示` / **确定** → poll until `LHBTS 安装` / **确定** (no fixed 5s wait; each step uses **`LAND_INSTALL_STEP_TIMEOUT_SECONDS`** poll). After wizard, worker reads **`HKCU\Software\LH\InstallVersion`** (expected version from installer filename e.g. `LHBTS_Setup-5.1.4.6.exe` → `5.1.4.6`, or **`LAND_INSTALL_EXPECTED_VERSION`**). Registry may append a build tag (e.g. `5.1.4.8  CALB 0728`); match accepts that as long as it starts with the expected version.
+
+**Redeploy desktop shortcut:** after GUI install, updates **`SHORTCUT_NAME`** (default **`监控软件.lnk`**) on the same interactive user desktop (`explorer.exe` owner → `C:\Users\<short>\Desktop`, same resolve as installer dest). If the `.lnk` already exists, only sets **Run as administrator** (keeps TargetPath). If missing, creates it pointing at resolved **`exe_path`**. Optional **`SHORTCUT_DESKTOP`** overrides the desktop directory. Failure does not fail the play.
 
 **Semaphore vs manual test:** WinRM runs `sem_land_gui_installer_interactive.ps1` (`chdir=C:\Windows\Temp`). Worker launch: **(1) WTS user-session `CreateProcessWithTokenW`**, **(2) scheduled task** with the same `powershell -File` + quoted `-ConfigFileArg`/`-LogFileArg` as graceful stop. Temp config/log under `C:\Windows\Temp\`. Manual `worker.ps1` in RDP skips the parent. Keep **Lenovo RDP logged on**.
 

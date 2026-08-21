@@ -47,6 +47,9 @@ ZIP_NAME=LHBTS5.1.4.4
 ZIP_PATH=/root/land/packages
 LAND_API_TOKEN=landapi
 STOP_POPUP_KEYWORD=警告
+# redeploy：登录用户桌面快捷方式「用管理员身份运行」（默认 监控软件.lnk；已存在则只改标志）
+# SHORTCUT_NAME=监控软件.lnk
+# SHORTCUT_DESKTOP=C:\Users\Lenovo\Desktop
 SEMAPHORE_API_TOKEN=<token>
 ```
 
