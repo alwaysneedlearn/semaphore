@@ -1,0 +1,46 @@
+---
+# LAND redeploy：在登录用户桌面更新快捷方式「用管理员身份运行」。
+# 依赖：_land_install_profile_user 或 _reconfig_profile_user（explorer GetOwner，同安装包落桌面）。
+# 已有 .lnk → 只改 0x15 管理员标志（保留原 TargetPath）；不存在则按 exe_path 新建。
+# ENV：SHORTCUT_NAME（默认 监控软件.lnk）、SHORTCUT_DESKTOP（可选覆盖桌面目录）。
+
+- name: 登记 LAND 快捷方式用户与名称
+  ansible.builtin.set_fact:
+    _land_shortcut_profile_user: >-
+      {{
+        (_land_install_profile_user | default(_reconfig_profile_user | default('', true), true) | trim)
+      }}
+    _land_shortcut_name_env: "{{ lookup('env', 'SHORTCUT_NAME') | default('', true) | trim }}"
+    _land_shortcut_desktop_env: "{{ lookup('env', 'SHORTCUT_DESKTOP') | default('', true) | trim }}"
+
+- name: 登记 LAND 快捷方式最终名称
+  ansible.builtin.set_fact:
+    _land_shortcut_name: "{{ _land_shortcut_name_env if ((_land_shortcut_name_env | length) > 0) else '监控软件.lnk' }}"
+
+- name: 更新桌面快捷方式（管理员启动）
+  environment:
+    SEMAPHORE_SHORTCUT_EXE_PATH: "{{ exe_path }}"
+    SEMAPHORE_SHORTCUT_PROFILE_USER: "{{ _land_shortcut_profile_user }}"
+    SEMAPHORE_SHORTCUT_DESKTOP: "{{ _land_shortcut_desktop_env }}"
+    SEMAPHORE_SHORTCUT_NAME: "{{ _land_shortcut_name }}"
+    SEMAPHORE_EXE_ARGS: "{{ exe_args | default('', true) }}"
+  ansible.windows.win_shell: >-
+    powershell.exe -NoProfile -ExecutionPolicy Bypass
+    -File C:\Windows\Temp\sem_update_desktop_shortcut_windows.ps1
+  args:
+    chdir: C:\Windows\Temp
+  register: _land_desktop_shortcut
+  changed_when: >-
+    _land_desktop_shortcut is defined and
+    'SHORTCUT_OK' in (_land_desktop_shortcut.stdout | default(''))
+  failed_when: false
+  when: (_land_shortcut_profile_user | default('') | length) > 0
+
+- name: DEBUG LAND 桌面快捷方式
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LAND] shortcut user={{ _land_shortcut_profile_user | default('n/a') }} name={{ _land_shortcut_name | default('n/a') }}"
+      - "[DEBUG-LAND] shortcut exe_path={{ exe_path | default('n/a') }}"
+      - "[DEBUG-LAND] shortcut {{ (_land_desktop_shortcut.stdout | default('n/a')) | trim }}"
+      - "[DEBUG-LAND] shortcut rc={{ _land_desktop_shortcut.rc | default('n/a') }}"
+  when: _land_desktop_shortcut is defined
