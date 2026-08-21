@@ -51,6 +51,11 @@
   ansible.builtin.set_fact:
     _reconfig_profile_user: "{{ (get_username_result.stdout_lines | default([]) | last | default(get_username_result.stdout | default(''))) | trim }}"
 
+- name: 更新桌面快捷方式（管理员启动）
+  block:
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/update_desktop_shortcut_windows.yml"
+  ignore_unreachable: true
+
 - name: 启动程序
   ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/reconfig_start_program_windows.yml"
 

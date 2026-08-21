@@ -36,7 +36,7 @@ grep SINEXCEL_CONFIG_STOP_START_REV shared/tasks/sinexcel_config_stop_start.yml
 | File | Purpose |
 |------|---------|
 | `device_status.yml` | Exe + process + **Kafka QueryConfig** (`EnableFlowInfoExtendedSqlite`), bulk callback |
-| `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryConfig**（不含 Retransmit；重发见 `device_resend_data.yml`） |
+| `device_restart.yml` | **SetConfig / IsEnable** + 交互启动 + **QueryConfig**（不含 Retransmit；重发见 `device_resend_data.yml`）；启动前更新桌面 **`BTS - 快捷方式.lnk`**「用管理员身份运行」（已有则只改标志，可重复） |
 | `device_redeploy.yml` | **进程定位目录** → zip → **Kafka** → 优雅停止 → **备份** → **解压覆盖** → **INI 改配** → 启动 → **Kafka** 验证 |
 | `device_check_restart.yml` | TDengine channel freshness first; else Kafka QueryConfig gate; restart only when needed |
 | `device_resend_data.yml` | QueryHistory + 批量 Retransmit。QueryHistory HTTP 200 且 Result 含「成功」、历史为空时视为成功（无 FlowId 可传，**不**把 `api_status` 打成 offline） |
