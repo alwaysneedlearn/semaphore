@@ -1,7 +1,7 @@
 # Create/overwrite a desktop .lnk pointing at EXE, with Run as administrator.
 # Env:
-#   SEMAPHORE_SHORTCUT_EXE_PATH  (required) — target exe
-#   SEMAPHORE_SHORTCUT_DESKTOP   (optional) — desktop dir; default Public Desktop
+#   SEMAPHORE_SHORTCUT_EXE_PATH  (required) — target exe (redeploy resolved path)
+#   SEMAPHORE_SHORTCUT_DESKTOP   (required in practice) — desktop dir for config user
 #   SEMAPHORE_SHORTCUT_NAME      (optional) — .lnk file name; default <exeBase>.lnk
 #   SEMAPHORE_EXE_ARGS           (optional) — shortcut Arguments
 $ErrorActionPreference = 'Stop'
@@ -14,10 +14,8 @@ if ($exePath.Length -eq 0) {
 
 $desktop = ([string]$env:SEMAPHORE_SHORTCUT_DESKTOP).Trim()
 if ($desktop.Length -eq 0) {
-  $desktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
-  if ([string]::IsNullOrWhiteSpace($desktop)) {
-    $desktop = Join-Path $env:PUBLIC 'Desktop'
-  }
+  Write-Output 'SHORTCUT_ERROR|reason=desktop_path_empty'
+  exit 1
 }
 
 $linkName = ([string]$env:SEMAPHORE_SHORTCUT_NAME).Trim()
