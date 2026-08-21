@@ -1,12 +1,29 @@
 ---
 # 更新桌面快捷方式（覆盖同名 .lnk，勾选「用管理员身份运行」）。
-# 前置：deploy_sem_windows_helper_scripts.yml；依赖 play vars：exe_path。
-# 可选 ENV：SHORTCUT_DESKTOP、SHORTCUT_NAME；EXE_ARGS 写入快捷方式 Arguments。
+# 目标 exe：play var exe_path（redeploy 解析后的安装路径）。
+# 桌面目录：配置更新用户桌面 C:\Users\<_reconfig_config_user>\Desktop
+#   （需先跑 reconfig_prepare_profile_user.yml；与 INI 写入同一用户）。
+# 可选 ENV：SHORTCUT_DESKTOP（显式覆盖桌面路径）、SHORTCUT_NAME；EXE_ARGS → Arguments。
+# 前置：deploy_sem_windows_helper_scripts.yml
+
+- name: 登记快捷方式桌面路径（配置用户桌面；SHORTCUT_DESKTOP 非空则覆盖）
+  ansible.builtin.set_fact:
+    _shortcut_desktop_env: "{{ lookup('env', 'SHORTCUT_DESKTOP') | default('', true) | trim }}"
+    _shortcut_config_user: "{{ _reconfig_config_user | default(hostvars[inventory_hostname].ansible_user | default('Administrator'), true) }}"
+
+- name: 登记快捷方式桌面最终路径
+  ansible.builtin.set_fact:
+    _shortcut_desktop_dir: >-
+      {{
+        _shortcut_desktop_env
+        if ((_shortcut_desktop_env | default('') | length) > 0)
+        else ('C:\\Users\\' ~ (_shortcut_config_user | string) ~ '\\Desktop')
+      }}
 
 - name: 更新桌面快捷方式（管理员启动）
   environment:
     SEMAPHORE_SHORTCUT_EXE_PATH: "{{ exe_path }}"
-    SEMAPHORE_SHORTCUT_DESKTOP: "{{ (lookup('env', 'SHORTCUT_DESKTOP') | default('', true) | trim) | default('', true) }}"
+    SEMAPHORE_SHORTCUT_DESKTOP: "{{ _shortcut_desktop_dir }}"
     SEMAPHORE_SHORTCUT_NAME: "{{ (lookup('env', 'SHORTCUT_NAME') | default('', true) | trim) | default('', true) }}"
     SEMAPHORE_EXE_ARGS: "{{ exe_args | default('', true) }}"
   ansible.windows.win_shell: >-
@@ -24,6 +41,7 @@
   ansible.builtin.debug:
     msg:
       - "[DEBUG-SHORTCUT] exe_path={{ exe_path | default('n/a') }}"
+      - "[DEBUG-SHORTCUT] config_user={{ _shortcut_config_user | default('n/a') }} desktop={{ _shortcut_desktop_dir | default('n/a') }}"
       - "[DEBUG-SHORTCUT] {{ (_sem_desktop_shortcut.stdout | default('n/a')) | trim }}"
       - "[DEBUG-SHORTCUT] rc={{ _sem_desktop_shortcut.rc | default('n/a') }}"
   when: _sem_desktop_shortcut is defined

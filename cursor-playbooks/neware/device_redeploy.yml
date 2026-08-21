@@ -56,11 +56,17 @@
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/redeploy_ensure_package_windows.yml"
 
-    # 每次 redeploy 都更新桌面快捷方式（覆盖同名 .lnk + 管理员启动），与是否复制/解压无关
+    # 每次 redeploy：解析配置用户 → 在该用户桌面更新快捷方式（指向当前 exe_path）
+    - name: 解析配置更新用户（快捷方式桌面）
+      block:
+        - ansible.builtin.include_tasks: tasks/reconfig_prepare_profile_user.yml
+      ignore_unreachable: true
+
     - name: 更新桌面快捷方式
       block:
         - ansible.builtin.include_tasks: tasks/update_desktop_shortcut_windows.yml
       ignore_unreachable: true
+      when: _reconfig_config_user is defined
 
     - block:
         - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml

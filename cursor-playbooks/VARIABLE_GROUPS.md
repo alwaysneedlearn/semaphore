@@ -148,8 +148,8 @@ ZIP_PATH=/root/neware/dbwb
 CONFIG_FILE_NAME=NWReport_DBWB.iconf
 API_PORT=9002
 API_STATUS_CALL_TYPE=1
-# redeploy：桌面快捷方式（每次执行都覆盖更新；默认公共桌面 + uu.lnk）
-# SHORTCUT_DESKTOP=C:\Users\Public\Desktop
+# redeploy：桌面快捷方式（每次执行都覆盖；默认写到配置用户桌面 C:\Users\<config_user>\Desktop）
+# SHORTCUT_DESKTOP=C:\Users\NEWARE\Desktop
 # SHORTCUT_NAME=uu.lnk
 SEMAPHORE_API_TOKEN=<token>
 # check_restart 通道新鲜度（批量一次 SELECT；未配置则跳过）
