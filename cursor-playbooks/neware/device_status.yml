@@ -1,4 +1,13 @@
 ---
+# Play 0：批量查一次 TDengine 通道 LAST(insert_time)（不依赖 WinRM；与 check_restart 同一套）
+- name: NEWARE status — 批量加载 TDengine 通道新鲜度
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_tdengine_query_channel_last.yml"
+
 - name: 生成所有主机程序运行状态总览
   hosts: windows_hosts
   strategy: free
@@ -25,13 +34,31 @@
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
 
-    # --- 必要：BTSClient 数据上报 API（controller HTTP，不依赖 WinRM）---
-    - name: 数据上报状态 API（Patrol 首要判定）
+    # --- 1) TDengine 通道新鲜度（首要；满足则 healthy，不跑 API/WinRM）---
+    - name: 应用本机 TDengine 通道新鲜度
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/tdengine_channel_freshness_for_host.yml"
+
+    - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM / Kafka）
+      when: td_channel_fresh | default(false) | bool
+      block:
+        - name: 登记 need_reconfigure=false（通道新鲜）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            log_status_ok: true
+            upload_health_via_api: false
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
+        - name: DEBUG NEWARE 巡检（通道新鲜快路径）
+          ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
+        - name: 通道新鲜 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    # --- 2) 新鲜度不满足：再查 BTSClient 数据上报 API（controller HTTP，不依赖 WinRM）---
+    - name: 数据上报状态 API（通道不新鲜时的次级判定）
       ansible.builtin.include_tasks: tasks/neware_query_upload_status_api.yml
       vars:
         neware_api_query_context: patrol
 
-  # 快路径：ExecResultData==3 → healthy；WinRM/进程/Kafka 仅作参考或跳过
+    # API 快路径：ExecResultData==3 → healthy；WinRM/进程/Kafka 仅作参考或跳过
     - name: 数据上报 API 已健康（跳过 WinRM/进程/Kafka 参考检查）
       when: api_upload_started | default(false) | bool
       block:
@@ -53,7 +80,7 @@
               api_status: online
               abnormal_reason: >-
                 {{
-                  'WinRM unreachable (API upload healthy; reference only)'
+                  'WinRM unreachable (API upload healthy; TDengine channel not fresh)'
                   if not (_winrm_session_ok | default(false) | bool)
                   else ''
                 }}
@@ -170,6 +197,13 @@
             - ansible.builtin.set_fact:
                 upload_health_via_api: false
 
+            # 已在通道不新鲜路径：即使 Kafka OK 仍标需关注（与 check_restart 一致）
+            - name: 通道不新鲜 — 覆盖 Kafka 健康判定为需关注
+              ansible.builtin.set_fact:
+                need_reconfigure: true
+                log_status_ok: false
+              when: not (td_channel_fresh | default(false) | bool)
+
             - name: 输出综合判断结果（参考路径）
               ansible.builtin.debug:
                 msg: >
@@ -177,6 +211,8 @@
                   api_upload_started={{ api_upload_started | default(false) }} |
                   ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
                   Kafka_OK={{ kafka_status_ok | default('n/a') }} |
+                  td_channel_fresh={{ td_channel_fresh | default('n/a') }} |
+                  td_age_h={{ td_channel_age_hours | default('n/a') }} |
                   异常/需关注={{ need_reconfigure | default('n/a') }} |
                   kafka={{ kafka_check_result.stdout | default('') | trim }}
 
@@ -202,6 +238,7 @@
               abnormal_reason: >-
                 {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
                 {% elif kafka_check_result is defined and (kafka_check_result.unreachable | default(false)) %}WinRM unreachable during Kafka TCP check
+                {% elif need_reconfigure is defined and need_reconfigure | bool and not (td_channel_fresh | default(false) | bool) %}TDengine channel data not fresh (insert_time={{ td_channel_insert_time | default('?') }}, age_h={{ td_channel_age_hours | default('?') }})
                 {% elif need_reconfigure is defined and need_reconfigure | bool %}API ExecResultData!=3 and Kafka TCP not Established
                 {% else %}{% endif %}
 
