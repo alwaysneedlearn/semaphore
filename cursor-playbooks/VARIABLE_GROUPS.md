@@ -80,6 +80,9 @@ STOP_POPUP_KEYWORD=警告
 STOP_POPUP_MATCH_MODE=title_or_content
 STOP_POPUP_WAIT_SECONDS=2
 STOP_FORCE_AFTER_GRACEFUL=true
+# restart：登录用户桌面快捷方式「用管理员身份运行」（默认 BTS - 快捷方式.lnk；重复执行安全）
+# SHORTCUT_NAME=BTS - 快捷方式.lnk
+# SHORTCUT_DESKTOP=C:\Users\Lenovo\Desktop
 # 回调
 SEMAPHORE_API_TOKEN=<token>
 ```
