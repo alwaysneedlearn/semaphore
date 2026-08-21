@@ -34,7 +34,7 @@ Every type playbook sets **`sem_tasks_dir`** to shared tasks. **`sem_files_dir`*
 
 Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play includes type-specific tasks. See [`shared/README.md`](shared/README.md#required-play-vars).
 
-**Batch selected devices:** all `hosts: windows_hosts` plays use **`strategy: free`** so one slow/hung host does not block others on each task (Ansible default `linear` is lockstep). Concurrent hosts are capped by **`forks`** (50 in [`ansible.cfg`](ansible.cfg); override with env **`ANSIBLE_FORKS`** or template CLI `--forks`). The localhost bulk-PUT play still waits until every host finishes play 1. Do not add `run_once` on the Windows play.
+**Batch selected devices:** all `hosts: windows_hosts` plays use **`strategy: free`** so one slow/hung host does not block others on each task (Ansible default `linear` is lockstep). Concurrent hosts are capped by **`forks`** (200 in [`ansible.cfg`](ansible.cfg); override with env **`ANSIBLE_FORKS`** or template CLI `--forks`). The localhost bulk-PUT play still waits until every host finishes play 1. Do not add `run_once` on the Windows play.
 
 **Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 

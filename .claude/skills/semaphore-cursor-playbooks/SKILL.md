@@ -113,7 +113,7 @@ If the second command shows `include_tasks` immediately followed by `delegate_to
 ### Patrol / batch (`strategy: free`)
 
 - Every `hosts: windows_hosts` play sets **`strategy: free`** and **`max_fail_percentage: 100`**. Default **linear** waits for **all** hosts to finish task N before any starts N+1 — one hung WinRM task stalls the whole selected batch. **`free`** lets each fork run a host through the **entire play**; a hung host occupies **one** worker only.
-- **`forks`** (default **50** in `cursor-playbooks/ansible.cfg`, override `ANSIBLE_FORKS` / `--forks`) caps how many hosts run at once. Ansible default is **5**.
+- **`forks`** (default **200** in `cursor-playbooks/ansible.cfg`, override `ANSIBLE_FORKS` / `--forks`) caps how many hosts run at once. Ansible default is **5**.
 - **Do not** put **`run_once`** (status report, bulk PUT) on the `windows_hosts` play — with `free` it fires when the **first** host reaches that task. Keep bulk PUT (and NEWARE status overview) on the **`hosts: localhost` second play**.
 - Play 2 still starts only after **all** play-1 hosts finish (or `end_host`). Fast hosts have already completed WinRM/`semaphore_callback_row`; UI bulk PUT still waits for the last host.
 
