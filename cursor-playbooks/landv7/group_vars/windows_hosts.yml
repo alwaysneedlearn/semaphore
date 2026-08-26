@@ -1,0 +1,6 @@
+---
+# LANDV7：仅巡检/确保运行；启动可能较慢，拉高 WinRM 读超时。
+ansible_winrm_connection_timeout: 60
+ansible_winrm_operation_timeout_sec: 180
+ansible_winrm_read_timeout_sec: 200
+ansible_winrm_server_cert_validation: ignore

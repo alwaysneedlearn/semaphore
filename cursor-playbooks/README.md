@@ -14,6 +14,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 | **`jhai/`** | JHAI (`UploaderServiceDaemon` + BTS upload HTTP API) |
 | **`dahua/`** | DAHUA（`device_status.yml`：CTSMonPro 进程；`device_resend_data.yml`：lims-hist） |
 | **`lanh/`** | LANH：`status` + `resend`；`check_restart` 仅 Schedule（只启动不停止） |
+| **`landv7/`** | LANDV7：与 LANH 功能一致（`status` + `resend`；Schedule `check_restart`） |
 | **`device_discovery.yml`** | Network scan + API callback (**device-type agnostic**, repo root) |
 
 **Semaphore templates** examples:
@@ -30,13 +31,13 @@ Every type playbook sets **`sem_tasks_dir`** to shared tasks. **`sem_files_dir`*
 | Profile | `sem_files_dir` | Notes |
 |---------|-----------------|-------|
 | NEWARE, LAND, SINEXCEL, NBT, JHAI | `{{ playbook_dir }}/files` | Type dir includes profile-only `sem_*.ps1` (and usually copies of shared helpers). |
-| LANH, DAHUA | `{{ playbook_dir }}/../shared/files` | No local `files/`; only shared start/resolve scripts are needed. |
+| LANH, LANDV7, DAHUA | `{{ playbook_dir }}/../shared/files` | No local `files/`; only shared start/resolve scripts are needed. |
 
 Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play includes type-specific tasks. See [`shared/README.md`](shared/README.md#required-play-vars).
 
 **Batch selected devices:** all `hosts: windows_hosts` plays use **`strategy: free`** so one slow/hung host does not block others on each task (Ansible default `linear` is lockstep). Concurrent hosts are capped by **`forks`** (200 in [`ansible.cfg`](ansible.cfg); override with env **`ANSIBLE_FORKS`** or template CLI `--forks`). The localhost bulk-PUT play still waits until every host finishes play 1. Do not add `run_once` on the Windows play.
 
-**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
+**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, `[DEBUG-LANDV7]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 
 ## Documentation
 
@@ -48,6 +49,7 @@ Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play i
 - **JHAI:** [`jhai/README.md`](jhai/README.md)
 - **DAHUA:** [`dahua/README.md`](dahua/README.md)
 - **LANH:** [`lanh/README.md`](lanh/README.md)
+- **LANDV7:** [`landv7/README.md`](landv7/README.md)
 - **Shared tasks:** [`shared/README.md`](shared/README.md)
 - **Cloud agent:** `AGENTS.md` (Devices section)
 

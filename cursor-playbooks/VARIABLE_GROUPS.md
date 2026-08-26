@@ -6,7 +6,7 @@ Semaphore **变量组**通过模板绑定的 **Environment** 注入 Ansible `loo
 
 | 原则 | 说明 |
 |------|------|
-| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE / DAHUA / LANH 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
+| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE / DAHUA / LANH / LANDV7 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
 | **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退、浅层扫描（SINEXCEL）。 |
 | **SINEXCEL 安装路径** | **变量组即可**：`EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 在各盘符下自动找最新 exe，**不必**逐台配 `Install.ExeDir` / `ExePath`。 |
 | **Install（可选）** | 仅当某台机无法被盘符扫描覆盖时，才在设备/类型配置里写 **`Install`** / **`Paths`** 覆盖。见 [`sinexcel/README.md`](sinexcel/README.md)。 |
@@ -216,6 +216,28 @@ SEMAPHORE_API_TOKEN=<token>
 ```
 
 详见 [`lanh/README.md`](lanh/README.md)。
+
+### LANDV7
+
+LANDV7 与 **LANH** 功能一致：提供 **status / resend**（设备类型绑定这两项即可）；**check_restart** 仅通过 **Schedule** 定时执行。**Patrol / check_restart** 使用 SyncLims **QueryStatus**（同 LAND，`real_status=true` 为健康）；check_restart 在 API 不健康时 **ensure 启动** `ccsmon.exe`（只启动、不停止、无弹窗）。重发走 **Redeliver**（同 LAND）。不配置 Restart / Redeploy。
+
+```env
+EXE_NAME=ccsmon.exe
+EXE_DIR=C:\Program Files\LANDV7
+APP_DIR=.
+EXE_DIR_FALLBACK_DRIVES=D,E,C
+EXE_SCAN_LATEST=true
+LANDV7_API_PORT=8080
+LANDV7_API_TOKEN=landapi
+LANDV7_API_STATUS_PATH=/SyncLims/QueryStatus
+# TDENGINE_URL=http://tdengine:6041
+# TDENGINE_CHANNEL_STATUS_TABLE=lab_sync.dwd_channel_status
+# TDENGINE_TAG_SUPPLIER=landv7
+# TDENGINE_CHANNEL_STALE_HOURS=6
+SEMAPHORE_API_TOKEN=<token>
+```
+
+详见 [`landv7/README.md`](landv7/README.md)。
 
 ## Stop 模板注意事项
 

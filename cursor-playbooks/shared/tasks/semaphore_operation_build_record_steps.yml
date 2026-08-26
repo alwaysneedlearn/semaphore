@@ -210,12 +210,20 @@
                 _h.land_redeliver_ok
                 if (_h.land_redeliver_ok is defined)
                 else (
-                  _h.sinexcel_retransmit_ok
-                  if (_h.sinexcel_retransmit_ok is defined)
+                  _h.lanh_redeliver_ok
+                  if (_h.lanh_redeliver_ok is defined)
                   else (
-                    _h.nbt_reset_data_ok
-                    if (_h.nbt_reset_data_ok is defined)
-                    else (_h.final_start_ok | default(false))
+                    _h.landv7_redeliver_ok
+                    if (_h.landv7_redeliver_ok is defined)
+                    else (
+                      _h.sinexcel_retransmit_ok
+                      if (_h.sinexcel_retransmit_ok is defined)
+                      else (
+                        _h.nbt_reset_data_ok
+                        if (_h.nbt_reset_data_ok is defined)
+                        else (_h.final_start_ok | default(false))
+                      )
+                    )
                   )
                 )
               )
@@ -226,17 +234,23 @@
             if (_h.jhai_config_apis_ok is defined) else (
               'LAND Redeliver'
               if (_h.land_redeliver_ok is defined) else (
-                (
-                  'SINEXCEL QueryHistory empty (nothing to retransmit)'
-                  if (
-                    (_h.sinexcel_retransmit_ok | default(false) | bool)
-                    and ((_h._sinexcel_kafka_history_rows | default([]) | length) == 0)
+                'LANH Redeliver'
+                if (_h.lanh_redeliver_ok is defined) else (
+                  'LANDV7 Redeliver'
+                  if (_h.landv7_redeliver_ok is defined) else (
+                    (
+                      'SINEXCEL QueryHistory empty (nothing to retransmit)'
+                      if (
+                        (_h.sinexcel_retransmit_ok | default(false) | bool)
+                        and ((_h._sinexcel_kafka_history_rows | default([]) | length) == 0)
+                      )
+                      else 'SINEXCEL Retransmit'
+                    )
+                    if (_h.sinexcel_retransmit_ok is defined) else (
+                      'NBT ResetData'
+                      if (_h.nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
+                    )
                   )
-                  else 'SINEXCEL Retransmit'
-                )
-                if (_h.sinexcel_retransmit_ok is defined) else (
-                  'NBT ResetData'
-                  if (_h.nbt_reset_data_ok is defined) else 'NEWARE INI + restart'
                 )
               )
             )

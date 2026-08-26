@@ -1,0 +1,184 @@
+---
+# Play 0：批量查一次 TDengine 通道 LAST(insert_time)
+- name: LANDV7 check_restart — 批量加载 TDengine 通道新鲜度
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_tdengine_query_channel_last.yml"
+
+# 通道不新鲜或未配置 TDengine：QueryStatus API 优先；不健康则 ensure 启动（只启动、不停止）
+- name: LANDV7 巡检确保运行（通道新鲜度 + API 优先；不健康仅启动）
+  hosts: windows_hosts
+  strategy: free
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_land_tasks_dir: "{{ playbook_dir }}/../land/tasks"
+    sem_files_dir: "{{ playbook_dir }}/../shared/files"
+    sem_debug_tag: LANDV7
+    sem_operation_type: restart
+    start_popup_keyword: ""
+    start_popup_wait_seconds: 0
+    exe_dir_preferred: "{{ (lookup('env', 'EXE_DIR') | default('', true) | trim) | default('C:\\Program Files\\LANDV7', true) }}"
+    exe_dir: "{{ exe_dir_preferred }}"
+    exe_dir_fallback_drives: "{{ (lookup('env', 'EXE_DIR_FALLBACK_DRIVES') | default('', true) | trim) | default('D,E,C', true) }}"
+    exe_scan_latest: "{{ ((lookup('env', 'EXE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
+    exe_scan_max_depth: "{{ ((lookup('env', 'EXE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int }}"
+    _exe_name_default: ccsmon.exe
+    _exe_name_env: "{{ (lookup('env', 'EXE_NAME') | default('', true) | trim) }}"
+    _exe_name_base: "{{ (_exe_name_env if (_exe_name_env | length > 0) else _exe_name_default) | regex_replace('(?i)\\.exe$', '') }}"
+    exe_name: "{{ _exe_name_base ~ '.exe' }}"
+    _app_dir_env: "{{ (lookup('env', 'APP_DIR') | default('', true) | trim) }}"
+    app_dir: "{{ _app_dir_env if (_app_dir_env | length > 0) else '.' }}"
+    exe_path: "{% if app_dir in ['.', ''] %}{{ exe_dir }}\\{{ exe_name }}{% else %}{{ exe_dir }}\\{{ app_dir }}\\{{ exe_name }}{% endif %}"
+    exe_args: "{{ (lookup('env', 'EXE_ARGS') | default('', true) | trim) | default('', true) }}"
+    restart_delay: "{{ ((lookup('env', 'RESTART_DELAY') | default('', true) | trim) | default('15', true)) | int }}"
+    process_verify_poll_seconds: "{{ ((lookup('env', 'PROCESS_VERIFY_POLL_SECONDS') | default('', true) | trim) | default('5', true)) | int }}"
+    process_name: "{{ ((lookup('env', 'PROCESS_NAME') | default('', true) | trim) | regex_replace('(?i)\\.exe$', '')) | default(_exe_name_base, true) }}"
+    land_api_scheme: "{{ (lookup('env', 'LANDV7_API_SCHEME') | default(lookup('env', 'LAND_API_SCHEME') | default('', true), true) | trim) | default('http', true) }}"
+    land_api_port: "{{ ((lookup('env', 'LANDV7_API_PORT') | default(lookup('env', 'LAND_API_PORT') | default('', true), true) | trim) | default('8080', true)) | int }}"
+    land_api_status_path: "{{ (lookup('env', 'LANDV7_API_STATUS_PATH') | default(lookup('env', 'LAND_API_STATUS_PATH') | default('', true), true) | trim) | default('/SyncLims/QueryStatus', true) }}"
+    land_api_timeout: "{{ ((lookup('env', 'LANDV7_API_TIMEOUT') | default(lookup('env', 'LAND_API_TIMEOUT') | default('', true), true) | trim) | default('8', true)) | int }}"
+    land_api_token: "{{ (lookup('env', 'LANDV7_API_TOKEN') | default(lookup('env', 'LAND_API_TOKEN') | default('', true), true) | trim) | default('landapi', true) }}"
+    land_api_verify_tls: "{{ ((lookup('env', 'LANDV7_API_VERIFY_TLS') | default(lookup('env', 'LAND_API_VERIFY_TLS') | default('', true), true) | trim) | default('true', true)) | bool }}"
+    land_query_status_require_real_status: "{{ ((lookup('env', 'LANDV7_QUERY_STATUS_REQUIRE_REAL_STATUS') | default(lookup('env', 'LAND_QUERY_STATUS_REQUIRE_REAL_STATUS') | default('', true), true) | trim) | default('true', true)) | bool }}"
+    land_start_check_api: "{{ ((lookup('env', 'LANDV7_START_CHECK_API') | default(lookup('env', 'LAND_START_CHECK_API') | default('', true), true) | trim) | default('true', true)) | bool }}"
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+
+    - name: 应用本机 TDengine 通道新鲜度
+      ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/tdengine_channel_freshness_for_host.yml"
+
+    - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM / 启动）
+      when: td_channel_fresh | default(false) | bool
+      block:
+        - ansible.builtin.set_fact:
+            _landv7_need_reconfigure: false
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
+        - name: 通道新鲜 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LANDV7 QueryStatus API（巡检重启首要判定）
+      ansible.builtin.include_tasks: "{{ sem_land_tasks_dir }}/land_api_query_status.yml"
+
+    - name: LANDV7 API 已健康（跳过 ensure 启动）
+      when: land_api_status_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "LANDV7 check_restart API 快路径"
+
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            _landv7_need_reconfigure: false
+            landv7_ensure_ok: true
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: ""
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LANDV7 API 未通过 — 标记需要 ensure 启动
+      ansible.builtin.set_fact:
+        _landv7_need_reconfigure: true
+      when: not (land_api_status_ok | default(false) | bool)
+
+    - block:
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+      ignore_unreachable: true
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/resolve_exe_dir_windows.yml"
+
+    - name: 检查 LANDV7 进程状态
+      ansible.windows.win_shell: |
+        $p = Get-Process -Name "{{ process_name }}" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
+      register: _landv7_process_check
+      changed_when: false
+      when: _landv7_need_reconfigure | default(false) | bool
+
+    - name: LANDV7 API 2xx 但未达健康 — 参考判定是否 ensure 启动
+      when:
+        - _landv7_need_reconfigure | default(false) | bool
+        - land_api_http_ok | default(false) | bool
+        - not (land_api_status_ok | default(false) | bool)
+      ansible.builtin.set_fact:
+        _landv7_need_reconfigure: "{{ _landv7_gate_need | bool }}"
+      vars:
+        _landv7_proc_out: "{{ ((_landv7_process_check | default({})).stdout | default('')) | trim }}"
+        _landv7_gate_need: >-
+          {{
+            ((_landv7_proc_out.split('|') | first) != 'RUNNING')
+            or (not (land_api_status_ok | default(false) | bool))
+          }}
+
+    - name: 进程未运行或 API 不健康 — ensure 启动
+      when: _landv7_need_reconfigure | default(false) | bool
+      block:
+        - block:
+            - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/landv7_ensure_running.yml"
+          ignore_unreachable: true
+          rescue:
+            - ansible.builtin.set_fact:
+                landv7_ensure_ok: false
+                landv7_process_running: false
+                landv7_started_this_run: false
+                host_failure_reason: "{{ (ansible_failed_result.msg | default('LANDV7 check_restart ensure failed')) | string | truncate(400, True) }}"
+
+    - name: ensure 后复查 QueryStatus（轮询，同 LAND）
+      when:
+        - _landv7_need_reconfigure | default(false) | bool
+        - landv7_ensure_ok | default(false) | bool
+        - land_start_check_api | default(true) | bool
+      ansible.builtin.include_tasks: "{{ sem_land_tasks_dir }}/land_api_query_status_start_poll.yml"
+
+    - name: 标记启动已执行（操作记录）
+      ansible.builtin.set_fact:
+        sem_operation_restart_performed: true
+      when: landv7_started_this_run | default(false) | bool
+
+  post_tasks:
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+          device_status: >-
+            {{ 'unhealthy' if (host_failure_reason is defined)
+               else ('healthy' if not (_landv7_need_reconfigure | default(false) | bool)
+               else ('healthy' if (landv7_ensure_ok | default(false) | bool) and ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
+               else 'unhealthy')) }}
+          winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+          api_status: >-
+            {{ 'offline' if (host_failure_reason is defined)
+               else ('online' if not (_landv7_need_reconfigure | default(false) | bool)
+               else ('online' if ((not (land_start_check_api | default(true) | bool)) or (land_api_status_ok | default(false) | bool))
+               else 'offline')) }}
+          abnormal_reason: "{{ host_failure_reason | default('') }}"
+      when: semaphore_callback_row is not defined
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: semaphore_callback_row is defined
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"
