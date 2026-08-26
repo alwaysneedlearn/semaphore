@@ -489,7 +489,6 @@ export default {
   deviceResendHintNEWARE: 'NEWARE：写入 HisDataFromTime / HisDataToTime，格式 yyyy-MM-dd，并重启进程',
   deviceResendHintLAND: 'LAND：Redeliver API，格式 yyyy-M-d HH:mm:ss（如 2026-6-1 10:10:10）',
   deviceResendHintLANH: 'LANH：Redeliver API（同 LAND），格式 yyyy-M-d HH:mm:ss',
-  deviceResendHintLANDV7: 'LANDV7：Redeliver API（同 LANH），格式 yyyy-M-d HH:mm:ss',
   deviceResendHintSINEXCEL: 'SINEXCEL：Retransmit API，格式 yyyy-M-d HH:mm:ss',
   deviceResendHintJHAI: 'JHAI：分段重传 testStartTime / testEndTime；可勾选全量重传',
   deviceResendHintDAHUA: 'DAHUA：在目标机运行 lims-hist.exe；时间格式 yyyy-MM-ddTHH:mm:ss（本地时区）',

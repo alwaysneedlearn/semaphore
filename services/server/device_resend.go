@@ -109,7 +109,7 @@ func BuildResendParams(profileKey string, in ResendRangeInput) (ResendParams, er
 		startFmt = formatNewareDate(startT)
 		endFmt = formatNewareDate(endT)
 		display = startFmt + " → " + endFmt
-	case "LAND", "SINEXCEL", "JHAI", "LANH", "LANDV7":
+	case "LAND", "SINEXCEL", "JHAI", "LANH":
 		startFmt = formatLandLikeDateTime(startT)
 		endFmt = formatLandLikeDateTime(endT)
 		display = startFmt + " → " + endFmt
@@ -148,7 +148,7 @@ func ResendFormatHint(profileKey string) string {
 		return "Date only (yyyy-M-d); time picker uses the date part"
 	case "NEWARE":
 		return "Date (yyyy-MM-dd) written to HisDataFromTime / HisDataToTime"
-	case "LAND", "LANH", "LANDV7":
+	case "LAND", "LANH":
 		return "yyyy-M-d HH:mm:ss (e.g. 2026-6-1 10:10:10)"
 	case "SINEXCEL", "JHAI":
 		return "yyyy-M-d HH:mm:ss"
@@ -162,7 +162,7 @@ func ResendFormatHint(profileKey string) string {
 // ProfileSupportsResend reports whether profile_key has a resend_data implementation.
 func ProfileSupportsResend(profileKey string) bool {
 	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
-	case "JHAI", "LAND", "SINEXCEL", "NBT", "NEWARE", "DAHUA", "LANH", "LANDV7":
+	case "JHAI", "LAND", "SINEXCEL", "NBT", "NEWARE", "DAHUA", "LANH":
 		return true
 	default:
 		return false

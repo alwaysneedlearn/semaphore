@@ -68,7 +68,6 @@ const PROFILE_HINT_KEYS = {
   NEWARE: 'deviceResendHintNEWARE',
   LAND: 'deviceResendHintLAND',
   LANH: 'deviceResendHintLANH',
-  LANDV7: 'deviceResendHintLANDV7',
   SINEXCEL: 'deviceResendHintSINEXCEL',
   JHAI: 'deviceResendHintJHAI',
   DAHUA: 'deviceResendHintDAHUA',
