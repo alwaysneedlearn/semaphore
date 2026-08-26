@@ -11,7 +11,7 @@
 
 - **Windows 设备管理体系**：设备列表、设备类型、Discovery、Probe、Remote Desktop、批量设备操作。
 - **Ansible playbook 驱动的设备运维**：仓库内置 `cursor-playbooks/`，由 Semaphore 模板直接调用。
-- **多设备类型支持**：NEWARE、LAND、SINEXCEL、NBT、JHAI、DAHUA、LANH。
+- **多设备类型支持**：NEWARE、LAND、SINEXCEL、NBT、JHAI、DAHUA、LANH、LANDV7。
 - **设备状态回写**：playbook 通过 bulk callback 回写 `device_status / winrm_status / api_status`。
 - **TDengine 集成**：bulk callback 后按设备类型写时序状态快照。
 - **RDP Helper**：通过本地 Windows helper 承接 Web 端“远程桌面”操作并回传审计事件。
@@ -59,6 +59,7 @@
 | **JHAI** | Windows 服务 + HTTP | 上传心跳 API | 服务重启 / zip redeploy | API resend |
 | **DAHUA** | `CTSMonPro` | 进程 `Get-Process` | 无 | WinRM 跑 `lims-hist -from/-to` |
 | **LANH** | GUI `ccsmon.exe` | `QueryStatus` | check_restart 仅 ensure 启动，不做完整 stop/start | `Redeliver` |
+| **LANDV7** | GUI `ccsmon.exe`（同 LANH） | `QueryStatus` | 与 LANH 一致：check_restart 仅 ensure 启动 | `Redeliver` |
 
 共同点：
 
@@ -83,6 +84,7 @@ cursor-playbooks/
   jhai/
   dahua/
   lanh/
+  landv7/
 ```
 
 ### Runner 约定

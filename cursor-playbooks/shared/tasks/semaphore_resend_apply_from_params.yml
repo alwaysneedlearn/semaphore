@@ -44,6 +44,13 @@
       endTime: "{{ resend_params.end | default('') }}"
   when: (resend_params.profile_key | default('') | upper) == 'LANH'
 
+- name: LANDV7 重发参数（SyncLims Redeliver，同 LANH）
+  ansible.builtin.set_fact:
+    landv7_redeliver_cfg:
+      startTime: "{{ resend_params.start | default('') }}"
+      endTime: "{{ resend_params.end | default('') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'LANDV7'
+
 - name: SINEXCEL 重发参数
   ansible.builtin.set_fact:
     sinexcel_retransmit_cfg:

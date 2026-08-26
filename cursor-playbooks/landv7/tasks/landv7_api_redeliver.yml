@@ -1,0 +1,66 @@
+---
+# LANDV7 Redeliver（与 LAND SyncLims 同形）：POST token + startTime/endTime。
+# Play vars: landv7_redeliver_cfg, landv7_api_*, _landv7_target_host
+
+- name: 解析 Redeliver 时间字段
+  ansible.builtin.set_fact:
+    _landv7_redeliver_start: "{{ landv7_redeliver_cfg.startTime | default('') | trim }}"
+    _landv7_redeliver_end: "{{ landv7_redeliver_cfg.endTime | default('') | trim }}"
+    _landv7_redeliver_time_pattern: '^\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{2}:\d{2}$'
+
+- name: 校验 Redeliver 时间格式
+  ansible.builtin.set_fact:
+    _landv7_redeliver_start_ok: >-
+      {{
+        (_landv7_redeliver_start | default('') | trim | length > 0) and
+        ((_landv7_redeliver_start | regex_search(_landv7_redeliver_time_pattern) | default('', true) | length) > 0)
+      }}
+    _landv7_redeliver_end_ok: >-
+      {{
+        (_landv7_redeliver_end | default('') | trim | length > 0) and
+        ((_landv7_redeliver_end | regex_search(_landv7_redeliver_time_pattern) | default('', true) | length) > 0)
+      }}
+
+- name: DEBUG LANDV7 Redeliver 请求参数
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANDV7] redeliver host={{ inventory_hostname }} target={{ _landv7_target_host | default(inventory_hostname) }}"
+      - "[DEBUG-LANDV7] redeliver url={{ landv7_api_scheme }}://{{ _landv7_target_host | default(inventory_hostname) }}:{{ landv7_api_port }}{{ landv7_api_redeliver_path }}"
+      - "[DEBUG-LANDV7] redeliver startTime={{ _landv7_redeliver_start | default('') }} valid={{ _landv7_redeliver_start_ok | default(false) }}"
+      - "[DEBUG-LANDV7] redeliver endTime={{ _landv7_redeliver_end | default('') }} valid={{ _landv7_redeliver_end_ok | default(false) }}"
+
+- name: 数据重传：API Redeliver
+  ansible.builtin.uri:
+    url: "{{ landv7_api_scheme }}://{{ _landv7_target_host }}:{{ landv7_api_port }}{{ landv7_api_redeliver_path }}"
+    method: POST
+    body_format: json
+    body:
+      token: "{{ landv7_api_token }}"
+      startTime: "{{ _landv7_redeliver_start }}"
+      endTime: "{{ _landv7_redeliver_end }}"
+    timeout: "{{ landv7_api_timeout }}"
+    validate_certs: "{{ landv7_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 201, 204, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _landv7_api_redeliver
+  delegate_to: localhost
+  failed_when: false
+  when:
+    - _landv7_redeliver_start_ok | default(false) | bool
+    - _landv7_redeliver_end_ok | default(false) | bool
+
+- name: DEBUG LANDV7 Redeliver 跳过（时间无效）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANDV7] redeliver skipped=invalid_time"
+      - "[DEBUG-LANDV7] expected_format=yyyy-M-d HH:mm:ss"
+  when: not (_landv7_redeliver_start_ok | default(false) | bool) or not (_landv7_redeliver_end_ok | default(false) | bool)
+
+- name: DEBUG LANDV7 Redeliver 结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-LANDV7] redeliver http_status={{ _landv7_api_redeliver.status | default('skipped') }}"
+      - "[DEBUG-LANDV7] redeliver response_body={{ _landv7_api_redeliver.content | default('') | truncate(1500, True) }}"
+  when:
+    - _landv7_api_redeliver is defined
+    - not (_landv7_api_redeliver.skipped | default(false))
