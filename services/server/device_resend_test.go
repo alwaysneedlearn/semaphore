@@ -75,6 +75,25 @@ func TestBuildResendParamsLANH(t *testing.T) {
 	}
 }
 
+func TestBuildResendParamsLANDV7(t *testing.T) {
+	params, err := BuildResendParams("LANDV7", ResendRangeInput{
+		Start: "2026-06-01T10:10:10",
+		End:   "2026-06-02T11:20:30",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params.Start != "2026-6-1 10:10:10" || params.End != "2026-6-2 11:20:30" {
+		t.Fatalf("got %q → %q", params.Start, params.End)
+	}
+	if !ProfileSupportsResend("LANDV7") || ProfileResendOnly("LANDV7") {
+		t.Fatal("LANDV7 should support resend but not be resend-only")
+	}
+	if ResendFormatHint("LANDV7") == "" {
+		t.Fatal("LANDV7 format hint empty")
+	}
+}
+
 func TestBuildResendParamsJHAIFull(t *testing.T) {
 	params, err := BuildResendParams("JHAI", ResendRangeInput{Full: true})
 	if err != nil {
