@@ -1,6 +1,7 @@
 ---
 # Map task extra-var resend_params (from API) to per-type playbook facts.
-# Does not read device profile / device categorized config for time range.
+# Server sends canonical local times: "YYYY-MM-DD HH:MM:SS" (see CanonicalResendTimeLayout).
+# This file formats those strings for each vendor API. Does not read device profile config.
 # Sets sem_resend_range_display for operation history.
 
 - name: 校验重发参数 resend_params
@@ -8,79 +9,123 @@
     that:
       - resend_params is defined
       - (resend_params.profile_key | default('') | trim | length) > 0
-    fail_msg: "resend_params missing in task extra-vars (use UI resend dialog)"
+      - (resend_params.start | default('') | trim | length) > 0
+      - (resend_params.end | default('') | trim | length) > 0
+    fail_msg: "resend_params missing start/end (use UI resend dialog; full resend removed)"
+
+- name: 解析 canonical 起止时间
+  ansible.builtin.set_fact:
+    _resend_start_raw: "{{ resend_params.start | default('') | trim }}"
+    _resend_end_raw: "{{ resend_params.end | default('') | trim }}"
+    _resend_time_layout: "%Y-%m-%d %H:%M:%S"
+
+# LAND-like: unpadded yyyy-M-d H:mm:ss (LAND / LANH / LANDV7 / SINEXCEL / JHAI)
+- name: 格式化为 LAND-like 时间
+  ansible.builtin.set_fact:
+    _resend_fmt_land_start: >-
+      {%- set dt = _resend_start_raw | to_datetime(_resend_time_layout) -%}
+      {{ dt.year }}-{{ dt.month }}-{{ dt.day }} {{ dt.hour }}:{{ '%02d' % dt.minute }}:{{ '%02d' % dt.second }}
+    _resend_fmt_land_end: >-
+      {%- set dt = _resend_end_raw | to_datetime(_resend_time_layout) -%}
+      {{ dt.year }}-{{ dt.month }}-{{ dt.day }} {{ dt.hour }}:{{ '%02d' % dt.minute }}:{{ '%02d' % dt.second }}
+  when: (resend_params.profile_key | default('') | upper) in ['LAND', 'LANH', 'LANDV7', 'SINEXCEL', 'JHAI']
+
+# NBT: unpadded date only yyyy-M-d
+- name: 格式化为 NBT 日期
+  ansible.builtin.set_fact:
+    _resend_fmt_nbt_start: >-
+      {%- set dt = _resend_start_raw | to_datetime(_resend_time_layout) -%}
+      {{ dt.year }}-{{ dt.month }}-{{ dt.day }}
+    _resend_fmt_nbt_end: >-
+      {%- set dt = _resend_end_raw | to_datetime(_resend_time_layout) -%}
+      {{ dt.year }}-{{ dt.month }}-{{ dt.day }}
+  when: (resend_params.profile_key | default('') | upper) == 'NBT'
+
+# NEWARE: padded yyyy-MM-dd
+- name: 格式化为 NEWARE 日期
+  ansible.builtin.set_fact:
+    _resend_fmt_neware_start: "{{ (_resend_start_raw | to_datetime(_resend_time_layout)).strftime('%Y-%m-%d') }}"
+    _resend_fmt_neware_end: "{{ (_resend_end_raw | to_datetime(_resend_time_layout)).strftime('%Y-%m-%d') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'NEWARE'
+
+# DAHUA lims-hist: yyyy-MM-ddTHH:mm:ss
+- name: 格式化为 DAHUA lims-hist 时间
+  ansible.builtin.set_fact:
+    _resend_fmt_dahua_start: "{{ (_resend_start_raw | to_datetime(_resend_time_layout)).strftime('%Y-%m-%dT%H:%M:%S') }}"
+    _resend_fmt_dahua_end: "{{ (_resend_end_raw | to_datetime(_resend_time_layout)).strftime('%Y-%m-%dT%H:%M:%S') }}"
+  when: (resend_params.profile_key | default('') | upper) == 'DAHUA'
 
 - name: 登记重发时间范围（操作历史）
   ansible.builtin.set_fact:
     sem_resend_range_display: >-
       {{
         resend_params.display | default('')
-        if (resend_params.full | default(false) | bool)
+        if (resend_params.display | default('') | trim | length) > 0
         else (
           (resend_params.start | default('') | string) ~ ' → ' ~ (resend_params.end | default('') | string)
         )
       }}
 
-- name: JHAI 重发参数
+- name: JHAI 重发参数（仅分段；全量 UI 已移除）
   ansible.builtin.set_fact:
-    jhai_resend_all_requested: "{{ resend_params.full | default(false) | bool }}"
-    jhai_resend_part_requested: "{{ not (resend_params.full | default(false) | bool) }}"
+    jhai_resend_all_requested: false
+    jhai_resend_part_requested: true
     jhai_resend_part_cfg:
-      testStartTime: "{{ resend_params.start | default('') }}"
-      testEndTime: "{{ resend_params.end | default('') }}"
+      testStartTime: "{{ _resend_fmt_land_start }}"
+      testEndTime: "{{ _resend_fmt_land_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'JHAI'
 
 - name: LAND 重发参数
   ansible.builtin.set_fact:
     land_redeliver_cfg:
-      startTime: "{{ resend_params.start | default('') }}"
-      endTime: "{{ resend_params.end | default('') }}"
+      startTime: "{{ _resend_fmt_land_start }}"
+      endTime: "{{ _resend_fmt_land_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'LAND'
 
 - name: LANH 重发参数（SyncLims Redeliver，同 LAND 时间格式）
   ansible.builtin.set_fact:
     lanh_redeliver_cfg:
-      startTime: "{{ resend_params.start | default('') }}"
-      endTime: "{{ resend_params.end | default('') }}"
+      startTime: "{{ _resend_fmt_land_start }}"
+      endTime: "{{ _resend_fmt_land_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'LANH'
 
 - name: LANDV7 重发参数（SyncLims Redeliver，同 LANH）
   ansible.builtin.set_fact:
     landv7_redeliver_cfg:
-      startTime: "{{ resend_params.start | default('') }}"
-      endTime: "{{ resend_params.end | default('') }}"
+      startTime: "{{ _resend_fmt_land_start }}"
+      endTime: "{{ _resend_fmt_land_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'LANDV7'
 
 - name: SINEXCEL 重发参数
   ansible.builtin.set_fact:
     sinexcel_retransmit_cfg:
-      StartTime: "{{ resend_params.start | default('') }}"
-      EndTime: "{{ resend_params.end | default('') }}"
+      StartTime: "{{ _resend_fmt_land_start }}"
+      EndTime: "{{ _resend_fmt_land_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'SINEXCEL'
 
 - name: NBT 重发参数
   ansible.builtin.set_fact:
     nbt_reset_data_cfg:
-      StartDate: "{{ resend_params.start | default('') }}"
-      EndDate: "{{ resend_params.end | default('') }}"
+      StartDate: "{{ _resend_fmt_nbt_start }}"
+      EndDate: "{{ _resend_fmt_nbt_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'NBT'
 
 - name: NEWARE 重发参数
   ansible.builtin.set_fact:
-    his_data_from_time: "{{ resend_params.start | default('') }}"
-    his_data_to_time: "{{ resend_params.end | default('') }}"
+    his_data_from_time: "{{ _resend_fmt_neware_start }}"
+    his_data_to_time: "{{ _resend_fmt_neware_end }}"
     merged_system_config: >-
       {{
         (merged_system_config | default({}))
         | combine({
-            'HisDataFromTime': (resend_params.start | default('')),
-            'HisDataToTime': (resend_params.end | default(''))
+            'HisDataFromTime': (_resend_fmt_neware_start | default('')),
+            'HisDataToTime': (_resend_fmt_neware_end | default(''))
           }, recursive=True)
       }}
   when: (resend_params.profile_key | default('') | upper) == 'NEWARE'
 
 - name: DAHUA 重发参数（lims-hist -from/-to）
   ansible.builtin.set_fact:
-    dahua_lims_from: "{{ resend_params.start | default('') }}"
-    dahua_lims_to: "{{ resend_params.end | default('') }}"
+    dahua_lims_from: "{{ _resend_fmt_dahua_start }}"
+    dahua_lims_to: "{{ _resend_fmt_dahua_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'DAHUA'

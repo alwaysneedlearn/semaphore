@@ -57,7 +57,7 @@ TDENGINE_TAG_SUPPLIER=jhai
 | Category | 字段 | 何时生效 |
 |----------|------|----------|
 | `ModifyKafka` 或 `KafkaConfig` | `kafkaConnectionInfo` | 仅当 playbook 设 **`jhai_include_config_apis: true`** 时调 `POST /api/modify_kafka_configuration`（当前 restart/redeploy/check_restart 均为 **false**） |
-| `ResendData` / `ResendDataPart` | `ResendDataAll` 或 `testStartTime`+`testEndTime` | **仅** `device_resend_data.yml`（UI 弹窗 `resend_params`）；restart **不**读取设备配置里的重传分类（`jhai_include_resend_data: false`） |
+| `ResendData` / `ResendDataPart` | `testStartTime`+`testEndTime`（UI 重发仅分段；全量勾选已移除） | **仅** `device_resend_data.yml`（UI 弹窗 `resend_params`）；restart **不**读取设备配置里的重传分类（`jhai_include_resend_data: false`） |
 
 `device_resend_data` 调用重传 API **不会** restart 服务。若将来在 restart 上启用 `jhai_include_config_apis: true`，也只会下发 Kafka，**不会**顺带重传，除非单独设 `jhai_include_resend_data: true`。
 

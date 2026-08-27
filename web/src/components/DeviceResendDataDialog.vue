@@ -17,17 +17,7 @@
           {{ mixedProfilesHint }}
         </v-alert>
 
-        <v-checkbox
-          v-if="showJhaiFullOption"
-          v-model="form.full"
-          :label="$t('deviceResendFull')"
-          dense
-          hide-details
-          class="mt-0 mb-2"
-          @change="onFullToggle"
-        />
-
-        <v-row v-if="!form.full" dense>
+        <v-row dense>
           <v-col cols="12" sm="6">
             <v-text-field
               v-model="form.start"
@@ -68,6 +58,7 @@ const PROFILE_HINT_KEYS = {
   NEWARE: 'deviceResendHintNEWARE',
   LAND: 'deviceResendHintLAND',
   LANH: 'deviceResendHintLANH',
+  LANDV7: 'deviceResendHintLANDV7',
   SINEXCEL: 'deviceResendHintSINEXCEL',
   JHAI: 'deviceResendHintJHAI',
   DAHUA: 'deviceResendHintDAHUA',
@@ -102,7 +93,6 @@ export default {
       form: {
         start: toDatetimeLocalValue(start),
         end: toDatetimeLocalValue(end),
-        full: false,
       },
       error: null,
     };
@@ -129,9 +119,6 @@ export default {
       }
       return this.$t('deviceResendBulkSummary', { count: n });
     },
-    showJhaiFullOption() {
-      return this.profileKeys.length === 1 && this.profileKeys[0] === 'JHAI';
-    },
     formatHint() {
       if (this.profileKeys.length !== 1) {
         return this.$t('deviceResendHintMixed');
@@ -150,7 +137,6 @@ export default {
     value(open) {
       if (open) {
         this.error = null;
-        this.form.full = false;
         const end = new Date();
         const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
         this.form.start = toDatetimeLocalValue(start);
@@ -159,15 +145,8 @@ export default {
     },
   },
   methods: {
-    onFullToggle() {
-      this.error = null;
-    },
     submit() {
       this.error = null;
-      if (this.form.full) {
-        this.$emit('submit', { full: true });
-        return;
-      }
       if (!this.form.start || !this.form.end) {
         this.error = this.$t('deviceResendTimeRequired');
         return;
@@ -183,7 +162,6 @@ export default {
         return;
       }
       this.$emit('submit', {
-        full: false,
         start: toApiTime(this.form.start),
         end: toApiTime(this.form.end),
       });
