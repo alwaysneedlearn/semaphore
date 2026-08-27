@@ -12,17 +12,22 @@ import (
 type ResendRangeInput struct {
 	Start string `json:"start"`
 	End   string `json:"end"`
-	Full  bool   `json:"full,omitempty"`
+	// Full is rejected; kept only so old clients get a clear error instead of silent ignore.
+	Full bool `json:"full,omitempty"`
 }
 
-// ResendParams is playbook extra-var: type-specific formatted times + display for operation log.
+// ResendParams is playbook extra-var. Start/End are canonical local times
+// ("2006-01-02 15:04:05"); each playbook formats for its vendor API.
 type ResendParams struct {
 	ProfileKey string `json:"profile_key"`
 	Start      string `json:"start"`
 	End        string `json:"end"`
-	Full       bool   `json:"full"`
 	Display    string `json:"display"`
 }
+
+// CanonicalResendTimeLayout is the fixed format Semaphore puts in resend_params;
+// cursor-playbooks/shared/tasks/semaphore_resend_apply_from_params.yml parses it.
+const CanonicalResendTimeLayout = "2006-01-02 15:04:05"
 
 func parseResendInstant(raw string) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
@@ -49,42 +54,15 @@ func parseResendInstant(raw string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid time %q", raw)
 }
 
-func formatLandLikeDateTime(t time.Time) string {
-	return fmt.Sprintf("%d-%d-%d %d:%02d:%02d",
-		t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), t.Second())
-}
-
-func formatNBTDate(t time.Time) string {
-	return fmt.Sprintf("%d-%d-%d", t.Year(), int(t.Month()), t.Day())
-}
-
-func formatNewareDate(t time.Time) string {
-	return t.Format("2006-01-02")
-}
-
-// lims-hist CLI (-from/-to): 2006-01-02T15:04:05 local.
-func formatLimsHistDateTime(t time.Time) string {
-	return t.Format("2006-01-02T15:04:05")
-}
-
-// BuildResendParams validates UI input and formats per device profile_key for Ansible.
+// BuildResendParams validates UI input and emits canonical times for Ansible.
+// Per-vendor string shaping happens in playbooks (semaphore_resend_apply_from_params.yml).
 func BuildResendParams(profileKey string, in ResendRangeInput) (ResendParams, error) {
 	key := strings.ToUpper(strings.TrimSpace(profileKey))
 	if key == "" {
 		return ResendParams{}, fmt.Errorf("device profile key is empty")
 	}
-
 	if in.Full {
-		switch key {
-		case "JHAI":
-			return ResendParams{
-				ProfileKey: key,
-				Full:       true,
-				Display:    "全量重传",
-			}, nil
-		default:
-			return ResendParams{}, fmt.Errorf("full resend is only supported for JHAI")
-		}
+		return ResendParams{}, fmt.Errorf("full resend is not supported; provide start and end")
 	}
 
 	startT, err := parseResendInstant(in.Start)
@@ -99,34 +77,13 @@ func BuildResendParams(profileKey string, in ResendRangeInput) (ResendParams, er
 		return ResendParams{}, fmt.Errorf("end time must be on or after start time")
 	}
 
-	var startFmt, endFmt, display string
-	switch key {
-	case "NBT":
-		startFmt = formatNBTDate(startT)
-		endFmt = formatNBTDate(endT)
-		display = startFmt + " → " + endFmt
-	case "NEWARE":
-		startFmt = formatNewareDate(startT)
-		endFmt = formatNewareDate(endT)
-		display = startFmt + " → " + endFmt
-	case "LAND", "SINEXCEL", "JHAI", "LANH", "LANDV7":
-		startFmt = formatLandLikeDateTime(startT)
-		endFmt = formatLandLikeDateTime(endT)
-		display = startFmt + " → " + endFmt
-	case "DAHUA":
-		startFmt = formatLimsHistDateTime(startT)
-		endFmt = formatLimsHistDateTime(endT)
-		display = startFmt + " → " + endFmt
-	default:
-		return ResendParams{}, fmt.Errorf("resend is not supported for profile %q", key)
-	}
-
+	startFmt := startT.Format(CanonicalResendTimeLayout)
+	endFmt := endT.Format(CanonicalResendTimeLayout)
 	return ResendParams{
 		ProfileKey: key,
 		Start:      startFmt,
 		End:        endFmt,
-		Full:       false,
-		Display:    display,
+		Display:    startFmt + " → " + endFmt,
 	}, nil
 }
 
@@ -136,51 +93,14 @@ func MergeResendParamsExtraVars(extraVars map[string]any, params ResendParams) {
 		"profile_key": params.ProfileKey,
 		"start":       params.Start,
 		"end":         params.End,
-		"full":        params.Full,
 		"display":     params.Display,
 	}
 }
 
-// ResendFormatHint returns a short UI hint for the profile's expected time precision.
-func ResendFormatHint(profileKey string) string {
-	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
-	case "NBT":
-		return "Date only (yyyy-M-d); time picker uses the date part"
-	case "NEWARE":
-		return "Date (yyyy-MM-dd) written to HisDataFromTime / HisDataToTime"
-	case "LAND", "LANH", "LANDV7":
-		return "yyyy-M-d HH:mm:ss (e.g. 2026-6-1 10:10:10)"
-	case "SINEXCEL", "JHAI":
-		return "yyyy-M-d HH:mm:ss"
-	case "DAHUA":
-		return "lims-hist: yyyy-MM-ddTHH:mm:ss (local)"
-	default:
-		return ""
-	}
-}
-
-// ProfileSupportsResend reports whether profile_key has a resend_data implementation.
-func ProfileSupportsResend(profileKey string) bool {
-	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
-	case "JHAI", "LAND", "SINEXCEL", "NBT", "NEWARE", "DAHUA", "LANH", "LANDV7":
-		return true
-	default:
-		return false
-	}
-}
-
-// ProfileResendOnly reports types that only support resend_data (no status/restart/redeploy).
-func ProfileResendOnly(profileKey string) bool {
-	switch strings.ToUpper(strings.TrimSpace(profileKey)) {
-	default:
-		return false
-	}
-}
-
-// ValidateResendForProfile ensures profile can resend before template lookup.
-func ValidateResendForProfile(profile db.DeviceProfile) error {
-	if !ProfileSupportsResend(profile.ProfileKey) {
-		return db.NewValidationError(fmt.Sprintf("Device profile %q does not support resend data", profile.ProfileKey))
+// ValidateResendTemplateBound ensures the profile has a resend_data template bound.
+func ValidateResendTemplateBound(ps db.ProjectDeviceProfileSettings) error {
+	if ps.ResendDataTemplateID == nil || *ps.ResendDataTemplateID == 0 {
+		return db.NewValidationError("No resend data template configured for this device profile")
 	}
 	return nil
 }

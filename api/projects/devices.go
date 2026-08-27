@@ -1444,7 +1444,7 @@ func RunDeviceAction(w http.ResponseWriter, r *http.Request) {
 			helpers.WriteError(w, profErr)
 			return
 		}
-		if err := server.ValidateResendForProfile(prof); err != nil {
+		if err := server.ValidateResendTemplateBound(ps); err != nil {
 			helpers.WriteError(w, err)
 			return
 		}
@@ -1593,7 +1593,7 @@ func RunBulkDeviceAction(w http.ResponseWriter, r *http.Request) {
 				helpers.WriteError(w, profErr)
 				return
 			}
-			if err := server.ValidateResendForProfile(prof); err != nil {
+			if err := server.ValidateResendTemplateBound(ps); err != nil {
 				helpers.WriteError(w, err)
 				return
 			}
