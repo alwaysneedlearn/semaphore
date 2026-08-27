@@ -10,9 +10,6 @@
           {{ $t('deviceActionRiskWarning') }}
         </v-alert>
         <p v-if="deviceSummary" class="caption mb-3">{{ deviceSummary }}</p>
-        <v-alert v-if="formatHint" type="info" dense text class="mb-3">
-          {{ formatHint }}
-        </v-alert>
         <v-alert v-if="mixedProfilesHint" type="warning" dense text class="mb-3">
           {{ mixedProfilesHint }}
         </v-alert>
@@ -53,16 +50,6 @@
 </template>
 
 <script>
-const PROFILE_HINT_KEYS = {
-  NBT: 'deviceResendHintNBT',
-  NEWARE: 'deviceResendHintNEWARE',
-  LAND: 'deviceResendHintLAND',
-  LANH: 'deviceResendHintLANH',
-  SINEXCEL: 'deviceResendHintSINEXCEL',
-  JHAI: 'deviceResendHintJHAI',
-  DAHUA: 'deviceResendHintDAHUA',
-};
-
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
@@ -117,13 +104,6 @@ export default {
         return `${d.hostname || '—'} (${d.ip_address || '—'})`;
       }
       return this.$t('deviceResendBulkSummary', { count: n });
-    },
-    formatHint() {
-      if (this.profileKeys.length !== 1) {
-        return this.$t('deviceResendHintMixed');
-      }
-      const key = PROFILE_HINT_KEYS[this.profileKeys[0]];
-      return key ? this.$t(key) : '';
     },
     mixedProfilesHint() {
       if (this.profileKeys.length <= 1) {
