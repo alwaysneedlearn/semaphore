@@ -1,5 +1,5 @@
 ---
-# 进程已在跑：先 POST 查询数据上报状态；ExecResultData==3 则跳过 Kafka TCP，否则回退 Kafka Established。
+# 进程已在跑：先 POST 查询数据上报状态；ExecResultData 有值则跳过 Kafka TCP，否则回退 Kafka Established。
 # 依赖 play vars：api_host、api_port、kafka_*（group_vars/windows_hosts.yml）
 # 产出：need_reconfigure、log_status_ok、kafka_status_ok、api_upload_*、upload_health_via_api
 
@@ -7,7 +7,7 @@
   vars:
     neware_api_query_context: "{{ neware_health_gate_context | default('health_gate') }}"
 
-- name: 数据上报状态：API 已上报启动，跳过 Kafka TCP
+- name: 数据上报状态：API ExecResultData 有值，跳过 Kafka TCP
   ansible.builtin.set_fact:
     need_reconfigure: false
     log_status_ok: true
@@ -15,7 +15,7 @@
     upload_health_via_api: true
   when: api_upload_started | default(false) | bool
 
-- name: 数据上报状态：API 未达上报已启动，回退 Kafka TCP 检查
+- name: 数据上报状态：API ExecResultData 无值，回退 Kafka TCP 检查
   when: not (api_upload_started | default(false) | bool)
   block:
     - ansible.builtin.include_tasks: tasks/kafka_health_check_windows.yml

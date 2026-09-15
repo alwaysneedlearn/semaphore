@@ -35,7 +35,6 @@
     _neware_api_status_retry_delay: "{{ api_status_retry_delay | default(((lookup('env', 'API_STATUS_RETRY_DELAY') | default('', true) | trim) | default('3', true)) | int) | int }}"
     _neware_api_expected_response_code: "{{ api_expected_response_code | default(((lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
     _neware_api_expected_exec_success_code: "{{ api_expected_exec_success_code | default(((lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
-    _neware_export_upload_started: "{{ export_started | default(((lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true)) | int) | int }}"
 
 # 单条 uri + register：勿拆成两条互斥 when 的 uri 共用 register——跳过的任务会覆盖上一条的真实响应。
 
