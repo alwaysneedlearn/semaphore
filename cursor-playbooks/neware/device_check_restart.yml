@@ -117,8 +117,8 @@
         upload_health_via_api: false
       when: not (api_upload_status_ok | default(false) | bool)
 
-    # API 通但未达 3（通道已不新鲜）→ 需要 restart，再经 WinRM/进程/Kafka 确认
-    - name: API 未达上报已启动 — 标记需要 restart
+    # API 通但 ExecResultData 无值（通道已不新鲜）→ 需要 restart，再经 WinRM/进程/Kafka 确认
+    - name: API ExecResultData 无值 — 标记需要 restart
       ansible.builtin.set_fact:
         need_reconfigure: true
         upload_health_via_api: false

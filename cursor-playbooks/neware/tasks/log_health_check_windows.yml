@@ -1,5 +1,5 @@
 ---
-# 状态检测日志回退（API ExecResultData!=3 且进程在跑）：单次读取，不重试。
+# 状态检测日志回退（API ExecResultData 无值且进程在跑）：单次读取，不重试。
 # 变量：exe_dir、zip_name；group/play：log_health_tail_lines（默认 10）、log_health_recent_minutes、log_health_keyword（默认 提示）
 # 输出 register：log_check_result（FOUND_KEYWORD | NO_KEYWORD | NO_LOGS_FOUND）
 

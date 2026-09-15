@@ -1,5 +1,5 @@
 ---
-# 启动验证：轮询 POST 直至 ExecResultData==EXPORT_STARTED（3），与日志轮询窗口对齐。
+# 启动验证：轮询 POST 直至信封有效且 ExecResultData 有值，与日志轮询窗口对齐。
 # until/retries 必须挂在 uri 上（旧版 Ansible 不支持 include_tasks 上使用）。
 
 - name: 启动验证：登记 API 轮询参数
@@ -8,7 +8,6 @@
     _neware_api_timeout_seconds: "{{ api_timeout_seconds | default(((lookup('env', 'API_TIMEOUT_SECONDS') | default('', true) | trim) | default('15', true)) | int) | int }}"
     _neware_api_expected_response_code: "{{ api_expected_response_code | default(((lookup('env', 'API_EXPECTED_RESPONSE_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
     _neware_api_expected_exec_success_code: "{{ api_expected_exec_success_code | default(((lookup('env', 'API_EXPECTED_EXEC_SUCCESS_CODE') | default('', true) | trim) | default('0', true)) | int) | int }}"
-    _neware_export_upload_started: "{{ export_started | default(((lookup('env', 'EXPORT_STARTED') | default('', true) | trim) | default('3', true)) | int) | int }}"
     _neware_api_start_poll_retries: >-
       {{
         api_status_start_poll_retries | default(
@@ -36,7 +35,7 @@
         ) | int
       }}
 
-- name: 启动验证：轮询数据上报状态 API（直至 ExecResultData==3）
+- name: 启动验证：轮询数据上报状态 API（直至 ExecResultData 有值）
   ansible.builtin.uri:
     url: "http://{{ api_host }}:{{ api_port }}"
     method: POST
@@ -56,9 +55,10 @@
     ((api_upload_status_result.content | default('') | trim) | length) > 0 and
     ((api_upload_status_result.content | from_json).ResponeResultCode | default(-1) | int == _neware_api_expected_response_code | int) and
     ((api_upload_status_result.content | from_json).ExecResultCode | default(-1) | int == _neware_api_expected_exec_success_code | int) and
-    ((api_upload_status_result.content | from_json).ExecResultData | default(-1) | int) == (_neware_export_upload_started | int)
+    ((api_upload_status_result.content | from_json).ExecResultData | default(-1) | int) != -1
   retries: "{{ _neware_api_start_poll_retries | int }}"
   delay: "{{ _neware_api_start_poll_delay | int }}"
+
 
 - ansible.builtin.include_tasks: neware_query_upload_status_api_apply.yml
 

@@ -6,17 +6,17 @@
 
 - ansible.builtin.include_tasks: tasks/start_verify_poll_process_after_start.yml
 
-- name: 启动验证：轮询数据上报状态 API（直至 ExecResultData==3）
+- name: 启动验证：轮询数据上报状态 API（直至 ExecResultData 有值）
   ansible.builtin.include_tasks: tasks/neware_query_upload_status_api_start_poll.yml
   vars:
     neware_api_query_context: start_verify
   when: _exe_start_script_ok | default(false) | bool
 
-- name: 启动验证：API 数据上报已启动，跳过日志轮询
+- name: 启动验证：API 正常（ExecResultData 有值），跳过日志轮询
   ansible.builtin.set_fact:
     skip_log_poll: true
     skip_log_poll_reason: >-
-      API ExecResultData={{ api_upload_exec_result_data | default('n/a') }} (upload started={{ export_started | default('3') }})
+      API ExecResultData={{ api_upload_exec_result_data | default('n/a') }} (any present value = healthy)
   when:
     - _exe_start_script_ok | default(false) | bool
     - api_upload_started | default(false) | bool

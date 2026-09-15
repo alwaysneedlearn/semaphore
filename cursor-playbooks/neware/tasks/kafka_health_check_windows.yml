@@ -1,5 +1,5 @@
 ---
-# 状态检测 Kafka TCP 回退（API ExecResultData!=3 且进程在跑）：
+# 状态检测 Kafka TCP 回退（API ExecResultData 无值且进程在跑）：
 # 进程对 RemotePort ∈ KAFKA_REMOTE_PORTS 有 Established → 工作正常。
 # 用 netstat.exe（限时），不用无过滤 Get-NetTCPConnection（会挂很久）。
 # 前置：deploy_sem_windows_helper_scripts.yml
