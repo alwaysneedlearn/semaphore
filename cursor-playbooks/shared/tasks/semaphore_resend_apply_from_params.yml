@@ -1,6 +1,7 @@
 ---
 # Map task extra-var resend_params (from API) to per-type playbook facts.
-# Server sends canonical local times: "YYYY-MM-DD HH:MM:SS" (see CanonicalResendTimeLayout).
+# Prefer canonical local times: "YYYY-MM-DD HH:MM:SS" (see CanonicalResendTimeLayout).
+# Also accepts date-only "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS" (normalize before parse).
 # This file formats those strings for each vendor API. Does not read device profile config.
 # Sets sem_resend_range_display for operation history.
 
@@ -13,11 +14,35 @@
       - (resend_params.end | default('') | trim | length) > 0
     fail_msg: "resend_params missing start/end (use UI resend dialog; full resend removed)"
 
-- name: 解析 canonical 起止时间
+- name: 解析起止时间原文
   ansible.builtin.set_fact:
-    _resend_start_raw: "{{ resend_params.start | default('') | trim }}"
-    _resend_end_raw: "{{ resend_params.end | default('') | trim }}"
+    _resend_start_raw: "{{ (resend_params.start | default('') | trim) | replace('T', ' ') }}"
+    _resend_end_raw: "{{ (resend_params.end | default('') | trim) | replace('T', ' ') }}"
     _resend_time_layout: "%Y-%m-%d %H:%M:%S"
+
+# Date-only (len 10) → append midnight; datetime-local without seconds (len 16) → append :00
+- name: 规范化为 canonical YYYY-MM-DD HH:MM:SS
+  ansible.builtin.set_fact:
+    _resend_start_raw: >-
+      {{
+        (_resend_start_raw ~ ' 00:00:00')
+        if ((_resend_start_raw | length) == 10)
+        else (
+          (_resend_start_raw ~ ':00')
+          if ((_resend_start_raw | length) == 16)
+          else _resend_start_raw
+        )
+      }}
+    _resend_end_raw: >-
+      {{
+        (_resend_end_raw ~ ' 00:00:00')
+        if ((_resend_end_raw | length) == 10)
+        else (
+          (_resend_end_raw ~ ':00')
+          if ((_resend_end_raw | length) == 16)
+          else _resend_end_raw
+        )
+      }}
 
 # LAND-like: unpadded yyyy-M-d H:mm:ss (LAND / LANH / LANDV7 / SINEXCEL / JHAI)
 - name: 格式化为 LAND-like 时间
@@ -41,7 +66,7 @@
       {{ dt.year }}-{{ dt.month }}-{{ dt.day }}
   when: (resend_params.profile_key | default('') | upper) == 'NBT'
 
-# NEWARE: padded yyyy-MM-dd
+# NEWARE: padded yyyy-MM-dd（输出只要日期；输入兼容纯日期 / canonical）
 - name: 格式化为 NEWARE 日期
   ansible.builtin.set_fact:
     _resend_fmt_neware_start: "{{ (_resend_start_raw | to_datetime(_resend_time_layout)).strftime('%Y-%m-%d') }}"
