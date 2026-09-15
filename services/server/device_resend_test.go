@@ -41,6 +41,19 @@ func TestBuildResendParamsAnyProfileKey(t *testing.T) {
 	}
 }
 
+func TestBuildResendParamsDateOnly(t *testing.T) {
+	params, err := BuildResendParams("NEWARE", ResendRangeInput{
+		Start: "2026-06-01",
+		End:   "2026-06-15",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params.Start != "2026-06-01 00:00:00" || params.End != "2026-06-15 00:00:00" {
+		t.Fatalf("date-only should become midnight canonical, got %q → %q", params.Start, params.End)
+	}
+}
+
 func TestBuildResendParamsRejectsFull(t *testing.T) {
 	_, err := BuildResendParams("JHAI", ResendRangeInput{Full: true})
 	if err == nil {
