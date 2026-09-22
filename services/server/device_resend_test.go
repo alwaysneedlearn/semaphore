@@ -54,6 +54,32 @@ func TestBuildResendParamsDateOnly(t *testing.T) {
 	}
 }
 
+func TestBuildResendParamsUnpaddedDate(t *testing.T) {
+	params, err := BuildResendParams("NBT", ResendRangeInput{
+		Start: "2025-6-1",
+		End:   "2025-6-15",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params.Start != "2025-06-01 00:00:00" || params.End != "2025-06-15 00:00:00" {
+		t.Fatalf("unpadded date should become canonical, got %q → %q", params.Start, params.End)
+	}
+}
+
+func TestBuildResendParamsUnpaddedDateTime(t *testing.T) {
+	params, err := BuildResendParams("LAND", ResendRangeInput{
+		Start: "2025-6-1 5:3:1",
+		End:   "2025-6-2 10:20:30",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params.Start != "2025-06-01 05:03:01" || params.End != "2025-06-02 10:20:30" {
+		t.Fatalf("unpadded datetime should become canonical, got %q → %q", params.Start, params.End)
+	}
+}
+
 func TestBuildResendParamsRejectsFull(t *testing.T) {
 	_, err := BuildResendParams("JHAI", ResendRangeInput{Full: true})
 	if err == nil {

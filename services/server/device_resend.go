@@ -39,6 +39,10 @@ func parseResendInstant(raw string) (time.Time, error) {
 		"2006-01-02T15:04:05",
 		"2006-01-02 15:04:05",
 		"2006-01-02",
+		"2006-1-2 15:04:05",
+		"2006-1-2 15:4:5",
+		"2006-1-2 15:4",
+		"2006-1-2",
 	}
 	var lastErr error
 	for _, layout := range layouts {

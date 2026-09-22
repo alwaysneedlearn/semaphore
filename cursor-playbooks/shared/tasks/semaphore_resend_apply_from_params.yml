@@ -1,8 +1,8 @@
 ---
 # Map task extra-var resend_params (from API) to per-type playbook facts.
 # Prefer canonical local times: "YYYY-MM-DD HH:MM:SS" (see CanonicalResendTimeLayout).
-# Also accepts date-only "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS" (normalize before parse).
-# This file formats those strings for each vendor API. Does not read device profile config.
+# Also accepts date-only, datetime-local, and unpadded vendor forms (e.g. 2025-6-1, 2025-6-1 5:3:1).
+# Normalizes to padded YYYY-MM-DD HH:MM:SS before to_datetime. Does not read device profile config.
 # Sets sem_resend_range_display for operation history.
 
 - name: 校验重发参数 resend_params
@@ -14,35 +14,41 @@
       - (resend_params.end | default('') | trim | length) > 0
     fail_msg: "resend_params missing start/end (use UI resend dialog; full resend removed)"
 
-- name: 解析起止时间原文
+- name: 解析并重采样起止时间为 canonical YYYY-MM-DD HH:MM:SS
   ansible.builtin.set_fact:
-    _resend_start_raw: "{{ (resend_params.start | default('') | trim) | replace('T', ' ') }}"
-    _resend_end_raw: "{{ (resend_params.end | default('') | trim) | replace('T', ' ') }}"
     _resend_time_layout: "%Y-%m-%d %H:%M:%S"
-
-# Date-only (len 10) → append midnight; datetime-local without seconds (len 16) → append :00
-- name: 规范化为 canonical YYYY-MM-DD HH:MM:SS
-  ansible.builtin.set_fact:
     _resend_start_raw: >-
-      {{
-        (_resend_start_raw ~ ' 00:00:00')
-        if ((_resend_start_raw | length) == 10)
-        else (
-          (_resend_start_raw ~ ':00')
-          if ((_resend_start_raw | length) == 16)
-          else _resend_start_raw
-        )
-      }}
+      {%- set raw = (resend_params.start | default('') | trim) | replace('T', ' ') -%}
+      {%- set chunks = raw.split(' ', 1) -%}
+      {%- set dp = chunks[0].split('-') -%}
+      {%- set y = dp[0] | int -%}
+      {%- set m = dp[1] | int -%}
+      {%- set d = dp[2] | int -%}
+      {%- if chunks | length > 1 -%}
+        {%- set tp = chunks[1].split(':') -%}
+        {%- set hh = tp[0] | int -%}
+        {%- set mm = (tp[1] | int) if tp | length > 1 else 0 -%}
+        {%- set ss = (tp[2] | int) if tp | length > 2 else 0 -%}
+        {{ '%04d-%02d-%02d %02d:%02d:%02d' % (y, m, d, hh, mm, ss) }}
+      {%- else -%}
+        {{ '%04d-%02d-%02d 00:00:00' % (y, m, d) }}
+      {%- endif -%}
     _resend_end_raw: >-
-      {{
-        (_resend_end_raw ~ ' 00:00:00')
-        if ((_resend_end_raw | length) == 10)
-        else (
-          (_resend_end_raw ~ ':00')
-          if ((_resend_end_raw | length) == 16)
-          else _resend_end_raw
-        )
-      }}
+      {%- set raw = (resend_params.end | default('') | trim) | replace('T', ' ') -%}
+      {%- set chunks = raw.split(' ', 1) -%}
+      {%- set dp = chunks[0].split('-') -%}
+      {%- set y = dp[0] | int -%}
+      {%- set m = dp[1] | int -%}
+      {%- set d = dp[2] | int -%}
+      {%- if chunks | length > 1 -%}
+        {%- set tp = chunks[1].split(':') -%}
+        {%- set hh = tp[0] | int -%}
+        {%- set mm = (tp[1] | int) if tp | length > 1 else 0 -%}
+        {%- set ss = (tp[2] | int) if tp | length > 2 else 0 -%}
+        {{ '%04d-%02d-%02d %02d:%02d:%02d' % (y, m, d, hh, mm, ss) }}
+      {%- else -%}
+        {{ '%04d-%02d-%02d 00:00:00' % (y, m, d) }}
+      {%- endif -%}
 
 # LAND-like: unpadded yyyy-M-d H:mm:ss (LAND / LANH / LANDV7 / SINEXCEL / JHAI)
 - name: 格式化为 LAND-like 时间
