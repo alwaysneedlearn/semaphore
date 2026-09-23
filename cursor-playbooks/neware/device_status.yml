@@ -38,7 +38,7 @@
     - name: 应用本机 TDengine 通道新鲜度
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/tdengine_channel_freshness_for_host.yml"
 
-    - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM / Kafka）
+    - name: 通道数据新鲜 — 健康快路径（跳过 API / WinRM）
       when: td_channel_fresh | default(false) | bool
       block:
         - name: 登记 need_reconfigure=false（通道新鲜）
@@ -58,8 +58,8 @@
       vars:
         neware_api_query_context: patrol
 
-    # API 快路径：ExecResultData 有值 → healthy；WinRM/进程/Kafka 仅作参考或跳过
-    - name: 数据上报 API 已健康（跳过 WinRM/进程/Kafka 参考检查）
+    # API 快路径：ExecResultData 有值 → healthy；WinRM 仅作参考
+    - name: 数据上报 API 已健康（跳过 WinRM 深度检查）
       when: api_upload_started | default(false) | bool
       block:
         - name: WinRM 参考探测（仅填写 winrm_status，不改变 API 健康结论）
@@ -91,7 +91,7 @@
         - name: API 健康 — 结束本主机
           ansible.builtin.meta: end_host
 
-    # 快速失败：API 不通 / 非 200 / 响应信封无效 → unhealthy，不跑 WinRM 参考链
+    # 快速失败：API 不通 / 非 200 / 响应信封无效 → unhealthy
     - name: Patrol API 不可达或非 200 — 快速失败
       when:
         - not (api_upload_started | default(false) | bool)
@@ -122,129 +122,37 @@
         - name: API 快速失败 — 结束本主机
           ansible.builtin.meta: end_host
 
-    # 参考路径：HTTP 200 且信封有效，但 ExecResultData 无值 → WinRM + 进程 + Kafka TCP
-    - name: API 200 但 ExecResultData 无值 — WinRM/进程/Kafka 参考检查
+    # HTTP 200 且信封有效，但 ExecResultData 无值 → unhealthy（健康判定仅 TDengine + API）
+    - name: API 200 但 ExecResultData 无值 — 标记不健康
       when:
         - not (api_upload_started | default(false) | bool)
         - api_upload_status_ok | default(false) | bool
       block:
-        - name: WinRM 建连（含重试）
-          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "Patrol API 无 ExecResultData WinRM 参考"
 
-        - name: WinRM 未连通则不再执行本主机后续步骤
-          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
-
-        - name: 一次性部署 Windows 辅助脚本
-          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
-
-        - name: 解析 EXE_DIR（参考）
-          block:
-            - ansible.builtin.include_tasks: tasks/resolve_exe_dir_windows.yml
-          ignore_unreachable: true
-
-        - name: 采集进程状态（参考）
-          block:
-            - ansible.builtin.include_tasks: tasks/collect_process_status_windows.yml
-            - ansible.builtin.set_fact:
-                status: "{{ _sem_process_status }}"
-          ignore_unreachable: true
-
-        - name: 状态判断：输出程序状态
-          ansible.builtin.debug:
-            msg: "[程序状态] {{ status.stdout | trim }}"
-          when: >
-            not (status.unreachable | default(false)) and
-            status is defined and
-            'stdout' in status
-
-        - name: DEBUG NEWARE 巡检（进程）
-          ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
-
-        - name: 登记 Semaphore 回调行（WinRM/进程采集不可达）
+        - name: 登记 Semaphore 状态回调行（API 无 ExecResultData）
           ansible.builtin.set_fact:
+            need_reconfigure: true
+            upload_status_ok: false
+            upload_health_via_api: false
             semaphore_callback_row:
               hostname: "{{ _sem_display_hostname }}"
               ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
               device_status: unhealthy
-              winrm_status: offline
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
               api_status: offline
-              abnormal_reason: "{{ 'WinRM unreachable: ' ~ (status.msg | default('connection failed') | string) }}"
-          when: status.unreachable | default(false)
-
-        - name: 跳过不可达主机
-          when: status.unreachable | default(false)
-          block:
-            - ansible.builtin.meta: end_host
-
-        - name: 进程未运行时标记异常
-          ansible.builtin.set_fact:
-            need_reconfigure: true
-            upload_status_ok: false
-            kafka_status_ok: false
-            upload_health_via_api: false
-          when: >
-            status is defined and
-            'stdout' in status and
-            'NOT_RUNNING' in status.stdout
-
-        - name: Kafka TCP 回退（API ExecResultData 无值且进程在跑）
-          when: >
-            status is defined and
-            'stdout' in status and
-            'NOT_RUNNING' not in status.stdout
-          block:
-            - ansible.builtin.include_tasks: tasks/kafka_health_check_windows.yml
-            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_kafka.yml
-            - ansible.builtin.set_fact:
-                upload_health_via_api: false
-
-            # 已在通道不新鲜路径：即使 Kafka OK 仍标需关注（与 check_restart 一致）
-            - name: 通道不新鲜 — 覆盖 Kafka 健康判定为需关注
-              ansible.builtin.set_fact:
-                need_reconfigure: true
-                upload_status_ok: false
-              when: not (td_channel_fresh | default(false) | bool)
-
-            - name: 输出综合判断结果（参考路径）
-              ansible.builtin.debug:
-                msg: >
-                  [综合判断] 程序状态={{ status.stdout | trim | regex_search('^[^|]+') }} |
-                  api_upload_started={{ api_upload_started | default(false) }} |
-                  ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
-                  Kafka_OK={{ kafka_status_ok | default('n/a') }} |
-                  td_channel_fresh={{ td_channel_fresh | default('n/a') }} |
-                  td_age_h={{ td_channel_age_hours | default('n/a') }} |
-                  异常/需关注={{ need_reconfigure | default('n/a') }} |
-                  kafka={{ kafka_check_result.stdout | default('') | trim }}
-
-        - name: 登记 Semaphore 状态回调行（参考路径）
-          ansible.builtin.set_fact:
-            semaphore_callback_row:
-              hostname: "{{ _sem_display_hostname }}"
-              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
-              device_status: >-
-                {{ 'unhealthy' if status is not defined or ('stdout' not in status)
-                   else ('unhealthy' if 'NOT_RUNNING' in (status.stdout | default(''))
-                   else ('unhealthy' if (need_reconfigure is defined and need_reconfigure | bool)
-                   else 'healthy')) }}
-              winrm_status: >-
-                {{ 'offline' if (not (_winrm_session_ok | default(false) | bool))
-                or (kafka_check_result is defined and (kafka_check_result.unreachable | default(false)))
-                else 'online' }}
-              api_status: >-
-                {{ 'offline' if status is not defined or ('stdout' not in status)
-                   else ('offline' if 'NOT_RUNNING' in (status.stdout | default(''))
-                   else ('online' if (need_reconfigure is defined and not (need_reconfigure | bool))
-                   else 'offline')) }}
               abnormal_reason: >-
-                {% if 'NOT_RUNNING' in (status.stdout | default('')) %}Process not running
-                {% elif kafka_check_result is defined and (kafka_check_result.unreachable | default(false)) %}WinRM unreachable during Kafka TCP check
-                {% elif need_reconfigure is defined and need_reconfigure | bool and not (td_channel_fresh | default(false) | bool) %}TDengine channel data not fresh (insert_time={{ td_channel_insert_time | default('?') }}, age_h={{ td_channel_age_hours | default('?') }})
-                {% elif need_reconfigure is defined and need_reconfigure | bool %}API ExecResultData missing and Kafka TCP not Established
-                {% else %}{% endif %}
+                API ExecResultData missing
+                (TDengine channel not fresh: insert_time={{ td_channel_insert_time | default('?') }}, age_h={{ td_channel_age_hours | default('?') }})
 
-        - name: DEBUG NEWARE 巡检（结果）
+        - name: DEBUG NEWARE 巡检（API 无 ExecResultData）
           ansible.builtin.include_tasks: tasks/debug_patrol_snapshot.yml
+
+        - name: API 无 ExecResultData — 结束本主机
+          ansible.builtin.meta: end_host
 
   post_tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"

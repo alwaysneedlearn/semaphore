@@ -129,9 +129,9 @@ Playbooks with bulk callback (**not** `device_discovery.yml`) must ensure **each
 |-------|--------|
 | `device_status` | `healthy` / `unhealthy` — **never** use `unknown` for WinRM-down (use **`unhealthy`**) |
 | `winrm_status` | `online` if WinRM used for the success path; **`offline`** on ping/collect unreachable |
-| `api_status` | Patrol/start/restart: **TDengine freshness** → **BTSClient upload-status API** (`ExecResultData` present) → **Kafka TCP** fallback; `online` when `need_reconfigure` is false or `final_start_ok`; stop → **`offline`** always |
+| `api_status` | Patrol/start/restart: **TDengine freshness** → **BTSClient upload-status API** (`ExecResultData` present); `online` when `need_reconfigure` is false or `final_start_ok`; stop → **`offline`** always |
 | `rdp_status` | **Omit** in patrol/start/restart/stop — RDP is **Probe** / discovery only |
-| `abnormal_reason` | Human-readable; distinguish **ping failed** vs **collect unreachable** vs **API/Kafka unhealthy** |
+| `abnormal_reason` | Human-readable; distinguish **ping failed** vs **collect unreachable** vs **API unhealthy** |
 | `hostname`, `ip` | From `_semaphore_device_rows` match on `inventory_hostname` |
 
 ### Play vars (required for matching)
@@ -205,7 +205,7 @@ Before committing LAND/shared task edits, grep: `set_fact:` blocks with **two or
 |---------|-----|
 | `set_fact: flag: "{{ false }}"` | Stores string **`"False"`** → **truthy** in `when: flag` | Use YAML literals: `flag: false` or two explicit `set_fact` tasks |
 | `final_start_ok \| default(true)` | Masks failure → false healthy | Use **`default(false)`** for success flags |
-| `need_reconfigure \| default(false)` when var may be string `"False"` | Wrong gate | Set booleans with literal `true`/`false` in `health_gate_need_reconfigure_from_kafka.yml` pattern |
+| `need_reconfigure \| default(false)` when var may be string `"False"` | Wrong gate | Set booleans with literal YAML `true`/`false` (two `set_fact` tasks) |
 | `api_port` via broken ternary | Becomes boolean | Use explicit `{% if (hp \| int) > 0 %}` pattern in play vars |
 
 ## Windows `win_shell` quoting / Ansible argument-splitting (critical)
@@ -246,7 +246,7 @@ cursor-playbooks/
   README.md
   device_discovery.yml   # Project-level discovery (not under neware/)
   neware/                # NEWARE Windows hosts (current production tree)
-    device_status.yml    # Patrol — TDengine → upload-status API → Kafka TCP
+    device_status.yml    # Patrol — TDengine → upload-status API
     device_restart.yml
     device_check_restart.yml
     device_redeploy.yml
@@ -260,15 +260,13 @@ cursor-playbooks/
     semaphore_bulk_put_from_hostvars.yml
     deploy_sem_windows_helper_scripts.yml
     collect_process_status_windows.yml
-    kafka_health_check_windows.yml
-    health_gate_need_reconfigure_from_kafka.yml
     start_verify_after_reconfig.yml
     ...
 ```
 
 - **Env defaults:** `lookup('env', 'VAR')` with trim; empty env → playbook default (see README table).
 - **Scripts:** one **`win_copy`** of `files/` → `C:\Windows\Temp\`, not per-task copy.
-- **Health gate:** TDengine channel freshness → upload-status API (`ExecResultData` present) → Kafka TCP Established while process running.
+- **Health gate:** TDengine channel freshness → upload-status API (`ExecResultData` present).
 - **Start verify:** `final_start_ok` = `VERIFY_OK` (exe start) **and** upload-status API (`ExecResultData` present).
 
 ---
