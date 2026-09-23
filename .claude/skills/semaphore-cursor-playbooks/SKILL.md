@@ -128,10 +128,10 @@ Playbooks with bulk callback (**not** `device_discovery.yml`) must ensure **each
 | Field | Rules |
 |-------|--------|
 | `device_status` | `healthy` / `unhealthy` — **never** use `unknown` for WinRM-down (use **`unhealthy`**) |
-| `winrm_status` | `online` if WinRM used for the success path; **`offline`** on ping/collect/log unreachable |
-| `api_status` | Patrol/start/restart: **BTSClient upload-status API** (`ExecResultData==3`) preferred, **log keyword fallback**; `online` when `need_reconfigure` is false or `final_start_ok`; stop → **`offline`** always |
+| `winrm_status` | `online` if WinRM used for the success path; **`offline`** on ping/collect unreachable |
+| `api_status` | Patrol/start/restart: **TDengine freshness** → **BTSClient upload-status API** (`ExecResultData` present); `online` when `need_reconfigure` is false or `final_start_ok`; stop → **`offline`** always |
 | `rdp_status` | **Omit** in patrol/start/restart/stop — RDP is **Probe** / discovery only |
-| `abnormal_reason` | Human-readable; distinguish **ping failed** vs **collect unreachable** vs **log check unreachable** |
+| `abnormal_reason` | Human-readable; distinguish **ping failed** vs **collect unreachable** vs **API unhealthy** |
 | `hostname`, `ip` | From `_semaphore_device_rows` match on `inventory_hostname` |
 
 ### Play vars (required for matching)
@@ -155,7 +155,7 @@ Any path that calls **`meta: end_host`** must **`set_fact: semaphore_callback_ro
 
 ### `ignore_unreachable` on fragile `win_shell`
 
-Wrap **collect**, **resolve EXE_DIR**, **log health check** in blocks with **`ignore_unreachable: true`**, then branch on `result.unreachable` to set callback + `end_host`. Patrol log task without this **fatal**s and skips the final callback row.
+Wrap **collect**, **resolve EXE_DIR**, and other fragile `win_shell` in blocks with **`ignore_unreachable: true`**, then branch on `result.unreachable` to set callback + `end_host`. Without this a mid-play disconnect **fatal**s and skips the final callback row.
 
 ---
 
@@ -205,7 +205,7 @@ Before committing LAND/shared task edits, grep: `set_fact:` blocks with **two or
 |---------|-----|
 | `set_fact: flag: "{{ false }}"` | Stores string **`"False"`** → **truthy** in `when: flag` | Use YAML literals: `flag: false` or two explicit `set_fact` tasks |
 | `final_start_ok \| default(true)` | Masks failure → false healthy | Use **`default(false)`** for success flags |
-| `need_reconfigure \| default(false)` when var may be string `"False"` | Wrong gate | Set booleans with literal `true`/`false` in `health_gate_need_reconfigure_from_log.yml` pattern |
+| `need_reconfigure \| default(false)` when var may be string `"False"` | Wrong gate | Set booleans with literal YAML `true`/`false` (two `set_fact` tasks) |
 | `api_port` via broken ternary | Becomes boolean | Use explicit `{% if (hp \| int) > 0 %}` pattern in play vars |
 
 ## Windows `win_shell` quoting / Ansible argument-splitting (critical)
@@ -246,7 +246,7 @@ cursor-playbooks/
   README.md
   device_discovery.yml   # Project-level discovery (not under neware/)
   neware/                # NEWARE Windows hosts (current production tree)
-    device_status.yml    # Patrol — upload-status API first, log fallback
+    device_status.yml    # Patrol — TDengine → upload-status API
     device_restart.yml
     device_check_restart.yml
     device_redeploy.yml
@@ -260,16 +260,14 @@ cursor-playbooks/
     semaphore_bulk_put_from_hostvars.yml
     deploy_sem_windows_helper_scripts.yml
     collect_process_status_windows.yml
-    log_health_check_windows.yml
-    health_gate_need_reconfigure_from_log.yml
     start_verify_after_reconfig.yml
     ...
 ```
 
 - **Env defaults:** `lookup('env', 'VAR')` with trim; empty env → playbook default (see README table).
 - **Scripts:** one **`win_copy`** of `files/` → `C:\Windows\Temp\`, not per-task copy.
-- **Health gate:** process running + recent log line matching **`LOG_SUCCESS_KEYWORD`** (`LOG_HEALTH_RECENT_MINUTES`; check_restart may use tail mode).
-- **Start verify:** `final_start_ok` = `VERIFY_OK` + process poll + upload-status API (`ExecResultData==3` skips log poll) or log poll; log baseline **before** starting EXE.
+- **Health gate:** TDengine channel freshness → upload-status API (`ExecResultData` present).
+- **Start verify:** `final_start_ok` = `VERIFY_OK` (exe start) **and** upload-status API (`ExecResultData` present).
 
 ---
 

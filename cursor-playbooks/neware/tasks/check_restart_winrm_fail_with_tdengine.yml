@@ -9,7 +9,7 @@
 - name: WinRM 失败 + 通道数据新鲜 — 参考健康
   ansible.builtin.set_fact:
     need_reconfigure: false
-    log_status_ok: true
+    upload_status_ok: true
     upload_health_via_api: false
     td_channel_helped_winrm_fail: true
     semaphore_callback_row:
@@ -26,7 +26,7 @@
 - name: WinRM 失败 + 通道数据过期/缺失 — 不健康
   ansible.builtin.set_fact:
     need_reconfigure: true
-    log_status_ok: false
+    upload_status_ok: false
     upload_health_via_api: false
     td_channel_helped_winrm_fail: true
     semaphore_callback_row:

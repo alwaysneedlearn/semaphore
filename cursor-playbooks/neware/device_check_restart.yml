@@ -15,7 +15,7 @@
   max_fail_percentage: 100
   vars:
     sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
-    # NEWARE helpers (sem_collect_process_status_windows.ps1, Kafka TCP, …) live in ./files, not shared/files.
+    # NEWARE helpers (sem_collect_process_status_windows.ps1, …) live in ./files, not shared/files.
     sem_files_dir: "{{ playbook_dir }}/files"
     sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
     sem_operation_type: restart
@@ -61,7 +61,7 @@
         - name: 登记 need_reconfigure=false（通道新鲜）
           ansible.builtin.set_fact:
             need_reconfigure: false
-            log_status_ok: true
+            upload_status_ok: true
             upload_health_via_api: false
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
         - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
@@ -85,7 +85,7 @@
         - name: 登记 Semaphore 状态回调行（API 健康快路径）
           ansible.builtin.set_fact:
             need_reconfigure: false
-            log_status_ok: true
+            upload_status_ok: true
             upload_health_via_api: true
             semaphore_callback_row:
               hostname: "{{ _sem_display_hostname }}"
@@ -112,16 +112,17 @@
         upload_health_via_api: false
       when: not (api_upload_status_ok | default(false) | bool)
 
-    # API 通但 ExecResultData 无值（通道已不新鲜）→ 需要 restart，再经 WinRM/进程/Kafka 确认
+    # API 通但 ExecResultData 无值（通道已不新鲜）→ 需要 restart
     - name: API ExecResultData 无值 — 标记需要 restart
       ansible.builtin.set_fact:
         need_reconfigure: true
+        upload_status_ok: false
         upload_health_via_api: false
       when:
         - api_upload_status_ok | default(false) | bool
         - not (api_upload_started | default(false) | bool)
 
-    # --- 3) 仍需处理：WinRM + 进程/Kafka + restart ---
+    # --- 3) 仍需处理：WinRM + 进程 + restart ---
     - name: WinRM 建连（含重试）
       ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
 
@@ -177,62 +178,6 @@
                 {{ ((check_result | default({})).stderr | default((check_result | default({})).msg | default('helper script missing or non-zero rc')) | string | trim) }})
         - ansible.builtin.include_tasks: tasks/debug_action_snapshot.yml
         - ansible.builtin.meta: end_host
-
-    - name: API 未达 3 — 进程/Kafka 参考检查
-      when:
-        - api_upload_status_ok | default(false) | bool
-        - not (api_upload_started | default(false) | bool)
-      block:
-        - name: 进程未运行时标记需要 restart
-          ansible.builtin.set_fact:
-            need_reconfigure: true
-            log_status_ok: false
-            kafka_status_ok: false
-            upload_health_via_api: false
-          when: >
-            check_result is defined and 'stdout' in check_result and
-            'NOT_RUNNING' in check_result.stdout
-
-        - name: WinRM 中途建连（Kafka 判断前）
-          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_refresh_midplay.yml"
-          when: >
-            _winrm_session_ok | default(false) | bool and
-            check_result is defined and 'stdout' in check_result and
-            'NOT_RUNNING' not in check_result.stdout
-          vars:
-            winrm_refresh_label: "WinRM 中途建连（状态/Kafka 判断前）"
-
-        - name: Kafka TCP 回退（API 已查，不再重复 POST）
-          when: >
-            check_result is defined and 'stdout' in check_result and
-            'NOT_RUNNING' not in check_result.stdout
-          block:
-            - ansible.builtin.include_tasks: tasks/kafka_health_check_windows.yml
-
-            - ansible.builtin.include_tasks: tasks/health_gate_need_reconfigure_from_kafka.yml
-
-            - name: 登记 Kafka 回退路径
-              ansible.builtin.set_fact:
-                upload_health_via_api: false
-
-            # 已在通道不新鲜路径：即使 Kafka OK 仍需 restart（通道滞后）
-            - name: 通道不新鲜 — 覆盖 Kafka 健康判定为需要 restart
-              ansible.builtin.set_fact:
-                need_reconfigure: true
-                log_status_ok: false
-              when: not (td_channel_fresh | default(false) | bool)
-
-            - name: 状态判断：输出综合判断结果（含程序状态）
-              ansible.builtin.debug:
-                msg: >
-                  [综合判断] 程序状态={{ check_result.stdout | trim | regex_search('^[^|]+') }} |
-                  api_upload_started={{ api_upload_started | default(false) }} |
-                  ExecResultData={{ api_upload_exec_result_data | default('n/a') }} |
-                  Kafka_OK={{ kafka_status_ok | default('n/a') }} |
-                  kafka={{ kafka_check_result.stdout | default('') | trim }} |
-                  td_channel_fresh={{ td_channel_fresh | default('n/a') }} |
-                  td_age_h={{ td_channel_age_hours | default('n/a') }} |
-                  需要重配={{ need_reconfigure | default('n/a') }}
 
     - name: 登记进程运行状态（供 stop 判断）
       ansible.builtin.set_fact:

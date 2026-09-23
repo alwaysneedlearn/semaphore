@@ -1,5 +1,5 @@
 ---
-# NEWARE: stop (optional) → INI config → start → verify (exe + API only). No zip. No log poll.
+# NEWARE: stop (optional) → INI config → start → verify (exe + upload-status API only). No zip.
 
 - name: 停止程序（运行中时）
   ansible.builtin.include_tasks: stop_program_windows.yml
