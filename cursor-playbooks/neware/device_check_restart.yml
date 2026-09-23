@@ -47,11 +47,6 @@
     merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
     merged_system_config: "{{ (default_cfg.SystemConfig | default({})) | combine(device_cfg.SystemConfig | default({}), recursive=True) }}"
     merged_cfg_json: "{{ merged_cfg | to_json }}"
-    log_success_keyword: "{{ (lookup('env', 'LOG_SUCCESS_KEYWORD') | default('', true) | trim) | default('提示 本轮通道状态上传成功', true) }}"
-    log_poll_retries: "{{ ((lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
-    log_poll_delay: "{{ ((lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"
-    log_read_retries: "{{ ((lookup('env', 'LOG_READ_RETRIES') | default('', true) | trim) | default('5', true)) | int }}"
-    log_read_retry_delay: "{{ ((lookup('env', 'LOG_READ_RETRY_DELAY') | default('', true) | trim) | default('2', true)) | int }}"
 
   tasks:
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
