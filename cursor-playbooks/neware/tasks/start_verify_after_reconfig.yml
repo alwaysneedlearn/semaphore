@@ -47,5 +47,5 @@
       start_verify_winrm_ok={{ _start_verify_winrm_ok | default('n/a') }}
       api_upload_started={{ api_upload_started | default(false) }} ExecResultData={{ api_upload_exec_result_data | default('n/a') }}
       api_last_http={{ api_upload_status_result.status | default('n/a') }} api_last_body={{ api_upload_status_result.content | default('') | truncate(400, True, '...') }}
-      hint=已移除日志轮询回退；API 与 WinRM 独立，VERIFY_OK 后须轮询 API_PORT 直至 ExecResultData 有值
+      hint=final_start_ok 需要 VERIFY_OK + API ExecResultData 有值；API 与 WinRM 独立
   when: not (final_start_ok | default(false) | bool)

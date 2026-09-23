@@ -172,8 +172,9 @@
           when: status.unreachable | default(false)
 
         - name: 跳过不可达主机
-          ansible.builtin.meta: end_host
           when: status.unreachable | default(false)
+          block:
+            - ansible.builtin.meta: end_host
 
         - name: 进程未运行时标记异常
           ansible.builtin.set_fact:

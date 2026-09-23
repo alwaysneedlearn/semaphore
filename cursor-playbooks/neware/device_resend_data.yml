@@ -51,8 +51,10 @@
             check_result: "{{ _sem_process_status }}"
       ignore_unreachable: true
 
-    - ansible.builtin.meta: end_host
+    - name: 跳过不可达主机
       when: check_result.unreachable | default(false)
+      block:
+        - ansible.builtin.meta: end_host
 
     - ansible.builtin.set_fact:
         process_running: "{{ 'NOT_RUNNING' not in (check_result.stdout | default('')) }}"
