@@ -1,6 +1,6 @@
 ---
-# 启动验证：启动后按 RESTART_DELAY / PROCESS_VERIFY_POLL_SECONDS 轮询进程状态
-# until/retries 必须挂在 win_shell 等模块任务上（旧版 Ansible 不支持 block/include_tasks 上使用）
+# 启动验证：启动后按 RESTART_DELAY / PROCESS_VERIFY_POLL_SECONDS 轮询进程（仅诊断 / winrm_status）
+# final_start_ok 不依赖本结果；until/retries 必须挂在 win_shell 上。
 
 - name: 启动验证：计算启动后进程轮询次数
   ansible.builtin.set_fact:
@@ -60,7 +60,7 @@
     not (check_result_after_start.unreachable | default(false)) and
     'stdout' in check_result_after_start
 
-- name: 启动验证：登记是否跳过日志轮询
+- name: 启动验证：登记进程/WinRM 诊断事实
   ansible.builtin.set_fact:
     _start_verify_winrm_ok: >-
       {{
@@ -74,33 +74,3 @@
         'stdout' in check_result_after_start and
         ('NOT_RUNNING' not in (check_result_after_start.stdout | default('')))
       }}
-    skip_log_poll: >-
-      {{
-        (check_result_after_start is not defined) or
-        (check_result_after_start.unreachable | default(false)) or
-        not (
-          check_result_after_start is defined and
-          'stdout' in check_result_after_start and
-          ('NOT_RUNNING' not in (check_result_after_start.stdout | default('')))
-        ) or
-        (not (_exe_start_script_ok | default(false) | bool))
-      }}
-    skip_log_poll_reason: >-
-      {%- if check_result_after_start is not defined or (check_result_after_start.unreachable | default(false)) -%}
-      after_start_unreachable
-      {%- elif 'NOT_RUNNING' in (check_result_after_start.stdout | default('')) -%}
-      after_start_not_running
-      {%- elif not (_exe_start_script_ok | default(false) | bool) -%}
-      exe_start_not_verify_ok
-      {%- else -%}
-      {%- endif -%}
-
-- name: 启动验证：DEBUG 跳过日志轮询原因
-  ansible.builtin.debug:
-    msg:
-      - "[DEBUG-LOG-POLL] skip_log_poll={{ skip_log_poll | default(false) }}"
-      - "[DEBUG-LOG-POLL] reason={{ skip_log_poll_reason | default('') | trim }}"
-      - "[DEBUG-LOG-POLL] after_start={{ check_result_after_start.stdout | default('n/a') | trim }}"
-      - "[DEBUG-LOG-POLL] process_running_after_start={{ process_running_after_start | default(false) }}"
-      - "[DEBUG-LOG-POLL] exe_start_verify_ok={{ _exe_start_script_ok | default(false) }}"
-  when: skip_log_poll | default(false) | bool

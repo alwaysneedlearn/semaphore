@@ -140,14 +140,13 @@ When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other sec
 
 `device_restart.yml` / **`device_check_restart.yml`** populate `SystemConfig.ReportApiSettings.ServerIpAddrStr` (from `merged_system_config.ServerIpAddrStr` or the device IP `api_host`), **`SystemConfig.ReportApiSettings.ServerPort`**, and **`EnableReportApiCall: true`** before running the merge — so on every (re)start the device's app callback is pointed at the current endpoint **and** the callback is turned on. **`ServerPort` is always overwritten** with the playbook-resolved **`api_port`** (inventory **`api_port`** when \(>0\), else Variable Group **`API_PORT`**, else **9002**), including when the existing INI or merged JSON already had `ServerPort` empty, zero, or invalid — this matches Semaphore device / env defaults and avoids leaving the field unset. Old configs that pinned `SystemConfig.ServerIpAddrStr` / `SystemConfig.ServerPort` / `SystemConfig.EnableReportApiCall` at the **top level** still work (they are folded into `ReportApiSettings` and the flat keys are removed). For **`ServerIpAddrStr`** / **`EnableReportApiCall`**, override priorities remain: **device-config in DB → project default config → playbook defaults.** Explicit `false` from device or project config is respected for **`EnableReportApiCall`**.
 
-### Start-verify (process + upload-status API + log fallback)
+### Start-verify (exe + upload-status API only)
 
 **`tasks/start_verify_after_reconfig.yml`** runs after **`重配执行：启动程序`**:
 
 1. **`tasks/start_verify_register_exe_start_ok.yml`** — **`_exe_start_script_ok`** from **`VERIFY_OK`**.
-2. **`tasks/start_verify_poll_process_after_start.yml`** — process poll; may set **`skip_log_poll`** on process/exe failure.
-3. **`tasks/neware_query_upload_status_api_start_poll.yml`** — upload-status POST **polled** until **`ExecResultData` present** (defaults align with **`LOG_POLL_RETRIES`** / **`LOG_POLL_DELAY`**; override **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`**). Patrol/health still uses **`neware_query_upload_status_api.yml`** (short retries).
-4. **`tasks/log_poll_confirm.yml`** when API did not return a present **`ExecResultData`**.
-5. **`final_start_ok`** — **`_exe_start_script_ok`** + (**`api_upload_started`** via localhost API poll, **independent of WinRM**) or (**`process_running_after_start`** + log poll **`rc == 0`**). **`winrm_status`** reflects post-start WinRM probe (`_start_verify_winrm_ok`), not API health.
+2. **`tasks/start_verify_poll_process_after_start.yml`** — optional process poll for WinRM/process diagnostics only (**not** used for `final_start_ok`).
+3. **`tasks/neware_query_upload_status_api_start_poll.yml`** — upload-status POST **polled** until **`ExecResultData` present** (override **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`**; defaults may still fall back to **`LOG_POLL_*`** env names).
+4. **`final_start_ok`** — **`_exe_start_script_ok`** **and** **`api_upload_started`** (localhost API). **No log-file baseline / keyword poll** (removed — large logs could hang bulk resend for hours).
 
-Log baseline is recorded in **`tasks/log_poll_record_baseline_before_start_api.yml`** **before** start (not after exe launch).
+Patrol/health still uses **`neware_query_upload_status_api.yml`** (short retries) and Kafka TCP fallback where configured.

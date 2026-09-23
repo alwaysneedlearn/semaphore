@@ -1,5 +1,5 @@
 ---
-# 启动验证：轮询 POST 直至信封有效且 ExecResultData 有值，与日志轮询窗口对齐。
+# 启动验证：轮询 POST 直至信封有效且 ExecResultData 有值。
 # until/retries 必须挂在 uri 上（旧版 Ansible 不支持 include_tasks 上使用）。
 
 - name: 启动验证：登记 API 轮询参数
