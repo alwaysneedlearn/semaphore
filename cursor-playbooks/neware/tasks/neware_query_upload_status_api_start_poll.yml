@@ -13,11 +13,7 @@
         api_status_start_poll_retries | default(
           (
             (lookup('env', 'API_STATUS_START_POLL_RETRIES') | default('', true) | trim)
-            | default(
-                (lookup('env', 'LOG_POLL_RETRIES') | default('', true) | trim)
-                | default('5', true),
-                true
-              )
+            | default('5', true)
           ) | int
         ) | int
       }}
@@ -26,11 +22,7 @@
         api_status_start_poll_delay | default(
           (
             (lookup('env', 'API_STATUS_START_POLL_DELAY') | default('', true) | trim)
-            | default(
-                (lookup('env', 'LOG_POLL_DELAY') | default('', true) | trim)
-                | default('8', true),
-                true
-              )
+            | default('8', true)
           ) | int
         ) | int
       }}

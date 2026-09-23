@@ -51,10 +51,10 @@ Patrol all sets devices to `checking` first; the status template should run a pl
 ### `semaphore_callback_row` (WinRM / API vs RDP)
 
 - **`rdp_status`** is **not** written by patrol/start/restart/stop templates — use **`POST …/devices/{id}/probe`** (or discovery import) for **RDP TCP** in the UI. **`PUT …/devices/status/bulk`** skips empty fields, so omitting **`rdp_status`** keeps the last probe/import value.
-- **`winrm_status`**: **`online`** when this template run successfully used WinRM through the callback path (e.g. post_tasks after the first `win_shell` was reachable; patrol sets **`offline`** if the **log-check** `win_shell` hit **`unreachable`**). **`offline`** when **WinRM ping 建连失败** (`semaphore_callback_winrm_connect_failed`) or **collect/stop** 等首段 `win_shell` **unreachable**。
+- **`winrm_status`**: **`online`** when this template run successfully used WinRM through the callback path (e.g. post_tasks after the first `win_shell` was reachable; patrol sets **`offline`** if collect/`win_shell` hit **`unreachable`**). **`offline`** when **WinRM ping 建连失败** (`semaphore_callback_winrm_connect_failed`) or **collect/stop** 等首段 `win_shell` **unreachable**。
 - **`api_status`** (bulk callback): **`online`** when **`need_reconfigure` is false** (TDengine channel fresh, or BTSClient upload-status API **`ExecResultData` present**, or Kafka TCP **Established** while process running **and** channel path not forcing attention) or **`final_start_ok`** after reconfigure; **`offline`** on failure or process not running. The legacy stop-only path forces **`api_status: offline`** (debug POST still runs). **`api_port`** is also written to INI **`ReportApiSettings.ServerPort`** on reconfigure.
 - **`device_status` (callback)**: **`healthy`** when process running and **`need_reconfigure` is false** (incl. TDengine fresh fast path); after reconfigure, when **`final_start_ok`** is true.
-- **Patrol / `device_status.yml` — log task unreachable:** **`检查日志上报状态`** uses **`ignore_unreachable: true`**. Without it, a WinRM disconnect on that task **fatal**s the host and **skips** setting **`semaphore_callback_row`**, so the localhost bulk play **omits** that host (`semaphore_bulk_put_from_hostvars.yml` only loops hosts with **`semaphore_callback_row` defined**) and the UI can stay **`checking`**. When unreachable, **`need_reconfigure`** is forced so the callback writes **unhealthy** / **`winrm_status: offline`** and a dedicated **`abnormal_reason`**.
+- **Patrol / `device_status.yml` — collect unreachable:** wrap **`collect_process_status_windows`** / **`resolve_exe_dir`** in **`ignore_unreachable: true`**. Without it, a WinRM disconnect **fatal**s the host and **skips** setting **`semaphore_callback_row`**, so the localhost bulk play **omits** that host (`semaphore_bulk_put_from_hostvars.yml` only loops hosts with **`semaphore_callback_row` defined**) and the UI can stay **`checking`**. When unreachable, the callback writes **unhealthy** / **`winrm_status: offline`** and a dedicated **`abnormal_reason`**.
 - **Ansible boolean gotcha:** `set_fact: x: "{{ false }}"` stores the **string** `"False"`, which is **truthy** in Jinja `when:` tests — use two tasks with literal YAML `true` / `false` (as in those playbooks) for flags that gate `fail` / callbacks.
 - `PUT …/devices/status/bulk` **persists** playbook fields as given. Patrol/start/restart align **`device_status`** and **`api_status`** on **TDengine channel freshness (preferred) / upload-status API / Kafka TCP Established fallback**.
 
@@ -65,13 +65,13 @@ Patrol all sets devices to `checking` first; the status template should run a pl
 | URL | `POST http://{device_ip}:{api_port}` (no path) |
 | Body | `{ "CallType": 1 }` — **`API_STATUS_CALL_TYPE`** (default **1**) |
 | Retries | **`API_STATUS_RETRIES`** (default **3**), **`API_STATUS_RETRY_DELAY`** (default **3** s) — patrol/health |
-| Start-verify poll | **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`** (default = **`LOG_POLL_RETRIES`** / **`LOG_POLL_DELAY`**, else **8** / **10** s) — restart/redeploy until **`ExecResultData` present** |
+| Start-verify poll | **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`** (default **5** / **8** s) — restart/redeploy until **`ExecResultData` present** |
 | Envelope OK | HTTP **200**, **`ResponeResultCode==0`**, **`ExecResultCode==0`** |
 | **`ExecResultData`** | **1** = 程序已启动 · **2** = 启动数据上报中 · **3** = 数据上报已启动；**any present value** → healthy / skip Kafka TCP (missing/null → sentinel **-1**, not healthy) |
 
 **Kafka TCP 回退**（API **无** `ExecResultData` 且进程在跑）：`netstat -ano`（带 **`KAFKA_TCP_TIMEOUT_SEC`** 默认 **12s** 上限），进程名默认 **`NWReport_DBWB`**（可用 **`KAFKA_PROCESS_NAME`** / 显式 **`EXE_NAME`**），远端端口 **`KAFKA_REMOTE_PORTS`**（默认 **9092,9093,9094**）；任一 **Established** / **已建立** → 健康。不要用无过滤的 **`Get-NetTCPConnection`**（连接多或 CIM 卡住时会挂数小时）。
 
-Tasks: **`tasks/neware_query_upload_status_api.yml`**, **`tasks/kafka_health_check_windows.yml`**, **`tasks/health_gate_upload_status_api_then_log.yml`**. Logs: **`[DEBUG-NEWARE] upload_status_api`**, **`[Kafka检查]`**.
+Tasks: **`tasks/neware_query_upload_status_api.yml`**, **`tasks/kafka_health_check_windows.yml`**, **`tasks/health_gate_need_reconfigure_from_kafka.yml`**. Debug: **`[DEBUG-NEWARE] upload_status_api`**, **`[Kafka检查]`**.
 
 ### Bulk vs single-device extra-vars
 
@@ -113,7 +113,7 @@ Add more local profile names as needed, e.g. `NEWARE,Administrator,Operator`.
 | `CFG_CHANGE|<path>|[<section>]|…` | **Only printed when a value really changes.** Flat keys: `key: <old> -> <new>` or `+ key=<new>` for inserts. JSON keys: one line per changed sub-key, e.g. `ReportApiSettings.EnableReportApiCall: false -> true` |
 | `CONFIG_MODIFIED` / `CONFIG_NOT_FOUND` / `CONFIG_MODIFY_ERROR` | Per-file outcome |
 | `RECONFIG_CFG_RUN_SUMMARY` | `user_ok` / `public_ok` booleans after both files processed |
-| `[DEBUG-NEWARE]` | Patrol (`debug_patrol_snapshot.yml`): process, log gate, callback row; start/stop/restart (`debug_action_snapshot.yml`): `final_start_ok`, `need_reconfigure`, stop stdout |
+| `[DEBUG-NEWARE]` | Patrol (`debug_patrol_snapshot.yml`): process, upload/Kafka health, callback row; start/stop/restart (`debug_action_snapshot.yml`): `final_start_ok`, `need_reconfigure`, stop stdout |
 | `[DEBUG-NEWARE] stop_api` | After the legacy stop-only path succeeds over WinRM: **`POST`** to app status URL (same **`api_port`** / **`API_STATUS_CALL_TYPE`**); bulk still forces **`api_status: offline`** |
 | `[DEBUG-API]` | HTTP status + **raw response body** for Semaphore `PUT …/devices/status/bulk` |
 
@@ -146,7 +146,7 @@ When `merged_cfg.SystemConfig.ReportApiSettings` is a **dict** (or any other sec
 
 1. **`tasks/start_verify_register_exe_start_ok.yml`** — **`_exe_start_script_ok`** from **`VERIFY_OK`**.
 2. **`tasks/start_verify_poll_process_after_start.yml`** — optional process poll for WinRM/process diagnostics only (**not** used for `final_start_ok`).
-3. **`tasks/neware_query_upload_status_api_start_poll.yml`** — upload-status POST **polled** until **`ExecResultData` present** (override **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`**; defaults may still fall back to **`LOG_POLL_*`** env names).
-4. **`final_start_ok`** — **`_exe_start_script_ok`** **and** **`api_upload_started`** (localhost API). **No log-file baseline / keyword poll** (removed — large logs could hang bulk resend for hours).
+3. **`tasks/neware_query_upload_status_api_start_poll.yml`** — upload-status POST **polled** until **`ExecResultData` present** (override **`API_STATUS_START_POLL_RETRIES`** / **`API_STATUS_START_POLL_DELAY`**).
+4. **`final_start_ok`** — **`_exe_start_script_ok`** **and** **`api_upload_started`** (localhost API).
 
 Patrol/health still uses **`neware_query_upload_status_api.yml`** (short retries) and Kafka TCP fallback where configured.

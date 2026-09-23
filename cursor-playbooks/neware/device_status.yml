@@ -44,7 +44,7 @@
         - name: 登记 need_reconfigure=false（通道新鲜）
           ansible.builtin.set_fact:
             need_reconfigure: false
-            log_status_ok: true
+            upload_status_ok: true
             upload_health_via_api: false
         - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/check_restart_channel_fresh_callback.yml"
         - name: DEBUG NEWARE 巡检（通道新鲜快路径）
@@ -70,7 +70,7 @@
         - name: 登记 Semaphore 状态回调行（API 健康快路径）
           ansible.builtin.set_fact:
             need_reconfigure: false
-            log_status_ok: true
+            upload_status_ok: true
             upload_health_via_api: true
             semaphore_callback_row:
               hostname: "{{ _sem_display_hostname }}"
@@ -178,7 +178,7 @@
         - name: 进程未运行时标记异常
           ansible.builtin.set_fact:
             need_reconfigure: true
-            log_status_ok: false
+            upload_status_ok: false
             kafka_status_ok: false
             upload_health_via_api: false
           when: >
@@ -186,7 +186,7 @@
             'stdout' in status and
             'NOT_RUNNING' in status.stdout
 
-        - name: Kafka TCP 回退（API 未达 3 且进程在跑）
+        - name: Kafka TCP 回退（API ExecResultData 无值且进程在跑）
           when: >
             status is defined and
             'stdout' in status and
@@ -201,7 +201,7 @@
             - name: 通道不新鲜 — 覆盖 Kafka 健康判定为需关注
               ansible.builtin.set_fact:
                 need_reconfigure: true
-                log_status_ok: false
+                upload_status_ok: false
               when: not (td_channel_fresh | default(false) | bool)
 
             - name: 输出综合判断结果（参考路径）

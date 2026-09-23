@@ -41,10 +41,10 @@
         )
         + (
           [{
-            'step': '日志关键字',
-            'result': ('ok' if (_h.log_status_ok | default(false) | bool) else 'failed'),
+            'step': '数据上报',
+            'result': ('ok' if (_h.upload_status_ok | default(false) | bool) else 'failed'),
             'detail': ''
-          }] if (_h.log_status_ok is defined) else []
+          }] if (_h.upload_status_ok is defined) else []
         )
       }}
     _action_steps: >-
