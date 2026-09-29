@@ -236,19 +236,61 @@ func runMonitorPowerShell(ctx context.Context, creds DeviceWinRMExecCredentials,
 }
 
 func parseMonitorJSON(stdout string) (monitorPSEnvelope, error) {
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
+	raw := extractMonitorJSONObject(stdout)
+	if raw == "" {
 		return monitorPSEnvelope{}, fmt.Errorf("empty response")
 	}
-	// Take last JSON object line if PowerShell prints banners.
-	if i := strings.LastIndex(stdout, "{"); i >= 0 {
-		stdout = stdout[i:]
-	}
 	var env monitorPSEnvelope
-	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return monitorPSEnvelope{}, err
 	}
 	return env, nil
+}
+
+// extractMonitorJSONObject returns the first complete JSON object in s.
+// PowerShell ConvertTo-Json sometimes wraps a single object as [{...}] or adds
+// CLIXML noise; slicing from the last '{' can leave a trailing ']' and break Unmarshal.
+func extractMonitorJSONObject(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	start := strings.Index(s, "{")
+	if start < 0 {
+		return ""
+	}
+	depth := 0
+	inString := false
+	escape := false
+	for i := start; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			if c == '\\' {
+				escape = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[start : i+1]
+			}
+		}
+	}
+	return ""
 }
 
 // GetDeviceMonitorMetrics queries CPU / memory / disk utilization.
@@ -261,9 +303,26 @@ func GetDeviceMonitorMetrics(ctx context.Context, creds DeviceWinRMExecCredentia
 	script := `
 $ErrorActionPreference = 'Stop'
 try {
+  # Task Manager–style CPU: PerfOS % Processor Time, second sample after 1s
+  # (first sample is often 0/stale; LoadPercentage alone is not comparable to TM)
   $cpu = 0.0
-  $cpus = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
-  if ($cpus) { $cpu = [double](($cpus | Measure-Object -Property LoadPercentage -Average).Average) }
+  try {
+    $null = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
+    Start-Sleep -Milliseconds 1000
+    $perf = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
+    if ($null -ne $perf.PercentProcessorTime) {
+      $cpu = [math]::Min(100.0, [double]$perf.PercentProcessorTime)
+    }
+  } catch {
+    try {
+      $samples = Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 2 -ErrorAction Stop
+      $last = ($samples.CounterSamples | Select-Object -Last 1).CookedValue
+      $cpu = [math]::Min(100.0, [double]$last)
+    } catch {
+      $cpus = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+      if ($cpus) { $cpu = [double](($cpus | Measure-Object -Property LoadPercentage -Average).Average) }
+    }
+  }
   $os = Get-CimInstance Win32_OperatingSystem
   $memTotal = [int64]$os.TotalVisibleMemorySize * 1024
   $memFree = [int64]$os.FreePhysicalMemory * 1024
@@ -293,11 +352,14 @@ try {
       free_bytes = $memFree
       used_percent = $memPct
     }
-    disks = $disks
+    disks = @($disks)
   }
-  $payload | ConvertTo-Json -Compress -Depth 6
+  # Single string to stdout (avoid pipeline wrapping as [{...}])
+  $json = ($payload | ConvertTo-Json -Compress -Depth 6)
+  [Console]::Out.Write($json)
 } catch {
-  (@{ ok = $false; error = 'query_failed'; message = $_.Exception.Message } | ConvertTo-Json -Compress)
+  $json = (@{ ok = $false; error = 'query_failed'; message = $_.Exception.Message } | ConvertTo-Json -Compress)
+  [Console]::Out.Write($json)
 }
 `
 	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDefaultTimeout, db.DeviceWinRMExecMaxResponseOut)
@@ -395,7 +457,7 @@ try {
     })
     $total = $entries.Count
     $slice = @($entries | Select-Object -Skip (($page - 1) * $pageSize) -First $pageSize)
-    (@{
+    $json = (@{
       ok = $true
       path = ''
       page = $page
@@ -403,45 +465,75 @@ try {
       roots = $roots
       entries = $slice
     } | ConvertTo-Json -Compress -Depth 6)
+    [Console]::Out.Write($json)
     return
   }
   if (-not (Test-SemLocalDrive $path)) {
-    (@{ ok = $false; error = 'network_drive'; message = 'network/shared drives are not allowed'; path = $path } | ConvertTo-Json -Compress)
+    $json = (@{ ok = $false; error = 'network_drive'; message = 'network/shared drives are not allowed'; path = $path } | ConvertTo-Json -Compress)
+    [Console]::Out.Write($json)
     return
   }
   if (-not (Test-Path -LiteralPath $path)) {
-    (@{ ok = $false; error = 'not_found'; message = 'path not found'; path = $path } | ConvertTo-Json -Compress)
+    $json = (@{ ok = $false; error = 'not_found'; message = 'path not found'; path = $path } | ConvertTo-Json -Compress)
+    [Console]::Out.Write($json)
     return
   }
   $item = Get-Item -LiteralPath $path -Force
   if (-not $item.PSIsContainer) {
-    (@{ ok = $false; error = 'not_directory'; message = 'path is not a directory'; path = $path } | ConvertTo-Json -Compress)
+    $json = (@{ ok = $false; error = 'not_directory'; message = 'path is not a directory'; path = $path } | ConvertTo-Json -Compress)
+    [Console]::Out.Write($json)
     return
   }
-  # Server-side pagination: count + Skip/Take on the remote host (not full pull to Semaphore)
-  $all = @(Get-ChildItem -LiteralPath $path -Force | Sort-Object { -not $_.PSIsContainer }, Name)
-  $total = $all.Count
-  $slice = @($all | Select-Object -Skip (($page - 1) * $pageSize) -First $pageSize | ForEach-Object {
-    $full = $_.FullName
-    if ($_.PSIsContainer -and -not $full.EndsWith('\')) { $full = $full + '\' }
-    [pscustomobject]@{
-      name = $_.Name
-      path = $full
-      is_dir = [bool]$_.PSIsContainer
-      size_bytes = $(if ($_.PSIsContainer) { 0 } else { [int64]$_.Length })
-      modified_at = $_.LastWriteTime.ToString('o')
-      is_hidden = [bool]($_.Attributes -band [IO.FileAttributes]::Hidden)
+  # Fast pagination: enumerate path strings only (incl. hidden), sort dirs then files,
+  # hydrate FileInfo/DirectoryInfo metadata for the current page (size 10) — not every entry.
+  $dirNames = [System.IO.Directory]::GetDirectories($path)
+  [Array]::Sort($dirNames, [StringComparer]::OrdinalIgnoreCase)
+  $fileNames = [System.IO.Directory]::GetFiles($path)
+  [Array]::Sort($fileNames, [StringComparer]::OrdinalIgnoreCase)
+  $dirCount = $dirNames.Length
+  $fileCount = $fileNames.Length
+  $total = $dirCount + $fileCount
+  $skip = ($page - 1) * $pageSize
+  $slice = New-Object System.Collections.Generic.List[object]
+  if ($skip -lt $total -and $pageSize -gt 0) {
+    $end = [Math]::Min($skip + $pageSize, $total)
+    for ($i = $skip; $i -lt $end; $i++) {
+      if ($i -lt $dirCount) {
+        $di = New-Object System.IO.DirectoryInfo ($dirNames[$i])
+        $full = $di.FullName
+        if (-not $full.EndsWith('\')) { $full = $full + '\' }
+        [void]$slice.Add([pscustomobject]@{
+          name = $di.Name
+          path = $full
+          is_dir = $true
+          size_bytes = 0
+          modified_at = $di.LastWriteTime.ToString('o')
+          is_hidden = [bool]($di.Attributes -band [IO.FileAttributes]::Hidden)
+        })
+      } else {
+        $fi = New-Object System.IO.FileInfo ($fileNames[$i - $dirCount])
+        [void]$slice.Add([pscustomobject]@{
+          name = $fi.Name
+          path = $fi.FullName
+          is_dir = $false
+          size_bytes = [int64]$fi.Length
+          modified_at = $fi.LastWriteTime.ToString('o')
+          is_hidden = [bool]($fi.Attributes -band [IO.FileAttributes]::Hidden)
+        })
+      }
     }
-  })
-  (@{
+  }
+  $json = (@{
     ok = $true
     path = $path
     page = $page
     total = $total
-    entries = $slice
+    entries = @($slice.ToArray())
   } | ConvertTo-Json -Compress -Depth 6)
+  [Console]::Out.Write($json)
 } catch {
-  (@{ ok = $false; error = 'list_failed'; message = $_.Exception.Message; path = $path } | ConvertTo-Json -Compress)
+  $json = (@{ ok = $false; error = 'list_failed'; message = $_.Exception.Message; path = $path } | ConvertTo-Json -Compress)
+  [Console]::Out.Write($json)
 }
 `, pathLit, pageLit, pageSizeLit)
 

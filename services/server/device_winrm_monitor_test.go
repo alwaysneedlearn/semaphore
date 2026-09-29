@@ -57,3 +57,32 @@ func TestSafeDownloadFilename(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestExtractMonitorJSONObject(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{`{"ok":true,"cpu_percent":1}`, `{"ok":true,"cpu_percent":1}`},
+		{`[{"ok":true,"cpu_percent":1}]`, `{"ok":true,"cpu_percent":1}`},
+		{"noise\n[{\"ok\":true}]\n", `{"ok":true}`},
+		{`{"ok":true,"msg":"a}b"}`, `{"ok":true,"msg":"a}b"}`},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got := extractMonitorJSONObject(tc.in)
+		if got != tc.want {
+			t.Fatalf("extractMonitorJSONObject(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestParseMonitorJSONWrappedArray(t *testing.T) {
+	env, err := parseMonitorJSON(`[{"ok":true,"cpu_percent":12.5,"memory":{"total_bytes":1},"disks":[]}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !env.OK || env.CPU != 12.5 {
+		t.Fatalf("got %+v", env)
+	}
+}

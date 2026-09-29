@@ -122,6 +122,19 @@ func GetDeviceMonitorFSList(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, status, list)
 }
 
+// flushResponseWriter flushes after each Write so browsers can report download progress.
+type flushResponseWriter struct {
+	http.ResponseWriter
+}
+
+func (f flushResponseWriter) Write(p []byte) (int, error) {
+	n, err := f.ResponseWriter.Write(p)
+	if fl, ok := f.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
+	}
+	return n, err
+}
+
 // DownloadDeviceMonitorFile streams a single file (≤20MB) to the client.
 func DownloadDeviceMonitorFile(w http.ResponseWriter, r *http.Request) {
 	device, creds, ok := resolveMonitorWinRM(w, r, queryForceOffline(r))
@@ -146,9 +159,12 @@ func DownloadDeviceMonitorFile(w http.ResponseWriter, r *http.Request) {
 			))
 			w.WriteHeader(http.StatusOK)
 			headersSent = true
+			if fl, ok := w.(http.Flusher); ok {
+				fl.Flush()
+			}
 			return nil
 		},
-		w,
+		flushResponseWriter{ResponseWriter: w},
 	)
 	durationMS := int(tz.Now().Sub(started).Milliseconds())
 	if err != nil {

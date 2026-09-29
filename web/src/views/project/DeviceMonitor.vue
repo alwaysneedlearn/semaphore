@@ -122,9 +122,27 @@
         </v-btn>
       </v-card-title>
       <v-card-text>
-        <div class="caption mb-2 monospace-path">
-          {{ $t('deviceMonitorPath') }}:
-          <strong>{{ currentPath || $t('deviceMonitorRoots') }}</strong>
+        <div class="d-flex align-center flex-wrap mb-2 breadcrumb-path caption">
+          <a
+            href="#"
+            class="text-decoration-none"
+            :class="{ 'font-weight-bold': !currentPath }"
+            @click.prevent="goRoots"
+          >{{ $t('deviceMonitorBreadcrumbRoots') }}</a>
+          <span
+            v-for="(seg, i) in pathSegments"
+            :key="'bc-' + i + '-' + seg.path"
+            class="d-inline-flex align-center"
+          >
+            <v-icon x-small class="mx-1">mdi-chevron-right</v-icon>
+            <a
+              v-if="i < pathSegments.length - 1"
+              href="#"
+              class="text-decoration-none monospace-path"
+              @click.prevent="goBreadcrumb(seg.path)"
+            >{{ seg.label }}</a>
+            <strong v-else class="monospace-path">{{ seg.label }}</strong>
+          </span>
         </div>
         <v-data-table
           :headers="fsHeaders"
@@ -172,6 +190,17 @@
             </v-btn>
           </template>
         </v-data-table>
+        <div v-if="downloadingPath" class="mt-3">
+          <div class="caption mb-1">
+            {{ $t('deviceMonitorDownloadProgress', { percent: downloadPercentDisplay }) }}
+          </div>
+          <v-progress-linear
+            :value="downloadPercent"
+            :indeterminate="downloadPercent < 0"
+            height="6"
+            color="primary"
+          />
+        </div>
         <div class="d-flex align-center mt-3">
           <span class="caption grey--text">
             {{ $t('deviceMonitorPageInfo', { page, total, pageSize: 10 }) }}
@@ -216,6 +245,7 @@ export default {
       page: 1,
       fsLoading: false,
       downloadingPath: '',
+      downloadPercent: -1,
       fsHeaders: [
         {
           text: this.$t('deviceMonitorColName'),
@@ -261,6 +291,26 @@ export default {
     },
     hasNextPage() {
       return this.page * 10 < this.total;
+    },
+    pathSegments() {
+      if (!this.currentPath) return [];
+      const raw = String(this.currentPath).replace(/[/]+/g, '\\').replace(/\\+$/, '');
+      const m = raw.match(/^([A-Za-z]:)(.*)$/);
+      if (!m) return [];
+      const drive = m[1].toUpperCase();
+      const segs = [{ label: drive, path: `${drive}\\` }];
+      const rest = (m[2] || '').replace(/^\\+/, '');
+      if (!rest) return segs;
+      let acc = drive;
+      rest.split('\\').filter(Boolean).forEach((part) => {
+        acc = `${acc}\\${part}`;
+        segs.push({ label: part, path: acc });
+      });
+      return segs;
+    },
+    downloadPercentDisplay() {
+      if (this.downloadPercent < 0) return '…';
+      return String(this.downloadPercent);
     },
   },
   async created() {
@@ -376,13 +426,31 @@ export default {
       this.currentPath = this.parentPath || '';
       this.loadFS(1);
     },
+    goRoots() {
+      this.currentPath = '';
+      this.loadFS(1);
+    },
+    goBreadcrumb(path) {
+      this.currentPath = path || '';
+      this.loadFS(1);
+    },
     async downloadFile(item) {
       this.downloadingPath = item.path;
+      this.downloadPercent = item.size_bytes > 0 ? 0 : -1;
       this.pageError = '';
+      const knownTotal = Number(item.size_bytes) || 0;
       try {
         const res = await axios.get(`${this.apiBase}/monitor/fs/download`, {
           params: this.monitorParams({ path: item.path }),
           responseType: 'blob',
+          onDownloadProgress: (ev) => {
+            const total = ev.total || knownTotal;
+            if (total > 0) {
+              this.downloadPercent = Math.min(100, Math.round((ev.loaded / total) * 100));
+            } else if (ev.loaded > 0) {
+              this.downloadPercent = -1;
+            }
+          },
         });
         const ct = res.headers['content-type'] || '';
         if (ct.includes('application/json')) {
@@ -390,6 +458,7 @@ export default {
           const body = JSON.parse(text);
           throw new Error(body.message || body.error || this.$t('deviceMonitorDownloadFailed'));
         }
+        this.downloadPercent = 100;
         const blob = new Blob([res.data]);
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -413,6 +482,7 @@ export default {
         this.pageError = msg || this.$t('deviceMonitorDownloadFailed');
       } finally {
         this.downloadingPath = '';
+        this.downloadPercent = -1;
       }
     },
     formatBytes(n) {
