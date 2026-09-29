@@ -111,7 +111,7 @@ func GetDeviceMonitorFSList(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	if !list.OK {
 		switch list.ErrorCode {
-		case "invalid_path", "not_directory":
+		case "invalid_path", "not_directory", "network_drive":
 			status = http.StatusBadRequest
 		case "not_found":
 			status = http.StatusNotFound
@@ -167,6 +167,12 @@ func DownloadDeviceMonitorFile(w http.ResponseWriter, r *http.Request) {
 				status = http.StatusNotFound
 				code = "not_found"
 			}
+			if strings.Contains(lower, "network") || strings.Contains(lower, "shared") {
+				code = "network_drive"
+			}
+		} else if strings.Contains(strings.ToLower(msg), "network/shared") {
+			code = "network_drive"
+			status = http.StatusBadRequest
 		}
 		auditMonitorAction(r, device, creds, fmt.Sprintf("[monitor] download path=%q", rawPath), false, durationMS, code, msg)
 		if !headersSent {

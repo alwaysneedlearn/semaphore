@@ -635,7 +635,7 @@ export default {
   deviceMonitorRefreshFS: 'Refresh list',
   deviceMonitorParent: 'Up',
   deviceMonitorPath: 'Path',
-  deviceMonitorRoots: '(drives C:\\ / D:\\)',
+  deviceMonitorRoots: '(local drives; network shares excluded)',
   deviceMonitorColName: 'Name',
   deviceMonitorColSize: 'Size',
   deviceMonitorColModified: 'Modified',

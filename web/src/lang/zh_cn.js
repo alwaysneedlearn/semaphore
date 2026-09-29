@@ -559,7 +559,7 @@ export default {
   deviceMonitorRefreshFS: '刷新列表',
   deviceMonitorParent: '上级',
   deviceMonitorPath: '路径',
-  deviceMonitorRoots: '（磁盘 C:\\ / D:\\）',
+  deviceMonitorRoots: '（本地磁盘；不含网络共享盘）',
   deviceMonitorColName: '名称',
   deviceMonitorColSize: '大小',
   deviceMonitorColModified: '修改时间',

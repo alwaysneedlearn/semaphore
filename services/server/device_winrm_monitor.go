@@ -27,8 +27,10 @@ const (
 )
 
 var (
-	deviceMonitorDriveRootRe = regexp.MustCompile(`(?i)^[cd]:\\?$`)
-	deviceMonitorAbsPathRe   = regexp.MustCompile(`(?i)^[cd]:\\`)
+	// Any single-letter drive root / absolute path. Network (shared) drives are
+	// rejected at query time via Win32_LogicalDisk.DriveType != 4.
+	deviceMonitorDriveRootRe = regexp.MustCompile(`(?i)^[a-z]:\\?$`)
+	deviceMonitorAbsPathRe   = regexp.MustCompile(`(?i)^[a-z]:\\`)
 )
 
 // DeviceMonitorMetrics is host utilization from WinRM.
@@ -115,8 +117,9 @@ type monitorPSEnvelope struct {
 	Read    int             `json:"read"`
 }
 
-// SanitizeDeviceMonitorPath validates and normalizes a Windows path under C:\ or D:\.
-// Empty path means drive-root listing mode.
+// SanitizeDeviceMonitorPath validates and normalizes a Windows drive path (A:\–Z:\).
+// Empty path means drive-root listing mode. UNC / shared paths are rejected;
+// network mapped drives are blocked in the remote PowerShell (DriveType=4).
 func SanitizeDeviceMonitorPath(raw string) (string, error) {
 	p := strings.TrimSpace(raw)
 	p = strings.ReplaceAll(p, "/", "\\")
@@ -125,10 +128,10 @@ func SanitizeDeviceMonitorPath(raw string) (string, error) {
 	}
 	// Reject UNC and alternate streams / device paths.
 	if strings.HasPrefix(p, "\\\\") || strings.Contains(p, "\x00") {
-		return "", &db.ValidationError{Message: "path not allowed"}
+		return "", &db.ValidationError{Message: "path not allowed (UNC/shared paths unsupported)"}
 	}
 	if !deviceMonitorAbsPathRe.MatchString(p) && !deviceMonitorDriveRootRe.MatchString(p) {
-		return "", &db.ValidationError{Message: "path must be under C:\\ or D:\\"}
+		return "", &db.ValidationError{Message: "path must be a local drive path like E:\\data"}
 	}
 	// Normalize drive root forms: C: / C:\ → C:\
 	if deviceMonitorDriveRootRe.MatchString(p) {
@@ -328,7 +331,8 @@ try {
 	return out
 }
 
-// ListDeviceMonitorFS lists a directory (or C:/D: roots) with pagination.
+// ListDeviceMonitorFS lists a directory (or local drive roots) with server-side pagination.
+// Roots exclude network/shared drives (Win32 DriveType=4). Page uses Skip/Take on the host.
 func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, rawPath string, page int) DeviceMonitorFSList {
 	out := DeviceMonitorFSList{
 		PageSize:     DeviceMonitorFSPageSize,
@@ -359,12 +363,25 @@ $ErrorActionPreference = 'Stop'
 $path = %s
 $page = %s
 $pageSize = %s
+function Test-SemLocalDrive([string]$p) {
+  if ([string]::IsNullOrWhiteSpace($p) -or $p.Length -lt 2) { return $false }
+  $id = $p.Substring(0,2).ToUpperInvariant()
+  if ($id -notmatch '^[A-Z]:$') { return $false }
+  $ld = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $id + "'") -ErrorAction SilentlyContinue
+  if (-not $ld) { return $false }
+  # 4 = Network Drive (mapped share) — not allowed
+  return ($ld.DriveType -ne 4)
+}
 try {
   if ([string]::IsNullOrWhiteSpace($path)) {
-    $roots = @()
-    foreach ($d in @('C:\','D:\')) {
-      if (Test-Path -LiteralPath $d) { $roots += $d }
-    }
+    # All present drives except network/shared (DriveType=4)
+    $roots = @(Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue |
+      Where-Object { $_.DriveType -ne 4 -and $_.DeviceID } |
+      Sort-Object DeviceID |
+      ForEach-Object {
+        $root = $_.DeviceID + '\'
+        if (Test-Path -LiteralPath $root) { $root }
+      })
     $entries = @($roots | ForEach-Object {
       $di = Get-Item -LiteralPath $_ -Force
       [pscustomobject]@{
@@ -388,6 +405,10 @@ try {
     } | ConvertTo-Json -Compress -Depth 6)
     return
   }
+  if (-not (Test-SemLocalDrive $path)) {
+    (@{ ok = $false; error = 'network_drive'; message = 'network/shared drives are not allowed'; path = $path } | ConvertTo-Json -Compress)
+    return
+  }
   if (-not (Test-Path -LiteralPath $path)) {
     (@{ ok = $false; error = 'not_found'; message = 'path not found'; path = $path } | ConvertTo-Json -Compress)
     return
@@ -397,6 +418,7 @@ try {
     (@{ ok = $false; error = 'not_directory'; message = 'path is not a directory'; path = $path } | ConvertTo-Json -Compress)
     return
   }
+  # Server-side pagination: count + Skip/Take on the remote host (not full pull to Semaphore)
   $all = @(Get-ChildItem -LiteralPath $path -Force | Sort-Object { -not $_.PSIsContainer }, Name)
   $total = $all.Count
   $slice = @($all | Select-Object -Skip (($page - 1) * $pageSize) -First $pageSize | ForEach-Object {
@@ -469,7 +491,7 @@ func DownloadDeviceMonitorFile(
 		return meta, err
 	}
 	if clean == "" || deviceMonitorDriveRootRe.MatchString(clean) {
-		return meta, &db.ValidationError{Message: "path must be a file under C:\\ or D:\\"}
+		return meta, &db.ValidationError{Message: "path must be a file on a local drive"}
 	}
 
 	var offset int64
@@ -520,6 +542,12 @@ $offset = [int64]%d
 $length = [int]%d
 $max = [int64]%d
 try {
+  $driveId = $path.Substring(0,2).ToUpperInvariant()
+  $ld = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $driveId + "'") -ErrorAction SilentlyContinue
+  if (-not $ld -or $ld.DriveType -eq 4) {
+    (@{ ok = $false; error = 'network_drive'; message = 'network/shared drives are not allowed' } | ConvertTo-Json -Compress)
+    return
+  }
   if (-not (Test-Path -LiteralPath $path)) {
     (@{ ok = $false; error = 'not_found'; message = 'file not found' } | ConvertTo-Json -Compress)
     return
