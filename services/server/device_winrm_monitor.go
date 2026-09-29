@@ -236,19 +236,61 @@ func runMonitorPowerShell(ctx context.Context, creds DeviceWinRMExecCredentials,
 }
 
 func parseMonitorJSON(stdout string) (monitorPSEnvelope, error) {
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
+	raw := extractMonitorJSONObject(stdout)
+	if raw == "" {
 		return monitorPSEnvelope{}, fmt.Errorf("empty response")
 	}
-	// Take last JSON object line if PowerShell prints banners.
-	if i := strings.LastIndex(stdout, "{"); i >= 0 {
-		stdout = stdout[i:]
-	}
 	var env monitorPSEnvelope
-	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return monitorPSEnvelope{}, err
 	}
 	return env, nil
+}
+
+// extractMonitorJSONObject returns the first complete JSON object in s.
+// PowerShell ConvertTo-Json sometimes wraps a single object as [{...}] or adds
+// CLIXML noise; slicing from the last '{' can leave a trailing ']' and break Unmarshal.
+func extractMonitorJSONObject(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	start := strings.Index(s, "{")
+	if start < 0 {
+		return ""
+	}
+	depth := 0
+	inString := false
+	escape := false
+	for i := start; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			if c == '\\' {
+				escape = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[start : i+1]
+			}
+		}
+	}
+	return ""
 }
 
 // GetDeviceMonitorMetrics queries CPU / memory / disk utilization.
@@ -293,11 +335,14 @@ try {
       free_bytes = $memFree
       used_percent = $memPct
     }
-    disks = $disks
+    disks = @($disks)
   }
-  $payload | ConvertTo-Json -Compress -Depth 6
+  # Single string to stdout (avoid pipeline wrapping as [{...}])
+  $json = ($payload | ConvertTo-Json -Compress -Depth 6)
+  [Console]::Out.Write($json)
 } catch {
-  (@{ ok = $false; error = 'query_failed'; message = $_.Exception.Message } | ConvertTo-Json -Compress)
+  $json = (@{ ok = $false; error = 'query_failed'; message = $_.Exception.Message } | ConvertTo-Json -Compress)
+  [Console]::Out.Write($json)
 }
 `
 	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDefaultTimeout, db.DeviceWinRMExecMaxResponseOut)
