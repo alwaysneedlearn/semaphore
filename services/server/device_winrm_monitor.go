@@ -354,12 +354,12 @@ try {
     }
     disks = @($disks)
   }
-  # Single string to stdout (avoid pipeline wrapping as [{...}])
+  # Emit via pipeline (WinRM captures success stream; Console.Out is empty remotely)
   $json = ($payload | ConvertTo-Json -Compress -Depth 6)
-  [Console]::Out.Write($json)
+  Write-Output -InputObject $json
 } catch {
   $json = (@{ ok = $false; error = 'query_failed'; message = $_.Exception.Message } | ConvertTo-Json -Compress)
-  [Console]::Out.Write($json)
+  Write-Output -InputObject $json
 }
 `
 	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDefaultTimeout, db.DeviceWinRMExecMaxResponseOut)
@@ -465,23 +465,23 @@ try {
       roots = $roots
       entries = $slice
     } | ConvertTo-Json -Compress -Depth 6)
-    [Console]::Out.Write($json)
+    Write-Output -InputObject $json
     return
   }
   if (-not (Test-SemLocalDrive $path)) {
     $json = (@{ ok = $false; error = 'network_drive'; message = 'network/shared drives are not allowed'; path = $path } | ConvertTo-Json -Compress)
-    [Console]::Out.Write($json)
+    Write-Output -InputObject $json
     return
   }
   if (-not (Test-Path -LiteralPath $path)) {
     $json = (@{ ok = $false; error = 'not_found'; message = 'path not found'; path = $path } | ConvertTo-Json -Compress)
-    [Console]::Out.Write($json)
+    Write-Output -InputObject $json
     return
   }
   $item = Get-Item -LiteralPath $path -Force
   if (-not $item.PSIsContainer) {
     $json = (@{ ok = $false; error = 'not_directory'; message = 'path is not a directory'; path = $path } | ConvertTo-Json -Compress)
-    [Console]::Out.Write($json)
+    Write-Output -InputObject $json
     return
   }
   # Fast pagination: enumerate path strings only (incl. hidden), sort dirs then files,
@@ -530,10 +530,10 @@ try {
     total = $total
     entries = @($slice.ToArray())
   } | ConvertTo-Json -Compress -Depth 6)
-  [Console]::Out.Write($json)
+  Write-Output -InputObject $json
 } catch {
   $json = (@{ ok = $false; error = 'list_failed'; message = $_.Exception.Message; path = $path } | ConvertTo-Json -Compress)
-  [Console]::Out.Write($json)
+  Write-Output -InputObject $json
 }
 `, pathLit, pageLit, pageSizeLit)
 
