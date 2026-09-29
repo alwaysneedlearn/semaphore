@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestSanitizeDeviceMonitorPath(t *testing.T) {
 	cases := []struct {
@@ -84,5 +87,43 @@ func TestParseMonitorJSONWrappedArray(t *testing.T) {
 	}
 	if !env.OK || env.CPU != 12.5 {
 		t.Fatalf("got %+v", env)
+	}
+}
+
+func TestCoerceJSONArray(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{``, `[]`},
+		{`null`, `[]`},
+		{`[]`, `[]`},
+		{`[{"name":"C:"}]`, `[{"name":"C:"}]`},
+		{`{"name":"C:"}`, `[{"name":"C:"}]`},
+		{`"C:\\"`, `["C:\\"]`},
+	}
+	for _, tc := range cases {
+		got := string(coerceJSONArray(json.RawMessage(tc.in)))
+		if got != tc.want {
+			t.Fatalf("coerceJSONArray(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestUnmarshalJSONSlicePS51Collapse(t *testing.T) {
+	// Windows PowerShell 5.1 collapses single-element arrays.
+	var entries []DeviceMonitorFSEntry
+	if err := unmarshalJSONSlice(json.RawMessage(`{"name":"C:","path":"C:\\","is_dir":true,"size_bytes":0,"modified_at":"","is_hidden":false}`), &entries); err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name != "C:" {
+		t.Fatalf("got %+v", entries)
+	}
+	var roots []string
+	if err := unmarshalJSONSlice(json.RawMessage(`"C:\\"`), &roots); err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 || roots[0] != `C:\` {
+		t.Fatalf("got %#v", roots)
 	}
 }

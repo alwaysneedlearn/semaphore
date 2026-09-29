@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -109,7 +110,7 @@ type monitorPSEnvelope struct {
 	Page    int             `json:"page"`
 	Total   int             `json:"total"`
 	Entries json.RawMessage `json:"entries"`
-	Roots   []string        `json:"roots"`
+	Roots   json.RawMessage `json:"roots"`
 	Name    string          `json:"name"`
 	Size    int64           `json:"size"`
 	Done    bool            `json:"done"`
@@ -245,6 +246,27 @@ func parseMonitorJSON(stdout string) (monitorPSEnvelope, error) {
 		return monitorPSEnvelope{}, err
 	}
 	return env, nil
+}
+
+// coerceJSONArray wraps a bare JSON value as a one-element array.
+// Windows PowerShell 5.1 ConvertTo-Json collapses single-element arrays to objects/strings.
+func coerceJSONArray(raw json.RawMessage) json.RawMessage {
+	s := bytes.TrimSpace(raw)
+	if len(s) == 0 || string(s) == "null" {
+		return json.RawMessage("[]")
+	}
+	if s[0] == '[' {
+		return s
+	}
+	out := make([]byte, 0, len(s)+2)
+	out = append(out, '[')
+	out = append(out, s...)
+	out = append(out, ']')
+	return out
+}
+
+func unmarshalJSONSlice(raw json.RawMessage, dest any) error {
+	return json.Unmarshal(coerceJSONArray(raw), dest)
 }
 
 // extractMonitorJSONObject returns the first complete JSON object in s.
@@ -386,7 +408,7 @@ try {
 	out.OK = true
 	out.CPUPercent = env.CPU
 	_ = json.Unmarshal(env.Mem, &out.Memory)
-	_ = json.Unmarshal(env.Disks, &out.Disks)
+	_ = unmarshalJSONSlice(env.Disks, &out.Disks)
 	if out.Disks == nil {
 		out.Disks = []DeviceMonitorDisk{}
 	}
@@ -557,11 +579,14 @@ try {
 	}
 	out.OK = true
 	out.Total = env.Total
-	out.Roots = env.Roots
+	_ = unmarshalJSONSlice(env.Roots, &out.Roots)
+	if out.Roots == nil {
+		out.Roots = []string{}
+	}
 	if env.Path != "" {
 		out.Path = env.Path
 	}
-	_ = json.Unmarshal(env.Entries, &out.Entries)
+	_ = unmarshalJSONSlice(env.Entries, &out.Entries)
 	if out.Entries == nil {
 		out.Entries = []DeviceMonitorFSEntry{}
 	}
