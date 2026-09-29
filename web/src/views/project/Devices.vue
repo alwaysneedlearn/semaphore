@@ -482,6 +482,13 @@
           </v-btn>
           <v-btn
             v-if="showWinrmConsole(item)"
+            :title="$t('deviceMonitorTitle')"
+            :to="`/project/${projectId}/devices/${item.id}/monitor`"
+          >
+            <v-icon>mdi-monitor-dashboard</v-icon>
+          </v-btn>
+          <v-btn
+            v-if="showWinrmConsole(item)"
             :title="$t('deviceWinrmConsole')"
             @click="openWinrmConsole(item)"
           >

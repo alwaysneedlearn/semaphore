@@ -1,0 +1,448 @@
+<template>
+  <div class="device-monitor pa-4">
+    <div class="d-flex align-center mb-4 flex-wrap">
+      <v-btn
+        icon
+        class="mr-2"
+        :to="`/project/${projectId}/devices/list`"
+        :title="$t('deviceTabList')"
+      >
+        <v-icon>mdi-arrow-left</v-icon>
+      </v-btn>
+      <div>
+        <div class="text-h6">
+          {{ $t('deviceMonitorTitle') }}
+          <span v-if="device">— {{ device.hostname }} ({{ device.ip_address }})</span>
+        </div>
+        <div class="caption grey--text" v-if="connectionPreview">
+          {{ connectionPreview.endpoint }}
+        </div>
+      </div>
+      <v-spacer />
+      <v-chip v-if="device" x-small :color="winrmStatusColor" dark class="mr-2">
+        WinRM: {{ device.winrm_status || 'unknown' }}
+      </v-chip>
+      <v-btn
+        icon
+        small
+        :loading="probing"
+        class="mr-2"
+        :title="$t('deviceProbe')"
+        @click="probeDevice"
+      >
+        <v-icon>mdi-radar</v-icon>
+      </v-btn>
+    </div>
+
+    <v-alert v-if="pageError" type="error" dense dismissible class="mb-4" @input="pageError = ''">
+      {{ pageError }}
+    </v-alert>
+
+    <v-radio-group
+      v-model="credentialMode"
+      row
+      dense
+      class="mt-0 mb-2"
+      @change="onCredentialModeChange"
+    >
+      <v-radio :label="$t('deviceWinrmCredentialWinrm')" value="winrm" />
+      <v-radio
+        :label="$t('deviceWinrmCredentialRdp')"
+        value="rdp"
+        :disabled="!rdpCredentialAvailable"
+      />
+    </v-radio-group>
+    <v-checkbox
+      v-model="forceOffline"
+      dense
+      hide-details
+      class="mt-0 mb-4"
+      :label="$t('deviceWinrmForceOffline')"
+    />
+
+    <v-card class="mb-4" outlined>
+      <v-card-title class="subtitle-1 d-flex align-center">
+        {{ $t('deviceMonitorUtilization') }}
+        <v-spacer />
+        <v-btn small depressed color="primary" :loading="metricsLoading" @click="loadMetrics">
+          {{ $t('deviceMonitorRefreshMetrics') }}
+        </v-btn>
+      </v-card-title>
+      <v-card-text>
+        <div v-if="!metrics && !metricsLoading" class="caption grey--text">
+          {{ $t('deviceMonitorMetricsHint') }}
+        </div>
+        <v-row v-else dense>
+          <v-col cols="12" sm="4">
+            <div class="caption grey--text">{{ $t('deviceMonitorCPU') }}</div>
+            <div class="text-h5">{{ formatPercent(metrics && metrics.cpu_percent) }}</div>
+          </v-col>
+          <v-col cols="12" sm="4">
+            <div class="caption grey--text">{{ $t('deviceMonitorMemory') }}</div>
+            <div class="text-h5">
+              {{ formatPercent(metrics && metrics.memory && metrics.memory.used_percent) }}
+            </div>
+            <div class="caption">
+              {{ formatBytes(metrics && metrics.memory && metrics.memory.used_bytes) }}
+              /
+              {{ formatBytes(metrics && metrics.memory && metrics.memory.total_bytes) }}
+            </div>
+          </v-col>
+          <v-col cols="12" sm="4">
+            <div class="caption grey--text mb-1">{{ $t('deviceMonitorDisks') }}</div>
+            <div v-if="!(metrics && metrics.disks && metrics.disks.length)" class="caption">—</div>
+            <div v-for="d in (metrics && metrics.disks) || []" :key="d.name" class="mb-1">
+              <strong>{{ d.name }}</strong>
+              {{ formatPercent(d.used_percent) }}
+              <span class="caption grey--text">
+                ({{ formatBytes(d.used_bytes) }} / {{ formatBytes(d.total_bytes) }})
+              </span>
+            </div>
+          </v-col>
+        </v-row>
+      </v-card-text>
+    </v-card>
+
+    <v-card outlined>
+      <v-card-title class="subtitle-1 d-flex align-center flex-wrap">
+        {{ $t('deviceMonitorFiles') }}
+        <v-spacer />
+        <v-btn
+          small
+          text
+          class="mr-2"
+          :disabled="!parentPath && currentPath === ''"
+          @click="goParent"
+        >
+          <v-icon left small>mdi-arrow-up</v-icon>
+          {{ $t('deviceMonitorParent') }}
+        </v-btn>
+        <v-btn small depressed color="primary" :loading="fsLoading" @click="loadFS(page)">
+          {{ $t('deviceMonitorRefreshFS') }}
+        </v-btn>
+      </v-card-title>
+      <v-card-text>
+        <div class="caption mb-2 monospace-path">
+          {{ $t('deviceMonitorPath') }}:
+          <strong>{{ currentPath || $t('deviceMonitorRoots') }}</strong>
+        </div>
+        <v-data-table
+          :headers="fsHeaders"
+          :items="entries"
+          :loading="fsLoading"
+          :items-per-page="10"
+          hide-default-footer
+          dense
+          class="elevation-0"
+        >
+          <template v-slot:item.name="{ item }">
+            <a
+              v-if="item.is_dir"
+              href="#"
+              class="text-decoration-none"
+              @click.prevent="enterDir(item)"
+            >
+              <v-icon small class="mr-1">mdi-folder</v-icon>
+              {{ item.name }}
+              <v-chip v-if="item.is_hidden" x-small class="ml-1">hidden</v-chip>
+            </a>
+            <span v-else>
+              <v-icon small class="mr-1">mdi-file</v-icon>
+              {{ item.name }}
+              <v-chip v-if="item.is_hidden" x-small class="ml-1">hidden</v-chip>
+            </span>
+          </template>
+          <template v-slot:item.size_bytes="{ item }">
+            {{ item.is_dir ? '—' : formatBytes(item.size_bytes) }}
+          </template>
+          <template v-slot:item.modified_at="{ item }">
+            {{ formatTime(item.modified_at) }}
+          </template>
+          <template v-slot:item.actions="{ item }">
+            <v-btn
+              v-if="!item.is_dir"
+              x-small
+              text
+              color="primary"
+              :loading="downloadingPath === item.path"
+              :disabled="!!downloadingPath"
+              @click="downloadFile(item)"
+            >
+              {{ $t('deviceMonitorDownload') }}
+            </v-btn>
+          </template>
+        </v-data-table>
+        <div class="d-flex align-center mt-3">
+          <span class="caption grey--text">
+            {{ $t('deviceMonitorPageInfo', { page, total, pageSize: 10 }) }}
+          </span>
+          <v-spacer />
+          <v-btn small text :disabled="page <= 1 || fsLoading" @click="loadFS(page - 1)">
+            {{ $t('deviceMonitorPrev') }}
+          </v-btn>
+          <v-btn small text :disabled="!hasNextPage || fsLoading" @click="loadFS(page + 1)">
+            {{ $t('deviceMonitorNext') }}
+          </v-btn>
+        </div>
+        <div class="caption grey--text mt-2">
+          {{ $t('deviceMonitorDownloadLimit') }}
+        </div>
+      </v-card-text>
+    </v-card>
+  </div>
+</template>
+
+<script>
+import axios from 'axios';
+
+export default {
+  props: {
+    projectId: [Number, String],
+  },
+  data() {
+    return {
+      device: null,
+      credentialMode: 'winrm',
+      forceOffline: false,
+      connectionPreview: null,
+      probing: false,
+      pageError: '',
+      metrics: null,
+      metricsLoading: false,
+      currentPath: '',
+      parentPath: '',
+      entries: [],
+      total: 0,
+      page: 1,
+      fsLoading: false,
+      downloadingPath: '',
+      fsHeaders: [
+        {
+          text: this.$t('deviceMonitorColName'),
+          value: 'name',
+          sortable: false,
+        },
+        {
+          text: this.$t('deviceMonitorColSize'),
+          value: 'size_bytes',
+          sortable: false,
+          width: '120px',
+        },
+        {
+          text: this.$t('deviceMonitorColModified'),
+          value: 'modified_at',
+          sortable: false,
+          width: '200px',
+        },
+        {
+          text: '',
+          value: 'actions',
+          sortable: false,
+          width: '100px',
+        },
+      ],
+    };
+  },
+  computed: {
+    deviceId() {
+      return this.$route.params.deviceId;
+    },
+    apiBase() {
+      return `/api/project/${this.projectId}/devices/${this.deviceId}`;
+    },
+    rdpCredentialAvailable() {
+      return !!(this.device && this.device.rdp_user);
+    },
+    winrmStatusColor() {
+      const s = this.device && this.device.winrm_status;
+      if (s === 'online') return 'success';
+      if (s === 'offline') return 'error';
+      return 'grey';
+    },
+    hasNextPage() {
+      return this.page * 10 < this.total;
+    },
+  },
+  async created() {
+    await this.loadDevice();
+    await this.loadConnectionPreview();
+    await this.loadMetrics();
+    await this.loadFS(1);
+  },
+  methods: {
+    async loadDevice() {
+      try {
+        const { data } = await axios.get(this.apiBase);
+        this.device = data;
+      } catch (e) {
+        this.pageError = (e.response && e.response.data && e.response.data.error)
+          || e.message
+          || this.$t('deviceMonitorLoadFailed');
+      }
+    },
+    async loadConnectionPreview() {
+      try {
+        const { data } = await axios.get(`${this.apiBase}/winrm/connection-preview`, {
+          params: { credential_mode: this.credentialMode },
+        });
+        this.connectionPreview = data;
+      } catch (e) {
+        this.connectionPreview = null;
+      }
+    },
+    async onCredentialModeChange() {
+      await this.loadConnectionPreview();
+    },
+    async probeDevice() {
+      this.probing = true;
+      try {
+        await axios.post(`${this.apiBase}/probe`);
+        await this.loadDevice();
+      } catch (e) {
+        this.pageError = (e.response && e.response.data && e.response.data.error) || e.message;
+      } finally {
+        this.probing = false;
+      }
+    },
+    monitorParams(extra) {
+      const params = {
+        credential_mode: this.credentialMode,
+        ...(extra || {}),
+      };
+      if (this.forceOffline) params.force_offline = '1';
+      return params;
+    },
+    async loadMetrics() {
+      this.metricsLoading = true;
+      this.pageError = '';
+      try {
+        const { data } = await axios.get(`${this.apiBase}/monitor/metrics`, {
+          params: this.monitorParams(),
+        });
+        this.metrics = data;
+        if (!data.ok) {
+          this.pageError = data.message || data.error || this.$t('deviceMonitorMetricsFailed');
+        }
+      } catch (e) {
+        const body = e.response && e.response.data;
+        this.pageError = (body && (body.message || body.error)) || e.message;
+        if (body && body.cpu_percent !== undefined) this.metrics = body;
+      } finally {
+        this.metricsLoading = false;
+      }
+    },
+    async loadFS(page) {
+      this.fsLoading = true;
+      this.pageError = '';
+      try {
+        const { data } = await axios.get(`${this.apiBase}/monitor/fs`, {
+          params: this.monitorParams({
+            path: this.currentPath,
+            page,
+          }),
+        });
+        if (!data.ok) {
+          this.pageError = data.message || data.error || this.$t('deviceMonitorFSFailed');
+          return;
+        }
+        this.entries = data.entries || [];
+        this.total = data.total || 0;
+        this.page = data.page || page;
+        this.currentPath = data.path || '';
+        this.parentPath = this.computeParent(this.currentPath);
+      } catch (e) {
+        const body = e.response && e.response.data;
+        this.pageError = (body && (body.message || body.error)) || e.message;
+      } finally {
+        this.fsLoading = false;
+      }
+    },
+    computeParent(p) {
+      if (!p) return '';
+      const norm = p.replace(/\\+$/, '');
+      const idx = norm.lastIndexOf('\\');
+      if (idx <= 2) {
+        // C:\Users -> C:\
+        if (/^[A-Za-z]:$/i.test(norm) || /^[A-Za-z]:\\?$/i.test(p)) return '';
+        return `${norm.slice(0, 2)}\\`;
+      }
+      return norm.slice(0, idx);
+    },
+    enterDir(item) {
+      this.currentPath = item.path;
+      this.loadFS(1);
+    },
+    goParent() {
+      this.currentPath = this.parentPath || '';
+      this.loadFS(1);
+    },
+    async downloadFile(item) {
+      this.downloadingPath = item.path;
+      this.pageError = '';
+      try {
+        const res = await axios.get(`${this.apiBase}/monitor/fs/download`, {
+          params: this.monitorParams({ path: item.path }),
+          responseType: 'blob',
+        });
+        const ct = res.headers['content-type'] || '';
+        if (ct.includes('application/json')) {
+          const text = await res.data.text();
+          const body = JSON.parse(text);
+          throw new Error(body.message || body.error || this.$t('deviceMonitorDownloadFailed'));
+        }
+        const blob = new Blob([res.data]);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.name || 'download.bin';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        let msg = e.message;
+        if (e.response && e.response.data) {
+          try {
+            const text = await e.response.data.text();
+            const body = JSON.parse(text);
+            msg = body.message || body.error || msg;
+          } catch (_) {
+            /* keep msg */
+          }
+        }
+        this.pageError = msg || this.$t('deviceMonitorDownloadFailed');
+      } finally {
+        this.downloadingPath = '';
+      }
+    },
+    formatBytes(n) {
+      if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+      let v = Number(n);
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let i = 0;
+      while (v >= 1024 && i < units.length - 1) {
+        v /= 1024;
+        i += 1;
+      }
+      return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+    },
+    formatPercent(n) {
+      if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+      return `${Number(n).toFixed(1)}%`;
+    },
+    formatTime(v) {
+      if (!v) return '—';
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return v;
+      return d.toLocaleString();
+    },
+  },
+};
+</script>
+
+<style scoped>
+.monospace-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+</style>

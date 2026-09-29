@@ -457,6 +457,9 @@ func Route(
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/connection-preview", projects.GetDeviceWinRMConnectionPreview).Methods("GET", "HEAD")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec", projects.ExecDeviceWinRMCommand).Methods("POST")
 	projectDeviceManagement.HandleFunc("/{device_id}/winrm/exec-logs", projects.GetDeviceWinRMExecLogs).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/monitor/metrics", projects.GetDeviceMonitorMetrics).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/monitor/fs", projects.GetDeviceMonitorFSList).Methods("GET", "HEAD")
+	projectDeviceManagement.HandleFunc("/{device_id}/monitor/fs/download", projects.DownloadDeviceMonitorFile).Methods("GET", "HEAD")
 
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.GetTerraformInventoryAliases).Methods("GET", "HEAD")
 	projectInventoryManagement.HandleFunc("/{inventory_id}/terraform/aliases", terraformInventoryController.AddTerraformInventoryAlias).Methods("POST")
