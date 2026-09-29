@@ -157,7 +157,14 @@
             @keyup.enter="applySearch"
             @click:clear="clearSearch"
           />
-          <v-btn small depressed color="primary" class="mr-2" :loading="fsLoading" @click="applySearch">
+          <v-btn
+            small
+            depressed
+            color="primary"
+            class="mr-2"
+            :loading="fsLoading"
+            @click="applySearch"
+          >
             {{ $t('deviceMonitorSearchApply') }}
           </v-btn>
           <v-btn
