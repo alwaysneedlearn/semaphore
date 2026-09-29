@@ -99,14 +99,11 @@ func GetDeviceMonitorFSList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
 	rawPath := r.URL.Query().Get("path")
 	query := r.URL.Query().Get("q")
-	list := server.ListDeviceMonitorFS(r.Context(), creds, rawPath, page, query)
-	cmd := fmt.Sprintf("[monitor] list path=%q page=%d q=%q", list.Path, page, list.Query)
+	cursor := r.URL.Query().Get("cursor")
+	list := server.ListDeviceMonitorFS(r.Context(), creds, rawPath, cursor, query)
+	cmd := fmt.Sprintf("[monitor] list path=%q cursor=%q q=%q", list.Path, list.Cursor, list.Query)
 	auditMonitorAction(r, device, creds, cmd, list.OK, list.DurationMS, list.ErrorCode, list.ErrorMessage)
 
 	status := http.StatusOK

@@ -551,6 +551,7 @@ export default {
   deviceMonitorUtilization: '利用率',
   deviceMonitorRefreshMetrics: '刷新利用率',
   deviceMonitorMetricsHint: '点击「刷新利用率」通过 WinRM 查询 CPU（接近任务管理器）、内存与磁盘。',
+  deviceMonitorOfflineHint: 'WinRM 离线：勾选「强制离线执行」或先 Probe 后再加载。',
   deviceMonitorMetricsFailed: '利用率查询失败',
   deviceMonitorCPU: 'CPU',
   deviceMonitorMemory: '内存',

@@ -6,6 +6,25 @@ import (
 	"testing"
 )
 
+func TestMonitorFSCursorRoundTrip(t *testing.T) {
+	c := EncodeMonitorFSCursor(`C:\Users\a`, true)
+	p, isDir, err := ParseMonitorFSCursor(c)
+	if err != nil || !isDir || p != `C:\Users\a` {
+		t.Fatalf("dir cursor got path=%q isDir=%v err=%v", p, isDir, err)
+	}
+	c = EncodeMonitorFSCursor(`C:\Users\a\b.txt`, false)
+	p, isDir, err = ParseMonitorFSCursor(c)
+	if err != nil || isDir || p != `C:\Users\a\b.txt` {
+		t.Fatalf("file cursor got path=%q isDir=%v err=%v", p, isDir, err)
+	}
+	if _, _, err := ParseMonitorFSCursor("nope"); err == nil {
+		t.Fatal("expected invalid cursor error")
+	}
+	if _, _, err := ParseMonitorFSCursor(""); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSanitizeDeviceMonitorSearch(t *testing.T) {
 	cases := []struct {
 		in   string

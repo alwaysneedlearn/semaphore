@@ -91,12 +91,20 @@
           <v-col cols="12" sm="4">
             <div class="caption grey--text mb-1">{{ $t('deviceMonitorDisks') }}</div>
             <div v-if="!(metrics && metrics.disks && metrics.disks.length)" class="caption">—</div>
-            <div v-for="d in (metrics && metrics.disks) || []" :key="d.name" class="mb-1">
-              <strong>{{ d.name }}</strong>
-              {{ formatPercent(d.used_percent) }}
-              <span class="caption grey--text">
-                ({{ formatBytes(d.used_bytes) }} / {{ formatBytes(d.total_bytes) }})
-              </span>
+            <div v-for="d in (metrics && metrics.disks) || []" :key="d.name" class="mb-2">
+              <div class="d-flex align-center justify-space-between">
+                <strong>{{ d.name }}</strong>
+                <span>{{ formatPercent(d.used_percent) }}</span>
+              </div>
+              <v-progress-linear
+                :value="Number(d.used_percent) || 0"
+                height="6"
+                class="my-1"
+                :color="diskBarColor(d.used_percent)"
+              />
+              <div class="caption grey--text">
+                {{ formatBytes(d.used_bytes) }} / {{ formatBytes(d.total_bytes) }}
+              </div>
             </div>
           </v-col>
         </v-row>
@@ -117,7 +125,7 @@
           <v-icon left small>mdi-arrow-up</v-icon>
           {{ $t('deviceMonitorParent') }}
         </v-btn>
-        <v-btn small depressed color="primary" :loading="fsLoading" @click="loadFS(page)">
+        <v-btn small depressed color="primary" :loading="fsLoading" @click="loadFS('refresh')">
           {{ $t('deviceMonitorRefreshFS') }}
         </v-btn>
       </v-card-title>
@@ -238,10 +246,10 @@
             {{ $t('deviceMonitorPageInfo', { page, pageSize: 10 }) }}
           </span>
           <v-spacer />
-          <v-btn small text :disabled="page <= 1 || fsLoading" @click="loadFS(page - 1)">
+          <v-btn small text :disabled="page <= 1 || fsLoading" @click="loadFS('prev')">
             {{ $t('deviceMonitorPrev') }}
           </v-btn>
-          <v-btn small text :disabled="!hasNext || fsLoading" @click="loadFS(page + 1)">
+          <v-btn small text :disabled="!hasNext || fsLoading" @click="loadFS('next')">
             {{ $t('deviceMonitorNext') }}
           </v-btn>
         </div>
@@ -264,7 +272,7 @@ export default {
     return {
       device: null,
       credentialMode: 'winrm',
-      forceOffline: false,
+      forceOffline: true,
       connectionPreview: null,
       probing: false,
       pageError: '',
@@ -274,9 +282,13 @@ export default {
       parentPath: '',
       entries: [],
       hasNext: false,
+      nextCursor: '',
+      fsCursor: '',
+      cursorStack: [],
       page: 1,
       searchInput: '',
       searchQuery: '',
+      searchDebounceTimer: null,
       fsLoading: false,
       downloadingPath: '',
       downloadPercent: -1,
@@ -343,14 +355,43 @@ export default {
       if (this.downloadPercent < 0) return '…';
       return String(this.downloadPercent);
     },
+    canAutoQuery() {
+      if (this.forceOffline) return true;
+      return !!(this.device && this.device.winrm_status === 'online');
+    },
+  },
+  watch: {
+    searchInput() {
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+      }
+      this.searchDebounceTimer = setTimeout(() => {
+        this.applySearch();
+      }, 300);
+    },
+  },
+  beforeDestroy() {
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
   },
   async created() {
     await this.loadDevice();
     await this.loadConnectionPreview();
-    await this.loadMetrics();
-    await this.loadFS(1);
+    if (this.canAutoQuery) {
+      await Promise.all([this.loadMetrics(), this.loadFS('first')]);
+    } else {
+      this.pageError = this.$t('deviceMonitorOfflineHint');
+    }
   },
   methods: {
+    diskBarColor(pct) {
+      const n = Number(pct);
+      if (Number.isNaN(n)) return 'primary';
+      if (n >= 90) return 'error';
+      if (n >= 75) return 'warning';
+      return 'primary';
+    },
     async loadDevice() {
       try {
         const { data } = await axios.get(this.apiBase);
@@ -373,12 +414,18 @@ export default {
     },
     async onCredentialModeChange() {
       await this.loadConnectionPreview();
+      if (this.canAutoQuery) {
+        await Promise.all([this.loadMetrics(), this.loadFS('first')]);
+      }
     },
     async probeDevice() {
       this.probing = true;
       try {
         await axios.post(`${this.apiBase}/probe`);
         await this.loadDevice();
+        if (this.canAutoQuery) {
+          await Promise.all([this.loadMetrics(), this.loadFS('first')]);
+        }
       } catch (e) {
         this.pageError = (e.response && e.response.data && e.response.data.error) || e.message;
       } finally {
@@ -412,25 +459,49 @@ export default {
         this.metricsLoading = false;
       }
     },
-    async loadFS(page) {
+    async loadFS(mode) {
+      let cursor = '';
+      if (mode === 'first') {
+        this.cursorStack = [];
+        this.page = 1;
+        cursor = '';
+      } else if (mode === 'refresh') {
+        cursor = this.fsCursor || '';
+      } else if (mode === 'next') {
+        if (!this.hasNext || !this.nextCursor) return;
+        this.cursorStack.push(this.fsCursor || '');
+        cursor = this.nextCursor;
+        this.page += 1;
+      } else if (mode === 'prev') {
+        if (this.page <= 1) return;
+        cursor = this.cursorStack.length ? this.cursorStack.pop() : '';
+        this.page = Math.max(1, this.page - 1);
+      } else {
+        cursor = '';
+        this.cursorStack = [];
+        this.page = 1;
+      }
+
       this.fsLoading = true;
       this.pageError = '';
       try {
         const params = this.monitorParams({
           path: this.currentPath,
-          page,
         });
+        if (cursor) params.cursor = cursor;
         if (this.searchQuery) params.q = this.searchQuery;
         const { data } = await axios.get(`${this.apiBase}/monitor/fs`, { params });
         if (!data.ok) {
           this.pageError = data.message || data.error || this.$t('deviceMonitorFSFailed');
           this.entries = [];
           this.hasNext = false;
+          this.nextCursor = '';
           return;
         }
         this.entries = data.entries || [];
         this.hasNext = !!data.has_next;
-        this.page = data.page || page;
+        this.nextCursor = data.next_cursor || '';
+        this.fsCursor = cursor;
         this.currentPath = data.path || '';
         this.parentPath = this.computeParent(this.currentPath);
       } catch (e) {
@@ -438,24 +509,37 @@ export default {
         this.pageError = (body && (body.message || body.error)) || e.message;
         this.entries = [];
         this.hasNext = false;
+        this.nextCursor = '';
       } finally {
         this.fsLoading = false;
       }
     },
     applySearch() {
-      this.searchQuery = (this.searchInput || '').trim();
-      this.loadFS(1);
+      const next = (this.searchInput || '').trim();
+      if (next === this.searchQuery && this.page === 1 && this.fsCursor === '') {
+        return;
+      }
+      this.searchQuery = next;
+      this.loadFS('first');
     },
     clearSearch() {
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = null;
+      }
       this.searchInput = '';
       this.searchQuery = '';
-      this.loadFS(1);
+      this.loadFS('first');
     },
     resetSearchAndLoad(path) {
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = null;
+      }
       this.currentPath = path || '';
       this.searchInput = '';
       this.searchQuery = '';
-      this.loadFS(1);
+      this.loadFS('first');
     },
     computeParent(p) {
       if (!p) return '';

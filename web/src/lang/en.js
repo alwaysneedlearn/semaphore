@@ -627,6 +627,7 @@ export default {
   deviceMonitorUtilization: 'Utilization',
   deviceMonitorRefreshMetrics: 'Refresh metrics',
   deviceMonitorMetricsHint: 'Click Refresh metrics to query CPU (Task Manager–style), memory, and disks over WinRM.',
+  deviceMonitorOfflineHint: 'WinRM offline: enable Force offline or Probe first, then load.',
   deviceMonitorMetricsFailed: 'Failed to load utilization metrics',
   deviceMonitorCPU: 'CPU',
   deviceMonitorMemory: 'Memory',

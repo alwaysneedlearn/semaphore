@@ -22,9 +22,12 @@ import (
 const (
 	DeviceMonitorMaxDownloadBytes = 20 * 1024 * 1024
 	DeviceMonitorFSPageSize       = 10
-	DeviceMonitorDownloadChunk    = 512 * 1024
-	DeviceMonitorDefaultTimeout   = 60
-	DeviceMonitorDownloadTimeout  = 120
+	// ~1MiB raw → ~1.4MiB base64; stdout budget must stay above that.
+	DeviceMonitorDownloadChunk       = 1024 * 1024
+	DeviceMonitorDownloadMaxStdout   = 3 * 1024 * 1024
+	DeviceMonitorDefaultTimeout      = 60
+	DeviceMonitorDownloadTimeout     = 120
+	DeviceMonitorCPUSampleMS         = 400
 )
 
 var (
@@ -75,13 +78,14 @@ type DeviceMonitorFSEntry struct {
 	IsHidden   bool   `json:"is_hidden"`
 }
 
-// DeviceMonitorFSList is a paginated directory listing (no full-directory total).
+// DeviceMonitorFSList is a cursor-paginated directory listing (no full-directory total).
 type DeviceMonitorFSList struct {
 	OK           bool                   `json:"ok"`
 	Path         string                 `json:"path"`
-	Page         int                    `json:"page"`
 	PageSize     int                    `json:"page_size"`
 	HasNext      bool                   `json:"has_next"`
+	Cursor       string                 `json:"cursor,omitempty"`
+	NextCursor   string                 `json:"next_cursor,omitempty"`
 	Query        string                 `json:"query,omitempty"`
 	Entries      []DeviceMonitorFSEntry `json:"entries"`
 	Roots        []string               `json:"roots,omitempty"`
@@ -107,12 +111,12 @@ type monitorPSEnvelope struct {
 	CPU     float64         `json:"cpu_percent"`
 	Mem     json.RawMessage `json:"memory"`
 	Disks   json.RawMessage `json:"disks"`
-	Path    string          `json:"path"`
-	Page    int             `json:"page"`
-	HasNext bool            `json:"has_next"`
-	Entries json.RawMessage `json:"entries"`
-	Roots   json.RawMessage `json:"roots"`
-	Name    string          `json:"name"`
+	Path       string          `json:"path"`
+	HasNext    bool            `json:"has_next"`
+	NextCursor string          `json:"next_cursor"`
+	Entries    json.RawMessage `json:"entries"`
+	Roots      json.RawMessage `json:"roots"`
+	Name       string          `json:"name"`
 	Size    int64           `json:"size"`
 	Done    bool            `json:"done"`
 	Data    string          `json:"data"`
@@ -181,6 +185,44 @@ func SanitizeDeviceMonitorSearch(raw string) string {
 		q = string(r[:128])
 	}
 	return q
+}
+
+// EncodeMonitorFSCursor builds an opaque listing cursor (d:path / f:path).
+func EncodeMonitorFSCursor(path string, isDir bool) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if isDir {
+		return "d:" + path
+	}
+	return "f:" + path
+}
+
+// ParseMonitorFSCursor parses a listing cursor. Empty cursor means start of directory.
+func ParseMonitorFSCursor(raw string) (path string, isDir bool, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false, nil
+	}
+	if strings.HasPrefix(raw, "d:") {
+		p, e := SanitizeDeviceMonitorPath(raw[2:])
+		if e != nil {
+			return "", false, e
+		}
+		return p, true, nil
+	}
+	if strings.HasPrefix(raw, "f:") {
+		p, e := SanitizeDeviceMonitorPath(raw[2:])
+		if e != nil {
+			return "", false, e
+		}
+		if p == "" || deviceMonitorDriveRootRe.MatchString(p) {
+			return "", false, &db.ValidationError{Message: "invalid cursor"}
+		}
+		return p, false, nil
+	}
+	return "", false, &db.ValidationError{Message: "invalid cursor"}
 }
 
 func runMonitorPowerShell(ctx context.Context, creds DeviceWinRMExecCredentials, script string, timeoutSec int, maxStdout int) DeviceWinRMExecResult {
@@ -353,12 +395,11 @@ func GetDeviceMonitorMetrics(ctx context.Context, creds DeviceWinRMExecCredentia
 	script := `
 $ErrorActionPreference = 'Stop'
 try {
-  # Task Manager–style CPU: PerfOS % Processor Time, second sample after 1s
-  # (first sample is often 0/stale; LoadPercentage alone is not comparable to TM)
+  # Task Manager–style CPU: PerfOS % Processor Time, short second sample
   $cpu = 0.0
   try {
     $null = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
-    Start-Sleep -Milliseconds 1000
+    Start-Sleep -Milliseconds ` + strconv.Itoa(DeviceMonitorCPUSampleMS) + `
     $perf = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
     if ($null -ne $perf.PercentProcessorTime) {
       $cpu = [math]::Min(100.0, [double]$perf.PercentProcessorTime)
@@ -404,7 +445,6 @@ try {
     }
     disks = @($disks)
   }
-  # Emit via pipeline (WinRM captures success stream; Console.Out is empty remotely)
   $json = ($payload | ConvertTo-Json -Compress -Depth 6)
   Write-Output -InputObject $json
 } catch {
@@ -443,11 +483,10 @@ try {
 	return out
 }
 
-// ListDeviceMonitorFS lists a directory (or local drive roots) with lazy pagination.
-// No full-directory sort/total: Enumerate* in filesystem order (dirs then files),
-// skip/take pageSize+1 for has_next. Optional q filters names in the current directory only.
-// Roots exclude network/shared drives (Win32 DriveType=4).
-func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, rawPath string, page int, query string) DeviceMonitorFSList {
+// ListDeviceMonitorFS lists a directory (or local drive roots) with cursor pagination.
+// Enumerate* in filesystem order (dirs then files); continue after cursor; no total/sort.
+// Optional q filters names in the current directory only. Roots exclude DriveType=4.
+func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, rawPath string, cursor string, query string) DeviceMonitorFSList {
 	out := DeviceMonitorFSList{
 		PageSize:     DeviceMonitorFSPageSize,
 		Entries:      []DeviceMonitorFSEntry{},
@@ -455,12 +494,15 @@ func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, 
 		ResolvedHost: creds.Host,
 		ResolvedPort: creds.Port,
 	}
-	if page < 1 {
-		page = 1
-	}
-	out.Page = page
 	query = SanitizeDeviceMonitorSearch(query)
 	out.Query = query
+	out.Cursor = strings.TrimSpace(cursor)
+
+	if _, _, err := ParseMonitorFSCursor(out.Cursor); err != nil {
+		out.ErrorCode = "invalid_path"
+		out.ErrorMessage = err.Error()
+		return out
+	}
 
 	clean, err := SanitizeDeviceMonitorPath(rawPath)
 	if err != nil {
@@ -472,24 +514,26 @@ func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, 
 
 	pathLit := psSingleQuote(clean)
 	queryLit := psSingleQuote(query)
-	pageLit := strconv.Itoa(page)
+	cursorLit := psSingleQuote(out.Cursor)
 	pageSizeLit := strconv.Itoa(DeviceMonitorFSPageSize)
 
-	// Compact script (also executed via stdin to avoid EncodedCommand length limits).
+	// Compact script via stdin (avoids EncodedCommand length limits).
 	script := fmt.Sprintf(`
-$ErrorActionPreference='Stop';$path=%s;$page=%s;$pageSize=%s;$q=%s
+$ErrorActionPreference='Stop';$path=%s;$pageSize=%s;$q=%s;$cur=%s
 function E($p,$d){$h=[IO.FileAttributes]::Hidden;if($d){$i=[IO.DirectoryInfo]$p;$f=$i.FullName;if(-not $f.EndsWith('\')){$f+='\'};return [pscustomobject]@{name=$i.Name;path=$f;is_dir=$true;size_bytes=0;modified_at=$i.LastWriteTime.ToString('o');is_hidden=[bool]($i.Attributes -band $h)}};$i=[IO.FileInfo]$p;return [pscustomobject]@{name=$i.Name;path=$i.FullName;is_dir=$false;size_bytes=[int64]$i.Length;modified_at=$i.LastWriteTime.ToString('o');is_hidden=[bool]($i.Attributes -band $h)}}
 function M($n){if([string]::IsNullOrEmpty($q)){return $true};return $n.IndexOf($q,[StringComparison]::OrdinalIgnoreCase) -ge 0}
-try{$skip=($page-1)*$pageSize;$need=$pageSize+1;$slice=New-Object 'System.Collections.Generic.List[object]';$skipped=0
-if([string]::IsNullOrWhiteSpace($path)){foreach($ld in (Get-CimInstance Win32_LogicalDisk -EA SilentlyContinue)){if(-not $ld.DeviceID -or $ld.DriveType -eq 4){continue};$root=$ld.DeviceID+'\';if(-not (Test-Path -LiteralPath $root)){continue};$name=$ld.DeviceID;if(-not (M $name)){continue};if($skipped -lt $skip){$skipped++;continue};if($slice.Count -ge $need){break};$di=Get-Item -LiteralPath $root -Force;[void]$slice.Add([pscustomobject]@{name=$name;path=$root;is_dir=$true;size_bytes=0;modified_at=$di.LastWriteTime.ToString('o');is_hidden=[bool]($di.Attributes -band [IO.FileAttributes]::Hidden)})};$hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Count-1)};Write-Output -InputObject ((@{ok=$true;path='';page=$page;has_next=$hasNext;entries=@($slice.ToArray())}|ConvertTo-Json -Compress -Depth 6));return}
+function NormDir($p){if([string]::IsNullOrEmpty($p)){return $p};if(-not $p.EndsWith('\')){return $p+'\'};return $p}
+try{$need=$pageSize+1;$slice=New-Object 'System.Collections.Generic.List[object]';$after='';$afterDir=$false;$seen=$true
+if(-not [string]::IsNullOrEmpty($cur)){if($cur.StartsWith('d:')){$afterDir=$true;$after=NormDir $cur.Substring(2);$seen=$false}elseif($cur.StartsWith('f:')){$afterDir=$false;$after=$cur.Substring(2);$seen=$false}}
+if([string]::IsNullOrWhiteSpace($path)){foreach($ld in (Get-CimInstance Win32_LogicalDisk -EA SilentlyContinue)){if(-not $ld.DeviceID -or $ld.DriveType -eq 4){continue};$root=$ld.DeviceID+'\';if(-not (Test-Path -LiteralPath $root)){continue};$name=$ld.DeviceID;if(-not (M $name)){continue};if(-not $seen){if($afterDir -and ((NormDir $root) -eq $after)){$seen=$true};continue};if($slice.Count -ge $need){break};$di=Get-Item -LiteralPath $root -Force;[void]$slice.Add([pscustomobject]@{name=$name;path=$root;is_dir=$true;size_bytes=0;modified_at=$di.LastWriteTime.ToString('o');is_hidden=[bool]($di.Attributes -band [IO.FileAttributes]::Hidden)})};if(-not $seen){$seen=$true};$hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Count-1)};$next='';if($hasNext -and $slice.Count -gt 0){$last=$slice[$slice.Count-1];$next='d:'+$last.path};Write-Output -InputObject ((@{ok=$true;path='';has_next=$hasNext;next_cursor=$next;entries=@($slice.ToArray())}|ConvertTo-Json -Compress -Depth 6));return}
 $id=$path.Substring(0,2).ToUpperInvariant();$ld=Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='"+$id+"'") -EA SilentlyContinue;if(-not $ld -or $ld.DriveType -eq 4){Write-Output -InputObject ((@{ok=$false;error='network_drive';message='network/shared drives are not allowed';path=$path}|ConvertTo-Json -Compress));return}
 if(-not (Test-Path -LiteralPath $path)){Write-Output -InputObject ((@{ok=$false;error='not_found';message='path not found';path=$path}|ConvertTo-Json -Compress));return}
 $item=Get-Item -LiteralPath $path -Force;if(-not $item.PSIsContainer){Write-Output -InputObject ((@{ok=$false;error='not_directory';message='path is not a directory';path=$path}|ConvertTo-Json -Compress));return}
-foreach($d in [IO.Directory]::EnumerateDirectories($path)){$name=[IO.Path]::GetFileName($d);if(-not (M $name)){continue};if($skipped -lt $skip){$skipped++;continue};if($slice.Count -ge $need){break};[void]$slice.Add((E $d $true))}
-if($slice.Count -lt $need){foreach($f in [IO.Directory]::EnumerateFiles($path)){$name=[IO.Path]::GetFileName($f);if(-not (M $name)){continue};if($skipped -lt $skip){$skipped++;continue};if($slice.Count -ge $need){break};[void]$slice.Add((E $f $false))}}
-$hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Count-1)};Write-Output -InputObject ((@{ok=$true;path=$path;page=$page;has_next=$hasNext;entries=@($slice.ToArray())}|ConvertTo-Json -Compress -Depth 6))
+if($seen -or $afterDir){foreach($d in [IO.Directory]::EnumerateDirectories($path)){$full=(NormDir $d);$name=[IO.Path]::GetFileName($d);if(-not (M $name)){continue};if(-not $seen){if($full -eq $after){$seen=$true};continue};if($slice.Count -ge $need){break};[void]$slice.Add((E $d $true))};if(-not $seen -and $afterDir){$seen=$true}}
+if($slice.Count -lt $need){foreach($f in [IO.Directory]::EnumerateFiles($path)){$name=[IO.Path]::GetFileName($f);if(-not (M $name)){continue};if(-not $seen){if((-not $afterDir) -and ($f -eq $after)){$seen=$true};continue};if($slice.Count -ge $need){break};[void]$slice.Add((E $f $false))}}
+$hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Count-1)};$next='';if($hasNext -and $slice.Count -gt 0){$last=$slice[$slice.Count-1];if($last.is_dir){$next='d:'+$last.path}else{$next='f:'+$last.path}};Write-Output -InputObject ((@{ok=$true;path=$path;has_next=$hasNext;next_cursor=$next;entries=@($slice.ToArray())}|ConvertTo-Json -Compress -Depth 6))
 }catch{Write-Output -InputObject ((@{ok=$false;error='list_failed';message=$_.Exception.Message;path=$path}|ConvertTo-Json -Compress))}
-`, pathLit, pageLit, pageSizeLit, queryLit)
+`, pathLit, pageSizeLit, queryLit, cursorLit)
 
 	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDefaultTimeout, db.DeviceWinRMExecMaxResponseOut)
 	out.DurationMS = execRes.DurationMS
@@ -514,6 +558,7 @@ $hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Co
 	}
 	out.OK = true
 	out.HasNext = env.HasNext
+	out.NextCursor = strings.TrimSpace(env.NextCursor)
 	_ = unmarshalJSONSlice(env.Roots, &out.Roots)
 	if out.Roots == nil {
 		out.Roots = []string{}
@@ -524,6 +569,10 @@ $hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Co
 	_ = unmarshalJSONSlice(env.Entries, &out.Entries)
 	if out.Entries == nil {
 		out.Entries = []DeviceMonitorFSEntry{}
+	}
+	if out.HasNext && out.NextCursor == "" && len(out.Entries) > 0 {
+		last := out.Entries[len(out.Entries)-1]
+		out.NextCursor = EncodeMonitorFSCursor(last.Path, last.IsDir)
 	}
 	return out
 }
@@ -641,7 +690,7 @@ try {
 `, psSingleQuote(filePath), offset, length, DeviceMonitorMaxDownloadBytes)
 
 	// Base64 of 512KiB ≈ 700KiB; allow 1.5MiB stdout.
-	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDownloadTimeout, 2*1024*1024)
+	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDownloadTimeout, DeviceMonitorDownloadMaxStdout)
 	if execRes.ErrorCode != "" {
 		return nil, false, 0, "", fmt.Errorf("%s: %s", execRes.ErrorCode, execRes.ErrorMessage)
 	}
