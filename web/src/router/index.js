@@ -20,6 +20,7 @@ import Inventory from '../views/project/Inventory.vue';
 import DevicesShell from '../views/project/DevicesShell.vue';
 import Devices from '../views/project/Devices.vue';
 import DeviceDiscovery from '../views/project/DeviceDiscovery.vue';
+import DeviceMonitor from '../views/project/DeviceMonitor.vue';
 import Keys from '../views/project/Keys.vue';
 import Repositories from '../views/project/Repositories.vue';
 import Team from '../views/project/Team.vue';
@@ -142,6 +143,10 @@ const routes = [
       { path: 'list', component: Devices },
       { path: 'discovery', component: DeviceDiscovery },
     ],
+  },
+  {
+    path: '/project/:projectId/devices/:deviceId/monitor',
+    component: DeviceMonitor,
   },
   {
     path: '/project/:projectId/integrations',
