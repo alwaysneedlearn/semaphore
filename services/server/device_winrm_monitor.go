@@ -220,7 +220,11 @@ func runMonitorPowerShell(ctx context.Context, creds DeviceWinRMExecCredentials,
 		res.DurationMS = int(time.Since(start).Milliseconds())
 		return res
 	}
-	stdout, stderr, exitCode, err := client.RunPSWithContextWithString(ctx, script, "")
+	// Avoid powershell -EncodedCommand: UTF-16+base64 blows past Windows' ~8191
+	// cmdline limit for longer monitor scripts. Feed the script on stdin instead.
+	psCmd := "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command -"
+	stdin := "$ProgressPreference='SilentlyContinue';\r\n" + script + "\r\n"
+	stdout, stderr, exitCode, err := client.RunWithContextWithString(ctx, psCmd, stdin)
 	res.DurationMS = int(time.Since(start).Milliseconds())
 	if len(stdout) > maxStdout {
 		stdout = stdout[:maxStdout]
@@ -250,6 +254,12 @@ func runMonitorPowerShell(ctx context.Context, creds DeviceWinRMExecCredentials,
 	res.OK = exitCode == 0
 	if !res.OK && res.ErrorMessage == "" {
 		res.ErrorMessage = fmt.Sprintf("exit code %d", exitCode)
+	}
+	// Surface common remote cmdline failures even when exit looks "ok" with empty stdout.
+	if strings.Contains(strings.ToLower(stderr), "command line is too long") {
+		res.OK = false
+		res.ErrorCode = "script_too_long"
+		res.ErrorMessage = strings.TrimSpace(stderr)
 	}
 	return res
 }
@@ -465,137 +475,20 @@ func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, 
 	pageLit := strconv.Itoa(page)
 	pageSizeLit := strconv.Itoa(DeviceMonitorFSPageSize)
 
+	// Compact script (also executed via stdin to avoid EncodedCommand length limits).
 	script := fmt.Sprintf(`
-$ErrorActionPreference = 'Stop'
-$path = %s
-$page = %s
-$pageSize = %s
-$q = %s
-function Test-SemLocalDrive([string]$p) {
-  if ([string]::IsNullOrWhiteSpace($p) -or $p.Length -lt 2) { return $false }
-  $id = $p.Substring(0,2).ToUpperInvariant()
-  if ($id -notmatch '^[A-Z]:$') { return $false }
-  $ld = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $id + "'") -ErrorAction SilentlyContinue
-  if (-not $ld) { return $false }
-  return ($ld.DriveType -ne 4)
-}
-function Test-SemNameMatch([string]$name, [string]$query) {
-  if ([string]::IsNullOrEmpty($query)) { return $true }
-  return ($name.IndexOf($query, [StringComparison]::OrdinalIgnoreCase) -ge 0)
-}
-function New-SemFSEntry([string]$fullPath, [bool]$isDir) {
-  if ($isDir) {
-    $di = New-Object System.IO.DirectoryInfo $fullPath
-    $full = $di.FullName
-    if (-not $full.EndsWith('\')) { $full = $full + '\' }
-    return [pscustomobject]@{
-      name = $di.Name
-      path = $full
-      is_dir = $true
-      size_bytes = 0
-      modified_at = $di.LastWriteTime.ToString('o')
-      is_hidden = [bool]($di.Attributes -band [IO.FileAttributes]::Hidden)
-    }
-  }
-  $fi = New-Object System.IO.FileInfo $fullPath
-  return [pscustomobject]@{
-    name = $fi.Name
-    path = $fi.FullName
-    is_dir = $false
-    size_bytes = [int64]$fi.Length
-    modified_at = $fi.LastWriteTime.ToString('o')
-    is_hidden = [bool]($fi.Attributes -band [IO.FileAttributes]::Hidden)
-  }
-}
-try {
-  $skip = ($page - 1) * $pageSize
-  $need = $pageSize + 1
-  $slice = New-Object System.Collections.Generic.List[object]
-  $skipped = 0
-
-  if ([string]::IsNullOrWhiteSpace($path)) {
-    $rootPaths = New-Object System.Collections.Generic.List[string]
-    $lds = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue
-    foreach ($ld in $lds) {
-      if (-not $ld.DeviceID) { continue }
-      if ($ld.DriveType -eq 4) { continue }
-      $root = $ld.DeviceID + '\'
-      if (-not (Test-Path -LiteralPath $root)) { continue }
-      $name = $ld.DeviceID
-      if (-not (Test-SemNameMatch $name $q)) { continue }
-      if ($skipped -lt $skip) { $skipped++; continue }
-      if ($slice.Count -ge $need) { break }
-      $di = Get-Item -LiteralPath $root -Force
-      [void]$slice.Add([pscustomobject]@{
-        name = $name
-        path = $root
-        is_dir = $true
-        size_bytes = 0
-        modified_at = $di.LastWriteTime.ToString('o')
-        is_hidden = [bool]($di.Attributes -band [IO.FileAttributes]::Hidden)
-      })
-      [void]$rootPaths.Add($root)
-    }
-    $hasNext = $slice.Count -gt $pageSize
-    if ($hasNext) { [void]$slice.RemoveAt($slice.Count - 1) }
-    $json = (@{
-      ok = $true
-      path = ''
-      page = $page
-      has_next = $hasNext
-      roots = @($rootPaths.ToArray())
-      entries = @($slice.ToArray())
-    } | ConvertTo-Json -Compress -Depth 6)
-    Write-Output -InputObject $json
-    return
-  }
-  if (-not (Test-SemLocalDrive $path)) {
-    $json = (@{ ok = $false; error = 'network_drive'; message = 'network/shared drives are not allowed'; path = $path } | ConvertTo-Json -Compress)
-    Write-Output -InputObject $json
-    return
-  }
-  if (-not (Test-Path -LiteralPath $path)) {
-    $json = (@{ ok = $false; error = 'not_found'; message = 'path not found'; path = $path } | ConvertTo-Json -Compress)
-    Write-Output -InputObject $json
-    return
-  }
-  $item = Get-Item -LiteralPath $path -Force
-  if (-not $item.PSIsContainer) {
-    $json = (@{ ok = $false; error = 'not_directory'; message = 'path is not a directory'; path = $path } | ConvertTo-Json -Compress)
-    Write-Output -InputObject $json
-    return
-  }
-  # Lazy page: Enumerate* (no Sort / no total). Dirs first (FS order), then files.
-  foreach ($d in [System.IO.Directory]::EnumerateDirectories($path)) {
-    $name = [System.IO.Path]::GetFileName($d)
-    if (-not (Test-SemNameMatch $name $q)) { continue }
-    if ($skipped -lt $skip) { $skipped++; continue }
-    if ($slice.Count -ge $need) { break }
-    [void]$slice.Add((New-SemFSEntry $d $true))
-  }
-  if ($slice.Count -lt $need) {
-    foreach ($f in [System.IO.Directory]::EnumerateFiles($path)) {
-      $name = [System.IO.Path]::GetFileName($f)
-      if (-not (Test-SemNameMatch $name $q)) { continue }
-      if ($skipped -lt $skip) { $skipped++; continue }
-      if ($slice.Count -ge $need) { break }
-      [void]$slice.Add((New-SemFSEntry $f $false))
-    }
-  }
-  $hasNext = $slice.Count -gt $pageSize
-  if ($hasNext) { [void]$slice.RemoveAt($slice.Count - 1) }
-  $json = (@{
-    ok = $true
-    path = $path
-    page = $page
-    has_next = $hasNext
-    entries = @($slice.ToArray())
-  } | ConvertTo-Json -Compress -Depth 6)
-  Write-Output -InputObject $json
-} catch {
-  $json = (@{ ok = $false; error = 'list_failed'; message = $_.Exception.Message; path = $path } | ConvertTo-Json -Compress)
-  Write-Output -InputObject $json
-}
+$ErrorActionPreference='Stop';$path=%s;$page=%s;$pageSize=%s;$q=%s
+function E($p,$d){$h=[IO.FileAttributes]::Hidden;if($d){$i=[IO.DirectoryInfo]$p;$f=$i.FullName;if(-not $f.EndsWith('\')){$f+='\'};return [pscustomobject]@{name=$i.Name;path=$f;is_dir=$true;size_bytes=0;modified_at=$i.LastWriteTime.ToString('o');is_hidden=[bool]($i.Attributes -band $h)}};$i=[IO.FileInfo]$p;return [pscustomobject]@{name=$i.Name;path=$i.FullName;is_dir=$false;size_bytes=[int64]$i.Length;modified_at=$i.LastWriteTime.ToString('o');is_hidden=[bool]($i.Attributes -band $h)}}
+function M($n){if([string]::IsNullOrEmpty($q)){return $true};return $n.IndexOf($q,[StringComparison]::OrdinalIgnoreCase) -ge 0}
+try{$skip=($page-1)*$pageSize;$need=$pageSize+1;$slice=New-Object 'System.Collections.Generic.List[object]';$skipped=0
+if([string]::IsNullOrWhiteSpace($path)){foreach($ld in (Get-CimInstance Win32_LogicalDisk -EA SilentlyContinue)){if(-not $ld.DeviceID -or $ld.DriveType -eq 4){continue};$root=$ld.DeviceID+'\';if(-not (Test-Path -LiteralPath $root)){continue};$name=$ld.DeviceID;if(-not (M $name)){continue};if($skipped -lt $skip){$skipped++;continue};if($slice.Count -ge $need){break};$di=Get-Item -LiteralPath $root -Force;[void]$slice.Add([pscustomobject]@{name=$name;path=$root;is_dir=$true;size_bytes=0;modified_at=$di.LastWriteTime.ToString('o');is_hidden=[bool]($di.Attributes -band [IO.FileAttributes]::Hidden)})};$hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Count-1)};Write-Output -InputObject ((@{ok=$true;path='';page=$page;has_next=$hasNext;entries=@($slice.ToArray())}|ConvertTo-Json -Compress -Depth 6));return}
+$id=$path.Substring(0,2).ToUpperInvariant();$ld=Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='"+$id+"'") -EA SilentlyContinue;if(-not $ld -or $ld.DriveType -eq 4){Write-Output -InputObject ((@{ok=$false;error='network_drive';message='network/shared drives are not allowed';path=$path}|ConvertTo-Json -Compress));return}
+if(-not (Test-Path -LiteralPath $path)){Write-Output -InputObject ((@{ok=$false;error='not_found';message='path not found';path=$path}|ConvertTo-Json -Compress));return}
+$item=Get-Item -LiteralPath $path -Force;if(-not $item.PSIsContainer){Write-Output -InputObject ((@{ok=$false;error='not_directory';message='path is not a directory';path=$path}|ConvertTo-Json -Compress));return}
+foreach($d in [IO.Directory]::EnumerateDirectories($path)){$name=[IO.Path]::GetFileName($d);if(-not (M $name)){continue};if($skipped -lt $skip){$skipped++;continue};if($slice.Count -ge $need){break};[void]$slice.Add((E $d $true))}
+if($slice.Count -lt $need){foreach($f in [IO.Directory]::EnumerateFiles($path)){$name=[IO.Path]::GetFileName($f);if(-not (M $name)){continue};if($skipped -lt $skip){$skipped++;continue};if($slice.Count -ge $need){break};[void]$slice.Add((E $f $false))}}
+$hasNext=$slice.Count -gt $pageSize;if($hasNext){[void]$slice.RemoveAt($slice.Count-1)};Write-Output -InputObject ((@{ok=$true;path=$path;page=$page;has_next=$hasNext;entries=@($slice.ToArray())}|ConvertTo-Json -Compress -Depth 6))
+}catch{Write-Output -InputObject ((@{ok=$false;error='list_failed';message=$_.Exception.Message;path=$path}|ConvertTo-Json -Compress))}
 `, pathLit, pageLit, pageSizeLit, queryLit)
 
 	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDefaultTimeout, db.DeviceWinRMExecMaxResponseOut)
