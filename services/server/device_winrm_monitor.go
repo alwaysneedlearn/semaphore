@@ -75,13 +75,14 @@ type DeviceMonitorFSEntry struct {
 	IsHidden   bool   `json:"is_hidden"`
 }
 
-// DeviceMonitorFSList is a paginated directory listing.
+// DeviceMonitorFSList is a paginated directory listing (no full-directory total).
 type DeviceMonitorFSList struct {
 	OK           bool                   `json:"ok"`
 	Path         string                 `json:"path"`
 	Page         int                    `json:"page"`
 	PageSize     int                    `json:"page_size"`
-	Total        int                    `json:"total"`
+	HasNext      bool                   `json:"has_next"`
+	Query        string                 `json:"query,omitempty"`
 	Entries      []DeviceMonitorFSEntry `json:"entries"`
 	Roots        []string               `json:"roots,omitempty"`
 	DurationMS   int                    `json:"duration_ms"`
@@ -108,7 +109,7 @@ type monitorPSEnvelope struct {
 	Disks   json.RawMessage `json:"disks"`
 	Path    string          `json:"path"`
 	Page    int             `json:"page"`
-	Total   int             `json:"total"`
+	HasNext bool            `json:"has_next"`
 	Entries json.RawMessage `json:"entries"`
 	Roots   json.RawMessage `json:"roots"`
 	Name    string          `json:"name"`
@@ -163,6 +164,23 @@ func SanitizeDeviceMonitorPath(raw string) (string, error) {
 
 func psSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// SanitizeDeviceMonitorSearch trims a current-directory name filter.
+// Path separators are stripped so the query cannot span directories.
+func SanitizeDeviceMonitorSearch(raw string) string {
+	q := strings.TrimSpace(raw)
+	if q == "" {
+		return ""
+	}
+	q = strings.ReplaceAll(q, `\`, "")
+	q = strings.ReplaceAll(q, `/`, "")
+	q = strings.ReplaceAll(q, "\x00", "")
+	if utf8.RuneCountInString(q) > 128 {
+		r := []rune(q)
+		q = string(r[:128])
+	}
+	return q
 }
 
 func runMonitorPowerShell(ctx context.Context, creds DeviceWinRMExecCredentials, script string, timeoutSec int, maxStdout int) DeviceWinRMExecResult {
@@ -415,9 +433,11 @@ try {
 	return out
 }
 
-// ListDeviceMonitorFS lists a directory (or local drive roots) with server-side pagination.
-// Roots exclude network/shared drives (Win32 DriveType=4). Page uses Skip/Take on the host.
-func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, rawPath string, page int) DeviceMonitorFSList {
+// ListDeviceMonitorFS lists a directory (or local drive roots) with lazy pagination.
+// No full-directory sort/total: Enumerate* in filesystem order (dirs then files),
+// skip/take pageSize+1 for has_next. Optional q filters names in the current directory only.
+// Roots exclude network/shared drives (Win32 DriveType=4).
+func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, rawPath string, page int, query string) DeviceMonitorFSList {
 	out := DeviceMonitorFSList{
 		PageSize:     DeviceMonitorFSPageSize,
 		Entries:      []DeviceMonitorFSEntry{},
@@ -429,6 +449,8 @@ func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, 
 		page = 1
 	}
 	out.Page = page
+	query = SanitizeDeviceMonitorSearch(query)
+	out.Query = query
 
 	clean, err := SanitizeDeviceMonitorPath(rawPath)
 	if err != nil {
@@ -439,6 +461,7 @@ func ListDeviceMonitorFS(ctx context.Context, creds DeviceWinRMExecCredentials, 
 	out.Path = clean
 
 	pathLit := psSingleQuote(clean)
+	queryLit := psSingleQuote(query)
 	pageLit := strconv.Itoa(page)
 	pageSizeLit := strconv.Itoa(DeviceMonitorFSPageSize)
 
@@ -447,45 +470,81 @@ $ErrorActionPreference = 'Stop'
 $path = %s
 $page = %s
 $pageSize = %s
+$q = %s
 function Test-SemLocalDrive([string]$p) {
   if ([string]::IsNullOrWhiteSpace($p) -or $p.Length -lt 2) { return $false }
   $id = $p.Substring(0,2).ToUpperInvariant()
   if ($id -notmatch '^[A-Z]:$') { return $false }
   $ld = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $id + "'") -ErrorAction SilentlyContinue
   if (-not $ld) { return $false }
-  # 4 = Network Drive (mapped share) — not allowed
   return ($ld.DriveType -ne 4)
 }
+function Test-SemNameMatch([string]$name, [string]$query) {
+  if ([string]::IsNullOrEmpty($query)) { return $true }
+  return ($name.IndexOf($query, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+}
+function New-SemFSEntry([string]$fullPath, [bool]$isDir) {
+  if ($isDir) {
+    $di = New-Object System.IO.DirectoryInfo $fullPath
+    $full = $di.FullName
+    if (-not $full.EndsWith('\')) { $full = $full + '\' }
+    return [pscustomobject]@{
+      name = $di.Name
+      path = $full
+      is_dir = $true
+      size_bytes = 0
+      modified_at = $di.LastWriteTime.ToString('o')
+      is_hidden = [bool]($di.Attributes -band [IO.FileAttributes]::Hidden)
+    }
+  }
+  $fi = New-Object System.IO.FileInfo $fullPath
+  return [pscustomobject]@{
+    name = $fi.Name
+    path = $fi.FullName
+    is_dir = $false
+    size_bytes = [int64]$fi.Length
+    modified_at = $fi.LastWriteTime.ToString('o')
+    is_hidden = [bool]($fi.Attributes -band [IO.FileAttributes]::Hidden)
+  }
+}
 try {
+  $skip = ($page - 1) * $pageSize
+  $need = $pageSize + 1
+  $slice = New-Object System.Collections.Generic.List[object]
+  $skipped = 0
+
   if ([string]::IsNullOrWhiteSpace($path)) {
-    # All present drives except network/shared (DriveType=4)
-    $roots = @(Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue |
-      Where-Object { $_.DriveType -ne 4 -and $_.DeviceID } |
-      Sort-Object DeviceID |
-      ForEach-Object {
-        $root = $_.DeviceID + '\'
-        if (Test-Path -LiteralPath $root) { $root }
-      })
-    $entries = @($roots | ForEach-Object {
-      $di = Get-Item -LiteralPath $_ -Force
-      [pscustomobject]@{
-        name = $_.TrimEnd('\')
-        path = $_
+    $rootPaths = New-Object System.Collections.Generic.List[string]
+    $lds = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue
+    foreach ($ld in $lds) {
+      if (-not $ld.DeviceID) { continue }
+      if ($ld.DriveType -eq 4) { continue }
+      $root = $ld.DeviceID + '\'
+      if (-not (Test-Path -LiteralPath $root)) { continue }
+      $name = $ld.DeviceID
+      if (-not (Test-SemNameMatch $name $q)) { continue }
+      if ($skipped -lt $skip) { $skipped++; continue }
+      if ($slice.Count -ge $need) { break }
+      $di = Get-Item -LiteralPath $root -Force
+      [void]$slice.Add([pscustomobject]@{
+        name = $name
+        path = $root
         is_dir = $true
         size_bytes = 0
         modified_at = $di.LastWriteTime.ToString('o')
         is_hidden = [bool]($di.Attributes -band [IO.FileAttributes]::Hidden)
-      }
-    })
-    $total = $entries.Count
-    $slice = @($entries | Select-Object -Skip (($page - 1) * $pageSize) -First $pageSize)
+      })
+      [void]$rootPaths.Add($root)
+    }
+    $hasNext = $slice.Count -gt $pageSize
+    if ($hasNext) { [void]$slice.RemoveAt($slice.Count - 1) }
     $json = (@{
       ok = $true
       path = ''
       page = $page
-      total = $total
-      roots = $roots
-      entries = $slice
+      has_next = $hasNext
+      roots = @($rootPaths.ToArray())
+      entries = @($slice.ToArray())
     } | ConvertTo-Json -Compress -Depth 6)
     Write-Output -InputObject $json
     return
@@ -506,50 +565,30 @@ try {
     Write-Output -InputObject $json
     return
   }
-  # Fast pagination: enumerate path strings only (incl. hidden), sort dirs then files,
-  # hydrate FileInfo/DirectoryInfo metadata for the current page (size 10) — not every entry.
-  $dirNames = [System.IO.Directory]::GetDirectories($path)
-  [Array]::Sort($dirNames, [StringComparer]::OrdinalIgnoreCase)
-  $fileNames = [System.IO.Directory]::GetFiles($path)
-  [Array]::Sort($fileNames, [StringComparer]::OrdinalIgnoreCase)
-  $dirCount = $dirNames.Length
-  $fileCount = $fileNames.Length
-  $total = $dirCount + $fileCount
-  $skip = ($page - 1) * $pageSize
-  $slice = New-Object System.Collections.Generic.List[object]
-  if ($skip -lt $total -and $pageSize -gt 0) {
-    $end = [Math]::Min($skip + $pageSize, $total)
-    for ($i = $skip; $i -lt $end; $i++) {
-      if ($i -lt $dirCount) {
-        $di = New-Object System.IO.DirectoryInfo ($dirNames[$i])
-        $full = $di.FullName
-        if (-not $full.EndsWith('\')) { $full = $full + '\' }
-        [void]$slice.Add([pscustomobject]@{
-          name = $di.Name
-          path = $full
-          is_dir = $true
-          size_bytes = 0
-          modified_at = $di.LastWriteTime.ToString('o')
-          is_hidden = [bool]($di.Attributes -band [IO.FileAttributes]::Hidden)
-        })
-      } else {
-        $fi = New-Object System.IO.FileInfo ($fileNames[$i - $dirCount])
-        [void]$slice.Add([pscustomobject]@{
-          name = $fi.Name
-          path = $fi.FullName
-          is_dir = $false
-          size_bytes = [int64]$fi.Length
-          modified_at = $fi.LastWriteTime.ToString('o')
-          is_hidden = [bool]($fi.Attributes -band [IO.FileAttributes]::Hidden)
-        })
-      }
+  # Lazy page: Enumerate* (no Sort / no total). Dirs first (FS order), then files.
+  foreach ($d in [System.IO.Directory]::EnumerateDirectories($path)) {
+    $name = [System.IO.Path]::GetFileName($d)
+    if (-not (Test-SemNameMatch $name $q)) { continue }
+    if ($skipped -lt $skip) { $skipped++; continue }
+    if ($slice.Count -ge $need) { break }
+    [void]$slice.Add((New-SemFSEntry $d $true))
+  }
+  if ($slice.Count -lt $need) {
+    foreach ($f in [System.IO.Directory]::EnumerateFiles($path)) {
+      $name = [System.IO.Path]::GetFileName($f)
+      if (-not (Test-SemNameMatch $name $q)) { continue }
+      if ($skipped -lt $skip) { $skipped++; continue }
+      if ($slice.Count -ge $need) { break }
+      [void]$slice.Add((New-SemFSEntry $f $false))
     }
   }
+  $hasNext = $slice.Count -gt $pageSize
+  if ($hasNext) { [void]$slice.RemoveAt($slice.Count - 1) }
   $json = (@{
     ok = $true
     path = $path
     page = $page
-    total = $total
+    has_next = $hasNext
     entries = @($slice.ToArray())
   } | ConvertTo-Json -Compress -Depth 6)
   Write-Output -InputObject $json
@@ -557,7 +596,7 @@ try {
   $json = (@{ ok = $false; error = 'list_failed'; message = $_.Exception.Message; path = $path } | ConvertTo-Json -Compress)
   Write-Output -InputObject $json
 }
-`, pathLit, pageLit, pageSizeLit)
+`, pathLit, pageLit, pageSizeLit, queryLit)
 
 	execRes := runMonitorPowerShell(ctx, creds, script, DeviceMonitorDefaultTimeout, db.DeviceWinRMExecMaxResponseOut)
 	out.DurationMS = execRes.DurationMS
@@ -570,6 +609,9 @@ try {
 	if err != nil {
 		out.ErrorCode = "invalid_response"
 		out.ErrorMessage = err.Error()
+		if execRes.Stderr != "" {
+			out.ErrorMessage = execRes.Stderr
+		}
 		return out
 	}
 	if !env.OK {
@@ -578,7 +620,7 @@ try {
 		return out
 	}
 	out.OK = true
-	out.Total = env.Total
+	out.HasNext = env.HasNext
 	_ = unmarshalJSONSlice(env.Roots, &out.Roots)
 	if out.Roots == nil {
 		out.Roots = []string{}

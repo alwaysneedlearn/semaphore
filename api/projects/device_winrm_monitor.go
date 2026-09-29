@@ -104,8 +104,9 @@ func GetDeviceMonitorFSList(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 	rawPath := r.URL.Query().Get("path")
-	list := server.ListDeviceMonitorFS(r.Context(), creds, rawPath, page)
-	cmd := fmt.Sprintf("[monitor] list path=%q page=%d", list.Path, page)
+	query := r.URL.Query().Get("q")
+	list := server.ListDeviceMonitorFS(r.Context(), creds, rawPath, page, query)
+	cmd := fmt.Sprintf("[monitor] list path=%q page=%d q=%q", list.Path, page, list.Query)
 	auditMonitorAction(r, device, creds, cmd, list.OK, list.DurationMS, list.ErrorCode, list.ErrorMessage)
 
 	status := http.StatusOK

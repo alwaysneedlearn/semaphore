@@ -2,8 +2,28 @@ package server
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
+
+func TestSanitizeDeviceMonitorSearch(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"  log  ", "log"},
+		{`foo\bar`, "foobar"},
+		{"a/b", "ab"},
+		{strings.Repeat("x", 200), strings.Repeat("x", 128)},
+	}
+	for _, tc := range cases {
+		got := SanitizeDeviceMonitorSearch(tc.in)
+		if got != tc.want {
+			t.Fatalf("SanitizeDeviceMonitorSearch(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
 
 func TestSanitizeDeviceMonitorPath(t *testing.T) {
 	cases := []struct {

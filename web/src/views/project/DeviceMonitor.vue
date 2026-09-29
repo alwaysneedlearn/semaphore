@@ -144,6 +144,31 @@
             <strong v-else class="monospace-path">{{ seg.label }}</strong>
           </span>
         </div>
+        <div class="d-flex align-center flex-wrap mb-3">
+          <v-text-field
+            v-model="searchInput"
+            dense
+            outlined
+            hide-details
+            clearable
+            class="mr-2 flex-grow-1"
+            style="max-width: 360px"
+            :label="$t('deviceMonitorSearch')"
+            @keyup.enter="applySearch"
+            @click:clear="clearSearch"
+          />
+          <v-btn small depressed color="primary" class="mr-2" :loading="fsLoading" @click="applySearch">
+            {{ $t('deviceMonitorSearchApply') }}
+          </v-btn>
+          <v-btn
+            small
+            text
+            :disabled="!searchQuery && !searchInput"
+            @click="clearSearch"
+          >
+            {{ $t('deviceMonitorSearchClear') }}
+          </v-btn>
+        </div>
         <v-data-table
           :headers="fsHeaders"
           :items="entries"
@@ -203,13 +228,13 @@
         </div>
         <div class="d-flex align-center mt-3">
           <span class="caption grey--text">
-            {{ $t('deviceMonitorPageInfo', { page, total, pageSize: 10 }) }}
+            {{ $t('deviceMonitorPageInfo', { page, pageSize: 10 }) }}
           </span>
           <v-spacer />
           <v-btn small text :disabled="page <= 1 || fsLoading" @click="loadFS(page - 1)">
             {{ $t('deviceMonitorPrev') }}
           </v-btn>
-          <v-btn small text :disabled="!hasNextPage || fsLoading" @click="loadFS(page + 1)">
+          <v-btn small text :disabled="!hasNext || fsLoading" @click="loadFS(page + 1)">
             {{ $t('deviceMonitorNext') }}
           </v-btn>
         </div>
@@ -241,8 +266,10 @@ export default {
       currentPath: '',
       parentPath: '',
       entries: [],
-      total: 0,
+      hasNext: false,
       page: 1,
+      searchInput: '',
+      searchQuery: '',
       fsLoading: false,
       downloadingPath: '',
       downloadPercent: -1,
@@ -288,9 +315,6 @@ export default {
       if (s === 'online') return 'success';
       if (s === 'offline') return 'error';
       return 'grey';
-    },
-    hasNextPage() {
-      return this.page * 10 < this.total;
     },
     pathSegments() {
       if (!this.currentPath) return [];
@@ -385,27 +409,46 @@ export default {
       this.fsLoading = true;
       this.pageError = '';
       try {
-        const { data } = await axios.get(`${this.apiBase}/monitor/fs`, {
-          params: this.monitorParams({
-            path: this.currentPath,
-            page,
-          }),
+        const params = this.monitorParams({
+          path: this.currentPath,
+          page,
         });
+        if (this.searchQuery) params.q = this.searchQuery;
+        const { data } = await axios.get(`${this.apiBase}/monitor/fs`, { params });
         if (!data.ok) {
           this.pageError = data.message || data.error || this.$t('deviceMonitorFSFailed');
+          this.entries = [];
+          this.hasNext = false;
           return;
         }
         this.entries = data.entries || [];
-        this.total = data.total || 0;
+        this.hasNext = !!data.has_next;
         this.page = data.page || page;
         this.currentPath = data.path || '';
         this.parentPath = this.computeParent(this.currentPath);
       } catch (e) {
         const body = e.response && e.response.data;
         this.pageError = (body && (body.message || body.error)) || e.message;
+        this.entries = [];
+        this.hasNext = false;
       } finally {
         this.fsLoading = false;
       }
+    },
+    applySearch() {
+      this.searchQuery = (this.searchInput || '').trim();
+      this.loadFS(1);
+    },
+    clearSearch() {
+      this.searchInput = '';
+      this.searchQuery = '';
+      this.loadFS(1);
+    },
+    resetSearchAndLoad(path) {
+      this.currentPath = path || '';
+      this.searchInput = '';
+      this.searchQuery = '';
+      this.loadFS(1);
     },
     computeParent(p) {
       if (!p) return '';
@@ -419,20 +462,16 @@ export default {
       return norm.slice(0, idx);
     },
     enterDir(item) {
-      this.currentPath = item.path;
-      this.loadFS(1);
+      this.resetSearchAndLoad(item.path);
     },
     goParent() {
-      this.currentPath = this.parentPath || '';
-      this.loadFS(1);
+      this.resetSearchAndLoad(this.parentPath || '');
     },
     goRoots() {
-      this.currentPath = '';
-      this.loadFS(1);
+      this.resetSearchAndLoad('');
     },
     goBreadcrumb(path) {
-      this.currentPath = path || '';
-      this.loadFS(1);
+      this.resetSearchAndLoad(path || '');
     },
     async downloadFile(item) {
       this.downloadingPath = item.path;
