@@ -43,9 +43,9 @@ Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play i
 |-----|-----------------|-----|
 | `WINRM_TASK_TIMEOUT_SEC` | 90 (260 long-read profiles) | `win_ping` |
 | `WINRM_SHELL_QUICK_TIMEOUT_SEC` | 120 (240) | resolve / collect / `win_stat` / service |
-| `WINRM_COPY_TASK_TIMEOUT_SEC` | 180 (300) | helper script `win_copy` |
+| `WINRM_COPY_TASK_TIMEOUT_SEC` | 600 (900) | helper / INI `win_copy` |
 | `WINRM_SHELL_LONG_TIMEOUT_SEC` | 900 (1200) | start/stop/reconfig shells |
-| `WINRM_COPY_LARGE_TIMEOUT_SEC` | 3600 | package zip / backup / GUI install |
+| `WINRM_COPY_LARGE_TIMEOUT_SEC` | 7200 | package zip / backup / GUI install |
 | `URI_TASK_TIMEOUT_SEC` | 60 | single HTTP call (outer ceiling) |
 | `URI_POLL_TASK_TIMEOUT_SEC` | 300 | HTTP `until`/`retries` poll whole task |
 

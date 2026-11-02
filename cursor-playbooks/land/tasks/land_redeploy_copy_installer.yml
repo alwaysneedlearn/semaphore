@@ -20,7 +20,7 @@
     if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
   register: _land_install_get_user
   changed_when: false
-  timeout: "{{ winrm_copy_large_timeout_sec | default(3600) | int }}"
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: 重新部署：登记桌面用户
   ansible.builtin.set_fact:
     _land_install_profile_user: "{{ (_land_install_get_user.stdout_lines | default([]) | last | default(_land_install_get_user.stdout | default(''))) | trim }}"
@@ -40,7 +40,7 @@
     (_land_installer_dest_cmd.rc | default(0) | int) != 0
     or ('DESKTOP_RESOLVE_FAILED' in (_land_installer_dest_cmd.stdout | default('')))
     or ('DEST_RESOLVE_FAILED' in (_land_installer_dest_cmd.stdout | default('')))
-  timeout: "{{ winrm_copy_large_timeout_sec | default(3600) | int }}"
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: DEBUG LAND 安装程序目标路径解析
   ansible.builtin.debug:
     msg:
@@ -92,7 +92,7 @@
     dest: "{{ land_installer_dest }}"
   register: _land_installer_copy
   when: not (_land_installer_dest_stat.stat.exists | default(false))
-  timeout: "{{ winrm_copy_large_timeout_sec | default(3600) | int }}"
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: DEBUG LAND 安装程序已存在（跳过复制）
   ansible.builtin.debug:
     msg:

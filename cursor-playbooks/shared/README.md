@@ -79,7 +79,7 @@ pywinrm `ansible_winrm_read_timeout_sec` alone did not bound wall time when a se
 | `ansible_winrm_connection/operation/read_timeout` | Normal fail-fast path; task timeout is backup when the plugin stalls |
 | `uri` module `timeout:` | Per HTTP attempt; task timeout covers the whole task including `retries` |
 | `RESTART_DELAY` / poll `delay` | Business wait, not a hang detector |
-| Long install/backup | Use `WINRM_COPY_LARGE_TIMEOUT_SEC` (3600), not the 90s ping ceiling |
+| Long install/backup | Use `WINRM_COPY_LARGE_TIMEOUT_SEC` (7200), not the 90s ping ceiling; helper/INI `win_copy` uses `WINRM_COPY_TASK_TIMEOUT_SEC` (600) |
 
 **“不阻塞”:** `strategy: free` + high `forks` stops one host from lockstepping others; task `timeout` then releases that host’s fork when WinRM/HTTP is wedged. It is **not** `async` — the task still runs synchronously until success/fail/timeout.
 

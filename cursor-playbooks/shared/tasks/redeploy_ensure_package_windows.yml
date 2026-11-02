@@ -34,7 +34,7 @@
   when: >
     not (_redeploy_exe_stat.stat.exists | default(false)) and
     'ZIP_NOT_FOUND' in (_redeploy_zip_local_check.stdout | default(''))
-  timeout: "{{ winrm_copy_large_timeout_sec | default(3600) | int }}"
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: 重新部署：跳过复制（目标机已有压缩包）
   ansible.builtin.debug:
     msg: "[重新部署] 目标机已存在压缩包，跳过复制: {{ redeploy_zip_dest }}"

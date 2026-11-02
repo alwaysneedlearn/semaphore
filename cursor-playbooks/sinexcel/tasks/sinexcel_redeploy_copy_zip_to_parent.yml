@@ -7,14 +7,14 @@
     if (Test-Path -LiteralPath $zip) { Write-Output 'ZIP_FOUND' } else { Write-Output 'ZIP_NOT_FOUND' }
   register: _sinexcel_redeploy_zip_check
   changed_when: false
-  timeout: "{{ winrm_copy_large_timeout_sec | default(3600) | int }}"
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: 重新部署：从控制器复制压缩包到程序上级目录
   ansible.builtin.win_copy:
     src: "{{ redeploy_zip_src }}"
     dest: "{{ redeploy_zip_dest }}"
   register: _sinexcel_redeploy_zip_copy
   when: "'ZIP_NOT_FOUND' in (_sinexcel_redeploy_zip_check.stdout | default(''))"
-  timeout: "{{ winrm_copy_large_timeout_sec | default(3600) | int }}"
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: 重新部署：跳过复制（上级目录已有压缩包）
   ansible.builtin.debug:
     msg: "[DEBUG-SINEXCEL] redeploy zip exists, skip copy: {{ redeploy_zip_dest }}"
