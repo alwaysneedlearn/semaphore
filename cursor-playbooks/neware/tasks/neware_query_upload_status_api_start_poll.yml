@@ -52,6 +52,7 @@
   delay: "{{ _neware_api_start_poll_delay | int }}"
 
 
+  timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
 - ansible.builtin.include_tasks: neware_query_upload_status_api_apply.yml
 
 - name: 启动验证：DEBUG API 轮询汇总

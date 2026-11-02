@@ -12,7 +12,7 @@
   register: _nbt_heartbeat
   delegate_to: localhost
   failed_when: false
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: NBT 解析心跳并判定上报状态
   ansible.builtin.set_fact:
     nbt_heartbeat_last_send: "{{ _hb_last_send }}"

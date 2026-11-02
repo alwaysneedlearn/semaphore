@@ -7,12 +7,12 @@
   ansible.builtin.win_file:
     path: "{{ _reconfig_user_bts_dir }}"
     state: directory
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重配执行：创建配置文件目录（Public用户）
   ansible.builtin.win_file:
     path: "C:\\Users\\Public\\{{ _reconfig_client_rel_path }}"
     state: directory
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重配执行：从控制器复制 INI 模板（当前用户）
   ansible.builtin.win_copy:
     src: "{{ _reconfig_cfg_src }}"
@@ -20,7 +20,7 @@
   register: config_copy_result_user
   when: >-
     (reconfig_copy_ini_template if (reconfig_copy_ini_template is defined) else (zip_path is defined)) | bool
-
+  timeout: "{{ winrm_copy_task_timeout_sec | default(180) | int }}"
 - name: 重配执行：从控制器复制 INI 模板（Public用户）
   ansible.builtin.win_copy:
     src: "{{ _reconfig_cfg_src }}"
@@ -28,7 +28,7 @@
   register: config_copy_result_public
   when: >-
     (reconfig_copy_ini_template if (reconfig_copy_ini_template is defined) else (zip_path is defined)) | bool
-
+  timeout: "{{ winrm_copy_task_timeout_sec | default(180) | int }}"
 - name: NEWARE HisData patch flag as PowerShell literal
   ansible.builtin.set_fact:
     _neware_ps_patch_his_data: "{{ '$true' if (neware_include_his_data_resend | default(false) | bool) else '$false' }}"

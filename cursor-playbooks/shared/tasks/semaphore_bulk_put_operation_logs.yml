@@ -38,6 +38,7 @@
     - (_sem_bulk_token | default('') | trim | length) > 0
     - (semaphore_operation_bulk_records | default([]) | length) > 0
 
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: DEBUG 操作记录 bulk PUT 响应
   ansible.builtin.debug:
     msg:

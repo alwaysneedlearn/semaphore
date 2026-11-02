@@ -37,7 +37,23 @@ Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play i
 
 **Batch selected devices:** all `hosts: windows_hosts` plays use **`strategy: free`** so one slow/hung host does not block others on each task (Ansible default `linear` is lockstep). Concurrent hosts are capped by **`forks`** (200 in [`ansible.cfg`](ansible.cfg); override with env **`ANSIBLE_FORKS`** or template CLI `--forks`). The localhost bulk-PUT play still waits until every host finishes play 1. Do not add `run_once` on the Windows play.
 
-**WinRM task hard timeout:** shared WinRM hot paths (`win_ping`, helper `win_copy`, quick `win_shell` resolve/collect) set Ansible task keyword **`timeout:`** so a hung pywinrm call cannot hold the play for hours. Defaults (Variable Group / env): **`WINRM_TASK_TIMEOUT_SEC`** (90; 260 on DAHUA/LANH/LANDV7), **`WINRM_COPY_TASK_TIMEOUT_SEC`** (180 / 300), **`WINRM_SHELL_QUICK_TIMEOUT_SEC`** (120 / 240). These are *not* long installer/redeploy shells — those keep their own longer limits.
+**Ansible task `timeout:` (hard ceiling):** almost all `win_*` / `uri` module tasks now set the Ansible **task keyword** `timeout:` so a hung connection cannot occupy a fork for hours (`strategy: free` already keeps other hosts moving; this frees the stuck host). Tiered defaults (Variable Group / env):
+
+| ENV | Typical default | Use |
+|-----|-----------------|-----|
+| `WINRM_TASK_TIMEOUT_SEC` | 90 (260 long-read profiles) | `win_ping` |
+| `WINRM_SHELL_QUICK_TIMEOUT_SEC` | 120 (240) | resolve / collect / `win_stat` / service |
+| `WINRM_COPY_TASK_TIMEOUT_SEC` | 180 (300) | helper script `win_copy` |
+| `WINRM_SHELL_LONG_TIMEOUT_SEC` | 900 (1200) | start/stop/reconfig shells |
+| `WINRM_COPY_LARGE_TIMEOUT_SEC` | 3600 | package zip / backup / GUI install |
+| `URI_TASK_TIMEOUT_SEC` | 60 | single HTTP call (outer ceiling) |
+| `URI_POLL_TASK_TIMEOUT_SEC` | 300 | HTTP `until`/`retries` poll whole task |
+
+**Not replaced by task timeout (keep as-is):**
+- `ansible_winrm_*_timeout` — connection plugin; still needed when it works
+- `uri:` **module** `timeout:` — per-attempt HTTP timeout (task keyword is an outer hard kill; do not delete the module param)
+- `RESTART_DELAY` / `retries`+`delay` — intentional waits; task timeout must stay **above** the full poll budget
+- Interactive stop’s `STOP_TASK_TIMEOUT_SECONDS` — wait inside the helper script (Ansible task timeout must cover it)
 
 **Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, `[DEBUG-LANDV7]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 

@@ -18,7 +18,7 @@
     'STOPPED' in (stop_result.stdout | default('')) or
     'STOPPED_BY_TASKKILL' in (stop_result.stdout | default('')) or
     'NOT_RUNNING' in (stop_result.stdout | default(''))
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 停止程序：复核进程是否仍在运行
   environment:
     EXE_NAME: "{{ exe_name }}"
@@ -40,7 +40,7 @@
       'STOP_FAILED' in stop_result.stdout or
       'STOP_ERROR' in stop_result.stdout
     )
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 停止程序：初次失败但复核已退出，继续后续流程
   ansible.builtin.debug:
     msg: >-

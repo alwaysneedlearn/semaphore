@@ -25,7 +25,7 @@
     }
   register: _stop_get_username
   changed_when: false
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 停止程序（登记交互用户）
   ansible.builtin.set_fact:
     _stop_profile_user: "{{ (_stop_get_username.stdout_lines | default([]) | last | default(_stop_get_username.stdout | default(''))) | trim }}"
@@ -56,7 +56,7 @@
       'FORCE_STOPPED' in stop_graceful_result.stdout or
       'NOT_RUNNING' in stop_graceful_result.stdout
     )
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 停止程序（优雅失败时 WinRM 强制结束）
   ansible.builtin.include_tasks: stop_program_force_fallback.yml
 
@@ -82,6 +82,7 @@
     - stop_graceful_result is defined
     - not (stop_graceful_result.unreachable | default(false))
 
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 停止程序（判定停止是否生效）
   ansible.builtin.set_fact:
     _stop_recheck_says_gone: >-

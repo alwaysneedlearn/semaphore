@@ -123,7 +123,7 @@
           register: _sinexcel_process_check
           changed_when: false
           ignore_unreachable: true
-
+          timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
         - name: 状态判断并组装回调行（参考路径）
           ansible.builtin.set_fact:
             need_reconfigure: "{{ _sinexcel_need_reconfig | bool }}"

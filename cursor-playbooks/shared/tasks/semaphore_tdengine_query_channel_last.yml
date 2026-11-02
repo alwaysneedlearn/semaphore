@@ -102,6 +102,7 @@
 
 # 勿把 JSON 放进 environment：column_meta 含反引号 last(`insert_time`)，
 # 部分环境下会损坏正文，json.loads 报 Expecting property name / 单引号 dict。
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: 创建临时文件保存 TDengine 响应正文
   ansible.builtin.tempfile:
     state: file

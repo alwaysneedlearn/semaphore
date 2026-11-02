@@ -39,7 +39,7 @@
   changed_when: false
   failed_when: false
   ignore_unreachable: true
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 启动验证：登记启动后进程终态
   ansible.builtin.set_fact:
     check_result_after_start: "{{ _sem_process_status }}"

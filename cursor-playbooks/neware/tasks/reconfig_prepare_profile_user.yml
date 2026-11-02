@@ -111,7 +111,7 @@
     RECONFIG_CONFIG_FALLBACK_USERS: "{{ _reconfig_config_fallback_users_env }}"
   register: _reconfig_profile_resolve
   changed_when: false
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重配执行：登记 Profile 与配置用户 facts
   ansible.builtin.set_fact:
     _reconfig_profile_user: >-

@@ -19,7 +19,7 @@
   delegate_to: localhost
   failed_when: false
   when: jhai_resend_all_requested | default(false) | bool
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: JHAI 解析全量重传响应
   ansible.builtin.include_tasks: jhai_parse_api_response.yml
   vars:

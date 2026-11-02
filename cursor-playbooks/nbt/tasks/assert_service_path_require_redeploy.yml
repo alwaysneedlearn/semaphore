@@ -5,7 +5,7 @@
   ansible.windows.win_stat:
     path: "{{ install_path | default(service_path) }}"
   register: _assert_service_path_stat
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 服务路径不存在：登记 unhealthy 并跳过后续步骤
   when: not (_assert_service_path_stat.stat.exists | default(false))
   block:

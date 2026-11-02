@@ -146,7 +146,7 @@
         ansible_password: "{{ winrm_password }}"
         ansible_winrm_server_cert_validation: ignore
         ansible_winrm_transport: basic
-
+      timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
     - name: 构建 hostname 映射（WinRM hostname 命令结果）
       ansible.builtin.set_fact:
         hostname_map: "{{ hostname_map | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"

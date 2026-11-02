@@ -49,6 +49,7 @@
     - _lanh_redeliver_start_ok | default(false) | bool
     - _lanh_redeliver_end_ok | default(false) | bool
 
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: DEBUG LANH Redeliver 跳过（时间无效）
   ansible.builtin.debug:
     msg:

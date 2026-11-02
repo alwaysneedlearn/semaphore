@@ -19,7 +19,7 @@
   ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_reconfig_start_program_windows.ps1
   register: relaunch_result
   failed_when: false
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 登记 LANDV7 启动脚本输出
   ansible.builtin.set_fact:
     landv7_start_stdout: "{{ (relaunch_result.stdout | default('')) | string }}"

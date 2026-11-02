@@ -32,7 +32,7 @@
     'SHORTCUT_OK' in (_sinexcel_desktop_shortcut.stdout | default(''))
   failed_when: false
   when: (_sinexcel_shortcut_profile_user | default('') | length) > 0
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: DEBUG SINEXCEL 桌面快捷方式
   ansible.builtin.debug:
     msg:

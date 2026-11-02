@@ -117,7 +117,7 @@
         if ($null -ne $p) { "RUNNING" } else { "NOT_RUNNING" }
       register: _land_process_check
       changed_when: false
-
+      timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
     - name: LAND API 2xx 但未达健康 — 参考判定是否 restart
       when:
         - _land_need_reconfigure | default(false) | bool

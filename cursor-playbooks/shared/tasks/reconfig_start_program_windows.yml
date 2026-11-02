@@ -22,6 +22,6 @@
     relaunch_result is defined and 'stdout' in relaunch_result and
     ('START_ERROR' in relaunch_result.stdout or
     'VERIFY_FAILED' in relaunch_result.stdout)
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: EXE 不存在则中止启动及后续验证
   ansible.builtin.include_tasks: reconfig_abort_if_exe_missing_at_start.yml

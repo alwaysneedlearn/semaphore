@@ -60,7 +60,7 @@
     label: "{{ item.file }}"
   when: (_sinexcel_config_file_names | default([]) | length) > 0
   failed_when: false
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重新部署：配置文件改配失败
   ansible.builtin.fail:
     msg: >-

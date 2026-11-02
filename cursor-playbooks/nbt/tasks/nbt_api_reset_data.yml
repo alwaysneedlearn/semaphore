@@ -41,6 +41,7 @@
     - _nbt_reset_start_ok | default(false) | bool
     - _nbt_reset_end_ok | default(false) | bool
 
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: DEBUG NBT ResetData 跳过（日期无效）
   ansible.builtin.debug:
     msg:

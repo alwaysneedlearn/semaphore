@@ -8,6 +8,10 @@ ansible_winrm_server_cert_validation: ignore
 winrm_task_timeout_sec: "{{ ((lookup('env', 'WINRM_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('90', true)) | int }}"
 winrm_copy_task_timeout_sec: "{{ ((lookup('env', 'WINRM_COPY_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('180', true)) | int }}"
 winrm_shell_quick_timeout_sec: "{{ ((lookup('env', 'WINRM_SHELL_QUICK_TIMEOUT_SEC') | default('', true) | trim) | default('120', true)) | int }}"
+winrm_shell_long_timeout_sec: "{{ ((lookup('env', 'WINRM_SHELL_LONG_TIMEOUT_SEC') | default('', true) | trim) | default('900', true)) | int }}"
+winrm_copy_large_timeout_sec: "{{ ((lookup('env', 'WINRM_COPY_LARGE_TIMEOUT_SEC') | default('', true) | trim) | default('3600', true)) | int }}"
+uri_task_timeout_sec: "{{ ((lookup('env', 'URI_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('60', true)) | int }}"
+uri_poll_task_timeout_sec: "{{ ((lookup('env', 'URI_POLL_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('300', true)) | int }}"
 
 land_start_check_api: "{{ ((lookup('env', 'LAND_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
 land_query_status_require_real_status: "{{ ((lookup('env', 'LAND_QUERY_STATUS_REQUIRE_REAL_STATUS') | default('', true) | trim) | default('true', true)) | bool }}"

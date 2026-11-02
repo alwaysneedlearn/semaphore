@@ -68,17 +68,20 @@ Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`) and include:
 
 NEWARE uses `neware/tasks/debug_patrol_snapshot.yml` and `debug_action_snapshot.yml` (`[DEBUG-NEWARE]`). Semaphore bulk PUT still logs `[DEBUG-API]` in `semaphore_bulk_put_from_hostvars.yml`.
 
-## WinRM Ansible task `timeout`
+## Ansible task `timeout` (hard ceiling)
 
-pywinrm `ansible_winrm_read_timeout_sec` alone did not bound wall time when a session hung (e.g. check_restart task holding ~11h on `win_ping` / helper `win_copy`). Shared tasks set the Ansible **task keyword** `timeout:`:
+pywinrm `ansible_winrm_read_timeout_sec` alone did not bound wall time when a session hung (e.g. check_restart ~11h on `win_ping` / helper `win_copy`). **Task keyword** `timeout:` is now on nearly all `win_*` and `uri` module tasks (see root `README.md` env table).
 
-| Var / ENV | Typical default | Applied on |
-|-----------|-----------------|------------|
-| `WINRM_TASK_TIMEOUT_SEC` | `90` (260 if profile read_timeout=200) | `win_ping` in connect / reference / mid-play refresh |
-| `WINRM_COPY_TASK_TIMEOUT_SEC` | `180` (300 on long-read profiles) | `deploy_sem_windows_helper_scripts` `win_copy` |
-| `WINRM_SHELL_QUICK_TIMEOUT_SEC` | `120` (240 on long-read profiles) | quick resolve/collect `win_shell` |
+**Can every timeout become “task timeout only”?** No:
 
-Do **not** put these short ceilings on long redeploy/GUI install shells.
+| Keep | Why |
+|------|-----|
+| `ansible_winrm_connection/operation/read_timeout` | Normal fail-fast path; task timeout is backup when the plugin stalls |
+| `uri` module `timeout:` | Per HTTP attempt; task timeout covers the whole task including `retries` |
+| `RESTART_DELAY` / poll `delay` | Business wait, not a hang detector |
+| Long install/backup | Use `WINRM_COPY_LARGE_TIMEOUT_SEC` (3600), not the 90s ping ceiling |
+
+**“不阻塞”:** `strategy: free` + high `forks` stops one host from lockstepping others; task `timeout` then releases that host’s fork when WinRM/HTTP is wedged. It is **not** `async` — the task still runs synchronously until success/fail/timeout.
 
 ## Windows helper scripts (`deploy_sem_windows_helper_scripts.yml`)
 
