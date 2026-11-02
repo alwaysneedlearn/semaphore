@@ -8,7 +8,7 @@
   register: _nbt_service_path_stat
   ignore_unreachable: true
   when: nbt_service_exe_resolved | default(false) | bool
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: NBT 登记服务 exe 未解析（跳过 win_stat）
   ansible.builtin.set_fact:
     _nbt_service_path_stat:

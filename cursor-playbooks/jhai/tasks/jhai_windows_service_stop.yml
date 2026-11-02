@@ -6,6 +6,6 @@
     name: "{{ service_name }}"
     state: stopped
   register: _jhai_service_stop_action
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 确认 JHAI 服务已停止
   ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/jhai_windows_service_status.yml"

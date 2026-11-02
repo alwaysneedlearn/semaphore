@@ -20,7 +20,7 @@
     (_jhai_upload_status.content | default('') | regex_search('\"code\"\\s*:\\s*200'))
   retries: "{{ jhai_upload_status_start_poll_retries | default(6) | int }}"
   delay: "{{ jhai_upload_status_start_poll_delay | default(10) | int }}"
-
+  timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
 - name: JHAI 解析启动后轮询响应
   ansible.builtin.include_tasks: jhai_parse_api_response.yml
   vars:

@@ -20,7 +20,7 @@
   register: _sinexcel_program_dir_resolve
   changed_when: false
   failed_when: false
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重新部署：登记程序目录解析行
   ansible.builtin.set_fact:
     _sinexcel_program_dir_line: "{{ (_sinexcel_program_dir_resolve.stdout_lines | default([]) | select('match', '^PROGRAM_DIR_RESOLVED=') | list | first) | default('PROGRAM_DIR_RESOLVED=', true) }}"

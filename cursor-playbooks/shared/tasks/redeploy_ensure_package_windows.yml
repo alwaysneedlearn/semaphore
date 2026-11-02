@@ -8,7 +8,7 @@
   ansible.windows.win_stat:
     path: "{{ install_path | default(exe_path) }}"
   register: _redeploy_exe_stat
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重新部署：检查目标机压缩包是否存在
   ansible.windows.win_shell: |
     if (Test-Path "{{ redeploy_zip_dest }}") {
@@ -19,13 +19,13 @@
   register: _redeploy_zip_local_check
   changed_when: false
   when: not (_redeploy_exe_stat.stat.exists | default(false))
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 重新部署：创建程序根目录
   ansible.builtin.win_file:
     path: "{{ redeploy_extract_dest }}"
     state: directory
   when: not (_redeploy_exe_stat.stat.exists | default(false))
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重新部署：从控制器复制安装包（目标机无 zip 时）
   ansible.builtin.win_copy:
     src: "{{ redeploy_zip_src }}"
@@ -34,7 +34,7 @@
   when: >
     not (_redeploy_exe_stat.stat.exists | default(false)) and
     'ZIP_NOT_FOUND' in (_redeploy_zip_local_check.stdout | default(''))
-
+  timeout: "{{ winrm_copy_large_timeout_sec | default(7200) | int }}"
 - name: 重新部署：跳过复制（目标机已有压缩包）
   ansible.builtin.debug:
     msg: "[重新部署] 目标机已存在压缩包，跳过复制: {{ redeploy_zip_dest }}"
@@ -57,12 +57,12 @@
     _redeploy_extract is defined and 'stdout' in _redeploy_extract and
     'EXTRACT_ERROR' in _redeploy_extract.stdout
   when: not (_redeploy_exe_stat.stat.exists | default(false))
-
+  timeout: "{{ winrm_shell_long_timeout_sec | default(900) | int }}"
 - name: 重新部署：解压后再次检查程序文件
   ansible.windows.win_stat:
     path: "{{ install_path | default(exe_path) }}"
   register: _redeploy_exe_stat_after
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 重新部署：程序文件仍不存在则失败
   ansible.builtin.fail:
     msg: "Install path not found after redeploy package step: {{ install_path | default(exe_path) }}"

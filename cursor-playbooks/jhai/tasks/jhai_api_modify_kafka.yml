@@ -20,7 +20,7 @@
   delegate_to: localhost
   failed_when: false
   when: (jhai_modify_kafka_cfg.kafkaConnectionInfo | default('') | trim) | length > 0
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: JHAI 解析修改 Kafka 响应
   ansible.builtin.include_tasks: jhai_parse_api_response.yml
   vars:

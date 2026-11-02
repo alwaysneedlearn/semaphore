@@ -63,7 +63,7 @@
         if ($explorerUser) { Write-Output $explorerUser } else { Write-Output "{{ hostvars[inventory_hostname].ansible_user | default('Administrator') }}" }
       register: _dahua_get_username
       changed_when: false
-
+      timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
     - name: 规范化启动用户
       ansible.builtin.set_fact:
         _reconfig_profile_user: "{{ (_dahua_get_username.stdout_lines | default([]) | last | default(_dahua_get_username.stdout | default(''))) | trim }}"

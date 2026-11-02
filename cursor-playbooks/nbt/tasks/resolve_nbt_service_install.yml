@@ -18,7 +18,7 @@
     chdir: C:\Windows\Temp
   register: _nbt_resolve_service_install
   changed_when: false
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: NBT 登记解析后的服务路径
   ansible.builtin.set_fact:
     _nbt_resolve_exe_line: "{{ (_nbt_resolve_service_install.stdout_lines | default([]) | select('match', '^SERVICE_EXE_PATH=') | list | first) | default('SERVICE_EXE_PATH=', true) }}"

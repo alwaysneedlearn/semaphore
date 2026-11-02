@@ -14,7 +14,7 @@
   register: _jhai_upload_status
   delegate_to: localhost
   failed_when: false
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: JHAI 解析上传心跳响应
   ansible.builtin.include_tasks: jhai_parse_api_response.yml
   vars:

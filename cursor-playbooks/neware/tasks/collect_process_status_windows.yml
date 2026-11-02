@@ -15,3 +15,5 @@
   register: _sem_process_status
   changed_when: false
   failed_when: false
+  ignore_unreachable: true
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"

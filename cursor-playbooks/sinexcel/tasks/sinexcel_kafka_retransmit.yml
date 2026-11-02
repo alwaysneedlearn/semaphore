@@ -33,7 +33,7 @@
   when: _sinexcel_retransmit_time_ok | bool
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: 解析 QueryHistory 并组装 Retransmit 请求体
   ansible.builtin.set_fact:
     _sinexcel_kafka_history_rows: "{{ _history_rows }}"
@@ -76,7 +76,7 @@
     - (_sinexcel_retransmit_body | length) > 0
   vars:
     _sinexcel_kafka_target_host: "{{ _agent_target_host | default(_sinexcel_target_host | default(inventory_hostname, true), true) }}"
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: DEBUG SINEXCEL Retransmit 全流程
   ansible.builtin.debug:
     msg: "{{ _rtx_debug_lines }}"

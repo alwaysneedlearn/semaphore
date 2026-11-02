@@ -8,7 +8,7 @@
   vars:
     _nbt_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
   when: (_nbt_start_exe_path | default('', true) | trim) | length > 0
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: NBT 服务程序不存在则中止启动
   when:
     - (_nbt_start_exe_path | default('', true) | trim) | length > 0

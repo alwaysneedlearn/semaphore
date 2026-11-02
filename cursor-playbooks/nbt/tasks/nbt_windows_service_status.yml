@@ -16,3 +16,4 @@
   changed_when: false
   ignore_unreachable: true
   failed_when: false
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"

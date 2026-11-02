@@ -15,5 +15,5 @@
   register: _land_api_status_raw
   delegate_to: localhost
   failed_when: false
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/land_api_query_status_apply.yml"

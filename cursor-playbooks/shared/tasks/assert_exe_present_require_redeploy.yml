@@ -6,7 +6,7 @@
   ansible.windows.win_stat:
     path: "{{ exe_path }}"
   register: _assert_exe_stat
-
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 - name: 程序不存在：登记 unhealthy 并跳过后续步骤
   when: not (_assert_exe_stat.stat.exists | default(false))
   block:

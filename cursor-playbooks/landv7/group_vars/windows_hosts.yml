@@ -4,3 +4,11 @@ ansible_winrm_connection_timeout: 60
 ansible_winrm_operation_timeout_sec: 180
 ansible_winrm_read_timeout_sec: 200
 ansible_winrm_server_cert_validation: ignore
+# Ansible 任务关键字 timeout（秒）：须高于 read_timeout；可用 env 覆盖
+winrm_task_timeout_sec: "{{ ((lookup('env', 'WINRM_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('260', true)) | int }}"
+winrm_copy_task_timeout_sec: "{{ ((lookup('env', 'WINRM_COPY_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('900', true)) | int }}"
+winrm_shell_quick_timeout_sec: "{{ ((lookup('env', 'WINRM_SHELL_QUICK_TIMEOUT_SEC') | default('', true) | trim) | default('240', true)) | int }}"
+winrm_shell_long_timeout_sec: "{{ ((lookup('env', 'WINRM_SHELL_LONG_TIMEOUT_SEC') | default('', true) | trim) | default('1200', true)) | int }}"
+winrm_copy_large_timeout_sec: "{{ ((lookup('env', 'WINRM_COPY_LARGE_TIMEOUT_SEC') | default('', true) | trim) | default('7200', true)) | int }}"
+uri_task_timeout_sec: "{{ ((lookup('env', 'URI_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('90', true)) | int }}"
+uri_poll_task_timeout_sec: "{{ ((lookup('env', 'URI_POLL_TASK_TIMEOUT_SEC') | default('', true) | trim) | default('400', true)) | int }}"

@@ -63,5 +63,5 @@
     )
   retries: "{{ _neware_api_status_retries | int }}"
   delay: "{{ _neware_api_status_retry_delay | int }}"
-
+  timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
 - ansible.builtin.include_tasks: neware_query_upload_status_api_apply.yml

@@ -20,7 +20,7 @@
   delegate_to: localhost
   failed_when: false
   when: (land_system_cfg_flat | default({}) | length) > 0
-
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
 - name: 登记 ModifyConfig 结果（停止前）
   ansible.builtin.set_fact:
     _land_api_modify_config_before: "{{ _land_modify_config_uri_raw }}"
