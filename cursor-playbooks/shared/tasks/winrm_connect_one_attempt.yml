@@ -12,6 +12,8 @@
       register: _winrm_ping
       failed_when: false
       ignore_unreachable: true
+      # 任务级硬顶：避免 pywinrm 越过 read_timeout 仍挂死数小时（task 3424）
+      timeout: "{{ winrm_task_timeout_sec | default(90) | int }}"
 
   always:
     - ansible.builtin.include_tasks: "{{ _sem_tasks_dir }}/winrm_eval_ping_result.yml"

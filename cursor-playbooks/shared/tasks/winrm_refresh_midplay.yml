@@ -10,6 +10,7 @@
       register: _winrm_ping
       failed_when: false
       ignore_unreachable: true
+      timeout: "{{ winrm_task_timeout_sec | default(90) | int }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_eval_ping_result.yml"
 

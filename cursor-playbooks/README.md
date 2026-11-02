@@ -37,6 +37,8 @@ Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play i
 
 **Batch selected devices:** all `hosts: windows_hosts` plays use **`strategy: free`** so one slow/hung host does not block others on each task (Ansible default `linear` is lockstep). Concurrent hosts are capped by **`forks`** (200 in [`ansible.cfg`](ansible.cfg); override with env **`ANSIBLE_FORKS`** or template CLI `--forks`). The localhost bulk-PUT play still waits until every host finishes play 1. Do not add `run_once` on the Windows play.
 
+**WinRM task hard timeout:** shared WinRM hot paths (`win_ping`, helper `win_copy`, quick `win_shell` resolve/collect) set Ansible task keyword **`timeout:`** so a hung pywinrm call cannot hold the play for hours. Defaults (Variable Group / env): **`WINRM_TASK_TIMEOUT_SEC`** (90; 260 on DAHUA/LANH/LANDV7), **`WINRM_COPY_TASK_TIMEOUT_SEC`** (180 / 300), **`WINRM_SHELL_QUICK_TIMEOUT_SEC`** (120 / 240). These are *not* long installer/redeploy shells — those keep their own longer limits.
+
 **Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, `[DEBUG-LANDV7]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 
 ## Documentation

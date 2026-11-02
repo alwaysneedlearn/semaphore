@@ -8,7 +8,7 @@ Tasks, helper scripts, and group vars used by **all** device profiles (`neware/`
 |------|---------|
 | `tasks/` | WinRM connect/retry, Semaphore bulk/discovery callbacks, interactive EXE start, deploy helper scripts |
 | `files/` | Generic `sem_*.ps1` (process alive, scheduled-task start, start/stop popup confirm) |
-| `group_vars/windows_hosts.yml` | WinRM timeouts (copy or mirror under each profile dir for Ansible) |
+| `group_vars/windows_hosts.yml` | WinRM connection/read timeouts + Ansible task `timeout` ceilings (mirror under each profile) |
 
 ## Ansible `set_fact` gotcha
 
@@ -67,6 +67,18 @@ Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`) and include:
 | `debug_sync_api_redeploy_gate_snapshot.yml` | `device_check_restart_redeploy` need_reconfigure gate |
 
 NEWARE uses `neware/tasks/debug_patrol_snapshot.yml` and `debug_action_snapshot.yml` (`[DEBUG-NEWARE]`). Semaphore bulk PUT still logs `[DEBUG-API]` in `semaphore_bulk_put_from_hostvars.yml`.
+
+## WinRM Ansible task `timeout`
+
+pywinrm `ansible_winrm_read_timeout_sec` alone did not bound wall time when a session hung (e.g. check_restart task holding ~11h on `win_ping` / helper `win_copy`). Shared tasks set the Ansible **task keyword** `timeout:`:
+
+| Var / ENV | Typical default | Applied on |
+|-----------|-----------------|------------|
+| `WINRM_TASK_TIMEOUT_SEC` | `90` (260 if profile read_timeout=200) | `win_ping` in connect / reference / mid-play refresh |
+| `WINRM_COPY_TASK_TIMEOUT_SEC` | `180` (300 on long-read profiles) | `deploy_sem_windows_helper_scripts` `win_copy` |
+| `WINRM_SHELL_QUICK_TIMEOUT_SEC` | `120` (240 on long-read profiles) | quick resolve/collect `win_shell` |
+
+Do **not** put these short ceilings on long redeploy/GUI install shells.
 
 ## Windows helper scripts (`deploy_sem_windows_helper_scripts.yml`)
 

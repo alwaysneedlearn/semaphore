@@ -8,6 +8,8 @@
   ansible.builtin.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\sem_resolve_exe_dir_windows.ps1
   register: _resolve_exe_dir
   changed_when: false
+  ignore_unreachable: true
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
 
 - name: 登记 EXE_DIR 解析行
   ansible.builtin.set_fact:
