@@ -6,7 +6,7 @@ Semaphore **变量组**通过模板绑定的 **Environment** 注入 Ansible `loo
 
 | 原则 | 说明 |
 |------|------|
-| **一类型一组** | LAND / SINEXCEL / NBT / JHAI / NEWARE / DAHUA / LANH / LANDV7 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
+| **一类型一组** | LAND / SINEXCEL / NBT / LANBTS / JHAI / NEWARE / DAHUA / LANH / LANDV7 各建 **独立变量组**，绑定到该类型的模板。不要混用跨类型默认值。 |
 | **全项目默认放 VG** | 如 `EXE_NAME`、`ZIP_NAME`、`API_PORT`、弹窗关键字、盘符回退、浅层扫描（SINEXCEL）。 |
 | **SINEXCEL 安装路径** | **变量组即可**：`EXE_DIR` + `EXE_DIR_FALLBACK_DRIVES` + `EXE_SCAN_LATEST` + `EXE_NAME` 在各盘符下自动找最新 exe，**不必**逐台配 `Install.ExeDir` / `ExePath`。 |
 | **Install（可选）** | 仅当某台机无法被盘符扫描覆盖时，才在设备/类型配置里写 **`Install`** / **`Paths`** 覆盖。见 [`sinexcel/README.md`](sinexcel/README.md)。 |
@@ -124,6 +124,30 @@ Redeploy：控制器 `{{ ZIP_PATH }}/{{ ZIP_NAME }}` → 目标 `D:\MES\数据�
 TDengine：任务日志搜 **`[DEBUG-TDENGINE]`**；未配置 `TDENGINE_URL` 时会打印 `TDengine publish skipped`。
 
 详见 [`nbt/README.md`](nbt/README.md)。
+
+### LANBTS
+
+LANBTS 从 **NBT** 复制：同样是 **Windows 服务**启停 + `SendStatus` / `ResetData`，**不写 INI**。**不支持重新部署**（无 `device_redeploy.yml`，Device types 的 Redeploy 留空）。
+
+- **`SERVICE_NAME`**：exe 文件名（如 `NBT.MES.Service`）
+- **`LANBTS_SERVICE_NAME`**：Windows 服务名（`win_service`，如 `NBTMESService`）
+- **`SERVICE_PATH` / `LANBTS_SERVICE_PATH`**：父目录，在其下查找 exe
+
+```env
+SERVICE_NAME=NBT.MES.Service
+LANBTS_SERVICE_NAME=NBTMESService
+SERVICE_PATH=D:\MES
+LANBTS_API_PORT=8885
+LANBTS_SERVICE_SCAN_MAX_DEPTH=3
+SEMAPHORE_API_TOKEN=<token>
+# TDengine（建议单独 TAG）
+TDENGINE_URL=http://tdengine:6041
+TDENGINE_TIMEZONE=Asia/Shanghai
+TDENGINE_TAG_SUPPLIER=lanbts
+TDENGINE_STATUS_TABLE=lanbts_remote_computer_status
+```
+
+无 `ZIP_NAME` / `ZIP_PATH`。详见 [`lanbts/README.md`](lanbts/README.md)。
 
 ### JHAI
 

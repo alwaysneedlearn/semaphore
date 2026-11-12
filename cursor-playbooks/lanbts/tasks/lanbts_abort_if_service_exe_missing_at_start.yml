@@ -1,0 +1,27 @@
+---
+# Before win_service start: abort when resolved service exe path is missing.
+
+- name: LANBTS 启动前检查服务程序文件
+  ansible.windows.win_stat:
+    path: "{{ _lanbts_start_exe_path }}"
+  register: _lanbts_start_exe_stat
+  vars:
+    _lanbts_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
+  when: (_lanbts_start_exe_path | default('', true) | trim) | length > 0
+  timeout: "{{ winrm_shell_quick_timeout_sec | default(120) | int }}"
+- name: LANBTS 服务程序不存在则中止启动
+  when:
+    - (_lanbts_start_exe_path | default('', true) | trim) | length > 0
+    - _lanbts_start_exe_stat is defined
+    - not (_lanbts_start_exe_stat.stat.exists | default(false) | bool)
+  vars:
+    _lanbts_start_exe_path: "{{ install_path | default(service_exe_path | default('', true), true) }}"
+  block:
+    - name: 登记 LANBTS 启动失败原因（服务程序不存在）
+      ansible.builtin.set_fact:
+        start_aborted_exe_missing: true
+        final_start_ok: false
+        host_failure_reason: "服务程序不存在，无法启动: {{ _lanbts_start_exe_path }} — LANBTS 不支持重新部署，请确认服务已安装"
+
+    - name: LANBTS 服务程序不存在 — 结束本主机后续任务
+      ansible.builtin.meta: end_host

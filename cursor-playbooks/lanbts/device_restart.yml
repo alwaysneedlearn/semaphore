@@ -1,0 +1,51 @@
+---
+- name: LANBTS 重启服务（无配置修改）
+  hosts: windows_hosts
+  strategy: free
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_operation_type: restart
+    sem_operation_force_log: true
+    sem_debug_tag: LANBTS
+    lanbts_service_stop_first: true
+    lanbts_include_reset_data: false
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+    default_cfg: "{{ default_config | default({}) }}"
+    device_cfg: "{{ ((configs_by_host | default({}))[inventory_hostname] | default((configs_by_hostname | default({}))[inventory_hostname], true) | default(config | default({}), true)) }}"
+    merged_cfg: "{{ default_cfg | combine(device_cfg, recursive=True) }}"
+
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+    - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_service_stop_start.yml"
+
+  post_tasks:
+    - ansible.builtin.set_fact:
+        semaphore_callback_row:
+          hostname: "{{ _sem_display_hostname }}"
+          ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+          device_status: "{{ 'unhealthy' if (host_failure_reason is defined) else ('healthy' if (((_lanbts_service_status.stdout | default('') | trim).split('|') | first) == 'RUNNING') and ((not (lanbts_start_check_api | bool)) or (lanbts_heartbeat_ok | default(false) | bool)) else 'unhealthy') }}"
+          winrm_status: online
+          api_status: "{{ 'offline' if (host_failure_reason is defined) else ('online' if ((not (lanbts_start_check_api | bool)) or (lanbts_heartbeat_ok | default(false) | bool)) else 'offline') }}"
+          abnormal_reason: "{{ host_failure_reason | default('') }}"
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_start_snapshot.yml"
+
+- name: 写回 Semaphore 设备状态
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

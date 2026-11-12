@@ -1,6 +1,6 @@
 # TDengine 状态写入（模板 / Variable Group）
 
-Semaphore **不再**在服务端自动写 TDengine。凡包含 **`semaphore_bulk_put_from_hostvars.yml`** 的设备 playbook（**NEWARE / NBT / LAND / SINEXCEL** 的 status/start/stop/restart/redeploy 等）在 **`PUT /devices/status/bulk`** 之后，由 **`shared/tasks/semaphore_tdengine_publish_from_bulk.yml`** 将**本任务**的 bulk 行写入 TDengine（单台与批量共用同一任务链）。**不要求** `sem_profile_tasks_dir`。
+Semaphore **不再**在服务端自动写 TDengine。凡包含 **`semaphore_bulk_put_from_hostvars.yml`** 的设备 playbook（**NEWARE / NBT / LANBTS / LAND / SINEXCEL** 的 status/start/stop/restart/redeploy 等）在 **`PUT /devices/status/bulk`** 之后，由 **`shared/tasks/semaphore_tdengine_publish_from_bulk.yml`** 将**本任务**的 bulk 行写入 TDengine（单台与批量共用同一任务链）。**不要求** `sem_profile_tasks_dir`。
 
 ## Variable Group（ENV）
 
@@ -61,7 +61,7 @@ TAG: supplier (NCHAR) — 写入时通过 TAGS('newarerm')，不是普通列
 
 ## 覆盖的操作
 
-凡包含 **`semaphore_bulk_put_from_hostvars.yml`** 的模板均会尝试写 TDengine（在配置了 `TDENGINE_URL` 时），含 **NBT**（`cursor-playbooks/nbt/device_*.yml`）：
+凡包含 **`semaphore_bulk_put_from_hostvars.yml`** 的模板均会尝试写 TDengine（在配置了 `TDENGINE_URL` 时），含 **NBT**（`cursor-playbooks/nbt/device_*.yml`）与 **LANBTS**（`cursor-playbooks/lanbts/device_*.yml`）：
 
 - Patrol / `device_status.yml`
 - `device_restart.yml`
@@ -73,13 +73,13 @@ TCP 定时探针、RDP Probe **不**写 TDengine。
 
 ## check_restart 通道新鲜度（只读）
 
-`device_check_restart.yml`（**NEWARE / SINEXCEL / LAND / NBT / JHAI**）判定顺序：
+`device_check_restart.yml`（**NEWARE / SINEXCEL / LAND / NBT / LANBTS / JHAI**）判定顺序：
 
 1. **批量一次**查询通道 `LAST(insert_time)`（按 hostname 匹配）
 2. **新鲜（≤ `TDENGINE_CHANNEL_STALE_HOURS`）** → `healthy`，**不**跑 API / WinRM
 3. **不新鲜 / 无行 / 查询失败 / 未配置** → 再跑各类型 **API** → **WinRM** → 必要时 restart
 
-Variable Group 仍用 `TDENGINE_CHANNEL_STATUS_TABLE` + `TDENGINE_TAG_SUPPLIER`（各类型 supplier 不同，如 `sinexcel` / `newarerm` / `nbt` / `jhai`）。
+Variable Group 仍用 `TDENGINE_CHANNEL_STATUS_TABLE` + `TDENGINE_TAG_SUPPLIER`（各类型 supplier 不同，如 `sinexcel` / `newarerm` / `nbt` / `lanbts` / `jhai`）。
 
 ```sql
 SELECT LAST(`insert_time`), `computer_name`

@@ -1,0 +1,7 @@
+---
+# Split merged_cfg by Semaphore category for LANBTS playbooks.
+# ResetData -> GET /ResetData?StartDate=&EndDate=
+
+- name: 拆分 LANBTS 配置分类
+  ansible.builtin.set_fact:
+    lanbts_reset_data_cfg: "{{ merged_cfg.ResetData | default({}) }}"
