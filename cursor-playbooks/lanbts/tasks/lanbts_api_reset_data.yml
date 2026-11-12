@@ -1,0 +1,74 @@
+---
+# GET /ResetData?StartDate=&EndDate= (HTTP API, no service restart required).
+# Play vars: lanbts_reset_data_cfg or merged_cfg.ResetData, lanbts_api_reset_data_path, _lanbts_target_host.
+
+- name: 准备 LANBTS 配置分类
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_prepare_merged_cfg.yml"
+  when: lanbts_reset_data_cfg is not defined
+
+- name: 解析 ResetData 日期字段
+  ansible.builtin.set_fact:
+    _lanbts_reset_start: "{{ lanbts_reset_data_cfg.StartDate | default('') | trim }}"
+    _lanbts_reset_end: "{{ lanbts_reset_data_cfg.EndDate | default('') | trim }}"
+    _lanbts_reset_date_pattern: '^\d{4}-\d{1,2}-\d{1,2}$'
+
+- name: 校验 ResetData 日期格式
+  ansible.builtin.set_fact:
+    _lanbts_reset_start_ok: >-
+      {{
+        (_lanbts_reset_start | default('') | trim | length > 0) and
+        ((_lanbts_reset_start | regex_search(_lanbts_reset_date_pattern) | default('', true) | length) > 0)
+      }}
+    _lanbts_reset_end_ok: >-
+      {{
+        (_lanbts_reset_end | default('') | trim | length > 0) and
+        ((_lanbts_reset_end | regex_search(_lanbts_reset_date_pattern) | default('', true) | length) > 0)
+      }}
+
+- name: 数据重传：API ResetData
+  ansible.builtin.uri:
+    url: >-
+      {{ lanbts_api_scheme }}://{{ _lanbts_target_host }}:{{ lanbts_api_port }}{{ lanbts_api_reset_data_path }}?StartDate={{ _lanbts_reset_start | urlencode }}&EndDate={{ _lanbts_reset_end | urlencode }}
+    method: GET
+    timeout: "{{ lanbts_api_timeout }}"
+    validate_certs: "{{ lanbts_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 409, 422, 500, 502, 503]
+  register: _lanbts_api_reset_data
+  delegate_to: localhost
+  failed_when: false
+  when:
+    - _lanbts_reset_start_ok | default(false) | bool
+    - _lanbts_reset_end_ok | default(false) | bool
+
+  timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
+- name: DEBUG LANBTS ResetData 跳过（日期无效）
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data skipped=invalid_date"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data StartDate={{ _lanbts_reset_start | default('') }} valid={{ _lanbts_reset_start_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data EndDate={{ _lanbts_reset_end | default('') }} valid={{ _lanbts_reset_end_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data expected_format=yyyy-M-d (e.g. 2026-6-1)"
+  when: not (_lanbts_reset_start_ok | default(false) | bool) or not (_lanbts_reset_end_ok | default(false) | bool)
+
+- name: DEBUG LANBTS ResetData 结果
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data url={{ lanbts_api_scheme }}://{{ _lanbts_target_host }}:{{ lanbts_api_port }}{{ lanbts_api_reset_data_path }}?StartDate={{ _lanbts_reset_start }}&EndDate={{ _lanbts_reset_end }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data http_status={{ _lanbts_api_reset_data.status | default('skipped') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data response_body={{ _lanbts_api_reset_data.content | default('') | truncate(1500, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] reset_data IsSuccess={{ (_lanbts_api_reset_data.content | default('{}') | from_json).IsSuccess | default('n/a') }}"
+  when:
+    - _lanbts_api_reset_data is defined
+    - not (_lanbts_api_reset_data.skipped | default(false))
+
+- name: 汇总 LANBTS ResetData 结果
+  ansible.builtin.set_fact:
+    lanbts_reset_data_ok: >-
+      {{
+        ((_lanbts_api_reset_data.status | default(0) | int) == 200)
+        and ((_lanbts_api_reset_data.content | default('{}') | from_json).IsSuccess | default(false) | bool)
+      }}
+  when:
+    - _lanbts_api_reset_data is defined
+    - not (_lanbts_api_reset_data.skipped | default(false))

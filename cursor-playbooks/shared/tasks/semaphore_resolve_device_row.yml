@@ -31,6 +31,7 @@
   ansible.builtin.set_fact:
     _jhai_target_host: "{{ _sem_target_host }}"
     _nbt_target_host: "{{ _sem_target_host }}"
+    _lanbts_target_host: "{{ _sem_target_host }}"
     _land_target_host: "{{ _sem_target_host }}"
     _sinexcel_target_host: "{{ _sem_target_host }}"
     _agent_target_host: "{{ _sem_target_host }}"

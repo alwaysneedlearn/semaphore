@@ -1,0 +1,135 @@
+---
+- name: LANBTS 状态巡检（心跳 API 优先 + 服务参考）
+  hosts: windows_hosts
+  strategy: free
+  gather_facts: no
+  max_fail_percentage: 100
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_files_dir: "{{ playbook_dir }}/files"
+    sem_debug_tag: LANBTS
+    sem_operation_type: status
+    _devices_from_extra: "{{ devices | default([]) }}"
+    _device_singleton: "{{ [device] if (device is defined) else [] }}"
+    _semaphore_device_rows: "{{ _devices_from_extra if (_devices_from_extra | length > 0) else _device_singleton }}"
+
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_resolve_device_row.yml"
+
+    - name: LANBTS 心跳 API（Patrol 首要判定）
+      ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_api_heartbeat_check.yml"
+
+    - name: LANBTS 心跳已健康（跳过 WinRM/服务参考）
+      when: lanbts_heartbeat_ok | default(false) | bool
+      block:
+        - name: WinRM 参考探测（仅填写 winrm_status）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_probe_reference_only.yml"
+          vars:
+            winrm_probe_reference_label: "LANBTS Patrol API 快路径"
+
+        - name: 登记 Semaphore 状态回调行（API 健康快路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: false
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: healthy
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: online
+              abnormal_reason: >-
+                {{
+                  'WinRM unreachable (heartbeat healthy; reference only)'
+                  if not (_winrm_session_ok | default(false) | bool)
+                  else ''
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 健康 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LANBTS 心跳 API 不可达或非 200 — 快速失败
+      when: not (lanbts_heartbeat_http_ok | default(false) | bool)
+      block:
+        - name: 登记 Semaphore 状态回调行（API 快速失败）
+          ansible.builtin.set_fact:
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: unhealthy
+              winrm_status: offline
+              api_status: offline
+              abnormal_reason: >-
+                {{
+                  'Heartbeat API unreachable: ' ~ (_lanbts_heartbeat.msg | default('connection failed') | string)
+                  if (_lanbts_heartbeat.status | default(0) | int) in [0, -1]
+                  else 'Heartbeat API HTTP ' ~ (_lanbts_heartbeat.status | default(0) | string) ~ ' (expected 200)'
+                }}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+        - name: API 快速失败 — 结束本主机
+          ansible.builtin.meta: end_host
+
+    - name: LANBTS 心跳 HTTP 200 但未达健康 — WinRM/服务参考检查
+      when:
+        - lanbts_heartbeat_http_ok | default(false) | bool
+        - not (lanbts_heartbeat_ok | default(false) | bool)
+      block:
+        - name: WinRM 建连（含重试）
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_ensure_reachable.yml"
+
+        - name: WinRM 未连通则不再执行本主机后续步骤
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/winrm_gate_play_tasks.yml"
+
+        - name: 部署 Windows 启动辅助脚本
+          ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/deploy_sem_windows_helper_scripts.yml"
+
+        - ansible.builtin.include_tasks: tasks/resolve_lanbts_service_install.yml
+
+        - ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_windows_service_status.yml"
+
+        - ansible.builtin.set_fact:
+            _lanbts_process_check: "{{ _lanbts_service_status }}"
+          when: _lanbts_service_status is defined
+
+        - name: 状态判断并组装回调行（参考路径）
+          ansible.builtin.set_fact:
+            need_reconfigure: "{{ _lanbts_need_reconfig | bool }}"
+            semaphore_callback_row:
+              hostname: "{{ _sem_display_hostname }}"
+              ip: "{{ _sem_dev.ip | default(inventory_hostname, true) }}"
+              device_status: "{{ 'healthy' if not (_lanbts_need_reconfig | bool) else 'unhealthy' }}"
+              winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
+              api_status: "{{ 'online' if not (_lanbts_need_reconfig | bool) else 'offline' }}"
+              abnormal_reason: "{{ _lanbts_abnormal_reason | trim }}"
+          vars:
+            _lanbts_svc_out: "{{ ((_lanbts_service_status | default({})).stdout | default('')) | trim }}"
+            _lanbts_svc_running: "{{ (_lanbts_svc_out.split('|') | first) == 'RUNNING' }}"
+            _lanbts_need_reconfig: >-
+              {{
+                (not (_lanbts_svc_running | bool))
+                or not (lanbts_heartbeat_ok | default(false) | bool)
+              }}
+            _lanbts_abnormal_reason: >-
+              {% if not (_lanbts_svc_running | bool) %}Service not running: {{ service_name }} ({{ _lanbts_svc_out }})
+              {% elif not (lanbts_heartbeat_ok | default(false) | bool) %}Heartbeat stale or failed: last_send={{ lanbts_heartbeat_last_send | default('n/a') }} age_min={{ lanbts_heartbeat_age_minutes | default('n/a') }} max={{ lanbts_heartbeat_max_age_minutes | default(90) }} http={{ _lanbts_heartbeat.status | default('n/a') }}
+              {% else %}{% endif %}
+
+        - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/debug_sync_api_patrol_snapshot.yml"
+
+  post_tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
+      when: semaphore_callback_row is defined
+
+- name: 写回 Semaphore 设备状态（bulk PUT + TDengine，仅此一处）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
+    sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"
+    sem_files_dir: "{{ playbook_dir }}/files"
+  tasks:
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_from_hostvars.yml"
+    - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_bulk_put_operation_logs.yml"

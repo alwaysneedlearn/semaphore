@@ -31,7 +31,7 @@ sem_tasks_dir: "{{ playbook_dir }}/../shared/tasks"
 
 | When | Set `sem_files_dir` to |
 |------|-------------------------|
-| Profile has `<type>/files/` with type-specific `sem_*.ps1` (NEWARE, LAND, SINEXCEL, NBT, JHAI) | `{{ playbook_dir }}/files` |
+| Profile has `<type>/files/` with type-specific `sem_*.ps1` (NEWARE, LAND, SINEXCEL, NBT, LANBTS, JHAI) | `{{ playbook_dir }}/files` |
 | Profile has **no** local `files/` and only needs shared helpers (LANH, LANDV7, DAHUA) | `{{ playbook_dir }}/../shared/files` |
 
 If **`sem_files_dir` is omitted**, deploy defaults to **`{{ playbook_dir }}/files`** (relative to the playbook’s directory). Do **not** point at `shared/files` when the play runs tasks that call scripts that exist **only** under the type’s `files/` (e.g. NEWARE `sem_collect_process_status_windows.ps1` — hosts that never ran Patrol then fail with `-File … does not exist`).
@@ -57,7 +57,7 @@ sem_tasks_dir: "{{ playbook_dir }}/shared/tasks"
 
 ## Debug task output (`[DEBUG-*]`)
 
-Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`) and include:
+Playbooks set `sem_debug_tag` (e.g. `LAND`, `SINEXCEL`, `NBT`, `LANBTS`) and include:
 
 | Task file | Used by |
 |-----------|---------|

@@ -1,0 +1,68 @@
+---
+# After service start: poll GET /SendStatus until HTTP 200 (patrol uses single GET in lanbts_api_heartbeat_check.yml).
+# until/retries must be on uri (not include_tasks) for older Ansible.
+
+- name: 启动后轮询 LANBTS 心跳（SendStatus）
+  ansible.builtin.uri:
+    url: "{{ lanbts_api_scheme }}://{{ _lanbts_target_host }}:{{ lanbts_api_port }}{{ lanbts_api_heartbeat_path }}"
+    method: GET
+    timeout: "{{ lanbts_api_timeout }}"
+    validate_certs: "{{ lanbts_api_verify_tls }}"
+    return_content: true
+    status_code: [200, 400, 401, 403, 404, 500, 502, 503]
+  register: _lanbts_heartbeat
+  delegate_to: localhost
+  failed_when: false
+  until: >
+    _lanbts_heartbeat is defined and
+    (_lanbts_heartbeat.status | default(0) | int) == 200
+  retries: "{{ lanbts_heartbeat_start_poll_retries | default(6) | int }}"
+  delay: "{{ lanbts_heartbeat_start_poll_delay | default(10) | int }}"
+  timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
+- name: LANBTS 解析心跳并判定上报状态
+  ansible.builtin.set_fact:
+    lanbts_heartbeat_last_send: "{{ _hb_last_send }}"
+    lanbts_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    lanbts_heartbeat_ok: "{{ _hb_ok | bool }}"
+    _lanbts_api_status: "{{ _lanbts_heartbeat }}"
+  vars:
+    _hb_http_ok: "{{ (_lanbts_heartbeat.status | default(0) | int) == 200 }}"
+    _hb_last_send: "{{ (_lanbts_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
+    _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
+    _hb_age_seconds: >-
+      {{
+        (
+          (now(fmt='%Y-%m-%d %H:%M:%S') | to_datetime)
+          - (_hb_last_send | to_datetime('%Y-%m-%d %H:%M:%S'))
+        ).total_seconds() | float
+        if (_hb_http_ok | bool) and (_hb_has_send | bool)
+        else -1
+      }}
+    _hb_max_min: "{{ lanbts_heartbeat_max_age_minutes | default(90) | int }}"
+    _hb_age_min: >-
+      {{
+        ((_hb_age_seconds | float) / 60) | round(1)
+        if (_hb_age_seconds | float) >= 0
+        else 'n/a'
+      }}
+    _hb_ok: >-
+      {{
+        (_hb_http_ok | bool) and (
+          (
+            (_hb_age_seconds | float) >= 0
+            and ((_hb_age_seconds | float) / 60) <= (_hb_max_min | int)
+          ) or (
+            (_hb_age_seconds | float) < 0
+          )
+        )
+      }}
+  failed_when: false
+
+- name: DEBUG LANBTS 启动后心跳轮询
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll retries={{ lanbts_heartbeat_start_poll_retries | default(6) }} delay_s={{ lanbts_heartbeat_start_poll_delay | default(10) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll attempts={{ _lanbts_heartbeat.attempts | default(1) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll ok={{ lanbts_heartbeat_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll last_http={{ _lanbts_heartbeat.status | default('n/a') }}"
+  when: _lanbts_heartbeat is defined

@@ -11,6 +11,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 | **`land/`** | LAND playbooks and LAND-only logic |
 | **`sinexcel/`** | SINEXCEL (LAND lifecycle + HTTP API config; no INI) |
 | **`nbt/`** | NBT (Windows service + heartbeat API) |
+| **`lanbts/`** | LANBTS（同 NBT：服务 + `SendStatus`；**无 redeploy**） |
 | **`jhai/`** | JHAI (`UploaderServiceDaemon` + BTS upload HTTP API) |
 | **`dahua/`** | DAHUA（`device_status.yml`：CTSMonPro 进程；`device_resend_data.yml`：lims-hist） |
 | **`lanh/`** | LANH：`status` + `resend`；`check_restart` 仅 Schedule（只启动不停止） |
@@ -23,6 +24,7 @@ Ansible playbooks for **Semaphore UI** device actions (discovery, patrol, stop/r
 - `cursor-playbooks/land/device_status.yml`
 - `cursor-playbooks/sinexcel/device_status.yml`
 - `cursor-playbooks/nbt/device_status.yml`
+- `cursor-playbooks/lanbts/device_status.yml`
 - `cursor-playbooks/jhai/device_status.yml`
 - `cursor-playbooks/device_discovery.yml`
 
@@ -30,7 +32,7 @@ Every type playbook sets **`sem_tasks_dir`** to shared tasks. **`sem_files_dir`*
 
 | Profile | `sem_files_dir` | Notes |
 |---------|-----------------|-------|
-| NEWARE, LAND, SINEXCEL, NBT, JHAI | `{{ playbook_dir }}/files` | Type dir includes profile-only `sem_*.ps1` (and usually copies of shared helpers). |
+| NEWARE, LAND, SINEXCEL, NBT, LANBTS, JHAI | `{{ playbook_dir }}/files` | Type dir includes profile-only `sem_*.ps1` (and usually copies of shared helpers). |
 | LANH, LANDV7, DAHUA | `{{ playbook_dir }}/../shared/files` | No local `files/`; only shared start/resolve scripts are needed. |
 
 Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play includes type-specific tasks. See [`shared/README.md`](shared/README.md#required-play-vars).
@@ -55,7 +57,7 @@ Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play i
 - `RESTART_DELAY` / `retries`+`delay` — intentional waits; task timeout must stay **above** the full poll budget
 - Interactive stop’s `STOP_TASK_TIMEOUT_SECONDS` — wait inside the helper script (Ansible task timeout must cover it)
 
-**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, `[DEBUG-LANDV7]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
+**Task logs:** search for `[DEBUG-LAND]`, `[DEBUG-SINEXCEL]`, `[DEBUG-NBT]`, `[DEBUG-LANBTS]`, `[DEBUG-JHAI]`, `[DEBUG-NEWARE]`, `[DEBUG-DAHUA]`, `[DEBUG-LANH]`, `[DEBUG-LANDV7]`, or `[DEBUG-API]` (bulk callback). See [`shared/README.md`](shared/README.md#debug-task-output-debug-).
 
 ## Documentation
 
@@ -64,6 +66,7 @@ Also set **`sem_profile_tasks_dir: "{{ playbook_dir }}/tasks"`** when the play i
 - **LAND:** [`land/README.md`](land/README.md)
 - **SINEXCEL:** [`sinexcel/README.md`](sinexcel/README.md)
 - **NBT:** [`nbt/README.md`](nbt/README.md)
+- **LANBTS:** [`lanbts/README.md`](lanbts/README.md)
 - **JHAI:** [`jhai/README.md`](jhai/README.md)
 - **DAHUA:** [`dahua/README.md`](dahua/README.md)
 - **LANH:** [`lanh/README.md`](lanh/README.md)

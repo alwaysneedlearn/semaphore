@@ -1,0 +1,33 @@
+---
+# LANBTS Windows service + HTTP API defaults (see lanbts/vars/service_layout.yml).
+# SERVICE_NAME = exe file base name; LANBTS_SERVICE_NAME = Windows service name (win_service).
+
+service_name: "{{ (lookup('env', 'LANBTS_SERVICE_NAME') | default('', true) | trim) | default('NBTMESService', true) }}"
+service_base_dir: "{{ (lookup('env', 'LANBTS_SERVICE_PATH') | default(lookup('env', 'SERVICE_PATH') | default('', true), true) | trim) | default('D:\\MES', true) }}"
+service_exe_name: >-
+  {{
+    (
+      (lookup('env', 'SERVICE_NAME') | default('', true) | trim)
+      | regex_replace('(?i)\\.exe$', '')
+    )
+    ~ '.exe'
+    if ((lookup('env', 'SERVICE_NAME') | default('', true) | trim) | length > 0)
+    else 'NBT.MES.Service.exe'
+  }}
+service_path: "{{ service_base_dir }}"
+install_path: "{{ service_base_dir }}\\{{ service_exe_name }}"
+service_parent_dir: "{{ service_base_dir }}"
+
+lanbts_api_scheme: "{{ (lookup('env', 'LANBTS_API_SCHEME') | default('', true) | trim) | default('http', true) }}"
+lanbts_api_port: "{% set hp = hostvars[inventory_hostname].api_port | default(0) %}{% if (hp | int) > 0 %}{{ hp | int }}{% else %}{{ (lookup('env', 'LANBTS_API_PORT') | default('', true) | trim) | default('8885', true) | int }}{% endif %}"
+lanbts_api_heartbeat_path: "{{ (lookup('env', 'LANBTS_API_HEARTBEAT_PATH') | default('', true) | trim) | default('/SendStatus', true) }}"
+lanbts_api_reset_data_path: "{{ (lookup('env', 'LANBTS_API_RESET_DATA_PATH') | default('', true) | trim) | default('/ResetData', true) }}"
+lanbts_api_timeout: "{{ ((lookup('env', 'LANBTS_API_TIMEOUT') | default('', true) | trim) | default('8', true)) | int }}"
+lanbts_api_verify_tls: "{{ ((lookup('env', 'LANBTS_API_VERIFY_TLS') | default('', true) | trim) | default('true', true)) | bool }}"
+lanbts_heartbeat_max_age_minutes: "{{ ((lookup('env', 'LANBTS_HEARTBEAT_MAX_AGE_MINUTES') | default('', true) | trim) | default('90', true)) | int }}"
+lanbts_start_check_api: "{{ ((lookup('env', 'LANBTS_START_CHECK_API') | default('', true) | trim) | default('true', true)) | bool }}"
+lanbts_stop_check_api: "{{ ((lookup('env', 'LANBTS_STOP_CHECK_API') | default('', true) | trim) | default('false', true)) | bool }}"
+lanbts_service_scan_max_depth: "{{ ((lookup('env', 'LANBTS_SERVICE_SCAN_MAX_DEPTH') | default('', true) | trim) | default('3', true)) | int }}"
+lanbts_service_scan_latest: "{{ ((lookup('env', 'LANBTS_SERVICE_SCAN_LATEST') | default('', true) | trim) | default('true', true)) | bool }}"
+lanbts_heartbeat_start_poll_retries: "{{ ((lookup('env', 'LANBTS_HEARTBEAT_START_POLL_RETRIES') | default('', true) | trim) | default('6', true)) | int }}"
+lanbts_heartbeat_start_poll_delay: "{{ ((lookup('env', 'LANBTS_HEARTBEAT_START_POLL_DELAY') | default('', true) | trim) | default('10', true)) | int }}"

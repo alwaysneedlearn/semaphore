@@ -64,6 +64,17 @@
         )
         + (
           [
+            '[DEBUG-' ~ _tag ~ '] heartbeat GET ' ~ (lanbts_api_scheme | default('http')) ~ '://' ~ (_lanbts_target_host | default(inventory_hostname))
+              ~ ':' ~ (lanbts_api_port | default(8885) | string) ~ (lanbts_api_heartbeat_path | default('/SendStatus'))
+              ~ ' http=' ~ (_lanbts_heartbeat.status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] heartbeat last_send=' ~ (lanbts_heartbeat_last_send | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] heartbeat age_min=' ~ (lanbts_heartbeat_age_minutes | default('n/a') | string)
+              ~ ' max=' ~ (lanbts_heartbeat_max_age_minutes | default(90) | string),
+            '[DEBUG-' ~ _tag ~ '] heartbeat ok=' ~ (lanbts_heartbeat_ok | default(false) | string)
+          ] if ((_tag == 'LANBTS') and (_lanbts_heartbeat is defined)) else []
+        )
+        + (
+          [
             '[DEBUG-' ~ _tag ~ '] api POST ' ~ (jhai_api_scheme | default('http')) ~ '://' ~ (_jhai_target_host | default(inventory_hostname))
               ~ ':' ~ (jhai_api_port | default(9002) | string) ~ (jhai_api_upload_status_path | default('/api/get_upload_status'))
               ~ ' http=' ~ (_jhai_upload_status.status | default('n/a') | string),

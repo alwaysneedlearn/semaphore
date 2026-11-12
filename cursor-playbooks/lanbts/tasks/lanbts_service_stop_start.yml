@@ -1,0 +1,24 @@
+---
+# LANBTS: Windows service stop/start (no INI). Vars: lanbts_service_stop_first, lanbts_start_check_api,
+# lanbts_include_reset_data, merged_cfg, _lanbts_target_host.
+
+- name: 停止 LANBTS Windows 服务（重启前）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_windows_service_stop.yml"
+  when: lanbts_service_stop_first | default(true) | bool
+
+- name: 启动 LANBTS Windows 服务
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_windows_service_start.yml"
+
+- name: LANBTS 启动后心跳检查（轮询 SendStatus）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_api_heartbeat_start_poll.yml"
+  when:
+    - not (start_aborted_exe_missing | default(false) | bool)
+    - lanbts_start_check_api | default(false) | bool
+
+- name: LANBTS ResetData（仅 restart）
+  ansible.builtin.include_tasks: "{{ sem_profile_tasks_dir }}/lanbts_api_reset_data.yml"
+  when: >
+    not (start_aborted_exe_missing | default(false) | bool)
+    and (lanbts_include_reset_data | default(false) | bool)
+    and (merged_cfg.ResetData | default({}) | length > 0)
+    and (lanbts_heartbeat_ok | default(false) | bool)
