@@ -1,6 +1,7 @@
 ---
 # After service start: poll GET /SendStatus until HTTP 200 (patrol uses single GET in nbt_api_heartbeat_check.yml).
 # until/retries must be on uri (not include_tasks) for older Ansible.
+# Timestamp extraction matches nbt_api_heartbeat_check.yml (JSON-safe).
 
 - name: 启动后轮询 NBT 心跳（SendStatus）
   ansible.builtin.uri:
@@ -19,15 +20,39 @@
   retries: "{{ nbt_heartbeat_start_poll_retries | default(6) | int }}"
   delay: "{{ nbt_heartbeat_start_poll_delay | default(10) | int }}"
   timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
-- name: NBT 解析心跳并判定上报状态
+
+- name: NBT 提取心跳时间字符串
   ansible.builtin.set_fact:
+    nbt_heartbeat_http_ok: "{{ (_nbt_heartbeat.status | default(0) | int) == 200 }}"
     nbt_heartbeat_last_send: "{{ _hb_last_send }}"
-    nbt_heartbeat_age_minutes: "{{ _hb_age_min }}"
-    nbt_heartbeat_ok: "{{ _hb_ok | bool }}"
     _nbt_api_status: "{{ _nbt_heartbeat }}"
   vars:
-    _hb_http_ok: "{{ (_nbt_heartbeat.status | default(0) | int) == 200 }}"
-    _hb_last_send: "{{ (_nbt_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
+    _hb_content: >-
+      {{
+        (_nbt_heartbeat.content | to_json)
+        if (_nbt_heartbeat.content is defined and (_nbt_heartbeat.content is mapping or _nbt_heartbeat.content is sequence) and (_nbt_heartbeat.content is not string))
+        else (_nbt_heartbeat.content | default('', true) | string)
+      }}
+    _hb_json_blob: >-
+      {{
+        (_nbt_heartbeat.json | to_json)
+        if (_nbt_heartbeat.json is defined and (_nbt_heartbeat.json is mapping))
+        else (
+          (_nbt_heartbeat.json | string)
+          if (_nbt_heartbeat.json is defined and (_nbt_heartbeat.json is string))
+          else ''
+        )
+      }}
+    _hb_blob: "{{ _hb_content if ((_hb_content | trim) | length > 0) else _hb_json_blob }}"
+    _hb_last_send: "{{ _hb_blob | regex_search('\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}') | default('', true) | regex_replace('T', ' ') }}"
+
+- name: NBT 解析心跳并判定上报状态
+  ansible.builtin.set_fact:
+    nbt_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    nbt_heartbeat_ok: "{{ _hb_ok | bool }}"
+  vars:
+    _hb_http_ok: "{{ nbt_heartbeat_http_ok | default(false) | bool }}"
+    _hb_last_send: "{{ nbt_heartbeat_last_send | default('', true) | string }}"
     _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
     _hb_age_seconds: >-
       {{
@@ -65,4 +90,5 @@
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll attempts={{ _nbt_heartbeat.attempts | default(1) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll ok={{ nbt_heartbeat_ok | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_http={{ _nbt_heartbeat.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_send={{ nbt_heartbeat_last_send | default('n/a') }}"
   when: _nbt_heartbeat is defined
