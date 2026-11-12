@@ -1,6 +1,7 @@
 ---
 # After service start: poll GET /SendStatus until HTTP 200 (patrol uses single GET in lanbts_api_heartbeat_check.yml).
 # until/retries must be on uri (not include_tasks) for older Ansible.
+# Timestamp extraction matches lanbts_api_heartbeat_check.yml (JSON-safe).
 
 - name: 启动后轮询 LANBTS 心跳（SendStatus）
   ansible.builtin.uri:
@@ -19,15 +20,39 @@
   retries: "{{ lanbts_heartbeat_start_poll_retries | default(6) | int }}"
   delay: "{{ lanbts_heartbeat_start_poll_delay | default(10) | int }}"
   timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
-- name: LANBTS 解析心跳并判定上报状态
+
+- name: LANBTS 提取心跳时间字符串
   ansible.builtin.set_fact:
+    lanbts_heartbeat_http_ok: "{{ (_lanbts_heartbeat.status | default(0) | int) == 200 }}"
     lanbts_heartbeat_last_send: "{{ _hb_last_send }}"
-    lanbts_heartbeat_age_minutes: "{{ _hb_age_min }}"
-    lanbts_heartbeat_ok: "{{ _hb_ok | bool }}"
     _lanbts_api_status: "{{ _lanbts_heartbeat }}"
   vars:
-    _hb_http_ok: "{{ (_lanbts_heartbeat.status | default(0) | int) == 200 }}"
-    _hb_last_send: "{{ (_lanbts_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
+    _hb_content: >-
+      {{
+        (_lanbts_heartbeat.content | to_json)
+        if (_lanbts_heartbeat.content is defined and (_lanbts_heartbeat.content is mapping or _lanbts_heartbeat.content is sequence) and (_lanbts_heartbeat.content is not string))
+        else (_lanbts_heartbeat.content | default('', true) | string)
+      }}
+    _hb_json_blob: >-
+      {{
+        (_lanbts_heartbeat.json | to_json)
+        if (_lanbts_heartbeat.json is defined and (_lanbts_heartbeat.json is mapping))
+        else (
+          (_lanbts_heartbeat.json | string)
+          if (_lanbts_heartbeat.json is defined and (_lanbts_heartbeat.json is string))
+          else ''
+        )
+      }}
+    _hb_blob: "{{ _hb_content if ((_hb_content | trim) | length > 0) else _hb_json_blob }}"
+    _hb_last_send: "{{ _hb_blob | regex_search('\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}') | default('', true) | regex_replace('T', ' ') }}"
+
+- name: LANBTS 解析心跳并判定上报状态
+  ansible.builtin.set_fact:
+    lanbts_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    lanbts_heartbeat_ok: "{{ _hb_ok | bool }}"
+  vars:
+    _hb_http_ok: "{{ lanbts_heartbeat_http_ok | default(false) | bool }}"
+    _hb_last_send: "{{ lanbts_heartbeat_last_send | default('', true) | string }}"
     _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
     _hb_age_seconds: >-
       {{
@@ -65,4 +90,5 @@
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll attempts={{ _lanbts_heartbeat.attempts | default(1) }}"
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll ok={{ lanbts_heartbeat_ok | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll last_http={{ _lanbts_heartbeat.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll last_send={{ lanbts_heartbeat_last_send | default('n/a') }}"
   when: _lanbts_heartbeat is defined

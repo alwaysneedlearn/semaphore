@@ -1,5 +1,8 @@
 ---
 # GET /SendStatus — last data send time. Sets _lanbts_heartbeat, lanbts_heartbeat_* , _lanbts_api_status.
+# Body may be plain timestamp, quoted string, or JSON containing YYYY-MM-DD HH:MM:SS.
+# Extract a scalar timestamp first — never pass JSON objects/strings to to_datetime
+# (Ansible nested vars can coerce JSON-looking strings into dict → strptime TypeError).
 
 - name: LANBTS 查询心跳（上次发数据时间）
   ansible.builtin.uri:
@@ -13,16 +16,39 @@
   delegate_to: localhost
   failed_when: false
   timeout: "{{ uri_task_timeout_sec | default(60) | int }}"
-- name: LANBTS 解析心跳并判定上报状态
+
+- name: LANBTS 提取心跳时间字符串
   ansible.builtin.set_fact:
+    lanbts_heartbeat_http_ok: "{{ (_lanbts_heartbeat.status | default(0) | int) == 200 }}"
     lanbts_heartbeat_last_send: "{{ _hb_last_send }}"
-    lanbts_heartbeat_age_minutes: "{{ _hb_age_min }}"
-    lanbts_heartbeat_http_ok: "{{ _hb_http_ok | bool }}"
-    lanbts_heartbeat_ok: "{{ _hb_ok | bool }}"
     _lanbts_api_status: "{{ _lanbts_heartbeat }}"
   vars:
-    _hb_http_ok: "{{ (_lanbts_heartbeat.status | default(0) | int) == 200 }}"
-    _hb_last_send: "{{ (_lanbts_heartbeat.content | default('') | string | trim | regex_replace('^\"|\"$', '')) }}"
+    _hb_content: >-
+      {{
+        (_lanbts_heartbeat.content | to_json)
+        if (_lanbts_heartbeat.content is defined and (_lanbts_heartbeat.content is mapping or _lanbts_heartbeat.content is sequence) and (_lanbts_heartbeat.content is not string))
+        else (_lanbts_heartbeat.content | default('', true) | string)
+      }}
+    _hb_json_blob: >-
+      {{
+        (_lanbts_heartbeat.json | to_json)
+        if (_lanbts_heartbeat.json is defined and (_lanbts_heartbeat.json is mapping))
+        else (
+          (_lanbts_heartbeat.json | string)
+          if (_lanbts_heartbeat.json is defined and (_lanbts_heartbeat.json is string))
+          else ''
+        )
+      }}
+    _hb_blob: "{{ _hb_content if ((_hb_content | trim) | length > 0) else _hb_json_blob }}"
+    _hb_last_send: "{{ _hb_blob | regex_search('\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}') | default('', true) | regex_replace('T', ' ') }}"
+
+- name: LANBTS 解析心跳并判定上报状态
+  ansible.builtin.set_fact:
+    lanbts_heartbeat_age_minutes: "{{ _hb_age_min }}"
+    lanbts_heartbeat_ok: "{{ _hb_ok | bool }}"
+  vars:
+    _hb_http_ok: "{{ lanbts_heartbeat_http_ok | default(false) | bool }}"
+    _hb_last_send: "{{ lanbts_heartbeat_last_send | default('', true) | string }}"
     _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
     _hb_age_seconds: >-
       {{
