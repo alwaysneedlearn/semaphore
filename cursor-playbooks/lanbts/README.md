@@ -71,4 +71,4 @@ SEMAPHORE_API_TOKEN=<token>
 
 | Category | 用途 |
 |----------|------|
-| `ResetData` | `GET /ResetData`（`StartDate` / `EndDate`，`yyyy-M-d`）；响应 `{"IsSuccess", "Message", "Data"}`，成功看 `IsSuccess`（`Data` 常为 null） |
+| `ResetData` | UI **重发数据** 走 `resend_params`（`profile_key=LANBTS`）→ `StartDate`/`EndDate`（`yyyy-M-d`）；响应 `{"IsSuccess", "Message", "Data"}`，成功看 `IsSuccess`（`Data` 常为 null） |
