@@ -32,7 +32,7 @@
           device_status: "{{ 'healthy' if (nbt_reset_data_ok | default(false) | bool) else 'unhealthy' }}"
           winrm_status: "{{ 'online' if (_winrm_session_ok | default(false) | bool) else 'offline' }}"
           api_status: "{{ 'online' if (nbt_reset_data_ok | default(false) | bool) else 'offline' }}"
-          abnormal_reason: "{{ '' if (nbt_reset_data_ok | default(false) | bool) else 'NBT ResetData API failed or invalid date range' }}"
+          abnormal_reason: "{{ '' if (nbt_reset_data_ok | default(false) | bool) else (nbt_reset_data_message | default('NBT ResetData API failed or invalid date range', true) | string) }}"
 
     - ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/semaphore_operation_build_record.yml"
 
