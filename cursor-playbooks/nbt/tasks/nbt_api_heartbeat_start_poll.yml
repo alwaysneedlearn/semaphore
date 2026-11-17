@@ -1,7 +1,6 @@
 ---
-# After service start: poll GET /SendStatus until HTTP 200 (patrol uses single GET in nbt_api_heartbeat_check.yml).
+# After service start: poll GET /SendStatus until HTTP 200.
 # until/retries must be on uri (not include_tasks) for older Ansible.
-# Timestamp extraction matches nbt_api_heartbeat_check.yml (JSON-safe).
 
 - name: 启动后轮询 NBT 心跳（SendStatus）
   ansible.builtin.uri:
@@ -21,74 +20,27 @@
   delay: "{{ nbt_heartbeat_start_poll_delay | default(10) | int }}"
   timeout: "{{ uri_poll_task_timeout_sec | default(300) | int }}"
 
-- name: NBT 提取心跳时间字符串
-  ansible.builtin.set_fact:
-    nbt_heartbeat_http_ok: "{{ (_nbt_heartbeat.status | default(0) | int) == 200 }}"
-    nbt_heartbeat_last_send: "{{ _hb_last_send }}"
-    _nbt_api_status: "{{ _nbt_heartbeat }}"
+- name: NBT 解析 SendStatus
+  ansible.builtin.include_tasks: "{{ sem_tasks_dir }}/parse_sendstatus_heartbeat.yml"
   vars:
-    _hb_content: >-
-      {{
-        (_nbt_heartbeat.content | to_json)
-        if (_nbt_heartbeat.content is defined and (_nbt_heartbeat.content is mapping or _nbt_heartbeat.content is sequence) and (_nbt_heartbeat.content is not string))
-        else (_nbt_heartbeat.content | default('', true) | string)
-      }}
-    _hb_json_blob: >-
-      {{
-        (_nbt_heartbeat.json | to_json)
-        if (_nbt_heartbeat.json is defined and (_nbt_heartbeat.json is mapping))
-        else (
-          (_nbt_heartbeat.json | string)
-          if (_nbt_heartbeat.json is defined and (_nbt_heartbeat.json is string))
-          else ''
-        )
-      }}
-    _hb_blob: "{{ _hb_content if ((_hb_content | trim) | length > 0) else _hb_json_blob }}"
-    _hb_last_send: "{{ _hb_blob | regex_search('\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}') | default('', true) | regex_replace('T', ' ') }}"
+    sem_hb_uri_result: "{{ _nbt_heartbeat }}"
+    sem_hb_max_age_minutes: "{{ nbt_heartbeat_max_age_minutes | default(90) | int }}"
 
-- name: NBT 解析心跳并判定上报状态
+- name: NBT 登记心跳判定结果
   ansible.builtin.set_fact:
-    nbt_heartbeat_age_minutes: "{{ _hb_age_min }}"
-    nbt_heartbeat_ok: "{{ _hb_ok | bool }}"
-  vars:
-    _hb_http_ok: "{{ nbt_heartbeat_http_ok | default(false) | bool }}"
-    _hb_last_send: "{{ nbt_heartbeat_last_send | default('', true) | string }}"
-    _hb_has_send: "{{ (_hb_last_send | trim | length) > 0 }}"
-    _hb_age_seconds: >-
-      {{
-        (
-          (now(fmt='%Y-%m-%d %H:%M:%S') | to_datetime)
-          - (_hb_last_send | to_datetime('%Y-%m-%d %H:%M:%S'))
-        ).total_seconds() | float
-        if (_hb_http_ok | bool) and (_hb_has_send | bool)
-        else -1
-      }}
-    _hb_max_min: "{{ nbt_heartbeat_max_age_minutes | default(90) | int }}"
-    _hb_age_min: >-
-      {{
-        ((_hb_age_seconds | float) / 60) | round(1)
-        if (_hb_age_seconds | float) >= 0
-        else 'n/a'
-      }}
-    _hb_ok: >-
-      {{
-        (_hb_http_ok | bool) and (
-          (
-            (_hb_age_seconds | float) >= 0
-            and ((_hb_age_seconds | float) / 60) <= (_hb_max_min | int)
-          ) or (
-            (_hb_age_seconds | float) < 0
-          )
-        )
-      }}
-  failed_when: false
+    nbt_heartbeat_http_ok: "{{ sem_hb_http_ok | default(false) | bool }}"
+    nbt_heartbeat_last_send: "{{ sem_hb_last_send | default('', true) | string }}"
+    nbt_heartbeat_age_minutes: "{{ sem_hb_age_minutes | default('n/a') }}"
+    nbt_heartbeat_ok: "{{ sem_hb_ok | default(false) | bool }}"
+    nbt_heartbeat_message: "{{ sem_hb_message | default('', true) | string }}"
+    _nbt_api_status: "{{ _nbt_heartbeat }}"
 
 - name: DEBUG NBT 启动后心跳轮询
   ansible.builtin.debug:
     msg:
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll retries={{ nbt_heartbeat_start_poll_retries | default(6) }} delay_s={{ nbt_heartbeat_start_poll_delay | default(10) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll attempts={{ _nbt_heartbeat.attempts | default(1) }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll ok={{ nbt_heartbeat_ok | default(false) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll ok={{ nbt_heartbeat_ok | default(false) }} is_success={{ sem_hb_is_success | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_http={{ _nbt_heartbeat.status | default('n/a') }}"
-      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_send={{ nbt_heartbeat_last_send | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_send={{ nbt_heartbeat_last_send | default('n/a') }} message={{ nbt_heartbeat_message | default('') }}"
   when: _nbt_heartbeat is defined

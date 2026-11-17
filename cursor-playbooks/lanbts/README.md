@@ -5,6 +5,7 @@
 - **提供**：`device_status.yml`、`device_restart.yml`、`device_resend_data.yml`、`device_check_restart.yml`（Schedule）
 - **不提供**：`device_redeploy.yml`（无重新部署 / zip 下发）
 - API 与 NBT 相同：`GET /SendStatus`、`GET /ResetData`
+- **`SendStatus` 响应**：JSON `{"IsSuccess": true, "Message": "...", "Data": null|"YYYY-MM-DD HH:MM:SS"}`；`IsSuccess=true` 且 `Data` 为空即健康；`Data` 有时间则另校验是否过期（默认 90 分钟）
 
 - **`SERVICE_NAME`** → exe 文件名（如 `NBT.MES.Service.exe`）
 - **`LANBTS_SERVICE_NAME`** → Windows 服务名（`win_service`，如 `NBTMESService`）

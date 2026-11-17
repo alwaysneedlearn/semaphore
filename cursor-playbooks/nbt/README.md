@@ -65,7 +65,7 @@ SEMAPHORE_API_TOKEN=<token>
 | `ZIP_NAME` | `nbt.zip` | 安装包文件名（含 `.zip`） |
 | `ZIP_PATH` | `/root/nbt/pkg` | 控制器上 zip 目录 |
 | `NBT_API_PORT` | `8885` | 心跳 API；设备 `api_port` 优先 |
-| `NBT_HEARTBEAT_MAX_AGE_MINUTES` | `90` | 心跳最大间隔（分钟） |
+| `NBT_HEARTBEAT_MAX_AGE_MINUTES` | `90` | 心跳最大间隔（分钟）；`SendStatus` 为 JSON `{"IsSuccess", "Message", "Data"}` 时：`IsSuccess=true` 且 `Data` 为空即健康，`Data` 有时间再校验是否过期 |
 | `NBT_API_TIMEOUT` | `8` | 单次 `GET /SendStatus` 超时（秒） |
 | `NBT_HEARTBEAT_START_POLL_RETRIES` | `6` | **重启/启动后** SendStatus 轮询：首次 + 6 次重试，间隔见下行 |
 | `NBT_HEARTBEAT_START_POLL_DELAY` | `10` | 轮询间隔（秒） |

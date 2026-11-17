@@ -1,0 +1,141 @@
+---
+# Parse GET /SendStatus uri register into sem_hb_* facts.
+#
+# Expected JSON envelope (LANBTS / NBT):
+#   {"IsSuccess": true, "Message": "...", "Data": null|"YYYY-MM-DD HH:MM:SS"}
+# Legacy: plain timestamp body (optional surrounding quotes).
+#
+# Inputs:
+#   sem_hb_uri_result       — ansible.builtin.uri register
+#   sem_hb_max_age_minutes  — int (default 90)
+#
+# Outputs:
+#   sem_hb_http_ok, sem_hb_has_envelope, sem_hb_is_success, sem_hb_message,
+#   sem_hb_last_send, sem_hb_age_seconds, sem_hb_age_minutes, sem_hb_ok
+#
+# Important: never put to_datetime inside a Jinja ternary — Ansible templates
+# both branches and fatals when the unused side gets a dict/empty value.
+
+- name: SendStatus 选用 uri.json 或正文 JSON
+  ansible.builtin.set_fact:
+    sem_hb_json: "{{ _picked }}"
+  vars:
+    _u: "{{ sem_hb_uri_result }}"
+    _from_uri_json: >-
+      {{
+        _u.json
+        if (_u.json is defined and (_u.json is mapping))
+        else {}
+      }}
+    _content_s: "{{ _u.content | default('', true) | string }}"
+    _picked: >-
+      {{
+        _from_uri_json
+        if ((_from_uri_json | length) > 0)
+        else (
+          (_content_s | from_json)
+          if ((_content_s | trim) is match('^\\{'))
+          else {}
+        )
+      }}
+
+- name: SendStatus 解析 HTTP / JSON 信封字段
+  ansible.builtin.set_fact:
+    sem_hb_http_ok: "{{ (_u.status | default(0) | int) == 200 }}"
+    sem_hb_has_envelope: "{{ _has_envelope | bool }}"
+    sem_hb_is_success: "{{ _is_success | bool }}"
+    sem_hb_message: "{{ _message }}"
+    sem_hb_last_send: "{{ _last_send }}"
+    sem_hb_age_seconds: -1
+    sem_hb_age_minutes: n/a
+  vars:
+    _u: "{{ sem_hb_uri_result }}"
+    _json: "{{ sem_hb_json | default({}, true) }}"
+    _has_envelope: >-
+      {{
+        (_json is mapping)
+        and (
+          ('IsSuccess' in _json)
+          or ('is_success' in _json)
+          or ('Data' in _json)
+          or ('data' in _json)
+          or ('Message' in _json)
+        )
+      }}
+    _is_success: >-
+      {{
+        (_json.IsSuccess | default(_json.is_success | default(false, true), true)) | bool
+        if (_has_envelope | bool)
+        else false
+      }}
+    _message: >-
+      {{
+        (_json.Message | default(_json.message | default('', true), true)) | string
+        if (_has_envelope | bool)
+        else ''
+      }}
+    _data: >-
+      {{
+        _json['Data']
+        if (_has_envelope | bool and ('Data' in _json))
+        else (
+          _json['data']
+          if (_has_envelope | bool and ('data' in _json))
+          else ''
+        )
+      }}
+    _content_s: >-
+      {{
+        (_u.content | to_json)
+        if (_u.content is defined and (_u.content is mapping or _u.content is sequence) and (_u.content is not string))
+        else (_u.content | default('', true) | string)
+      }}
+    _data_s: >-
+      {{
+        (_data | string | trim | regex_replace('^\"|\"$', ''))
+        if (_data is string)
+        else ''
+      }}
+    _from_data: "{{ _data_s | regex_search('\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}') | default('', true) | regex_replace('T', ' ') }}"
+    _from_content: "{{ _content_s | regex_search('\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}') | default('', true) | regex_replace('T', ' ') }}"
+    _last_send: "{{ _from_data if ((_from_data | length) > 0) else (_from_content if (not (_has_envelope | bool)) else '') }}"
+
+- name: SendStatus 计算心跳年龄（仅当 Data/正文含可解析时间）
+  when:
+    - (sem_hb_last_send | default('', true) | string | trim | length) > 0
+    - (sem_hb_last_send | default('', true) | string) is match('^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$')
+  ansible.builtin.set_fact:
+    sem_hb_age_seconds: "{{ _age_sec | float }}"
+    sem_hb_age_minutes: "{{ ((_age_sec | float) / 60) | round(1) }}"
+  vars:
+    _ts: "{{ sem_hb_last_send | string }}"
+    _age_sec: "{{ ((now(fmt='%Y-%m-%d %H:%M:%S') | to_datetime) - (_ts | to_datetime('%Y-%m-%d %H:%M:%S'))).total_seconds() | float }}"
+
+- name: SendStatus 判定心跳健康
+  ansible.builtin.set_fact:
+    sem_hb_ok: "{{ _ok | bool }}"
+  vars:
+    _max: "{{ sem_hb_max_age_minutes | default(90) | int }}"
+    _age: "{{ sem_hb_age_seconds | default(-1) | float }}"
+    _has_ts: "{{ (sem_hb_last_send | default('', true) | string | trim | length) > 0 }}"
+    _age_fresh: "{{ (_age | float) >= 0 and ((_age | float) / 60) <= (_max | int) }}"
+    _ok: >-
+      {{
+        (sem_hb_http_ok | default(false) | bool) and (
+          (
+            (sem_hb_has_envelope | default(false) | bool)
+            and (sem_hb_is_success | default(false) | bool)
+            and (
+              (not (_has_ts | bool))
+              or (_age_fresh | bool)
+            )
+          )
+          or (
+            (not (sem_hb_has_envelope | default(false) | bool))
+            and (
+              (not (_has_ts | bool))
+              or (_age_fresh | bool)
+            )
+          )
+        )
+      }}
