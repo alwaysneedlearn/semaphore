@@ -42,5 +42,6 @@
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll attempts={{ _nbt_heartbeat.attempts | default(1) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll ok={{ nbt_heartbeat_ok | default(false) }} is_success={{ sem_hb_is_success | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_http={{ _nbt_heartbeat.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll response_body={{ _nbt_heartbeat.content | default('') | string | truncate(1500, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('NBT') }}] heartbeat_poll last_send={{ nbt_heartbeat_last_send | default('n/a') }} message={{ nbt_heartbeat_message | default('') }}"
   when: _nbt_heartbeat is defined

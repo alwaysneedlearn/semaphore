@@ -56,6 +56,9 @@
             '[DEBUG-' ~ _tag ~ '] heartbeat GET ' ~ (nbt_api_scheme | default('http')) ~ '://' ~ (_nbt_target_host | default(inventory_hostname))
               ~ ':' ~ (nbt_api_port | default(8885) | string) ~ (nbt_api_heartbeat_path | default('/SendStatus'))
               ~ ' http=' ~ (_nbt_heartbeat.status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] heartbeat response_body=' ~ (_nbt_heartbeat.content | default('') | string | truncate(1500, True)),
+            '[DEBUG-' ~ _tag ~ '] heartbeat IsSuccess=' ~ (sem_hb_is_success | default(false) | string)
+              ~ ' Message=' ~ (nbt_heartbeat_message | default(sem_hb_message | default('')) | string | truncate(200, True)),
             '[DEBUG-' ~ _tag ~ '] heartbeat last_send=' ~ (nbt_heartbeat_last_send | default('n/a') | string),
             '[DEBUG-' ~ _tag ~ '] heartbeat age_min=' ~ (nbt_heartbeat_age_minutes | default('n/a') | string)
               ~ ' max=' ~ (nbt_heartbeat_max_age_minutes | default(90) | string),
@@ -67,6 +70,9 @@
             '[DEBUG-' ~ _tag ~ '] heartbeat GET ' ~ (lanbts_api_scheme | default('http')) ~ '://' ~ (_lanbts_target_host | default(inventory_hostname))
               ~ ':' ~ (lanbts_api_port | default(8885) | string) ~ (lanbts_api_heartbeat_path | default('/SendStatus'))
               ~ ' http=' ~ (_lanbts_heartbeat.status | default('n/a') | string),
+            '[DEBUG-' ~ _tag ~ '] heartbeat response_body=' ~ (_lanbts_heartbeat.content | default('') | string | truncate(1500, True)),
+            '[DEBUG-' ~ _tag ~ '] heartbeat IsSuccess=' ~ (sem_hb_is_success | default(lanbts_heartbeat_ok | default(false)) | string)
+              ~ ' Message=' ~ (lanbts_heartbeat_message | default(sem_hb_message | default('')) | string | truncate(200, True)),
             '[DEBUG-' ~ _tag ~ '] heartbeat last_send=' ~ (lanbts_heartbeat_last_send | default('n/a') | string),
             '[DEBUG-' ~ _tag ~ '] heartbeat age_min=' ~ (lanbts_heartbeat_age_minutes | default('n/a') | string)
               ~ ' max=' ~ (lanbts_heartbeat_max_age_minutes | default(90) | string),
