@@ -139,3 +139,12 @@
           )
         )
       }}
+
+- name: DEBUG SendStatus 原始响应
+  ansible.builtin.debug:
+    msg:
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] SendStatus http={{ sem_hb_uri_result.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] SendStatus response_body={{ sem_hb_uri_result.content | default('') | string | truncate(1500, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] SendStatus IsSuccess={{ sem_hb_is_success | default(false) }} Message={{ sem_hb_message | default('') | truncate(200, True) }}"
+      - "[DEBUG-{{ sem_debug_tag | default('DEVICE') }}] SendStatus Data/last_send={{ sem_hb_last_send | default('') }} age_min={{ sem_hb_age_minutes | default('n/a') }} ok={{ sem_hb_ok | default(false) }}"
+  when: sem_hb_uri_result is defined

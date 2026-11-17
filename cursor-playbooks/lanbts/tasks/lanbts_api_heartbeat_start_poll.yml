@@ -42,5 +42,6 @@
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll attempts={{ _lanbts_heartbeat.attempts | default(1) }}"
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll ok={{ lanbts_heartbeat_ok | default(false) }} is_success={{ sem_hb_is_success | default(false) }}"
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll last_http={{ _lanbts_heartbeat.status | default('n/a') }}"
+      - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll response_body={{ _lanbts_heartbeat.content | default('') | string | truncate(1500, True) }}"
       - "[DEBUG-{{ sem_debug_tag | default('LANBTS') }}] heartbeat_poll last_send={{ lanbts_heartbeat_last_send | default('n/a') }} message={{ lanbts_heartbeat_message | default('') }}"
   when: _lanbts_heartbeat is defined
