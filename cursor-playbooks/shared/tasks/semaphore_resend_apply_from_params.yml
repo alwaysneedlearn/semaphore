@@ -61,8 +61,8 @@
       {{ dt.year }}-{{ dt.month }}-{{ dt.day }} {{ dt.hour }}:{{ '%02d' % dt.minute }}:{{ '%02d' % dt.second }}
   when: (resend_params.profile_key | default('') | upper) in ['LAND', 'LANH', 'LANDV7', 'SINEXCEL', 'JHAI']
 
-# NBT: unpadded date only yyyy-M-d
-- name: 格式化为 NBT 日期
+# NBT / LANBTS: unpadded date only yyyy-M-d (ResetData StartDate/EndDate)
+- name: 格式化为 NBT/LANBTS 日期
   ansible.builtin.set_fact:
     _resend_fmt_nbt_start: >-
       {%- set dt = _resend_start_raw | to_datetime(_resend_time_layout) -%}
@@ -70,7 +70,7 @@
     _resend_fmt_nbt_end: >-
       {%- set dt = _resend_end_raw | to_datetime(_resend_time_layout) -%}
       {{ dt.year }}-{{ dt.month }}-{{ dt.day }}
-  when: (resend_params.profile_key | default('') | upper) == 'NBT'
+  when: (resend_params.profile_key | default('') | upper) in ['NBT', 'LANBTS']
 
 # NEWARE: padded yyyy-MM-dd（输出只要日期；输入兼容纯日期 / canonical）
 - name: 格式化为 NEWARE 日期
@@ -140,6 +140,13 @@
       StartDate: "{{ _resend_fmt_nbt_start }}"
       EndDate: "{{ _resend_fmt_nbt_end }}"
   when: (resend_params.profile_key | default('') | upper) == 'NBT'
+
+- name: LANBTS 重发参数（同 NBT：ResetData 日期 yyyy-M-d）
+  ansible.builtin.set_fact:
+    lanbts_reset_data_cfg:
+      StartDate: "{{ _resend_fmt_nbt_start }}"
+      EndDate: "{{ _resend_fmt_nbt_end }}"
+  when: (resend_params.profile_key | default('') | upper) == 'LANBTS'
 
 - name: NEWARE 重发参数
   ansible.builtin.set_fact:
